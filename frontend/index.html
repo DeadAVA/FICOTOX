@@ -795,7 +795,7 @@
                         <label class="form-check-label" for="sampleMuestraUnicaInput">Muestra unica</label>
                       </div>
                     </div>
-                    <div class="col-12 col-md-3">
+                    <div class="col-12 col-md-3" id="sampleFechaMuestraFieldWrap">
                       <label class="form-label" for="sampleFechaMuestraInput">Fecha de la muestra</label>
                       <input id="sampleFechaMuestraInput" type="date" class="form-control" />
                     </div>
@@ -812,7 +812,7 @@
                         <option value="completada">Completada</option>
                       </select>
                     </div>
-                    <div class="col-12">
+                    <div class="col-12" id="sampleEspecificacionesFieldWrap">
                       <label class="form-label" for="sampleEspecificacionesInput">Especificaciones</label>
                       <textarea id="sampleEspecificacionesInput" class="form-control" rows="2"></textarea>
                     </div>
@@ -822,9 +822,15 @@
 
               <div class="col-12" id="sampleLoteSectionWrap">
                 <div class="sample-section-card">
-                  <div class="d-flex justify-content-between align-items-center mb-2">
+                  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                     <h6 class="sample-section-title mb-0">Lote / Muestras por lote</h6>
-                    <button type="button" id="addSampleLoteRowBtn" class="btn btn-outline-secondary btn-sm">Agregar fila</button>
+                    <div class="d-flex align-items-end gap-2">
+                      <div>
+                        <label class="form-label mb-1" for="sampleLoteCountInput"># de muestras por lote</label>
+                        <input id="sampleLoteCountInput" type="number" min="1" step="1" class="form-control form-control-sm sample-lote-count-input" value="1" />
+                      </div>
+                      <button type="button" id="addSampleLoteRowBtn" class="btn btn-outline-secondary btn-sm">Agregar fila</button>
+                    </div>
                   </div>
                   <div class="table-responsive">
                     <table class="table table-sm align-middle movement-table mb-0">
@@ -983,6 +989,27 @@
                     <div class="col-12 col-md-4">
                       <label class="form-label" for="processingIdInternoInput">ID interno</label>
                       <input id="processingIdInternoInput" class="form-control" maxlength="100" />
+                    </div>
+                    <div class="col-12 d-none" id="processingLoteSelectionWrap">
+                      <label class="form-label">Muestras del lote a procesar (selecciona las que pasan a extraccion)</label>
+                      <div class="table-responsive">
+                        <table class="table table-sm align-middle movement-table mb-0">
+                          <thead>
+                            <tr>
+                              <th>Trabajar</th>
+                              <th>ID interno</th>
+                              <th>Nombre de organismo</th>
+                              <th>Cantidad/Volumen</th>
+                              <th>Sitio de muestreo</th>
+                              <th>Fecha de la muestra</th>
+                              <th>Informacion adicional</th>
+                            </tr>
+                          </thead>
+                          <tbody id="processingLoteSelectionBody">
+                            <tr><td colspan="7" class="text-secondary">Selecciona un folio de recepcion para cargar muestras.</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 </div>

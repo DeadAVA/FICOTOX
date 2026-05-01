@@ -112,11 +112,14 @@ const sampleHoraRecepcionInput = document.getElementById("sampleHoraRecepcionInp
 const sampleSolicitanteInput = document.getElementById("sampleSolicitanteInput");
 const sampleMuestraUnicaInput = document.getElementById("sampleMuestraUnicaInput");
 const sampleFechaMuestraInput = document.getElementById("sampleFechaMuestraInput");
+const sampleFechaMuestraFieldWrap = document.getElementById("sampleFechaMuestraFieldWrap");
 const sampleIdInternoInput = document.getElementById("sampleIdInternoInput");
 const sampleIdInternoFieldWrap = document.getElementById("sampleIdInternoFieldWrap");
 const sampleEstadoInput = document.getElementById("sampleEstadoInput");
 const sampleEspecificacionesInput = document.getElementById("sampleEspecificacionesInput");
+const sampleEspecificacionesFieldWrap = document.getElementById("sampleEspecificacionesFieldWrap");
 const sampleLoteSectionWrap = document.getElementById("sampleLoteSectionWrap");
+const sampleLoteCountInput = document.getElementById("sampleLoteCountInput");
 const sampleLoteTableBody = document.getElementById("sampleLoteTableBody");
 const addSampleLoteRowBtn = document.getElementById("addSampleLoteRowBtn");
 const sampleAnalisisObservacionesInput = document.getElementById("sampleAnalisisObservacionesInput");
@@ -151,6 +154,8 @@ const processingHoraInput = document.getElementById("processingHoraInput");
 const processingEstadoInput = document.getElementById("processingEstadoInput");
 const processingReceptionSelect = document.getElementById("processingReceptionSelect");
 const processingIdInternoInput = document.getElementById("processingIdInternoInput");
+const processingLoteSelectionWrap = document.getElementById("processingLoteSelectionWrap");
+const processingLoteSelectionBody = document.getElementById("processingLoteSelectionBody");
 const processingMuestraTipoInput = document.getElementById("processingMuestraTipoInput");
 const processingOtroInput = document.getElementById("processingOtroInput");
 const processingObservacionesInput = document.getElementById("processingObservacionesInput");
@@ -233,6 +238,7 @@ let samplesCache = [];
 let processingCache = [];
 let extractionCache = [];
 let processingEquipmentCache = [];
+let processingReceptionDetailCache = new Map();
 let activeSamplesSection = "recepcion";
 let importPreviewRows = [];
 let importDetectedColumns = [];
@@ -1051,9 +1057,39 @@ const ensureSampleLoteRows = (items = []) => {
   sampleLoteTableBody.innerHTML = "";
   if (!items.length) {
     sampleLoteTableBody.appendChild(buildSampleLoteRow());
+    if (sampleLoteCountInput) {
+      sampleLoteCountInput.value = "1";
+    }
     return;
   }
   items.forEach((item) => sampleLoteTableBody.appendChild(buildSampleLoteRow(item)));
+  if (sampleLoteCountInput) {
+    sampleLoteCountInput.value = String(items.length);
+  }
+};
+
+const syncSampleLoteRowsCount = (targetCount) => {
+  if (!sampleLoteTableBody) {
+    return;
+  }
+  const nextCount = Math.max(1, Number.parseInt(targetCount, 10) || 1);
+  const currentCount = sampleLoteTableBody.querySelectorAll("tr").length;
+
+  if (nextCount > currentCount) {
+    for (let i = currentCount; i < nextCount; i += 1) {
+      sampleLoteTableBody.appendChild(buildSampleLoteRow());
+    }
+  }
+
+  if (nextCount < currentCount) {
+    for (let i = currentCount; i > nextCount; i -= 1) {
+      sampleLoteTableBody.querySelector("tr:last-child")?.remove();
+    }
+  }
+
+  if (sampleLoteCountInput) {
+    sampleLoteCountInput.value = String(nextCount);
+  }
 };
 
 const collectSampleLoteRows = (selectedOnly = false) => {
@@ -1082,6 +1118,15 @@ const collectSampleLoteRows = (selectedOnly = false) => {
 
 const toggleSampleModeUI = () => {
   const isUnique = !!sampleMuestraUnicaInput?.checked;
+  if (sampleFechaMuestraFieldWrap) {
+    sampleFechaMuestraFieldWrap.classList.toggle("d-none", !isUnique);
+  }
+  if (sampleFechaMuestraInput) {
+    sampleFechaMuestraInput.disabled = !isUnique;
+    if (!isUnique) {
+      sampleFechaMuestraInput.value = "";
+    }
+  }
   if (sampleIdInternoFieldWrap) {
     sampleIdInternoFieldWrap.classList.toggle("d-none", !isUnique);
   }
@@ -1091,11 +1136,26 @@ const toggleSampleModeUI = () => {
       sampleIdInternoInput.value = "";
     }
   }
+  if (sampleEspecificacionesFieldWrap) {
+    sampleEspecificacionesFieldWrap.classList.toggle("d-none", !isUnique);
+  }
+  if (sampleEspecificacionesInput) {
+    sampleEspecificacionesInput.disabled = !isUnique;
+    if (!isUnique) {
+      sampleEspecificacionesInput.value = "";
+    }
+  }
   if (sampleLoteSectionWrap) {
     sampleLoteSectionWrap.classList.toggle("d-none", isUnique);
   }
+  if (!isUnique) {
+    syncSampleLoteRowsCount(sampleLoteCountInput?.value || 1);
+  }
   if (addSampleLoteRowBtn) {
     addSampleLoteRowBtn.disabled = isUnique;
+  }
+  if (sampleLoteCountInput) {
+    sampleLoteCountInput.disabled = isUnique;
   }
 };
 
@@ -1152,6 +1212,9 @@ const resetSampleForm = async (withNextFolio = true) => {
   sampleEstadoInput.value = "registrada";
   sampleMuestraUnicaInput.checked = true;
   ensureSampleLoteRows();
+  if (sampleLoteCountInput) {
+    sampleLoteCountInput.value = "1";
+  }
   toggleSampleModeUI();
   renderInspeccionRows();
 
@@ -1226,6 +1289,9 @@ const fillSampleForm = (item) => {
   sampleEspecificacionesInput.value = item.especificaciones || "";
   sampleEstadoInput.value = item.estado || "registrada";
   ensureSampleLoteRows(item.lote_muestras || []);
+  if (sampleLoteCountInput) {
+    sampleLoteCountInput.value = String((item.lote_muestras || []).length || 1);
+  }
   toggleSampleModeUI();
 
   const analisis = item.analisis || {};
@@ -1640,6 +1706,159 @@ const formatProcessingFolio = (item) => {
   return `${type} ${String(num).padStart(7, "0")}`;
 };
 
+const renderProcessingLoteSelectionRows = (items = [], selectedIds = []) => {
+  if (!processingLoteSelectionBody) {
+    return;
+  }
+
+  if (!Array.isArray(items) || !items.length) {
+    processingLoteSelectionBody.innerHTML = '<tr><td colspan="7" class="text-secondary">Este folio no contiene muestras de lote.</td></tr>';
+    return;
+  }
+
+  const selectedSet = new Set((selectedIds || []).map((it) => String(it || "")).filter(Boolean));
+  processingLoteSelectionBody.innerHTML = items
+    .map((item, index) => {
+      const idInterno = String(item?.id_interno || "").trim();
+      const selectedByDefault = item?.trabajar !== false;
+      const checked = selectedSet.size ? selectedSet.has(idInterno) : selectedByDefault;
+      return `
+        <tr
+          data-id-interno="${idInterno}"
+          data-nombre-organismo="${String(item?.nombre_organismo || "").trim()}"
+          data-cantidad-volumen="${String(item?.cantidad_volumen || "").trim()}"
+          data-sitio-muestreo="${String(item?.sitio_muestreo || "").trim()}"
+          data-fecha-muestra="${item?.fecha_muestra || ""}"
+          data-informacion-adicional="${String(item?.informacion_adicional || "").trim()}"
+        >
+          <td><input type="checkbox" class="form-check-input processing-lote-selected" ${checked ? "checked" : ""} /></td>
+          <td>${idInterno || `Muestra ${index + 1}`}</td>
+          <td>${item?.nombre_organismo || "-"}</td>
+          <td>${item?.cantidad_volumen || "-"}</td>
+          <td>${item?.sitio_muestreo || "-"}</td>
+          <td>${fmtDate(item?.fecha_muestra)}</td>
+          <td>${item?.informacion_adicional || "-"}</td>
+        </tr>
+      `;
+    })
+    .join("");
+};
+
+const collectProcessingSelectedLoteRows = () => {
+  if (!processingLoteSelectionBody) {
+    return [];
+  }
+
+  return Array.from(processingLoteSelectionBody.querySelectorAll("tr"))
+    .filter((row) => !!row.querySelector(".processing-lote-selected:checked"))
+    .map((row) => ({
+      id_interno: (row.dataset.idInterno || "").trim() || null,
+      nombre_organismo: (row.dataset.nombreOrganismo || "").trim() || null,
+      cantidad_volumen: (row.dataset.cantidadVolumen || "").trim() || null,
+      sitio_muestreo: (row.dataset.sitioMuestreo || "").trim() || null,
+      fecha_muestra: row.dataset.fechaMuestra || null,
+      informacion_adicional: (row.dataset.informacionAdicional || "").trim() || null,
+    }));
+};
+
+const syncProcessingIdInternoFromLoteSelection = () => {
+  if (!processingIdInternoInput || processingMuestraTipoInput?.value !== "lote") {
+    return;
+  }
+  const selected = collectProcessingSelectedLoteRows();
+  const joinedIds = selected.map((row) => row.id_interno).filter(Boolean).join(", ");
+  processingIdInternoInput.value = joinedIds;
+};
+
+const clearProcessingReceptionDerivedData = () => {
+  if (processingMuestraTipoInput) {
+    processingMuestraTipoInput.value = "unica";
+    processingMuestraTipoInput.disabled = false;
+  }
+  if (processingIdInternoInput) {
+    processingIdInternoInput.disabled = false;
+    processingIdInternoInput.value = "";
+  }
+  if (processingLoteSelectionWrap) {
+    processingLoteSelectionWrap.classList.add("d-none");
+  }
+  if (processingLoteSelectionBody) {
+    processingLoteSelectionBody.innerHTML = '<tr><td colspan="7" class="text-secondary">Selecciona un folio de recepcion para cargar muestras.</td></tr>';
+  }
+};
+
+const getReceptionDetailForProcessing = async (receptionId) => {
+  if (!receptionId) {
+    return null;
+  }
+
+  if (processingReceptionDetailCache.has(receptionId)) {
+    return processingReceptionDetailCache.get(receptionId);
+  }
+
+  const token = getStoredToken();
+  if (!token) {
+    return null;
+  }
+
+  const data = await getJsonAuth(`${API_BASE_URL}/samples/reception/${receptionId}`, token);
+  const item = data?.item || null;
+  if (item) {
+    processingReceptionDetailCache.set(receptionId, item);
+  }
+  return item;
+};
+
+const applyReceptionToProcessingForm = (reception, selectedLoteRows = []) => {
+  if (!reception) {
+    clearProcessingReceptionDerivedData();
+    return;
+  }
+
+  const isUnique = !!reception.muestra_unica;
+  if (processingMuestraTipoInput) {
+    processingMuestraTipoInput.value = isUnique ? "unica" : "lote";
+    processingMuestraTipoInput.disabled = true;
+  }
+
+  if (isUnique) {
+    if (processingLoteSelectionWrap) {
+      processingLoteSelectionWrap.classList.add("d-none");
+    }
+    if (processingIdInternoInput) {
+      processingIdInternoInput.disabled = false;
+      processingIdInternoInput.value = reception.id_interno || "";
+    }
+    return;
+  }
+
+  if (processingLoteSelectionWrap) {
+    processingLoteSelectionWrap.classList.remove("d-none");
+  }
+  const selectedIds = (selectedLoteRows || []).map((row) => row?.id_interno || "").filter(Boolean);
+  renderProcessingLoteSelectionRows(reception.lote_muestras || [], selectedIds);
+  if (processingIdInternoInput) {
+    processingIdInternoInput.disabled = true;
+  }
+  syncProcessingIdInternoFromLoteSelection();
+};
+
+const handleProcessingReceptionSelection = async (selectedLoteRows = []) => {
+  const receptionId = parseIntOrNull(processingReceptionSelect?.value);
+  if (!receptionId) {
+    clearProcessingReceptionDerivedData();
+    return;
+  }
+
+  try {
+    const reception = await getReceptionDetailForProcessing(receptionId);
+    applyReceptionToProcessingForm(reception, selectedLoteRows);
+  } catch (error) {
+    showProcessingFeedback(error.message || "No se pudo leer la recepcion seleccionada", true);
+    clearProcessingReceptionDerivedData();
+  }
+};
+
 const loadReceptionOptionsForProcessing = async (selectedReceptionId = null) => {
   if (!processingReceptionSelect) {
     return;
@@ -1676,6 +1895,8 @@ const resetProcessingForm = async (withNextFolio = true) => {
   processingFechaEmisionInput.value = isoDate(new Date());
   processingFechaInput.value = isoDate(new Date());
   processingEstadoInput.value = "registrada";
+  clearProcessingReceptionDerivedData();
+  processingReceptionDetailCache = new Map();
   document.querySelectorAll(".processing-organismo").forEach((el) => {
     el.checked = false;
   });
@@ -1794,6 +2015,9 @@ const collectProcessingStepObjects = (selector, extrasMap = {}) => {
 
 const buildProcessingPayload = () => {
   const selectedOption = processingReceptionSelect?.selectedOptions?.[0];
+  const selectedLoteRows = collectProcessingSelectedLoteRows();
+  const isLote = processingMuestraTipoInput.value === "lote";
+  const idInternoLote = selectedLoteRows.map((row) => row.id_interno).filter(Boolean).join(", ");
   const selectedOrganism = getProcessingSelectedOrganism();
   const bivalvos = collectProcessingStepObjects(".processing-bivalvos-step", {
     procBiv7: { equipo: procBiv7Equipo, peso: procBiv7Peso },
@@ -1813,7 +2037,8 @@ const buildProcessingPayload = () => {
     recepcion_id: parseIntOrNull(processingReceptionSelect.value),
     folio_recepcion_num: parseIntOrNull(selectedOption?.dataset?.folioR),
     muestra_tipo: processingMuestraTipoInput.value || null,
-    id_interno: (processingIdInternoInput.value || "").trim() || null,
+    id_interno: (isLote ? idInternoLote : processingIdInternoInput.value || "").trim() || null,
+    lote_seleccion: isLote ? selectedLoteRows : [],
     tipo_organismo: selectedOrganism ? [selectedOrganism] : [],
     parte_organismo: collectCheckedValues(".processing-parte:checked"),
     bivalvos_steps: bivalvos,
@@ -1843,9 +2068,18 @@ const fillProcessingForm = async (item) => {
   processingFolioInput.value = item.folio_num || "";
   processingFechaInput.value = isoDate(item.fecha_procesamiento);
   processingHoraInput.value = item.hora_procesamiento || "";
-  processingMuestraTipoInput.value = item.muestra_tipo || "unica";
-  processingIdInternoInput.value = item.id_interno || "";
   processingEstadoInput.value = item.estado || "registrada";
+
+  if (item.recepcion_id) {
+    await handleProcessingReceptionSelection(item.lote_seleccion || []);
+    if ((item.muestra_tipo || "") === "unica" && processingIdInternoInput) {
+      processingIdInternoInput.value = item.id_interno || "";
+    }
+  } else {
+    clearProcessingReceptionDerivedData();
+    processingMuestraTipoInput.value = item.muestra_tipo || "unica";
+    processingIdInternoInput.value = item.id_interno || "";
+  }
 
   const tipoOrganismo = Array.isArray(item.tipo_organismo) ? item.tipo_organismo[0] || "" : "";
   document.querySelectorAll(".processing-organismo").forEach((el) => {
@@ -2677,7 +2911,19 @@ if (addSampleLoteRowBtn) {
   addSampleLoteRowBtn.addEventListener("click", () => {
     if (sampleLoteTableBody) {
       sampleLoteTableBody.appendChild(buildSampleLoteRow());
+      if (sampleLoteCountInput) {
+        sampleLoteCountInput.value = String(sampleLoteTableBody.querySelectorAll("tr").length || 1);
+      }
     }
+  });
+}
+
+if (sampleLoteCountInput) {
+  sampleLoteCountInput.addEventListener("input", () => {
+    if (sampleMuestraUnicaInput?.checked) {
+      return;
+    }
+    syncSampleLoteRowsCount(sampleLoteCountInput.value);
   });
 }
 
@@ -2702,6 +2948,9 @@ if (sampleLoteTableBody) {
     }
     if (!sampleLoteTableBody.querySelector("tr")) {
       sampleLoteTableBody.appendChild(buildSampleLoteRow());
+    }
+    if (sampleLoteCountInput) {
+      sampleLoteCountInput.value = String(sampleLoteTableBody.querySelectorAll("tr").length || 1);
     }
   });
 }
@@ -2735,7 +2984,7 @@ if (muestrasTableBody) {
       await resetProcessingForm(true);
       if (source && processingReceptionSelect) {
         processingReceptionSelect.value = String(source.id);
-        processingIdInternoInput.value = source.id_interno || "";
+        await handleProcessingReceptionSelection();
       }
       if (processingModal) {
         processingModal.show();
@@ -2858,15 +3107,21 @@ if (extractionTableBody) {
 }
 
 if (processingReceptionSelect) {
-  processingReceptionSelect.addEventListener("change", () => {
-    const selected = processingReceptionSelect.selectedOptions?.[0];
-    if (!selected) {
+  processingReceptionSelect.addEventListener("change", async () => {
+    await handleProcessingReceptionSelection();
+  });
+}
+
+if (processingLoteSelectionBody) {
+  processingLoteSelectionBody.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
       return;
     }
-    const idInterno = selected.dataset.idInterno || "";
-    if (!processingIdInternoInput.value) {
-      processingIdInternoInput.value = idInterno;
+    if (!target.classList.contains("processing-lote-selected")) {
+      return;
     }
+    syncProcessingIdInternoFromLoteSelection();
   });
 }
 
@@ -2913,6 +3168,17 @@ if (processingForm) {
     if (!payload.folio_num) {
       showProcessingFeedback("El folio de procesamiento es obligatorio", true);
       processingFolioInput.focus();
+      return;
+    }
+
+    if (payload.muestra_tipo === "unica" && !payload.id_interno) {
+      showProcessingFeedback("La recepcion seleccionada es muestra unica, falta ID interno", true);
+      processingIdInternoInput.focus();
+      return;
+    }
+
+    if (payload.muestra_tipo === "lote" && !(payload.lote_seleccion || []).length) {
+      showProcessingFeedback("Selecciona al menos una muestra del lote para trabajar y enviar a extraccion", true);
       return;
     }
 

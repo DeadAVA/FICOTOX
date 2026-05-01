@@ -26,6 +26,7 @@ def ensure_samples_procesamiento_schema():
 				folio_recepcion_num INT DEFAULT NULL,
 				muestra_tipo VARCHAR(20) DEFAULT NULL,
 				id_interno VARCHAR(100) DEFAULT NULL,
+				lote_seleccion_json LONGTEXT,
 				tipo_organismo_json LONGTEXT,
 				parte_organismo_json LONGTEXT,
 				bivalvos_steps_json LONGTEXT,
@@ -49,6 +50,14 @@ def ensure_samples_procesamiento_schema():
 				CONSTRAINT fk_muestras_procesamiento_creado_por FOREIGN KEY (creado_por) REFERENCES usuarios(id) ON DELETE SET NULL,
 				CONSTRAINT fk_muestras_procesamiento_actualizado_por FOREIGN KEY (actualizado_por) REFERENCES usuarios(id) ON DELETE SET NULL
 			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+			"""
+		)
+	)
+	db.session.execute(
+		text(
+			"""
+			ALTER TABLE muestras_procesamiento
+			ADD COLUMN IF NOT EXISTS lote_seleccion_json LONGTEXT AFTER id_interno
 			"""
 		)
 	)
@@ -95,6 +104,7 @@ def _normalize_payload(raw):
 		"folio_recepcion_num": _to_int_or_none(payload.get("folio_recepcion_num")),
 		"muestra_tipo": (payload.get("muestra_tipo") or "").strip()[:20] or None,
 		"id_interno": (payload.get("id_interno") or "").strip()[:100] or None,
+		"lote_seleccion_json": _json_text(payload.get("lote_seleccion") or []),
 		"tipo_organismo_json": _json_text(payload.get("tipo_organismo") or []),
 		"parte_organismo_json": _json_text(payload.get("parte_organismo") or []),
 		"bivalvos_steps_json": _json_text(payload.get("bivalvos_steps") or []),
@@ -112,6 +122,7 @@ def _serialize_row(row):
 	item = dict(row)
 	item["tipo_organismo"] = _safe_json_load(item.pop("tipo_organismo_json", None), [])
 	item["parte_organismo"] = _safe_json_load(item.pop("parte_organismo_json", None), [])
+	item["lote_seleccion"] = _safe_json_load(item.pop("lote_seleccion_json", None), [])
 	item["bivalvos_steps"] = _safe_json_load(item.pop("bivalvos_steps_json", None), [])
 	item["sardinas_steps"] = _safe_json_load(item.pop("sardinas_steps_json", None), [])
 	item["resguardo"] = _safe_json_load(item.pop("resguardo_json", None), {})
@@ -163,6 +174,7 @@ def get_processing_sample(processing_id: int):
 			SELECT id, folio_num, tipo_registro, clave_revision, fecha_emision,
 				   fecha_procesamiento, hora_procesamiento, recepcion_id,
 				   folio_recepcion_num, muestra_tipo, id_interno,
+				   lote_seleccion_json,
 				   tipo_organismo_json, parte_organismo_json,
 				   bivalvos_steps_json, sardinas_steps_json,
 				   otro_procesamiento, resguardo_json,
@@ -199,6 +211,7 @@ def create_processing_sample():
 					folio_num, tipo_registro, clave_revision, fecha_emision,
 					fecha_procesamiento, hora_procesamiento, recepcion_id,
 					folio_recepcion_num, muestra_tipo, id_interno,
+					lote_seleccion_json,
 					tipo_organismo_json, parte_organismo_json,
 					bivalvos_steps_json, sardinas_steps_json,
 					otro_procesamiento, resguardo_json,
@@ -208,6 +221,7 @@ def create_processing_sample():
 					:folio_num, :tipo_registro, :clave_revision, :fecha_emision,
 					:fecha_procesamiento, :hora_procesamiento, :recepcion_id,
 					:folio_recepcion_num, :muestra_tipo, :id_interno,
+					:lote_seleccion_json,
 					:tipo_organismo_json, :parte_organismo_json,
 					:bivalvos_steps_json, :sardinas_steps_json,
 					:otro_procesamiento, :resguardo_json,
@@ -254,6 +268,7 @@ def update_processing_sample(processing_id: int):
 					folio_recepcion_num = :folio_recepcion_num,
 					muestra_tipo = :muestra_tipo,
 					id_interno = :id_interno,
+					lote_seleccion_json = :lote_seleccion_json,
 					tipo_organismo_json = :tipo_organismo_json,
 					parte_organismo_json = :parte_organismo_json,
 					bivalvos_steps_json = :bivalvos_steps_json,
