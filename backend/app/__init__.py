@@ -1,0 +1,88 @@
+from pathlib import Path
+
+from flask import Flask, jsonify, send_from_directory
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
+
+from app.config import Config
+from app.extensions import cors, db
+from app.utils.rbac import ensure_rbac_schema
+
+
+def create_app() -> Flask:
+    app = Flask(__name__)
+    app.config.from_object(Config)
+
+    db.init_app(app)
+    cors.init_app(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}})
+
+    from app.modules.admin.endpoints import admin_bp
+    from app.modules.auth.endpoints import auth_bp
+    from app.modules.dashboard.endpoints import dashboard_bp
+    from app.modules.documents.endpoints import documents_bp
+    from app.modules.inventory.endpoints import inventory_bp
+    from app.modules.samples.extraccion import ensure_samples_extraccion_schema, samples_extraccion_bp
+    from app.modules.samples.procesamiento import ensure_samples_procesamiento_schema, samples_procesamiento_bp
+    from app.modules.samples.endpoints import samples_bp
+    from app.modules.samples.recepcion import ensure_samples_recepcion_schema, samples_recepcion_bp
+    from app.modules.traceability.endpoints import traceability_bp
+    from app.modules.inventory.consumables import bp as consumables_bp
+
+    app.register_blueprint(admin_bp, url_prefix="/api/admin")
+    app.register_blueprint(auth_bp, url_prefix="/api/auth")
+    app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
+    app.register_blueprint(inventory_bp, url_prefix="/api/inventory")
+    app.register_blueprint(samples_bp, url_prefix="/api/samples")
+    app.register_blueprint(samples_recepcion_bp)
+    app.register_blueprint(samples_procesamiento_bp)
+    app.register_blueprint(samples_extraccion_bp)
+    app.register_blueprint(documents_bp, url_prefix="/api/documents")
+    app.register_blueprint(traceability_bp, url_prefix="/api/traceability")
+    app.register_blueprint(consumables_bp)
+
+    try:
+        with app.app_context():
+            ensure_rbac_schema()
+            ensure_samples_recepcion_schema()
+            ensure_samples_procesamiento_schema()
+            ensure_samples_extraccion_schema()
+    except Exception:
+        # Si la BD no esta disponible en arranque, el health/db reportara el problema.
+        pass
+
+    @app.get("/api/health")
+    def health_check():
+        return jsonify({"ok": True, "service": "ficotox-backend"}), 200
+
+    @app.get("/api/health/db")
+    def health_db_check():
+        try:
+            db.session.execute(text("SELECT 1"))
+            return jsonify({"ok": True, "database": "reachable"}), 200
+        except OperationalError:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "database": "unreachable",
+                        "message": "No se pudo conectar a MySQL. Revisa credenciales en backend/.env",
+                    }
+                ),
+                503,
+            )
+
+    frontend_dir = Path(app.root_path).parent.parent / "frontend"
+
+    @app.get("/")
+    def serve_frontend_index():
+        return send_from_directory(frontend_dir, "index.html")
+
+    @app.get("/<path:filename>")
+    def serve_frontend_assets(filename: str):
+        file_path = frontend_dir / filename
+        if file_path.exists() and file_path.is_file():
+            return send_from_directory(frontend_dir, filename)
+
+        return jsonify({"message": "Ruta no encontrada"}), 404
+
+    return app
