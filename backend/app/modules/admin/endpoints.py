@@ -1,12 +1,55 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 from sqlalchemy import text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.extensions import db
 from app.utils.auth import token_required
 from app.utils.rbac import _bool, ensure_rbac_schema, permission_required
+from app.utils.schema import add_column_if_missing, drop_column_if_exists
 
 admin_bp = Blueprint("admin", __name__)
+
+
+def ensure_usuarios_schema() -> None:
+    ensure_rbac_schema()
+    db.session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS usuarios (
+              id INT NOT NULL AUTO_INCREMENT,
+              nombre VARCHAR(100) NOT NULL,
+              email VARCHAR(100) NOT NULL,
+              activo TINYINT(1) DEFAULT 1,
+              id_rol INT NOT NULL,
+              departamento VARCHAR(100) DEFAULT NULL,
+              creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (id),
+              UNIQUE KEY email (email),
+              KEY id_rol (id_rol),
+              CONSTRAINT usuarios_ibfk_1 FOREIGN KEY (id_rol) REFERENCES roles(id) ON DELETE RESTRICT
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+            """
+        )
+    )
+    drop_column_if_exists("usuarios", "password_hash")
+    for column_name, column_definition in [
+        ("departamento", "VARCHAR(100) DEFAULT NULL"),
+        ("activo", "TINYINT(1) DEFAULT 1"),
+        ("creado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP"),
+        ("ultimo_acceso", "TIMESTAMP NULL DEFAULT NULL"),
+    ]:
+        add_column_if_missing("usuarios", column_name, column_definition)
+    db.session.commit()
+
+
+def _normalize_user_payload(payload: dict) -> dict:
+    return {
+        "nombre": (payload.get("nombre") or "").strip()[:100],
+        "email": (payload.get("email") or "").strip().lower()[:100],
+        "id_rol": int(payload.get("id_rol") or 0),
+        "departamento": (payload.get("departamento") or "").strip()[:100] or None,
+        "activo": _bool(payload.get("activo", True)),
+    }
 
 
 def _save_role_permissions(role_id: int, permissions: list[dict]) -> None:
@@ -297,13 +340,13 @@ def delete_role(role_id: int):
 @token_required
 @permission_required("usuarios", "read")
 def list_usuarios():
-    ensure_rbac_schema()
+    ensure_usuarios_schema()
 
     rows = db.session.execute(
         text(
             """
-            SELECT u.id, u.nombre, u.email, u.activo, r.nombre AS rol,
-                   u.departamento, u.creado_en
+            SELECT u.id, u.nombre, u.email, u.activo, u.id_rol, r.nombre AS rol,
+                   u.departamento, u.creado_en, u.ultimo_acceso
             FROM usuarios u
             LEFT JOIN roles r ON r.id = u.id_rol
             ORDER BY u.id DESC
@@ -313,3 +356,132 @@ def list_usuarios():
     ).mappings().all()
 
     return jsonify({"items": [dict(row) for row in rows], "total": len(rows)}), 200
+
+
+@admin_bp.get("/usuarios/<int:user_id>")
+@token_required
+@permission_required("usuarios", "read")
+def get_usuario(user_id: int):
+    ensure_usuarios_schema()
+    row = db.session.execute(
+        text(
+            """
+            SELECT u.id, u.nombre, u.email, u.activo, u.id_rol, r.nombre AS rol,
+                   u.departamento, u.creado_en, u.ultimo_acceso
+            FROM usuarios u
+            LEFT JOIN roles r ON r.id = u.id_rol
+            WHERE u.id = :user_id
+            LIMIT 1
+            """
+        ),
+        {"user_id": user_id},
+    ).mappings().first()
+    if row is None:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+    return jsonify({"item": dict(row)}), 200
+
+
+@admin_bp.post("/usuarios")
+@token_required
+@permission_required("usuarios", "create")
+def create_usuario():
+    ensure_usuarios_schema()
+    data = _normalize_user_payload(request.get_json(silent=True) or {})
+
+    if not data["nombre"]:
+        return jsonify({"message": "El nombre es obligatorio"}), 400
+    if not data["email"]:
+        return jsonify({"message": "El email es obligatorio"}), 400
+    if not data["id_rol"]:
+        return jsonify({"message": "Selecciona un rol"}), 400
+
+    role_exists = db.session.execute(
+        text("SELECT id FROM roles WHERE id = :id_rol LIMIT 1"),
+        {"id_rol": data["id_rol"]},
+    ).scalar()
+    if not role_exists:
+        return jsonify({"message": "El rol seleccionado no existe"}), 400
+
+    try:
+        result = db.session.execute(
+            text(
+                """
+                INSERT INTO usuarios (nombre, email, activo, id_rol, departamento)
+                VALUES (:nombre, :email, :activo, :id_rol, :departamento)
+                """
+            ),
+            data,
+        )
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"message": "Ya existe un usuario con ese email"}), 409
+
+    return jsonify({"message": "Usuario creado", "id": result.lastrowid}), 201
+
+
+@admin_bp.put("/usuarios/<int:user_id>")
+@token_required
+@permission_required("usuarios", "update")
+def update_usuario(user_id: int):
+    ensure_usuarios_schema()
+    data = _normalize_user_payload(request.get_json(silent=True) or {})
+
+    if not data["nombre"]:
+        return jsonify({"message": "El nombre es obligatorio"}), 400
+    if not data["email"]:
+        return jsonify({"message": "El email es obligatorio"}), 400
+    if not data["id_rol"]:
+        return jsonify({"message": "Selecciona un rol"}), 400
+
+    role_exists = db.session.execute(
+        text("SELECT id FROM roles WHERE id = :id_rol LIMIT 1"),
+        {"id_rol": data["id_rol"]},
+    ).scalar()
+    if not role_exists:
+        return jsonify({"message": "El rol seleccionado no existe"}), 400
+
+    try:
+        result = db.session.execute(
+            text(
+                """
+                UPDATE usuarios
+                SET nombre = :nombre,
+                    email = :email,
+                    activo = :activo,
+                    id_rol = :id_rol,
+                    departamento = :departamento
+                WHERE id = :user_id
+                """
+            ),
+            {**data, "user_id": user_id},
+        )
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"message": "Ya existe un usuario con ese email"}), 409
+
+    if result.rowcount == 0:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+    return jsonify({"message": "Usuario actualizado"}), 200
+
+
+@admin_bp.delete("/usuarios/<int:user_id>")
+@token_required
+@permission_required("usuarios", "delete")
+def delete_usuario(user_id: int):
+    ensure_usuarios_schema()
+    current_user = getattr(g, "current_user", {}) or {}
+    if str(current_user.get("sub")) == str(user_id):
+        return jsonify({"message": "No puedes eliminar tu propio usuario activo"}), 403
+
+    try:
+        result = db.session.execute(text("DELETE FROM usuarios WHERE id = :user_id"), {"user_id": user_id})
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"message": "No se puede eliminar porque el usuario tiene registros relacionados"}), 409
+
+    if result.rowcount == 0:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+    return jsonify({"message": "Usuario eliminado"}), 200

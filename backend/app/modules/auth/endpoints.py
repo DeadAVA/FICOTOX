@@ -70,17 +70,6 @@ def login_with_email():
         if role_row is None:
             return jsonify({"message": "No existe el rol base Consulta"}), 500
 
-        user_columns = db.session.execute(
-            text(
-                """
-                SELECT COLUMN_NAME
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                  AND TABLE_NAME = 'usuarios'
-                """
-            )
-        ).scalars().all()
-
         cols = ["nombre", "email", "id_rol", "activo"]
         vals = [":nombre", ":email", ":id_rol", "1"]
         params = {
@@ -88,15 +77,6 @@ def login_with_email():
             "email": email,
             "id_rol": role_row["id"],
         }
-
-        if "password_hash" in user_columns:
-            cols.append("password_hash")
-            vals.append(":password_hash")
-            params["password_hash"] = "email_only_login"
-        elif "password" in user_columns:
-            cols.append("password")
-            vals.append(":password")
-            params["password"] = "email_only_login"
 
         insert_sql = f"INSERT INTO usuarios ({', '.join(cols)}) VALUES ({', '.join(vals)})"
         db.session.execute(text(insert_sql), params)

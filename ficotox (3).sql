@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1:3306
--- Tiempo de generación: 01-05-2026 a las 11:44:12
+-- Tiempo de generación: 01-05-2026 a las 12:49:00
 -- Versión del servidor: 9.1.0
 -- Versión de PHP: 8.3.14
 
@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS `equipos` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `numero_serie` (`numero_serie`),
   KEY `id_responsable` (`id_responsable`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 
@@ -179,10 +179,11 @@ CREATE TABLE IF NOT EXISTS `mantenimientos` (
   `observaciones` text,
   `id_responsable` int DEFAULT NULL,
   `creado_en` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `fecha_realizado` date DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `id_equipo` (`id_equipo`),
   KEY `id_responsable` (`id_responsable`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 
@@ -284,6 +285,7 @@ CREATE TABLE IF NOT EXISTS `muestras_procesamiento` (
   `folio_recepcion_num` int DEFAULT NULL,
   `muestra_tipo` varchar(20) DEFAULT NULL,
   `id_interno` varchar(100) DEFAULT NULL,
+  `lote_seleccion_json` longtext,
   `tipo_organismo_json` longtext,
   `parte_organismo_json` longtext,
   `bivalvos_steps_json` longtext,
@@ -303,7 +305,14 @@ CREATE TABLE IF NOT EXISTS `muestras_procesamiento` (
   KEY `idx_muestras_procesamiento_recepcion_id` (`recepcion_id`),
   KEY `idx_muestras_procesamiento_creado_por` (`creado_por`),
   KEY `idx_muestras_procesamiento_actualizado_por` (`actualizado_por`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+--
+-- Volcado de datos para la tabla `muestras_procesamiento`
+--
+
+INSERT INTO `muestras_procesamiento` (`id`, `folio_num`, `tipo_registro`, `clave_revision`, `fecha_emision`, `fecha_procesamiento`, `hora_procesamiento`, `recepcion_id`, `folio_recepcion_num`, `muestra_tipo`, `id_interno`, `lote_seleccion_json`, `tipo_organismo_json`, `parte_organismo_json`, `bivalvos_steps_json`, `sardinas_steps_json`, `otro_procesamiento`, `resguardo_json`, `observaciones_generales`, `nombre_quien_proceso`, `nombre_quien_superviso`, `estado`, `creado_por`, `actualizado_por`, `creado_en`, `actualizado_en`) VALUES
+(2, 1, 'P', 'FX-TCF-GMP', '2026-05-01', '2026-05-01', NULL, 2, 1, 'lote', 'D27-98A', '[{\"trabajar\": true, \"id_interno\": \"D27-98A\", \"nombre_organismo\": \"P\", \"cantidad_volumen\": \"9\", \"sitio_muestreo\": \"P\", \"fecha_muestra\": \"2026-05-01\", \"informacion_adicional\": null}]', '[\"bivalvos\"]', '[]', '[{\"step\": \"Lavar interior con agua corriente\", \"equipo_id\": null, \"peso\": null}]', '[]', NULL, '{\"entregado_extraccion\": false, \"refrigerador_re1\": false, \"congelador_co1\": false, \"congelador_co2\": true, \"congelador_co3\": false}', NULL, 'Tec. Karen Valdivia', 'Supervisor QA', 'registrada', 1, 1, '2026-05-01 12:47:20', '2026-05-01 12:47:20');
 
 -- --------------------------------------------------------
 
@@ -339,7 +348,14 @@ CREATE TABLE IF NOT EXISTS `muestras_recepcion` (
   UNIQUE KEY `uq_muestras_recepcion_folio_num` (`folio_num`),
   KEY `idx_muestras_recepcion_creado_por` (`creado_por`),
   KEY `idx_muestras_recepcion_actualizado_por` (`actualizado_por`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+--
+-- Volcado de datos para la tabla `muestras_recepcion`
+--
+
+INSERT INTO `muestras_recepcion` (`id`, `folio_num`, `tipo_registro`, `clave_revision`, `fecha_emision`, `fecha_recepcion`, `hora_recepcion`, `solicitante`, `muestra_unica`, `fecha_muestra`, `id_interno`, `especificaciones`, `lote_muestras_json`, `analisis_json`, `inspeccion_json`, `datos_solicitante_json`, `datos_custodio_json`, `estado`, `creado_por`, `actualizado_por`, `creado_en`, `actualizado_en`) VALUES
+(2, 1, 'R', 'FX-TCF-GMR', '2026-05-01', '2026-05-01', '05:09', 'prueba', 0, NULL, NULL, NULL, '[{\"trabajar\": true, \"id_interno\": \"D27-98A\", \"nombre_organismo\": \"P\", \"cantidad_volumen\": \"9\", \"sitio_muestreo\": \"P\", \"fecha_muestra\": \"2026-05-01\", \"informacion_adicional\": null}]', '{\"tipos\": [\"acido_domoico\"], \"metodos\": [\"microscopia\"], \"tipos_muestra\": [\"agua_mar\"], \"observaciones\": null}', '{\"checklist\": [{\"requisito\": \"Se presentan en talla comercial\", \"estado\": \"C\", \"observacion\": null}, {\"requisito\": \"Sin alteraciones visibles (descomposicion, visceras alteradas, cuerpos discordes)\", \"estado\": \"C\", \"observacion\": null}, {\"requisito\": \"No han transcurrido mas de 24 horas desde su captura\", \"estado\": \"\", \"observacion\": null}, {\"requisito\": \"Muestras transportadas en Styracones como contenedor primario\", \"estado\": \"C\", \"observacion\": null}, {\"requisito\": \"Contenedor primario transportado en hielera con hielo suficiente\", \"estado\": \"C\", \"observacion\": null}, {\"requisito\": \"Cantidad y volumen suficientes para analisis\", \"estado\": \"\", \"observacion\": null}, {\"requisito\": \"Sin algun tipo de flujo (en caso previo especificar)\", \"estado\": \"NC\", \"observacion\": null}], \"observaciones_generales\": null}', '{\"nombre_entrega\": \"P\", \"firma_conformidad\": \"P\"}', '{\"nombre_cargo_firma\": \"P\", \"lugar_resguardo\": \"congelador\", \"lugar_otro\": \"P\"}', 'registrada', 1, 1, '2026-05-01 12:10:34', '2026-05-01 12:10:34');
 
 -- --------------------------------------------------------
 
@@ -356,7 +372,7 @@ CREATE TABLE IF NOT EXISTS `permisos` (
   `activo` tinyint(1) NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_permisos_clave` (`clave`)
-) ENGINE=InnoDB AUTO_INCREMENT=1961 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3921 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Volcado de datos para la tabla `permisos`
@@ -524,6 +540,7 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
   `id_rol` int NOT NULL,
   `departamento` varchar(100) DEFAULT NULL,
   `creado_en` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `ultimo_acceso` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `email` (`email`),
   KEY `id_rol` (`id_rol`)
@@ -533,9 +550,9 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
 -- Volcado de datos para la tabla `usuarios`
 --
 
-INSERT INTO `usuarios` (`id`, `nombre`, `email`, `activo`, `id_rol`, `departamento`, `creado_en`) VALUES
-(1, 'Administrador Ficotox', 'ficotox108@cicese.mx', 1, 1, 'Administración', '2026-05-01 10:20:05'),
-(2, 'qa.consumibles', 'qa.consumibles@ficotox.com', 1, 3, NULL, '2026-05-01 10:33:20');
+INSERT INTO `usuarios` (`id`, `nombre`, `email`, `activo`, `id_rol`, `departamento`, `creado_en`, `ultimo_acceso`) VALUES
+(1, 'Administrador Ficotox', 'ficotox108@cicese.mx', 1, 1, 'Administración', '2026-05-01 10:20:05', NULL),
+(2, 'qa.consumibles', 'qa.consumibles@ficotox.com', 1, 3, NULL, '2026-05-01 10:33:20', NULL);
 
 --
 -- Restricciones para tablas volcadas

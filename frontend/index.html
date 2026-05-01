@@ -263,12 +263,50 @@
             </section>
 
             <section class="content-page" id="page-reactivos">
+              <div class="role-header mb-3">
+                <div class="role-header-icon"><i class="bi bi-flask"></i></div>
+                <div>
+                  <h3 class="h4 fw-bold mb-0">Reactivos</h3>
+                  <p class="text-secondary mb-0">Catalogo por familias, ubicacion y estado de inventario</p>
+                </div>
+              </div>
+
+              <section class="row g-3 mb-3">
+                <div class="col-12 col-md-4">
+                  <article class="role-stat-card">
+                    <p class="role-stat-label">Total</p>
+                    <h4 class="role-stat-value" id="reactivosTotalCount">0</h4>
+                  </article>
+                </div>
+                <div class="col-12 col-md-4">
+                  <article class="role-stat-card">
+                    <p class="role-stat-label">Con caducidad</p>
+                    <h4 class="role-stat-value text-warning" id="reactivosExpiryCount">0</h4>
+                  </article>
+                </div>
+                <div class="col-12 col-md-4">
+                  <article class="role-stat-card">
+                    <p class="role-stat-label">Tipos</p>
+                    <h4 class="role-stat-value text-success" id="reactivosTypesCount">0</h4>
+                  </article>
+                </div>
+              </section>
+
               <article class="panel-card">
-                <div class="panel-head"><h3 class="h5 mb-0">Reactivos</h3></div>
+                <div class="panel-head flex-wrap gap-2">
+                  <div>
+                    <h3 class="h5 mb-1">Inventario de reactivos</h3>
+                    <p class="text-secondary small mb-0" id="reactivosFeedback"></p>
+                  </div>
+                  <div class="d-flex flex-wrap gap-2">
+                    <input id="reactivosSearchInput" class="form-control form-control-sm role-search-input" placeholder="Buscar reactivo..." />
+                    <button id="openCreateReactivoModalBtn" class="btn btn-brand btn-sm" type="button">Nuevo Reactivo</button>
+                  </div>
+                </div>
                 <div class="table-responsive">
                   <table class="table table-sm align-middle movement-table mb-0">
-                    <thead><tr><th>Nombre</th><th>Categoria</th><th>Cantidad</th><th>Unidad</th><th>Stock Minimo</th></tr></thead>
-                    <tbody id="reactivosTableBody"><tr><td colspan="5" class="text-secondary">Cargando...</td></tr></tbody>
+                    <thead><tr><th>Tipo</th><th>Producto</th><th>Marca / Proveedor</th><th>Ubicacion</th><th>Caducidad</th><th>Existencia</th><th>Acciones</th></tr></thead>
+                    <tbody id="reactivosTableBody"><tr><td colspan="7" class="text-secondary">Cargando...</td></tr></tbody>
                   </table>
                 </div>
               </article>
@@ -337,14 +375,52 @@
             </section>
 
             <section class="content-page" id="page-equipos">
-              <article class="panel-card">
-                <div class="panel-head"><h3 class="h5 mb-0">Equipos</h3></div>
+              <div class="users-page-head mb-3">
+                <div class="role-header mb-0">
+                  <div class="role-header-icon"><i class="bi bi-magic"></i></div>
+                  <div>
+                    <h3 class="h4 fw-bold mb-0">Equipos</h3>
+                    <p class="text-secondary mb-0">Administracion de equipos del laboratorio</p>
+                  </div>
+                </div>
+                <button id="openCreateEquipoBtn" class="btn btn-brand btn-sm" type="button"><i class="bi bi-plus-lg me-1"></i>Nuevo Equipo</button>
+              </div>
+
+              <section class="row g-3 mb-3">
+                <div class="col-12 col-md-6 col-xl-3"><article class="role-stat-card user-stat-card"><p class="role-stat-label">Total Equipos</p><h4 class="role-stat-value" id="equiposTotalCount">0</h4></article></div>
+                <div class="col-12 col-md-6 col-xl-3"><article class="role-stat-card user-stat-card"><p class="role-stat-label">Operativos</p><h4 class="role-stat-value text-success" id="equiposOperativosCount">0</h4></article></div>
+                <div class="col-12 col-md-6 col-xl-3"><article class="role-stat-card user-stat-card"><p class="role-stat-label">En Mantenimiento</p><h4 class="role-stat-value text-warning" id="equiposMantenimientoCount">0</h4></article></div>
+                <div class="col-12 col-md-6 col-xl-3"><article class="role-stat-card user-stat-card"><p class="role-stat-label">Alertas</p><h4 class="role-stat-value text-danger" id="equiposAlertasCount">0</h4></article></div>
+              </section>
+
+              <article class="panel-card users-filter-card mb-3">
+                <div class="row g-2 align-items-center users-search">
+                  <div class="col-12 col-xl-9">
+                    <div class="input-group">
+                      <span class="input-group-text"><i class="bi bi-search"></i></span>
+                      <input id="equiposSearchInput" class="form-control" placeholder="Buscar por nombre, marca o modelo..." />
+                    </div>
+                  </div>
+                  <div class="col-12 col-xl-3">
+                    <select id="equiposEstadoFilter" class="form-select">
+                      <option value="">Todos los estados</option>
+                      <option value="operativo">Operativo</option>
+                      <option value="mantenimiento">En Mantenimiento</option>
+                      <option value="calibracion_pendiente">Calibracion Pendiente</option>
+                      <option value="fuera_servicio">Fuera de Servicio</option>
+                    </select>
+                  </div>
+                </div>
+              </article>
+
+              <article class="panel-card users-table-card">
                 <div class="table-responsive">
-                  <table class="table table-sm align-middle movement-table mb-0">
-                    <thead><tr><th>Nombre</th><th>Marca</th><th>Modelo</th><th>Estado</th><th>Prox. Calibracion</th></tr></thead>
-                    <tbody id="equiposTableBody"><tr><td colspan="5" class="text-secondary">Cargando...</td></tr></tbody>
+                  <table class="table table-sm align-middle movement-table users-table mb-0">
+                    <thead><tr><th>Equipo</th><th>Marca / Modelo</th><th>No. Serie</th><th>Ubicacion</th><th>Responsable</th><th>Prox. Calibracion</th><th>Estado</th><th>Acciones</th></tr></thead>
+                    <tbody id="equiposTableBody"><tr><td colspan="8" class="text-secondary">Cargando...</td></tr></tbody>
                   </table>
                 </div>
+                <p id="equiposFeedback" class="small text-secondary mt-2 mb-0"></p>
               </article>
             </section>
 
@@ -459,14 +535,60 @@
             </section>
 
             <section class="content-page" id="page-mantenimiento">
-              <article class="panel-card">
-                <div class="panel-head"><h3 class="h5 mb-0">Mantenimiento</h3></div>
+              <div class="users-page-head mb-3">
+                <div class="role-header mb-0">
+                  <div class="role-header-icon amber"><i class="bi bi-wrench-adjustable"></i></div>
+                  <div>
+                    <h3 class="h4 fw-bold mb-0">Mantenimiento</h3>
+                    <p class="text-secondary mb-0">Programa de mantenimiento de equipos</p>
+                  </div>
+                </div>
+                <button id="openCreateMantenimientoBtn" class="btn btn-brand btn-sm" type="button"><i class="bi bi-plus-lg me-1"></i>Programar Mantenimiento</button>
+              </div>
+
+              <section class="row g-3 mb-3">
+                <div class="col-12 col-md-6 col-xl-3"><article class="role-stat-card user-stat-card"><p class="role-stat-label">Total</p><h4 class="role-stat-value" id="mantenimientoTotalCount">0</h4></article></div>
+                <div class="col-12 col-md-6 col-xl-3"><article class="role-stat-card user-stat-card"><p class="role-stat-label">Pendientes</p><h4 class="role-stat-value text-primary" id="mantenimientoPendientesCount">0</h4></article></div>
+                <div class="col-12 col-md-6 col-xl-3"><article class="role-stat-card user-stat-card"><p class="role-stat-label">Completados</p><h4 class="role-stat-value text-success" id="mantenimientoCompletadosCount">0</h4></article></div>
+                <div class="col-12 col-md-6 col-xl-3"><article class="role-stat-card user-stat-card"><p class="role-stat-label">Vencidos</p><h4 class="role-stat-value text-danger" id="mantenimientoVencidosCount">0</h4></article></div>
+              </section>
+
+              <article class="panel-card users-filter-card mb-3">
+                <div class="row g-2 align-items-center users-search">
+                  <div class="col-12 col-xl-8">
+                    <div class="input-group">
+                      <span class="input-group-text"><i class="bi bi-search"></i></span>
+                      <input id="mantenimientoSearchInput" class="form-control" placeholder="Buscar por equipo o proveedor..." />
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-6 col-xl-2">
+                    <select id="mantenimientoTipoFilter" class="form-select" aria-label="Filtrar por tipo de mantenimiento">
+                      <option value="">Todos los tipos</option>
+                      <option value="preventivo">Preventivo</option>
+                      <option value="correctivo">Correctivo</option>
+                      <option value="calibracion">Calibracion</option>
+                    </select>
+                  </div>
+                  <div class="col-12 col-md-6 col-xl-2">
+                    <select id="mantenimientoEstadoFilter" class="form-select" aria-label="Filtrar por estado de mantenimiento">
+                      <option value="">Todos los estados</option>
+                      <option value="programado">Programado</option>
+                      <option value="en_proceso">En Proceso</option>
+                      <option value="completado">Completado</option>
+                      <option value="vencido">Vencido</option>
+                    </select>
+                  </div>
+                </div>
+              </article>
+
+              <article class="panel-card users-table-card">
                 <div class="table-responsive">
-                  <table class="table table-sm align-middle movement-table mb-0">
-                    <thead><tr><th>Equipo</th><th>Tipo</th><th>Estado</th><th>Fecha</th><th>Responsable</th></tr></thead>
-                    <tbody id="mantenimientosTableBody"><tr><td colspan="5" class="text-secondary">Cargando...</td></tr></tbody>
+                  <table class="table table-sm align-middle movement-table users-table mb-0">
+                    <thead><tr><th>Equipo</th><th>Tipo</th><th>Fecha Programada</th><th>Tecnico / Proveedor</th><th>Estado</th><th>Observaciones</th><th>Acciones</th></tr></thead>
+                    <tbody id="mantenimientosTableBody"><tr><td colspan="7" class="text-secondary">Cargando...</td></tr></tbody>
                   </table>
                 </div>
+                <p id="mantenimientoFeedback" class="small text-secondary mt-2 mb-0"></p>
               </article>
             </section>
 
@@ -551,14 +673,73 @@
             </section>
 
             <section class="content-page" id="page-usuarios">
-              <article class="panel-card">
-                <div class="panel-head"><h3 class="h5 mb-0">Usuarios</h3></div>
+              <div class="users-page-head mb-3">
+                <div class="role-header mb-0">
+                  <div class="role-header-icon"><i class="bi bi-people"></i></div>
+                  <div>
+                    <h3 class="h4 fw-bold mb-0">Usuarios</h3>
+                    <p class="text-secondary mb-0">Administracion de usuarios del sistema</p>
+                  </div>
+                </div>
+                <button id="openCreateUserBtn" class="btn btn-brand btn-sm" type="button">
+                  <i class="bi bi-plus-lg me-1"></i> Nuevo Usuario
+                </button>
+              </div>
+
+              <section class="row g-3 mb-3">
+                <div class="col-12 col-md-6 col-xl-3">
+                  <article class="role-stat-card user-stat-card">
+                    <p class="role-stat-label">Total Usuarios</p>
+                    <h4 class="role-stat-value" id="usuariosTotalCount">0</h4>
+                  </article>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                  <article class="role-stat-card user-stat-card">
+                    <p class="role-stat-label">Activos</p>
+                    <h4 class="role-stat-value text-success" id="usuariosActiveCount">0</h4>
+                  </article>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                  <article class="role-stat-card user-stat-card">
+                    <p class="role-stat-label">Inactivos</p>
+                    <h4 class="role-stat-value" id="usuariosInactiveCount">0</h4>
+                  </article>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                  <article class="role-stat-card user-stat-card">
+                    <p class="role-stat-label">Administradores</p>
+                    <h4 class="role-stat-value text-primary" id="usuariosAdminCount">0</h4>
+                  </article>
+                </div>
+              </section>
+
+              <article class="panel-card users-filter-card mb-3">
+                <div class="row g-2 align-items-center">
+                  <div class="col-12 col-xl-9">
+                    <div class="input-group users-search">
+                      <span class="input-group-text"><i class="bi bi-search"></i></span>
+                      <input id="usuariosSearchInput" class="form-control" placeholder="Buscar por nombre o email..." aria-label="Buscar usuarios por nombre o email" />
+                    </div>
+                  </div>
+                  <div class="col-12 col-xl-3">
+                    <div class="input-group users-search">
+                      <span class="input-group-text"><i class="bi bi-shield"></i></span>
+                      <select id="usuariosRoleFilter" class="form-select" aria-label="Filtrar usuarios por rol">
+                        <option value="">Todos los roles</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="panel-card users-table-card">
                 <div class="table-responsive">
-                  <table class="table table-sm align-middle movement-table mb-0">
-                    <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Departamento</th><th>Activo</th></tr></thead>
-                    <tbody id="usuariosTableBody"><tr><td colspan="5" class="text-secondary">Cargando...</td></tr></tbody>
+                  <table class="table table-sm align-middle movement-table users-table mb-0">
+                    <thead><tr><th>Usuario</th><th>Email</th><th>Rol</th><th>Departamento</th><th>Ultimo Acceso</th><th>Estado</th><th>Acciones</th></tr></thead>
+                    <tbody id="usuariosTableBody"><tr><td colspan="7" class="text-secondary">Cargando...</td></tr></tbody>
                   </table>
                 </div>
+                <p id="usuariosFeedback" class="small text-secondary mt-2 mb-0"></p>
               </article>
             </section>
           </div>
@@ -615,6 +796,222 @@
           <div class="modal-footer">
             <button type="button" id="roleCancelBtn" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
             <button type="submit" form="roleForm" id="roleSaveBtn" class="btn btn-brand btn-sm">Guardar Rol</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="reactivoModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <div>
+              <h5 class="modal-title" id="reactivoFormTitle">Nuevo Reactivo</h5>
+              <p class="text-secondary small mb-0">Los campos cambian segun la familia seleccionada.</p>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <form id="reactivoForm" class="row g-3">
+              <input type="hidden" id="reactivoIdInput" />
+              <div class="col-12">
+                <div class="sample-section-card">
+                  <h6 class="sample-section-title">Familia del reactivo</h6>
+                  <div class="row g-3">
+                    <div class="col-12 col-lg-5">
+                      <label class="form-label" for="reactivoTipoInput">Tipo de reactivo</label>
+                      <select id="reactivoTipoInput" class="form-select" required></select>
+                    </div>
+                    <div class="col-12 col-lg-7">
+                      <div id="reactivoTypeHint" class="reactivo-type-hint"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12">
+                <div class="sample-section-card">
+                  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                    <h6 class="sample-section-title mb-0">Datos del formato</h6>
+                    <span class="status-dot">Autocompletado por tipo</span>
+                  </div>
+                  <div id="reactivoDynamicFields" class="row g-3"></div>
+                </div>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" form="reactivoForm" id="reactivoSaveBtn" class="btn btn-brand btn-sm">Guardar Reactivo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <div>
+              <h5 class="modal-title" id="userFormTitle">Nuevo Usuario</h5>
+              <p class="text-secondary small mb-0">Acceso por correo corporativo y permisos segun rol.</p>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <form id="userForm" class="row g-3">
+              <input type="hidden" id="userIdInput" />
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="userNameInput">Nombre</label>
+                <input id="userNameInput" class="form-control" maxlength="100" required />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="userEmailInput">Email</label>
+                <input id="userEmailInput" type="email" class="form-control" maxlength="100" required />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="userRoleInput">Rol</label>
+                <select id="userRoleInput" class="form-select" required></select>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="userDepartmentInput">Departamento</label>
+                <input id="userDepartmentInput" class="form-control" maxlength="100" />
+              </div>
+              <div class="col-12">
+                <div class="form-check form-switch">
+                  <input id="userActiveInput" class="form-check-input" type="checkbox" checked />
+                  <label class="form-check-label" for="userActiveInput">Usuario activo</label>
+                </div>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" form="userForm" id="userSaveBtn" class="btn btn-brand btn-sm">Guardar Usuario</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="equipoModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <div>
+              <h5 class="modal-title" id="equipoFormTitle">Nuevo Equipo</h5>
+              <p class="text-secondary small mb-0">Registro operativo y calibracion del equipo.</p>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <form id="equipoForm" class="row g-3">
+              <input type="hidden" id="equipoIdInput" />
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="equipoNombreInput">Nombre del equipo</label>
+                <input id="equipoNombreInput" class="form-control" maxlength="150" required />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="equipoSerieInput">Numero de serie</label>
+                <input id="equipoSerieInput" class="form-control" maxlength="100" placeholder="Opcional" />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="equipoMarcaInput">Marca</label>
+                <input id="equipoMarcaInput" class="form-control" maxlength="100" />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="equipoModeloInput">Modelo</label>
+                <input id="equipoModeloInput" class="form-control" maxlength="100" />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="equipoUbicacionInput">Ubicacion</label>
+                <input id="equipoUbicacionInput" class="form-control" maxlength="150" />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="equipoResponsableInput">Responsable</label>
+                <select id="equipoResponsableInput" class="form-select"></select>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="equipoCalibracionInput">Proxima calibracion</label>
+                <input id="equipoCalibracionInput" type="date" class="form-control" />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="equipoEstadoInput">Estado</label>
+                <select id="equipoEstadoInput" class="form-select" required>
+                  <option value="operativo">Operativo</option>
+                  <option value="mantenimiento">En Mantenimiento</option>
+                  <option value="calibracion_pendiente">Calibracion Pendiente</option>
+                  <option value="fuera_servicio">Fuera de Servicio</option>
+                </select>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" form="equipoForm" id="equipoSaveBtn" class="btn btn-brand btn-sm">Guardar Equipo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="mantenimientoModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <div>
+              <h5 class="modal-title" id="mantenimientoFormTitle">Programar Mantenimiento</h5>
+              <p class="text-secondary small mb-0">Fechas programadas para mantenimiento y calibracion.</p>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <form id="mantenimientoForm" class="row g-3">
+              <input type="hidden" id="mantenimientoIdInput" />
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="mantenimientoEquipoInput">Equipo</label>
+                <select id="mantenimientoEquipoInput" class="form-select" required></select>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="mantenimientoTipoInput">Tipo</label>
+                <select id="mantenimientoTipoInput" class="form-select" required>
+                  <option value="preventivo">Preventivo</option>
+                  <option value="correctivo">Correctivo</option>
+                  <option value="calibracion">Calibracion</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="mantenimientoFechaProgramadaInput">Fecha programada</label>
+                <input id="mantenimientoFechaProgramadaInput" type="date" class="form-control" required />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="mantenimientoFechaRealizadoInput">Fecha realizado</label>
+                <input id="mantenimientoFechaRealizadoInput" type="date" class="form-control" />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="mantenimientoTecnicoInput">Tecnico / Proveedor</label>
+                <input id="mantenimientoTecnicoInput" class="form-control" maxlength="150" />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="mantenimientoResponsableInput">Responsable interno</label>
+                <select id="mantenimientoResponsableInput" class="form-select"></select>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="mantenimientoEstadoInput">Estado</label>
+                <select id="mantenimientoEstadoInput" class="form-select" required>
+                  <option value="programado">Programado</option>
+                  <option value="en_proceso">En Proceso</option>
+                  <option value="completado">Completado</option>
+                  <option value="vencido">Vencido</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="mantenimientoObservacionesInput">Observaciones</label>
+                <textarea id="mantenimientoObservacionesInput" class="form-control" rows="3"></textarea>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" form="mantenimientoForm" id="mantenimientoSaveBtn" class="btn btn-brand btn-sm">Guardar Mantenimiento</button>
           </div>
         </div>
       </div>
@@ -1243,6 +1640,29 @@
                         <option value="lote">Muestra lote</option>
                       </select>
                     </div>
+                    <div class="col-12">
+                      <div id="extractionProcessingSummary" class="small text-secondary"></div>
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label">Muestras que pasan a extraccion</label>
+                      <div class="table-responsive">
+                        <table class="table table-sm align-middle movement-table mb-0">
+                          <thead>
+                            <tr>
+                              <th>ID muestra</th>
+                              <th>Organismo</th>
+                              <th>Sitio</th>
+                              <th>Peso muestra (g)</th>
+                              <th>Replica</th>
+                              <th>Peso replica (g)</th>
+                            </tr>
+                          </thead>
+                          <tbody id="extractionSampleTableBody">
+                            <tr><td colspan="6" class="text-secondary">Selecciona un folio de procesamiento.</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                     <div class="col-12 col-md-8">
                       <label class="form-label">Tipo de molienda</label>
                       <div class="d-flex flex-wrap gap-3">
@@ -1257,8 +1677,8 @@
               <div class="col-12 col-lg-6">
                 <div class="sample-section-card h-100">
                   <h6 class="sample-section-title">Etapas de Extraccion</h6>
-                  <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep1" value="Moler 2 min muestra" /><label class="form-check-label" for="extrStep1">Moler 2 min muestra</label></div>
-                  <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep2" value="Transferir a recipiente" /><label class="form-check-label" for="extrStep2">Transferir a recipiente</label></div>
+                  <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep1" value="Descongelar en oscuridad" /><label class="form-check-label" for="extrStep1">Descongelar en oscuridad</label></div>
+                  <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep2" value="Homogeneizar 30-45s sin descartar liquido de descongelacion" /><label class="form-check-label" for="extrStep2">Homogeneizar 30-45s sin descartar liquido de descongelacion</label></div>
                   <div class="row g-2 mb-2">
                     <div class="col-12 col-md-6">
                       <label class="form-label form-label-sm" for="extrLicuadoraEquipoInput">ID equipo licuadora</label>
@@ -1269,7 +1689,14 @@
                       <input id="extrBA1Input" class="form-control form-control-sm" maxlength="60" />
                     </div>
                   </div>
-                  <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep3" value="Registrar submuestras" /><label class="form-check-label" for="extrStep3">Registrar submuestras y pesos</label></div>
+                  <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep3" value="Submuestrear por duplicado en tubo protegido de luz" /><label class="form-check-label" for="extrStep3">Submuestrear por duplicado en tubo protegido de luz</label></div>
+                  <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep4" value="Pesar agua desionizada para blanco" /><label class="form-check-label" for="extrStep4">Pesar agua desionizada para blanco</label></div>
+                  <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep5" value="Adicionar 16 mL de metanol agua 50 50" /><label class="form-check-label" for="extrStep5">Adicionar 16 mL de metanol:agua (50:50)</label></div>
+                  <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep6" value="Homogeneizar durante 3 minutos" /><label class="form-check-label" for="extrStep6">Homogeneizar durante 3 min</label></div>
+                  <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep7" value="Centrifugar a 3000g o mas durante 10 minutos" /><label class="form-check-label" for="extrStep7">Centrifugar a 3,000 g o mas durante 10 min</label></div>
+                  <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep8" value="Evaluar limpieza del extracto" /><label class="form-check-label" for="extrStep8">Evaluar limpieza del extracto</label></div>
+                  <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep9" value="Limpieza del extracto" /><label class="form-check-label" for="extrStep9">Limpieza del extracto</label></div>
+                  <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep10" value="Filtrar sobrenadante a vial ambar" /><label class="form-check-label" for="extrStep10">Filtrar sobrenadante a vial ambar</label></div>
                   <div class="row g-2">
                     <div class="col-12 col-md-6">
                       <label class="form-label form-label-sm" for="extrSub1PesoInput">Submuestra 1 (g)</label>

@@ -6,6 +6,7 @@ from sqlalchemy import text
 from app.extensions import db
 from app.utils.auth import token_required
 from app.utils.rbac import permission_required
+from app.utils.schema import add_column_if_missing
 
 samples_procesamiento_bp = Blueprint("samples_procesamiento", __name__, url_prefix="/api/samples/processing")
 
@@ -53,13 +54,10 @@ def ensure_samples_procesamiento_schema():
 			"""
 		)
 	)
-	db.session.execute(
-		text(
-			"""
-			ALTER TABLE muestras_procesamiento
-			ADD COLUMN IF NOT EXISTS lote_seleccion_json LONGTEXT AFTER id_interno
-			"""
-		)
+	add_column_if_missing(
+		"muestras_procesamiento",
+		"lote_seleccion_json",
+		"LONGTEXT AFTER `id_interno`",
 	)
 	db.session.commit()
 
@@ -148,7 +146,7 @@ def list_processing_samples():
 			"""
 			SELECT p.id, p.folio_num, p.tipo_registro, p.fecha_procesamiento,
 				   p.hora_procesamiento, p.folio_recepcion_num, p.id_interno,
-				   p.estado, p.nombre_quien_proceso, p.creado_en
+				   p.muestra_tipo, p.estado, p.nombre_quien_proceso, p.creado_en
 			FROM muestras_procesamiento p
 			WHERE :search = ''
 			   OR p.id_interno LIKE :search_like
