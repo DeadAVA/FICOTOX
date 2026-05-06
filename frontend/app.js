@@ -202,6 +202,10 @@ const sampleLoteCountInput = document.getElementById("sampleLoteCountInput");
 const sampleLoteTableBody = document.getElementById("sampleLoteTableBody");
 const addSampleLoteRowBtn = document.getElementById("addSampleLoteRowBtn");
 const sampleAnalisisObservacionesInput = document.getElementById("sampleAnalisisObservacionesInput");
+const analisisMetodoOtroWrap = document.getElementById("analisisMetodoOtroWrap");
+const analisisMetodoOtroInput = document.getElementById("analisisMetodoOtroInput");
+const analisisMuestraOtroWrap = document.getElementById("analisisMuestraOtroWrap");
+const analisisMuestraOtroInput = document.getElementById("analisisMuestraOtroInput");
 const sampleInspeccionTableBody = document.getElementById("sampleInspeccionTableBody");
 const sampleInspeccionGeneralInput = document.getElementById("sampleInspeccionGeneralInput");
 const sampleSolicitanteNombreInput = document.getElementById("sampleSolicitanteNombreInput");
@@ -243,6 +247,7 @@ const processingQuienSupervisoInput = document.getElementById("processingQuienSu
 const processingSaveBtn = document.getElementById("processingSaveBtn");
 const processingBivalvosWrap = document.getElementById("processingBivalvosWrap");
 const processingSardinasWrap = document.getElementById("processingSardinasWrap");
+const processingOtroWrap = document.getElementById("processingOtroWrap");
 
 const procBiv7 = document.getElementById("procBiv7");
 const procBiv8 = document.getElementById("procBiv8");
@@ -519,6 +524,26 @@ const showLogin = () => {
 const getStoredToken = () => {
   const saved = localStorage.getItem(SESSION_TOKEN_KEY);
   return saved && saved.trim() ? saved.trim() : null;
+};
+
+const getStoredUser = () => {
+  const raw = localStorage.getItem(SESSION_USER_KEY);
+  if (!raw) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (_error) {
+    return null;
+  }
+};
+
+const formatActiveUserSignature = () => {
+  const user = getStoredUser() || {};
+  const name = (user.nombre || "").trim();
+  const role = (user.rol || "").trim();
+  const email = (user.email || "").trim();
+  return [name || email || "Usuario activo", role, email && name ? email : ""].filter(Boolean).join(" - ");
 };
 
 const setSession = (token, user) => {
@@ -1387,6 +1412,30 @@ const toggleSampleModeUI = () => {
   }
 };
 
+const toggleSampleAnalysisOtherFields = () => {
+  const methodOtherChecked = !!document.getElementById("analisisMetodo5")?.checked;
+  const sampleOtherChecked = !!document.getElementById("analisisMuestra5")?.checked;
+
+  if (analisisMetodoOtroWrap) {
+    analisisMetodoOtroWrap.classList.toggle("d-none", !methodOtherChecked);
+  }
+  if (analisisMetodoOtroInput) {
+    analisisMetodoOtroInput.disabled = !methodOtherChecked;
+    if (!methodOtherChecked) {
+      analisisMetodoOtroInput.value = "";
+    }
+  }
+  if (analisisMuestraOtroWrap) {
+    analisisMuestraOtroWrap.classList.toggle("d-none", !sampleOtherChecked);
+  }
+  if (analisisMuestraOtroInput) {
+    analisisMuestraOtroInput.disabled = !sampleOtherChecked;
+    if (!sampleOtherChecked) {
+      analisisMuestraOtroInput.value = "";
+    }
+  }
+};
+
 const renderInspeccionRows = (existing = []) => {
   if (!sampleInspeccionTableBody) {
     return;
@@ -1400,9 +1449,9 @@ const renderInspeccionRows = (existing = []) => {
       return `
       <tr>
         <td>${req}</td>
-        <td><input type="radio" name="insp-${btoa(unescape(encodeURIComponent(req))).slice(0, 12)}" class="sample-insp-status" data-req="${req}" value="C" ${status === "C" ? "checked" : ""} /></td>
-        <td><input type="radio" name="insp-${btoa(unescape(encodeURIComponent(req))).slice(0, 12)}" class="sample-insp-status" data-req="${req}" value="NC" ${status === "NC" ? "checked" : ""} /></td>
-        <td><input type="radio" name="insp-${btoa(unescape(encodeURIComponent(req))).slice(0, 12)}" class="sample-insp-status" data-req="${req}" value="NA" ${status === "NA" ? "checked" : ""} /></td>
+        <td><label class="sample-radio-cell" title="Cumple"><input type="radio" name="insp-${btoa(unescape(encodeURIComponent(req))).slice(0, 12)}" class="sample-insp-status" data-req="${req}" value="C" ${status === "C" ? "checked" : ""} /></label></td>
+        <td><label class="sample-radio-cell" title="No cumple"><input type="radio" name="insp-${btoa(unescape(encodeURIComponent(req))).slice(0, 12)}" class="sample-insp-status" data-req="${req}" value="NC" ${status === "NC" ? "checked" : ""} /></label></td>
+        <td><label class="sample-radio-cell" title="No aplica"><input type="radio" name="insp-${btoa(unescape(encodeURIComponent(req))).slice(0, 12)}" class="sample-insp-status" data-req="${req}" value="NA" ${status === "NA" ? "checked" : ""} /></label></td>
         <td><input class="form-control form-control-sm sample-insp-obs" data-req="${req}" value="${current.observacion || ""}" /></td>
       </tr>`;
     })
@@ -1439,11 +1488,15 @@ const resetSampleForm = async (withNextFolio = true) => {
   sampleFechaRecepcionInput.value = isoDate(new Date());
   sampleEstadoInput.value = "registrada";
   sampleMuestraUnicaInput.checked = true;
+  if (sampleCustodioNombreInput) {
+    sampleCustodioNombreInput.value = formatActiveUserSignature();
+  }
   ensureSampleLoteRows();
   if (sampleLoteCountInput) {
     sampleLoteCountInput.value = "1";
   }
   toggleSampleModeUI();
+  toggleSampleAnalysisOtherFields();
   renderInspeccionRows();
 
   if (!withNextFolio) {
@@ -1482,7 +1535,9 @@ const buildSamplePayload = () => {
     analisis: {
       tipos: Array.from(document.querySelectorAll(".sample-analisis-tipo:checked")).map((el) => el.value),
       metodos: Array.from(document.querySelectorAll(".sample-analisis-metodo:checked")).map((el) => el.value),
+      metodo_otro: document.getElementById("analisisMetodo5")?.checked ? (analisisMetodoOtroInput?.value || "").trim() || null : null,
       tipos_muestra: Array.from(document.querySelectorAll(".sample-analisis-muestra:checked")).map((el) => el.value),
+      tipo_muestra_otro: document.getElementById("analisisMuestra5")?.checked ? (analisisMuestraOtroInput?.value || "").trim() || null : null,
       observaciones: (sampleAnalisisObservacionesInput.value || "").trim() || null,
     },
     inspeccion: {
@@ -1532,6 +1587,13 @@ const fillSampleForm = (item) => {
   document.querySelectorAll(".sample-analisis-muestra").forEach((el) => {
     el.checked = (analisis.tipos_muestra || []).includes(el.value);
   });
+  if (analisisMetodoOtroInput) {
+    analisisMetodoOtroInput.value = analisis.metodo_otro || "";
+  }
+  if (analisisMuestraOtroInput) {
+    analisisMuestraOtroInput.value = analisis.tipo_muestra_otro || "";
+  }
+  toggleSampleAnalysisOtherFields();
   sampleAnalisisObservacionesInput.value = analisis.observaciones || "";
 
   const inspeccion = item.inspeccion || {};
@@ -1890,6 +1952,9 @@ const resetExtractionForm = async (withNextFolio = true, prefillProcessing = nul
   extractionFechaEmisionInput.value = isoDate(new Date());
   extractionFechaInput.value = isoDate(new Date());
   extractionEstadoInput.value = "registrada";
+  if (extractionQuienExtrajoInput) {
+    extractionQuienExtrajoInput.value = formatActiveUserSignature();
+  }
   clearExtractionProcessingDerivedData();
   extractionProcessingDetailCache = new Map();
   setExtractionDefaultChecklist();
@@ -2310,6 +2375,9 @@ const resetProcessingForm = async (withNextFolio = true) => {
   processingFechaEmisionInput.value = isoDate(new Date());
   processingFechaInput.value = isoDate(new Date());
   processingEstadoInput.value = "registrada";
+  if (processingQuienProcesoInput) {
+    processingQuienProcesoInput.value = formatActiveUserSignature();
+  }
   clearProcessingReceptionDerivedData();
   processingReceptionDetailCache = new Map();
   document.querySelectorAll(".processing-organismo").forEach((el) => {
@@ -2373,6 +2441,9 @@ const setProcessingOrganismSections = () => {
   }
   if (processingSardinasWrap) {
     processingSardinasWrap.classList.toggle("d-none", selected !== "sardinas");
+  }
+  if (processingOtroWrap) {
+    processingOtroWrap.classList.toggle("d-none", selected !== "otro");
   }
   setProcessingStepExtraVisibility();
 };
@@ -2458,7 +2529,7 @@ const buildProcessingPayload = () => {
     parte_organismo: collectCheckedValues(".processing-parte:checked"),
     bivalvos_steps: bivalvos,
     sardinas_steps: sardinas,
-    otro_procesamiento: (processingOtroInput.value || "").trim() || null,
+    otro_procesamiento: selectedOrganism === "otro" ? (processingOtroInput.value || "").trim() || null : null,
     resguardo: {
       entregado_extraccion: !!procRes1?.checked,
       refrigerador_re1: !!procRes2?.checked,
@@ -4296,6 +4367,10 @@ if (sampleMuestraUnicaInput) {
     toggleSampleModeUI();
   });
 }
+
+document.querySelectorAll(".sample-analisis-metodo, .sample-analisis-muestra").forEach((input) => {
+  input.addEventListener("change", toggleSampleAnalysisOtherFields);
+});
 
 if (sampleLoteTableBody) {
   sampleLoteTableBody.addEventListener("click", (event) => {

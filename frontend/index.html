@@ -425,24 +425,37 @@
             </section>
 
             <section class="content-page" id="page-muestras">
-              <div class="role-header mb-3">
-                <div class="role-header-icon"><i class="bi bi-eyedropper"></i></div>
-                <div>
-                  <h3 class="h4 fw-bold mb-0">Muestras</h3>
-                  <p class="text-secondary mb-0">Recepcion, procesamiento y extraccion</p>
+              <div class="samples-academic-hero mb-3">
+                <div class="role-header mb-0">
+                  <div class="role-header-icon"><i class="bi bi-eyedropper"></i></div>
+                  <div>
+                    <h3 class="h4 fw-bold mb-0">Gestion de Muestras</h3>
+                    <p class="text-secondary mb-0">Trazabilidad academica del flujo: recepcion, procesamiento y extraccion.</p>
+                  </div>
+                </div>
+                <div class="samples-hero-meta">
+                  <span><i class="bi bi-clipboard2-check"></i> Control documental</span>
+                  <span><i class="bi bi-diagram-3"></i> Cadena de custodia</span>
+                  <span><i class="bi bi-shield-check"></i> Registro ISO 17025</span>
                 </div>
               </div>
 
               <article class="panel-card mb-3 samples-subtabs-wrap">
                 <div class="samples-subtabs" aria-label="Secciones de muestras">
-                  <button type="button" class="samples-subtab-btn active" data-samples-section-btn="recepcion">Recepcion</button>
-                  <button type="button" class="samples-subtab-btn" data-samples-section-btn="procesamiento">Procesamiento</button>
-                  <button type="button" class="samples-subtab-btn" data-samples-section-btn="extraccion">Extraccion</button>
+                  <button type="button" class="samples-subtab-btn active" data-samples-section-btn="recepcion"><i class="bi bi-inbox"></i><span>Recepcion</span></button>
+                  <button type="button" class="samples-subtab-btn" data-samples-section-btn="procesamiento"><i class="bi bi-cpu"></i><span>Procesamiento</span></button>
+                  <button type="button" class="samples-subtab-btn" data-samples-section-btn="extraccion"><i class="bi bi-droplet-half"></i><span>Extraccion</span></button>
                 </div>
               </article>
 
               <div id="samplesSectionRecepcion" class="samples-section-block">
-                <article class="panel-card mb-3">
+                <article class="panel-card samples-workbar mb-3">
+                  <div class="samples-section-titlebar">
+                    <div>
+                      <h4>Recepcion de Muestras</h4>
+                      <p>Registro inicial, solicitante, estado y folio de entrada.</p>
+                    </div>
+                  </div>
                   <div class="row g-2 align-items-center">
                     <div class="col-12 col-xl-5">
                       <div class="input-group">
@@ -451,12 +464,13 @@
                       </div>
                     </div>
                     <div class="col-12 col-xl-7 d-flex justify-content-xl-end gap-2">
-                      <button id="openCreateSampleModalBtn" class="btn btn-brand btn-sm">Nueva Recepcion</button>
+                      <button id="openCreateSampleModalBtn" class="btn btn-brand btn-sm"><i class="bi bi-plus-lg me-1"></i>Nueva Recepcion</button>
                     </div>
                   </div>
                 </article>
 
-                <article class="panel-card">
+                <article class="panel-card samples-table-card">
+                  <div class="panel-head"><h3 class="h6 mb-0">Bitacora de recepciones</h3></div>
                   <div class="table-responsive">
                     <table class="table table-sm align-middle movement-table role-table mb-0">
                       <thead><tr><th>Folio</th><th>Solicitante</th><th>Fecha Recepcion</th><th>Hora</th><th>Estado</th><th>Acciones</th></tr></thead>
@@ -468,7 +482,13 @@
               </div>
 
               <div id="samplesSectionProcesamiento" class="samples-section-block samples-initial-hidden" hidden>
-                <article class="panel-card mb-3 mt-3">
+                <article class="panel-card samples-workbar mb-3 mt-3">
+                  <div class="samples-section-titlebar">
+                    <div>
+                      <h4>Procesamiento de Muestras</h4>
+                      <p>Preparacion, seleccion de organismo y registro de molienda.</p>
+                    </div>
+                  </div>
                   <div class="row g-2 align-items-center">
                     <div class="col-12 col-xl-5">
                       <div class="input-group">
@@ -477,13 +497,13 @@
                       </div>
                     </div>
                     <div class="col-12 col-xl-7 d-flex justify-content-xl-end gap-2">
-                      <button id="openCreateProcessingModalBtn" class="btn btn-outline-secondary btn-sm">Nuevo Procesamiento</button>
+                      <button id="openCreateProcessingModalBtn" class="btn btn-brand btn-sm samples-primary-action"><i class="bi bi-plus-lg me-1"></i>Nuevo Procesamiento</button>
                     </div>
                   </div>
                 </article>
 
-                <article class="panel-card">
-                  <div class="panel-head"><h3 class="h6 mb-0">Procesamiento de Muestras</h3></div>
+                <article class="panel-card samples-table-card">
+                  <div class="panel-head"><h3 class="h6 mb-0">Bitacora de procesamientos</h3></div>
                   <div class="table-responsive">
                     <table class="table table-sm align-middle movement-table role-table mb-0">
                       <thead><tr><th>Folio P</th><th>Folio R</th><th>ID Interno</th><th>Fecha</th><th>Hora</th><th>Estado</th><th>Acciones</th></tr></thead>
@@ -495,7 +515,13 @@
               </div>
 
               <div id="samplesSectionExtraccion" class="samples-section-block samples-initial-hidden" hidden>
-                <article class="panel-card mb-3 mt-3">
+                <article class="panel-card samples-workbar mb-3 mt-3">
+                  <div class="samples-section-titlebar">
+                    <div>
+                      <h4>Extraccion de Muestras</h4>
+                      <p>Submuestras, reactivos, limpieza y responsable de extraccion.</p>
+                    </div>
+                  </div>
                   <div class="row g-2 align-items-center">
                     <div class="col-12 col-xl-5">
                       <div class="input-group">
@@ -504,13 +530,13 @@
                       </div>
                     </div>
                     <div class="col-12 col-xl-7 d-flex justify-content-xl-end gap-2">
-                      <button id="openCreateExtractionModalBtn" class="btn btn-outline-secondary btn-sm">Nuevo Extraccion</button>
+                      <button id="openCreateExtractionModalBtn" class="btn btn-brand btn-sm samples-primary-action"><i class="bi bi-plus-lg me-1"></i>Nueva Extraccion</button>
                     </div>
                   </div>
                 </article>
 
-                <article class="panel-card">
-                  <div class="panel-head"><h3 class="h6 mb-0">Extraccion de Muestras</h3></div>
+                <article class="panel-card samples-table-card">
+                  <div class="panel-head"><h3 class="h6 mb-0">Bitacora de extracciones</h3></div>
                   <div class="table-responsive">
                     <table class="table table-sm align-middle movement-table role-table mb-0">
                       <thead><tr><th>Folio E</th><th>Folio P</th><th>ID Interno</th><th>Fecha</th><th>Hora</th><th>Estado</th><th>Acciones</th></tr></thead>
@@ -1147,8 +1173,24 @@
               <input type="hidden" id="sampleIdInput" />
 
               <div class="col-12">
-                <div class="sample-section-card">
-                  <h6 class="sample-section-title">Datos Generales</h6>
+                <div class="sample-form-guide">
+                  <div class="sample-guide-item active"><span>1</span>Formato</div>
+                  <div class="sample-guide-item"><span>2</span>Muestra</div>
+                  <div class="sample-guide-item"><span>3</span>Analisis</div>
+                  <div class="sample-guide-item"><span>4</span>Inspeccion</div>
+                  <div class="sample-guide-item"><span>5</span>Firmas</div>
+                </div>
+              </div>
+
+              <div class="col-12">
+                <div class="sample-section-card sample-step-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">1</span>
+                    <div>
+                      <h6 class="sample-section-title">Datos Generales</h6>
+                      <p>Identificacion documental del formato y folio de control.</p>
+                    </div>
+                  </div>
                   <div class="row g-3">
                     <div class="col-12 col-md-4">
                       <label class="form-label" for="sampleClaveRevisionInput">Clave/Revision</label>
@@ -1171,8 +1213,14 @@
               </div>
 
               <div class="col-12">
-                <div class="sample-section-card">
-                  <h6 class="sample-section-title">Datos de la Muestra</h6>
+                <div class="sample-section-card sample-step-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">2</span>
+                    <div>
+                      <h6 class="sample-section-title">Datos de la Muestra</h6>
+                      <p>Registra quien entrega, cuando se recibe y como queda identificada la muestra.</p>
+                    </div>
+                  </div>
                   <div class="row g-3">
                     <div class="col-12 col-md-3">
                       <label class="form-label" for="sampleFechaRecepcionInput">Fecha de recepcion</label>
@@ -1187,9 +1235,12 @@
                       <input id="sampleSolicitanteInput" class="form-control" maxlength="180" />
                     </div>
                     <div class="col-12 col-md-2 d-flex align-items-end">
-                      <div class="form-check mb-2">
+                      <div class="form-check sample-mode-check mb-2">
                         <input id="sampleMuestraUnicaInput" class="form-check-input" type="checkbox" checked />
-                        <label class="form-check-label" for="sampleMuestraUnicaInput">Muestra unica</label>
+                        <label class="form-check-label" for="sampleMuestraUnicaInput">
+                          <strong>Muestra unica</strong>
+                          <span>Desactiva para capturar lote</span>
+                        </label>
                       </div>
                     </div>
                     <div class="col-12 col-md-3" id="sampleFechaMuestraFieldWrap">
@@ -1218,9 +1269,15 @@
               </div>
 
               <div class="col-12" id="sampleLoteSectionWrap">
-                <div class="sample-section-card">
+                <div class="sample-section-card sample-step-card sample-lote-card">
                   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                    <h6 class="sample-section-title mb-0">Lote / Muestras por lote</h6>
+                    <div class="sample-section-heading mb-0">
+                      <span class="sample-step-number">2A</span>
+                      <div>
+                        <h6 class="sample-section-title mb-0">Lote / Muestras por lote</h6>
+                        <p>Usa esta tabla solo cuando la recepcion contiene varias muestras.</p>
+                      </div>
+                    </div>
                     <div class="d-flex align-items-end gap-2">
                       <div>
                         <label class="form-label mb-1" for="sampleLoteCountInput"># de muestras por lote</label>
@@ -1239,11 +1296,17 @@
               </div>
 
               <div class="col-12">
-                <div class="sample-section-card">
-                  <h6 class="sample-section-title">Analisis Solicitado</h6>
-                  <div class="row g-3">
+                <div class="sample-section-card sample-step-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">3</span>
+                    <div>
+                      <h6 class="sample-section-title">Analisis Solicitado</h6>
+                      <p>Selecciona las opciones aplicables para orientar el procesamiento posterior.</p>
+                    </div>
+                  </div>
+                  <div class="row g-3 sample-choice-grid">
                     <div class="col-12 col-md-4">
-                      <p class="small fw-semibold mb-2">Tipo de analisis</p>
+                      <p class="sample-choice-title">Tipo de analisis</p>
                       <div class="form-check"><input class="form-check-input sample-analisis-tipo" type="checkbox" value="acido_domoico" id="analisisTipo1"><label class="form-check-label" for="analisisTipo1">Acido domoico (ASP)</label></div>
                       <div class="form-check"><input class="form-check-input sample-analisis-tipo" type="checkbox" value="toxinas_lipofilicas" id="analisisTipo2"><label class="form-check-label" for="analisisTipo2">Toxinas lipofilicas</label></div>
                       <div class="form-check"><input class="form-check-input sample-analisis-tipo" type="checkbox" value="toxinas_paralizantes" id="analisisTipo3"><label class="form-check-label" for="analisisTipo3">Toxinas paralizantes</label></div>
@@ -1251,20 +1314,28 @@
                       <div class="form-check"><input class="form-check-input sample-analisis-tipo" type="checkbox" value="plancton" id="analisisTipo5"><label class="form-check-label" for="analisisTipo5">Plancton</label></div>
                     </div>
                     <div class="col-12 col-md-4">
-                      <p class="small fw-semibold mb-2">Metodo de analisis</p>
+                      <p class="sample-choice-title">Metodo de analisis</p>
                       <div class="form-check"><input class="form-check-input sample-analisis-metodo" type="checkbox" value="microscopia" id="analisisMetodo1"><label class="form-check-label" for="analisisMetodo1">Microscopia</label></div>
                       <div class="form-check"><input class="form-check-input sample-analisis-metodo" type="checkbox" value="espectrofotometro" id="analisisMetodo2"><label class="form-check-label" for="analisisMetodo2">Espectrofotometro</label></div>
                       <div class="form-check"><input class="form-check-input sample-analisis-metodo" type="checkbox" value="fluorometro" id="analisisMetodo3"><label class="form-check-label" for="analisisMetodo3">Fluorometro</label></div>
                       <div class="form-check"><input class="form-check-input sample-analisis-metodo" type="checkbox" value="luminometro" id="analisisMetodo4"><label class="form-check-label" for="analisisMetodo4">Luminometro</label></div>
                       <div class="form-check"><input class="form-check-input sample-analisis-metodo" type="checkbox" value="otro" id="analisisMetodo5"><label class="form-check-label" for="analisisMetodo5">Otro</label></div>
+                      <div id="analisisMetodoOtroWrap" class="sample-other-field d-none">
+                        <label class="form-label" for="analisisMetodoOtroInput">Especifica el metodo</label>
+                        <input id="analisisMetodoOtroInput" class="form-control form-control-sm" maxlength="120" placeholder="Escribe el metodo de analisis" />
+                      </div>
                     </div>
                     <div class="col-12 col-md-4">
-                      <p class="small fw-semibold mb-2">Tipo de muestra</p>
+                      <p class="sample-choice-title">Tipo de muestra</p>
                       <div class="form-check"><input class="form-check-input sample-analisis-muestra" type="checkbox" value="organismo" id="analisisMuestra1"><label class="form-check-label" for="analisisMuestra1">Organismo</label></div>
                       <div class="form-check"><input class="form-check-input sample-analisis-muestra" type="checkbox" value="organismo_plancton" id="analisisMuestra2"><label class="form-check-label" for="analisisMuestra2">Organismo plancton</label></div>
                       <div class="form-check"><input class="form-check-input sample-analisis-muestra" type="checkbox" value="fitotox" id="analisisMuestra3"><label class="form-check-label" for="analisisMuestra3">Fitotox</label></div>
                       <div class="form-check"><input class="form-check-input sample-analisis-muestra" type="checkbox" value="agua_mar" id="analisisMuestra4"><label class="form-check-label" for="analisisMuestra4">Agua de mar</label></div>
                       <div class="form-check"><input class="form-check-input sample-analisis-muestra" type="checkbox" value="otro" id="analisisMuestra5"><label class="form-check-label" for="analisisMuestra5">Otro</label></div>
+                      <div id="analisisMuestraOtroWrap" class="sample-other-field d-none">
+                        <label class="form-label" for="analisisMuestraOtroInput">Especifica el tipo de muestra</label>
+                        <input id="analisisMuestraOtroInput" class="form-control form-control-sm" maxlength="120" placeholder="Escribe el tipo de muestra" />
+                      </div>
                     </div>
                     <div class="col-12">
                       <label class="form-label" for="sampleAnalisisObservacionesInput">Observaciones</label>
@@ -1275,10 +1346,21 @@
               </div>
 
               <div class="col-12">
-                <div class="sample-section-card">
-                  <h6 class="sample-section-title">Inspeccion Visual de la Muestra</h6>
+                <div class="sample-section-card sample-step-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">4</span>
+                    <div>
+                      <h6 class="sample-section-title">Inspeccion Visual de la Muestra</h6>
+                      <p>Marca C si cumple, NC si no cumple o NA cuando no aplica. Agrega observaciones cuando sea necesario.</p>
+                    </div>
+                  </div>
+                  <div class="sample-status-legend">
+                    <span><strong>C</strong> Cumple</span>
+                    <span><strong>NC</strong> No cumple</span>
+                    <span><strong>NA</strong> No aplica</span>
+                  </div>
                   <div class="table-responsive">
-                    <table class="table table-sm align-middle movement-table mb-2">
+                    <table class="table table-sm align-middle movement-table sample-inspection-table mb-2">
                       <thead><tr><th>Requisito</th><th>C</th><th>NC</th><th>NA</th><th>Observaciones</th></tr></thead>
                       <tbody id="sampleInspeccionTableBody"></tbody>
                     </table>
@@ -1289,8 +1371,14 @@
               </div>
 
               <div class="col-12 col-lg-6">
-                <div class="sample-section-card h-100">
-                  <h6 class="sample-section-title">Datos del Solicitante</h6>
+                <div class="sample-section-card sample-step-card h-100">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">5</span>
+                    <div>
+                      <h6 class="sample-section-title">Datos del Solicitante</h6>
+                      <p>Persona que entrega y confirma la recepcion.</p>
+                    </div>
+                  </div>
                   <label class="form-label" for="sampleSolicitanteNombreInput">Nombre de quien entrega la muestra</label>
                   <input id="sampleSolicitanteNombreInput" class="form-control mb-2" maxlength="150" />
                   <label class="form-label" for="sampleSolicitanteFirmaInput">Firma de conformidad</label>
@@ -1299,8 +1387,14 @@
               </div>
 
               <div class="col-12 col-lg-6">
-                <div class="sample-section-card h-100">
-                  <h6 class="sample-section-title">Datos del Custodio</h6>
+                <div class="sample-section-card sample-step-card h-100">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">6</span>
+                    <div>
+                      <h6 class="sample-section-title">Datos del Custodio</h6>
+                      <p>Responsable del resguardo y ubicacion inmediata de la muestra.</p>
+                    </div>
+                  </div>
                   <label class="form-label" for="sampleCustodioNombreInput">Nombre, cargo y firma del custodio</label>
                   <input id="sampleCustodioNombreInput" class="form-control mb-2" maxlength="180" />
                   <label class="form-label" for="sampleCustodioLugarInput">Asignacion de lugar de resguardo</label>
@@ -1337,8 +1431,24 @@
               <input type="hidden" id="processingIdInput" />
 
               <div class="col-12">
-                <div class="sample-section-card">
-                  <h6 class="sample-section-title">Datos Generales</h6>
+                <div class="sample-form-guide processing-form-guide">
+                  <div class="sample-guide-item active"><span>1</span>Formato</div>
+                  <div class="sample-guide-item"><span>2</span>Recepcion</div>
+                  <div class="sample-guide-item"><span>3</span>Muestra</div>
+                  <div class="sample-guide-item"><span>4</span>Proceso</div>
+                  <div class="sample-guide-item"><span>5</span>Resguardo</div>
+                </div>
+              </div>
+
+              <div class="col-12">
+                <div class="sample-section-card sample-step-card processing-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">1</span>
+                    <div>
+                      <h6 class="sample-section-title">Datos Generales</h6>
+                      <p>Control documental del formato de procesamiento y folio asignado.</p>
+                    </div>
+                  </div>
                   <div class="row g-3">
                     <div class="col-12 col-md-4">
                       <label class="form-label" for="processingClaveRevisionInput">Clave/Revision</label>
@@ -1361,7 +1471,14 @@
               </div>
 
               <div class="col-12">
-                <div class="sample-section-card">
+                <div class="sample-section-card sample-step-card processing-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">2</span>
+                    <div>
+                      <h6 class="sample-section-title">Recepcion vinculada</h6>
+                      <p>Relaciona el procesamiento con el folio de recepcion y confirma la muestra a trabajar.</p>
+                    </div>
+                  </div>
                   <div class="row g-3">
                     <div class="col-12 col-md-4">
                       <label class="form-label" for="processingFechaInput">Fecha de procesamiento</label>
@@ -1379,13 +1496,20 @@
                         <option value="completada">Completada</option>
                       </select>
                     </div>
-                    <div class="col-12 col-md-8">
+                    <div class="col-12 col-md-6">
                       <label class="form-label" for="processingReceptionSelect">Folio de FX-TCF-GMR (Recepcion)</label>
                       <select id="processingReceptionSelect" class="form-select"></select>
                     </div>
-                    <div class="col-12 col-md-4">
+                    <div class="col-12 col-md-3">
                       <label class="form-label" for="processingIdInternoInput">ID interno</label>
                       <input id="processingIdInternoInput" class="form-control" maxlength="100" />
+                    </div>
+                    <div class="col-12 col-md-3">
+                      <label class="form-label" for="processingMuestraTipoInput">Tipo de muestra</label>
+                      <select id="processingMuestraTipoInput" class="form-select">
+                        <option value="unica">Muestra unica</option>
+                        <option value="lote">Muestra lote</option>
+                      </select>
                     </div>
                     <div class="col-12 d-none" id="processingLoteSelectionWrap">
                       <label class="form-label">Muestras del lote a procesar (selecciona las que pasan a extraccion)</label>
@@ -1413,36 +1537,35 @@
               </div>
 
               <div class="col-12">
-                <div class="sample-section-card">
-                  <h6 class="sample-section-title">Datos de la Muestra</h6>
-                  <div class="row g-3">
-                    <div class="col-12 col-md-4">
-                      <label class="form-label" for="processingMuestraTipoInput">Tipo de muestra</label>
-                      <select id="processingMuestraTipoInput" class="form-select">
-                        <option value="unica">Muestra unica</option>
-                        <option value="lote">Muestra lote</option>
-                      </select>
+                <div class="sample-section-card sample-step-card processing-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">3</span>
+                    <div>
+                      <h6 class="sample-section-title">Datos de la Muestra</h6>
+                      <p>Define el organismo y la parte biologica que sera procesada.</p>
                     </div>
-                    <div class="col-12 col-md-8">
+                  </div>
+                  <div class="row g-3">
+                    <div class="col-12">
                       <label class="form-label">Tipo de organismo</label>
                       <div class="d-flex flex-wrap gap-3 organismo-choice-grid">
                         <label class="organismo-choice">
                           <input class="form-check-input processing-organismo" type="radio" name="processingOrganismo" value="bivalvos" id="procOrg1">
-                          <span>Bivalvos</span>
+                          <span>🦪 Bivalvos</span>
                         </label>
                         <label class="organismo-choice">
                           <input class="form-check-input processing-organismo" type="radio" name="processingOrganismo" value="sardinas" id="procOrg2">
-                          <span>Sardinas</span>
+                          <span>🐟 Sardinas</span>
                         </label>
                         <label class="organismo-choice">
                           <input class="form-check-input processing-organismo" type="radio" name="processingOrganismo" value="otro" id="procOrg3">
-                          <span>Otro</span>
+                          <span>🔬 Otro</span>
                         </label>
                       </div>
                     </div>
                     <div class="col-12">
                       <label class="form-label">Parte del organismo a procesar</label>
-                      <div class="d-flex flex-wrap gap-3">
+                      <div class="processing-part-grid">
                         <div class="form-check"><input class="form-check-input processing-parte" type="checkbox" value="cuerpo_completo" id="procParte1"><label class="form-check-label" for="procParte1">Cuerpo completo</label></div>
                         <div class="form-check"><input class="form-check-input processing-parte" type="checkbox" value="viscera" id="procParte2"><label class="form-check-label" for="procParte2">Viscera</label></div>
                         <div class="form-check"><input class="form-check-input processing-parte" type="checkbox" value="sifon_callo" id="procParte3"><label class="form-check-label" for="procParte3">Sifon/callo</label></div>
@@ -1453,9 +1576,15 @@
                 </div>
               </div>
 
-              <div class="col-12 col-lg-6" id="processingBivalvosWrap">
-                <div class="sample-section-card h-100 processing-step-card">
-                  <h6 class="sample-section-title">Tipo de procesamiento: Bivalvos</h6>
+              <div class="col-12" id="processingBivalvosWrap">
+                <div class="sample-section-card sample-step-card h-100 processing-step-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">4A</span>
+                    <div>
+                      <h6 class="sample-section-title">Procesamiento: Bivalvos</h6>
+                      <p>Checklist tecnico para preparacion de organismos bivalvos.</p>
+                    </div>
+                  </div>
                   <div class="form-check"><input class="form-check-input processing-bivalvos-step" type="checkbox" value="Seleccionar organismos de mayor talla (~30)" id="procBiv1"><label class="form-check-label" for="procBiv1">Seleccionar organismos de mayor talla (~30)</label></div>
                   <div class="form-check"><input class="form-check-input processing-bivalvos-step" type="checkbox" value="Lavar exterior con agua corriente" id="procBiv2"><label class="form-check-label" for="procBiv2">Lavar exterior con agua corriente</label></div>
                   <div class="form-check"><input class="form-check-input processing-bivalvos-step" type="checkbox" value="Abrir valvas" id="procBiv3"><label class="form-check-label" for="procBiv3">Abrir las valvas</label></div>
@@ -1495,9 +1624,15 @@
                 </div>
               </div>
 
-              <div class="col-12 col-lg-6" id="processingSardinasWrap">
-                <div class="sample-section-card h-100 processing-step-card">
-                  <h6 class="sample-section-title">Tipo de procesamiento: Sardinas</h6>
+              <div class="col-12" id="processingSardinasWrap">
+                <div class="sample-section-card sample-step-card h-100 processing-step-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">4B</span>
+                    <div>
+                      <h6 class="sample-section-title">Procesamiento: Sardinas</h6>
+                      <p>Checklist tecnico para preparacion, molienda y peso de sardinas.</p>
+                    </div>
+                  </div>
                   <div class="form-check"><input class="form-check-input processing-sardinas-step" type="checkbox" value="Seleccionar aprox. 10 organismos" id="procSar1"><label class="form-check-label" for="procSar1">Seleccionar aprox. 10 organismos</label></div>
                   <div class="form-check"><input class="form-check-input processing-sardinas-step" type="checkbox" value="Partir organismos por la mitad" id="procSar2"><label class="form-check-label" for="procSar2">Partir/trozar organismos por la mitad</label></div>
                   <div class="form-check"><input class="form-check-input processing-sardinas-step" type="checkbox" value="Moler 1-2 min 100-150g" id="procSar3"><label class="form-check-label" for="procSar3">Moler 1-2 min 100-150g</label></div>
@@ -1531,15 +1666,33 @@
                     </div>
                   </div>
                   <div class="form-check"><input class="form-check-input processing-sardinas-step" type="checkbox" value="Reservar molienda en bolsa hermetica" id="procSar5"><label class="form-check-label" for="procSar5">Reservar molienda en bolsa hermetica</label></div>
-                  <label class="form-label mt-2" for="processingOtroInput">Otro</label>
-                  <textarea id="processingOtroInput" class="form-control" rows="3"></textarea>
+                </div>
+              </div>
+
+              <div class="col-12" id="processingOtroWrap">
+                <div class="sample-section-card sample-step-card h-100 processing-step-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">4C</span>
+                    <div>
+                      <h6 class="sample-section-title">Procesamiento: Otro</h6>
+                      <p>Describe el procedimiento aplicado cuando el organismo no corresponde a bivalvos o sardinas.</p>
+                    </div>
+                  </div>
+                  <label class="form-label" for="processingOtroInput">Procedimiento aplicado</label>
+                  <textarea id="processingOtroInput" class="form-control" rows="3" placeholder="Describe el procesamiento realizado"></textarea>
                 </div>
               </div>
 
               <div class="col-12">
-                <div class="sample-section-card">
-                  <h6 class="sample-section-title">Resguardo de la molienda</h6>
-                  <div class="d-flex flex-wrap gap-3 mb-2">
+                <div class="sample-section-card sample-step-card processing-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">5</span>
+                    <div>
+                      <h6 class="sample-section-title">Resguardo de la molienda</h6>
+                      <p>Registra destino, observaciones y responsables del procesamiento.</p>
+                    </div>
+                  </div>
+                  <div class="processing-storage-grid mb-2">
                     <div class="form-check"><input class="form-check-input" type="checkbox" id="procRes1"><label class="form-check-label" for="procRes1">Entregado para extraccion</label></div>
                     <div class="form-check"><input class="form-check-input" type="checkbox" id="procRes2"><label class="form-check-label" for="procRes2">Refrigerador RE1</label></div>
                     <div class="form-check"><input class="form-check-input" type="checkbox" id="procRes3"><label class="form-check-label" for="procRes3">Congelador CO1</label></div>
@@ -1582,8 +1735,24 @@
               <input type="hidden" id="extractionIdInput" />
 
               <div class="col-12">
-                <div class="sample-section-card">
-                  <h6 class="sample-section-title">Datos Generales</h6>
+                <div class="sample-form-guide extraction-form-guide">
+                  <div class="sample-guide-item active"><span>1</span>Formato</div>
+                  <div class="sample-guide-item"><span>2</span>Procesamiento</div>
+                  <div class="sample-guide-item"><span>3</span>Muestras</div>
+                  <div class="sample-guide-item"><span>4</span>Extraccion</div>
+                  <div class="sample-guide-item"><span>5</span>Control</div>
+                </div>
+              </div>
+
+              <div class="col-12">
+                <div class="sample-section-card sample-step-card extraction-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">1</span>
+                    <div>
+                      <h6 class="sample-section-title">Datos Generales</h6>
+                      <p>Control documental del formato de extraccion y folio asignado.</p>
+                    </div>
+                  </div>
                   <div class="row g-3">
                     <div class="col-12 col-md-4">
                       <label class="form-label" for="extractionClaveRevisionInput">Clave/Revision</label>
@@ -1606,8 +1775,14 @@
               </div>
 
               <div class="col-12">
-                <div class="sample-section-card">
-                  <h6 class="sample-section-title">Datos de la Extraccion</h6>
+                <div class="sample-section-card sample-step-card extraction-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">2</span>
+                    <div>
+                      <h6 class="sample-section-title">Datos de la Extraccion</h6>
+                      <p>Relaciona la extraccion con el procesamiento y define el estado operativo.</p>
+                    </div>
+                  </div>
                   <div class="row g-3">
                     <div class="col-12 col-md-4">
                       <label class="form-label" for="extractionFechaInput">Fecha de extraccion</label>
@@ -1644,7 +1819,13 @@
                       <div id="extractionProcessingSummary" class="small text-secondary"></div>
                     </div>
                     <div class="col-12">
-                      <label class="form-label">Muestras que pasan a extraccion</label>
+                      <div class="extraction-subsection-title">
+                        <span class="sample-step-number">3</span>
+                        <div>
+                          <label class="form-label mb-0">Muestras que pasan a extraccion</label>
+                          <p>Confirma submuestras, replicas y pesos que se integran al proceso.</p>
+                        </div>
+                      </div>
                       <div class="table-responsive">
                         <table class="table table-sm align-middle movement-table mb-0">
                           <thead>
@@ -1665,7 +1846,7 @@
                     </div>
                     <div class="col-12 col-md-8">
                       <label class="form-label">Tipo de molienda</label>
-                      <div class="d-flex flex-wrap gap-3">
+                      <div class="extraction-choice-grid">
                         <div class="form-check"><input class="form-check-input extraction-molienda" type="radio" name="extractionMolienda" value="fresca" id="extrMolienda1"><label class="form-check-label" for="extrMolienda1">Fresca</label></div>
                         <div class="form-check"><input class="form-check-input extraction-molienda" type="radio" name="extractionMolienda" value="congelada" id="extrMolienda2"><label class="form-check-label" for="extrMolienda2">Congelada</label></div>
                       </div>
@@ -1675,8 +1856,14 @@
               </div>
 
               <div class="col-12 col-lg-6">
-                <div class="sample-section-card h-100">
-                  <h6 class="sample-section-title">Etapas de Extraccion</h6>
+                <div class="sample-section-card sample-step-card h-100 extraction-step-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">4</span>
+                    <div>
+                      <h6 class="sample-section-title">Etapas de Extraccion</h6>
+                      <p>Checklist tecnico de preparacion, extraccion, limpieza y filtrado.</p>
+                    </div>
+                  </div>
                   <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep1" value="Descongelar en oscuridad" /><label class="form-check-label" for="extrStep1">Descongelar en oscuridad</label></div>
                   <div class="form-check mb-2"><input class="form-check-input extraction-step" type="checkbox" id="extrStep2" value="Homogeneizar 30-45s sin descartar liquido de descongelacion" /><label class="form-check-label" for="extrStep2">Homogeneizar 30-45s sin descartar liquido de descongelacion</label></div>
                   <div class="row g-2 mb-2">
@@ -1719,8 +1906,14 @@
               </div>
 
               <div class="col-12 col-lg-6">
-                <div class="sample-section-card h-100">
-                  <h6 class="sample-section-title">Control de Reactivo y Limpieza</h6>
+                <div class="sample-section-card sample-step-card h-100 extraction-control-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">5</span>
+                    <div>
+                      <h6 class="sample-section-title">Control de Reactivo y Limpieza</h6>
+                      <p>Registra equipos, reactivo usado y condicion de limpieza posterior.</p>
+                    </div>
+                  </div>
                   <div class="row g-2">
                     <div class="col-12 col-md-6">
                       <label class="form-label form-label-sm" for="extrProbetaInput">ID probeta</label>
@@ -1740,7 +1933,7 @@
                     </div>
                   </div>
                   <label class="form-label mt-3">Requirio limpieza de equipos</label>
-                  <div class="d-flex flex-wrap gap-3">
+                  <div class="extraction-choice-grid extraction-cleaning-grid">
                     <div class="form-check"><input class="form-check-input" type="radio" name="extrLimpieza" id="extrLimpiezaSi" value="si"><label class="form-check-label" for="extrLimpiezaSi">Si</label></div>
                     <div class="form-check"><input class="form-check-input" type="radio" name="extrLimpieza" id="extrLimpiezaNo" value="no"><label class="form-check-label" for="extrLimpiezaNo">No</label></div>
                   </div>
@@ -1750,7 +1943,14 @@
               </div>
 
               <div class="col-12">
-                <div class="sample-section-card">
+                <div class="sample-section-card sample-step-card extraction-card">
+                  <div class="sample-section-heading">
+                    <span class="sample-step-number">6</span>
+                    <div>
+                      <h6 class="sample-section-title">Responsables</h6>
+                      <p>Firma de quien realiza y supervisa la extraccion.</p>
+                    </div>
+                  </div>
                   <div class="row g-3">
                     <div class="col-12 col-md-6">
                       <label class="form-label" for="extractionQuienExtrajoInput">Nombre, cargo y firma de quien extrajo</label>
