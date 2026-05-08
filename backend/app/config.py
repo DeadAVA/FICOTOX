@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
 
@@ -13,13 +12,9 @@ def _build_database_uri() -> str:
     if explicit_url:
         return explicit_url
 
-    db_user = os.getenv("DB_USER", "root")
-    db_password = quote_plus(os.getenv("DB_PASSWORD", ""))
-    db_host = os.getenv("DB_HOST", "127.0.0.1")
-    db_port = os.getenv("DB_PORT", "3306")
-    db_name = os.getenv("DB_NAME", "ficotox")
-
-    return f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+    sqlite_path = Path(os.getenv("SQLITE_PATH", BASE_DIR / "instance" / "ficotox.sqlite3"))
+    sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    return f"sqlite:///{sqlite_path.as_posix()}"
 
 
 class Config:

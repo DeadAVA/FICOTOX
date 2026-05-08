@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from app.extensions import db
 from app.utils.auth import token_required
 from app.utils.rbac import _bool, ensure_rbac_schema, permission_required
-from app.utils.schema import add_column_if_missing, drop_column_if_exists
+from app.utils.schema import add_column_if_missing, drop_column_if_exists, is_sqlite
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -14,6 +14,20 @@ def ensure_usuarios_schema() -> None:
     ensure_rbac_schema()
     db.session.execute(
         text(
+            """
+            CREATE TABLE IF NOT EXISTS usuarios (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              nombre VARCHAR(100) NOT NULL,
+              email VARCHAR(100) NOT NULL UNIQUE,
+              activo INTEGER DEFAULT 1,
+              id_rol INTEGER NOT NULL,
+              departamento VARCHAR(100) DEFAULT NULL,
+              creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              ultimo_acceso TIMESTAMP DEFAULT NULL
+            )
+            """
+            if is_sqlite()
+            else
             """
             CREATE TABLE IF NOT EXISTS usuarios (
               id INT NOT NULL AUTO_INCREMENT,

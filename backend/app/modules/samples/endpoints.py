@@ -2,6 +2,9 @@ from flask import Blueprint, jsonify
 from sqlalchemy import text
 
 from app.extensions import db
+from app.modules.samples.extraccion import ensure_samples_extraccion_schema
+from app.modules.samples.procesamiento import ensure_samples_procesamiento_schema
+from app.modules.samples.recepcion import ensure_samples_recepcion_schema
 from app.utils.auth import token_required
 from app.utils.rbac import permission_required
 
@@ -12,14 +15,29 @@ samples_bp = Blueprint("samples", __name__)
 @token_required
 @permission_required("dashboard", "read")
 def samples_summary():
+    ensure_samples_recepcion_schema()
+    ensure_samples_procesamiento_schema()
+    ensure_samples_extraccion_schema()
     summary = db.session.execute(
         text(
             """
             SELECT
-              (SELECT COUNT(*) FROM muestras) AS total_muestras,
-              (SELECT COUNT(*) FROM muestras WHERE estado = 'pendiente') AS pendientes,
-              (SELECT COUNT(*) FROM muestras WHERE estado = 'en_proceso') AS en_proceso,
-              (SELECT COUNT(*) FROM muestras WHERE estado = 'completada') AS completadas
+              (
+                (SELECT COUNT(*) FROM muestras_recepcion) +
+                (SELECT COUNT(*) FROM muestras_procesamiento) +
+                (SELECT COUNT(*) FROM muestras_extraccion)
+              ) AS total_muestras,
+              0 AS pendientes,
+              (
+                (SELECT COUNT(*) FROM muestras_recepcion WHERE estado = 'en_proceso') +
+                (SELECT COUNT(*) FROM muestras_procesamiento WHERE estado = 'en_proceso') +
+                (SELECT COUNT(*) FROM muestras_extraccion WHERE estado = 'en_proceso')
+              ) AS en_proceso,
+              (
+                (SELECT COUNT(*) FROM muestras_recepcion WHERE estado = 'completada') +
+                (SELECT COUNT(*) FROM muestras_procesamiento WHERE estado = 'completada') +
+                (SELECT COUNT(*) FROM muestras_extraccion WHERE estado = 'completada')
+              ) AS completadas
             """
         )
     ).mappings().first()
@@ -31,14 +49,30 @@ def samples_summary():
 @token_required
 @permission_required("muestras", "read")
 def list_samples():
+    ensure_samples_recepcion_schema()
+    ensure_samples_procesamiento_schema()
+    ensure_samples_extraccion_schema()
     rows = db.session.execute(
         text(
             """
-            SELECT m.id, m.codigo, m.cliente, m.tipo, m.prioridad, m.estado,
-                   m.fecha_ingreso, u.nombre AS analista
-            FROM muestras m
-            LEFT JOIN usuarios u ON u.id = m.id_analista
-            ORDER BY m.fecha_ingreso DESC, m.id DESC
+            SELECT id, codigo, cliente, tipo, prioridad, estado, fecha_ingreso, analista
+            FROM (
+              SELECT id, 'R-' || printf('%07d', folio_num) AS codigo, solicitante AS cliente,
+                     'Recepcion' AS tipo, '-' AS prioridad, estado, fecha_recepcion AS fecha_ingreso,
+                     NULL AS analista
+              FROM muestras_recepcion
+              UNION ALL
+              SELECT id, 'P-' || printf('%07d', folio_num) AS codigo, id_interno AS cliente,
+                     'Procesamiento' AS tipo, '-' AS prioridad, estado, fecha_procesamiento AS fecha_ingreso,
+                     nombre_quien_proceso AS analista
+              FROM muestras_procesamiento
+              UNION ALL
+              SELECT id, 'E-A-' || printf('%07d', folio_num) AS codigo, id_interno AS cliente,
+                     'Extraccion' AS tipo, '-' AS prioridad, estado, fecha_extraccion AS fecha_ingreso,
+                     nombre_quien_extrajo AS analista
+              FROM muestras_extraccion
+            ) m
+            ORDER BY fecha_ingreso DESC, id DESC
             LIMIT 200
             """
         )
@@ -51,12 +85,27 @@ def list_samples():
 @token_required
 @permission_required("muestras", "read")
 def list_pending_samples():
+    ensure_samples_recepcion_schema()
+    ensure_samples_procesamiento_schema()
+    ensure_samples_extraccion_schema()
     rows = db.session.execute(
         text(
             """
             SELECT id, codigo, cliente, tipo, prioridad, estado, fecha_ingreso
-            FROM muestras
-            WHERE estado IN ('pendiente', 'en_proceso')
+            FROM (
+              SELECT id, 'R-' || printf('%07d', folio_num) AS codigo, solicitante AS cliente,
+                     'Recepcion' AS tipo, '-' AS prioridad, estado, fecha_recepcion AS fecha_ingreso
+              FROM muestras_recepcion
+              UNION ALL
+              SELECT id, 'P-' || printf('%07d', folio_num) AS codigo, id_interno AS cliente,
+                     'Procesamiento' AS tipo, '-' AS prioridad, estado, fecha_procesamiento AS fecha_ingreso
+              FROM muestras_procesamiento
+              UNION ALL
+              SELECT id, 'E-A-' || printf('%07d', folio_num) AS codigo, id_interno AS cliente,
+                     'Extraccion' AS tipo, '-' AS prioridad, estado, fecha_extraccion AS fecha_ingreso
+              FROM muestras_extraccion
+            ) m
+            WHERE estado IN ('pendiente', 'en_proceso', 'registrada')
             ORDER BY fecha_ingreso ASC
             LIMIT 100
             """

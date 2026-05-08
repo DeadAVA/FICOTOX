@@ -5,8 +5,9 @@ from sqlalchemy import text
 
 from app.extensions import db
 from app.utils.auth import token_required
+from app.utils.inventory_usage import consume_consumible
 from app.utils.rbac import permission_required
-from app.utils.schema import add_column_if_missing
+from app.utils.schema import add_column_if_missing, is_sqlite
 
 samples_procesamiento_bp = Blueprint("samples_procesamiento", __name__, url_prefix="/api/samples/processing")
 
@@ -14,6 +15,38 @@ samples_procesamiento_bp = Blueprint("samples_procesamiento", __name__, url_pref
 def ensure_samples_procesamiento_schema():
 	db.session.execute(
 		text(
+			"""
+			CREATE TABLE IF NOT EXISTS muestras_procesamiento (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				folio_num INTEGER NOT NULL UNIQUE,
+				tipo_registro VARCHAR(2) NOT NULL DEFAULT 'P',
+				clave_revision VARCHAR(50) DEFAULT 'FX-TCF-GMP',
+				fecha_emision DATE DEFAULT NULL,
+				fecha_procesamiento DATE DEFAULT NULL,
+				hora_procesamiento VARCHAR(20) DEFAULT NULL,
+				recepcion_id INTEGER DEFAULT NULL,
+				folio_recepcion_num INTEGER DEFAULT NULL,
+				muestra_tipo VARCHAR(20) DEFAULT NULL,
+				id_interno VARCHAR(100) DEFAULT NULL,
+				lote_seleccion_json TEXT,
+				tipo_organismo_json TEXT,
+				parte_organismo_json TEXT,
+				bivalvos_steps_json TEXT,
+				sardinas_steps_json TEXT,
+				otro_procesamiento TEXT,
+				resguardo_json TEXT,
+				observaciones_generales TEXT,
+				nombre_quien_proceso VARCHAR(180) DEFAULT NULL,
+				nombre_quien_superviso VARCHAR(180) DEFAULT NULL,
+				estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
+				creado_por INTEGER DEFAULT NULL,
+				actualizado_por INTEGER DEFAULT NULL,
+				creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			)
+			"""
+			if is_sqlite()
+			else
 			"""
 			CREATE TABLE IF NOT EXISTS muestras_procesamiento (
 				id INT NOT NULL AUTO_INCREMENT,
@@ -114,6 +147,20 @@ def _normalize_payload(raw):
 		"nombre_quien_superviso": (payload.get("nombre_quien_superviso") or "").strip()[:180] or None,
 		"estado": (payload.get("estado") or "registrada").strip()[:30] or "registrada",
 	}
+
+
+def _apply_inventory_usage(processing_id: int, data: dict, user_id: int | None) -> None:
+	resguardo = _safe_json_load(data.get("resguardo_json"), {})
+	consumible_ref = resguardo.get("consumible_id") or resguardo.get("consumible_ref")
+	consumible_qty = resguardo.get("consumible_cantidad") or 1
+	if consumible_ref:
+		consume_consumible(
+			consumible_ref,
+			consumible_qty,
+			user_id=user_id,
+			motivo=f"Procesamiento de muestra folio {data.get('folio_num')}",
+			referencia=f"PROC-{processing_id}-CONSUMIBLE",
+		)
 
 
 def _serialize_row(row):
@@ -230,6 +277,7 @@ def create_processing_sample():
 			),
 			{**data, "creado_por": user_id, "actualizado_por": user_id},
 		)
+		_apply_inventory_usage(result.lastrowid, data, user_id)
 		db.session.commit()
 		return jsonify({"message": "Procesamiento creado", "id": result.lastrowid}), 201
 	except Exception as exc:

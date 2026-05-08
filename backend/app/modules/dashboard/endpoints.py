@@ -3,8 +3,15 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 from app.extensions import db
+from app.modules.inventory.consumables import ensure_consumibles_schema
+from app.modules.inventory.endpoints import ensure_equipos_schema, ensure_mantenimientos_schema, ensure_reactivos_schema
+from app.modules.samples.extraccion import ensure_samples_extraccion_schema
+from app.modules.samples.procesamiento import ensure_samples_procesamiento_schema
+from app.modules.samples.recepcion import ensure_samples_recepcion_schema
 from app.utils.auth import token_required
+from app.utils.inventory_usage import ensure_movimientos_schema
 from app.utils.rbac import permission_required
+from app.utils.schema import is_sqlite
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -14,6 +21,18 @@ dashboard_bp = Blueprint("dashboard", __name__)
 @permission_required("dashboard", "read")
 def dashboard_overview():
     try:
+        ensure_reactivos_schema()
+        ensure_consumibles_schema()
+        ensure_equipos_schema()
+        ensure_mantenimientos_schema()
+        ensure_movimientos_schema()
+        ensure_samples_recepcion_schema()
+        ensure_samples_procesamiento_schema()
+        ensure_samples_extraccion_schema()
+        maintenance_date_filter = (
+            "date('now') AND date('now', '+30 days')" if is_sqlite() else "CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)"
+        )
+        overdue_date_filter = "date('now')" if is_sqlite() else "CURDATE()"
         counters = db.session.execute(
             text(
                 """
@@ -21,7 +40,11 @@ def dashboard_overview():
                   (SELECT COUNT(*) FROM reactivos) AS total_reactivos,
                   (SELECT COUNT(*) FROM consumibles) AS total_consumibles,
                   (SELECT COUNT(*) FROM equipos) AS total_equipos,
-                  (SELECT COUNT(*) FROM muestras) AS total_muestras,
+                  (
+                    (SELECT COUNT(*) FROM muestras_recepcion) +
+                    (SELECT COUNT(*) FROM muestras_procesamiento) +
+                    (SELECT COUNT(*) FROM muestras_extraccion)
+                  ) AS total_muestras,
                   (
                     SELECT COALESCE(SUM(cantidad), 0)
                     FROM movimientos
@@ -45,7 +68,7 @@ def dashboard_overview():
                   (
                     SELECT COUNT(*)
                     FROM mantenimientos
-                    WHERE fecha_programada BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+                    WHERE fecha_programada BETWEEN __DATE_RANGE__
                       AND estado IN ('programado', 'en_proceso')
                   ) AS mantenimientos_proximos,
                   (SELECT COUNT(*) FROM mantenimientos WHERE estado = 'completado') AS mantenimientos_realizados,
@@ -58,9 +81,11 @@ def dashboard_overview():
                     SELECT COUNT(*)
                     FROM mantenimientos
                     WHERE estado = 'vencido'
-                       OR (fecha_programada < CURDATE() AND estado IN ('programado', 'en_proceso'))
+                       OR (fecha_programada < __TODAY__ AND estado IN ('programado', 'en_proceso'))
                   ) AS mantenimientos_vencidos
                 """
+                .replace("__DATE_RANGE__", maintenance_date_filter)
+                .replace("__TODAY__", overdue_date_filter)
             )
         ).mappings().first()
 
@@ -74,7 +99,7 @@ def dashboard_overview():
                   m.tabla_origen,
                   m.cantidad,
                   m.motivo,
-                  m.fecha_hora,
+                  m.creado_en AS fecha_hora,
                   COALESCE(r.nombre, c.producto) AS item_nombre,
                   u.nombre AS usuario
                 FROM movimientos m
@@ -84,7 +109,7 @@ def dashboard_overview():
                   ON m.tabla_origen = 'consumibles' AND c.id = m.id_item
                 LEFT JOIN usuarios u
                   ON u.id = m.id_usuario
-                ORDER BY m.fecha_hora DESC
+                ORDER BY m.creado_en DESC
                 LIMIT 8
                 """
             )

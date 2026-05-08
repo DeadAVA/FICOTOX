@@ -5,7 +5,9 @@ from sqlalchemy import text
 
 from app.extensions import db
 from app.utils.auth import token_required
+from app.utils.inventory_usage import consume_consumible, consume_reactivo
 from app.utils.rbac import permission_required
+from app.utils.schema import is_sqlite
 
 samples_extraccion_bp = Blueprint("samples_extraccion", __name__, url_prefix="/api/samples/extraction")
 
@@ -13,6 +15,34 @@ samples_extraccion_bp = Blueprint("samples_extraccion", __name__, url_prefix="/a
 def ensure_samples_extraccion_schema():
     db.session.execute(
         text(
+            """
+            CREATE TABLE IF NOT EXISTS muestras_extraccion (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                folio_num INTEGER NOT NULL UNIQUE,
+                tipo_registro VARCHAR(4) NOT NULL DEFAULT 'E-A',
+                clave_revision VARCHAR(50) DEFAULT 'FX-TCF-GME-A',
+                fecha_emision DATE DEFAULT NULL,
+                fecha_extraccion DATE DEFAULT NULL,
+                hora_extraccion VARCHAR(20) DEFAULT NULL,
+                procesamiento_id INTEGER DEFAULT NULL,
+                folio_procesamiento_num INTEGER DEFAULT NULL,
+                muestra_tipo VARCHAR(20) DEFAULT NULL,
+                id_interno VARCHAR(100) DEFAULT NULL,
+                tipo_molienda VARCHAR(20) DEFAULT NULL,
+                pasos_json TEXT,
+                registro_pesos_json TEXT,
+                observaciones_generales TEXT,
+                nombre_quien_extrajo VARCHAR(180) DEFAULT NULL,
+                nombre_quien_superviso VARCHAR(180) DEFAULT NULL,
+                estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
+                creado_por INTEGER DEFAULT NULL,
+                actualizado_por INTEGER DEFAULT NULL,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite()
+            else
             """
             CREATE TABLE IF NOT EXISTS muestras_extraccion (
                 id INT NOT NULL AUTO_INCREMENT,
@@ -100,6 +130,31 @@ def _normalize_payload(raw):
         "nombre_quien_superviso": (payload.get("nombre_quien_superviso") or "").strip()[:180] or None,
         "estado": (payload.get("estado") or "registrada").strip()[:30] or "registrada",
     }
+
+
+def _apply_inventory_usage(extraction_id: int, data: dict, user_id: int | None) -> None:
+    pasos = _safe_json_load(data.get("pasos_json"), {})
+    reactivo_ref = pasos.get("folio_reactivo")
+    reactivo_qty = pasos.get("reactivo_cantidad") or 16
+    if reactivo_ref:
+        consume_reactivo(
+            reactivo_ref,
+            reactivo_qty,
+            user_id=user_id,
+            motivo=f"Extraccion de muestra folio {data.get('folio_num')}",
+            referencia=f"EXT-{extraction_id}-REACTIVO",
+        )
+
+    consumible_ref = pasos.get("consumible_id") or pasos.get("consumible_ref")
+    consumible_qty = pasos.get("consumible_cantidad") or 1
+    if consumible_ref:
+        consume_consumible(
+            consumible_ref,
+            consumible_qty,
+            user_id=user_id,
+            motivo=f"Extraccion de muestra folio {data.get('folio_num')}",
+            referencia=f"EXT-{extraction_id}-CONSUMIBLE",
+        )
 
 
 def _serialize_row(row):
@@ -203,6 +258,7 @@ def create_extraction_sample():
             ),
             {**data, "creado_por": user_id, "actualizado_por": user_id},
         )
+        _apply_inventory_usage(result.lastrowid, data, user_id)
         db.session.commit()
         return jsonify({"message": "Extraccion creada", "id": result.lastrowid}), 201
     except Exception as exc:

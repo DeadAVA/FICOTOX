@@ -16,7 +16,7 @@ def create_app() -> Flask:
     db.init_app(app)
     cors.init_app(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}})
 
-    from app.modules.admin.endpoints import admin_bp
+    from app.modules.admin.endpoints import admin_bp, ensure_usuarios_schema
     from app.modules.auth.endpoints import auth_bp
     from app.modules.dashboard.endpoints import dashboard_bp
     from app.modules.documents.endpoints import documents_bp
@@ -27,6 +27,9 @@ def create_app() -> Flask:
     from app.modules.samples.recepcion import ensure_samples_recepcion_schema, samples_recepcion_bp
     from app.modules.traceability.endpoints import traceability_bp
     from app.modules.inventory.consumables import bp as consumables_bp
+    from app.modules.inventory.consumables import ensure_consumibles_schema
+    from app.modules.inventory.endpoints import ensure_equipos_schema, ensure_mantenimientos_schema, ensure_reactivos_schema
+    from app.utils.inventory_usage import ensure_movimientos_schema
 
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
@@ -43,9 +46,16 @@ def create_app() -> Flask:
     try:
         with app.app_context():
             ensure_rbac_schema()
+            ensure_usuarios_schema()
             ensure_samples_recepcion_schema()
             ensure_samples_procesamiento_schema()
             ensure_samples_extraccion_schema()
+            ensure_reactivos_schema()
+            ensure_consumibles_schema()
+            ensure_equipos_schema()
+            ensure_mantenimientos_schema()
+            ensure_movimientos_schema()
+            db.session.commit()
     except Exception:
         # Si la BD no esta disponible en arranque, el health/db reportara el problema.
         pass
@@ -65,7 +75,7 @@ def create_app() -> Flask:
                     {
                         "ok": False,
                         "database": "unreachable",
-                        "message": "No se pudo conectar a MySQL. Revisa credenciales en backend/.env",
+                        "message": "No se pudo conectar a la base de datos local. Revisa backend/.env o permisos del archivo SQLite.",
                     }
                 ),
                 503,

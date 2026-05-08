@@ -4,6 +4,7 @@ from flask import g, jsonify
 from sqlalchemy import text
 
 from app.extensions import db
+from app.utils.schema import is_sqlite
 
 DEFAULT_PERMISSIONS = [
     ("dashboard", "Dashboard", "Acceso al panel principal"),
@@ -27,6 +28,43 @@ def ensure_rbac_schema() -> None:
     db.session.execute(
         text(
             """
+            CREATE TABLE IF NOT EXISTS roles (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              nombre VARCHAR(100) NOT NULL UNIQUE,
+              descripcion TEXT,
+              es_sistemico INTEGER NOT NULL DEFAULT 0,
+              activo INTEGER NOT NULL DEFAULT 1
+            )
+            """
+            if is_sqlite()
+            else
+            """
+            CREATE TABLE IF NOT EXISTS roles (
+              id INT NOT NULL AUTO_INCREMENT,
+              nombre VARCHAR(100) NOT NULL,
+              descripcion TEXT,
+              es_sistemico TINYINT(1) NOT NULL DEFAULT 0,
+              activo TINYINT(1) NOT NULL DEFAULT 1,
+              PRIMARY KEY (id),
+              UNIQUE KEY uk_roles_nombre (nombre)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """
+        )
+    )
+    db.session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS permisos (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              clave VARCHAR(80) NOT NULL UNIQUE,
+              nombre VARCHAR(120) NOT NULL,
+              descripcion TEXT,
+              activo INTEGER NOT NULL DEFAULT 1
+            )
+            """
+            if is_sqlite()
+            else
+            """
             CREATE TABLE IF NOT EXISTS permisos (
               id INT NOT NULL AUTO_INCREMENT,
               clave VARCHAR(80) NOT NULL,
@@ -42,6 +80,20 @@ def ensure_rbac_schema() -> None:
 
     db.session.execute(
         text(
+            """
+            CREATE TABLE IF NOT EXISTS rol_permisos (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              id_rol INTEGER NOT NULL,
+              id_permiso INTEGER NOT NULL,
+              can_read INTEGER NOT NULL DEFAULT 0,
+              can_create INTEGER NOT NULL DEFAULT 0,
+              can_update INTEGER NOT NULL DEFAULT 0,
+              can_delete INTEGER NOT NULL DEFAULT 0,
+              UNIQUE (id_rol, id_permiso)
+            )
+            """
+            if is_sqlite()
+            else
             """
             CREATE TABLE IF NOT EXISTS rol_permisos (
               id INT NOT NULL AUTO_INCREMENT,
@@ -62,23 +114,51 @@ def ensure_rbac_schema() -> None:
         )
     )
 
+    for nombre, descripcion, es_sistemico in [
+        ("Super Admin", "Acceso total al sistema", 1),
+        ("Analista", "Operacion de laboratorio", 1),
+        ("Consulta", "Rol base de solo lectura", 0),
+    ]:
+        existing = db.session.execute(
+            text("SELECT id FROM roles WHERE LOWER(nombre) = LOWER(:nombre) LIMIT 1"),
+            {"nombre": nombre},
+        ).scalar()
+        if not existing:
+            db.session.execute(
+                text(
+                    "INSERT INTO roles (nombre, descripcion, es_sistemico, activo) "
+                    "VALUES (:nombre, :descripcion, :es_sistemico, 1)"
+                ),
+                {"nombre": nombre, "descripcion": descripcion, "es_sistemico": es_sistemico},
+            )
+
     for clave, nombre, descripcion in DEFAULT_PERMISSIONS:
-        db.session.execute(
-            text(
-                """
-                INSERT INTO permisos (clave, nombre, descripcion, activo)
-                VALUES (:clave, :nombre, :descripcion, 1)
-                ON DUPLICATE KEY UPDATE
-                  nombre = VALUES(nombre),
-                  descripcion = VALUES(descripcion)
-                """
-            ),
-            {
-                "clave": clave,
-                "nombre": nombre,
-                "descripcion": descripcion,
-            },
-        )
+        if is_sqlite():
+            db.session.execute(
+                text(
+                    """
+                    INSERT INTO permisos (clave, nombre, descripcion, activo)
+                    VALUES (:clave, :nombre, :descripcion, 1)
+                    ON CONFLICT(clave) DO UPDATE SET
+                      nombre = excluded.nombre,
+                      descripcion = excluded.descripcion
+                    """
+                ),
+                {"clave": clave, "nombre": nombre, "descripcion": descripcion},
+            )
+        else:
+            db.session.execute(
+                text(
+                    """
+                    INSERT INTO permisos (clave, nombre, descripcion, activo)
+                    VALUES (:clave, :nombre, :descripcion, 1)
+                    ON DUPLICATE KEY UPDATE
+                      nombre = VALUES(nombre),
+                      descripcion = VALUES(descripcion)
+                    """
+                ),
+                {"clave": clave, "nombre": nombre, "descripcion": descripcion},
+            )
 
     permission_rows = db.session.execute(
         text("SELECT id, clave FROM permisos WHERE activo = 1")

@@ -9,6 +9,30 @@ import io
 bp = Blueprint("consumables", __name__, url_prefix="/api/consumables")
 
 
+def ensure_consumibles_schema():
+    db.session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS consumibles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                producto VARCHAR(180) NOT NULL,
+                marca VARCHAR(120) DEFAULT NULL,
+                proveedor VARCHAR(180) DEFAULT NULL,
+                catalogo_parte_cas VARCHAR(180) DEFAULT NULL,
+                fecha_ingreso DATE DEFAULT NULL,
+                tamano_capacidad VARCHAR(120) DEFAULT NULL,
+                contenedor VARCHAR(120) DEFAULT NULL,
+                piezas INTEGER DEFAULT 0,
+                cantidad_por_pieza INTEGER DEFAULT NULL,
+                creado_por INTEGER DEFAULT NULL,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    db.session.commit()
+
+
 def _to_int_or_none(value):
     if value in (None, ""):
         return None
@@ -98,6 +122,7 @@ def _decode_csv_bytes(file_bytes: bytes):
 @token_required
 @permission_required("consumibles", "read")
 def get_consumables():
+    ensure_consumibles_schema()
     search = request.args.get("search", "")
     query = """
         SELECT id, producto, marca, proveedor, catalogo_parte_cas,
@@ -118,6 +143,7 @@ def get_consumables():
 @token_required
 @permission_required("consumibles", "create")
 def create_consumable():
+    ensure_consumibles_schema()
     data = _normalize_payload(request.get_json(silent=True))
     if not data["producto"]:
         return jsonify({"message": "El campo 'producto' es obligatorio"}), 400
@@ -138,6 +164,7 @@ def create_consumable():
 @token_required
 @permission_required("consumibles", "update")
 def update_consumable(consumable_id):
+    ensure_consumibles_schema()
     data = _normalize_payload(request.get_json(silent=True))
     if not data["producto"]:
         return jsonify({"message": "El campo 'producto' es obligatorio"}), 400
@@ -161,6 +188,7 @@ def update_consumable(consumable_id):
 @token_required
 @permission_required("consumibles", "delete")
 def delete_consumable(consumable_id):
+    ensure_consumibles_schema()
     query = "DELETE FROM consumibles WHERE id = :id"
     result = db.session.execute(text(query), {"id": consumable_id})
     db.session.commit()
@@ -173,6 +201,7 @@ def delete_consumable(consumable_id):
 @token_required
 @permission_required("consumibles", "create")
 def import_consumables():
+    ensure_consumibles_schema()
     inserted = 0
 
     # Permite importar filas preprocesadas desde frontend (preview + depuración).

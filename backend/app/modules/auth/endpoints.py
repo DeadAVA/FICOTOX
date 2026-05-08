@@ -32,7 +32,7 @@ def login_with_email():
         return (
             jsonify(
                 {
-                    "message": "No se pudo conectar a la base de datos. Revisa DATABASE_URL y credenciales de MySQL."
+                    "message": "No se pudo conectar a la base de datos local. Revisa DATABASE_URL o el archivo SQLite."
                 }
             ),
             503,
@@ -40,14 +40,17 @@ def login_with_email():
 
     if row is None and current_app.config["AUTH_AUTO_REGISTER"]:
         try:
+            users_count = db.session.execute(text("SELECT COUNT(*) FROM usuarios")).scalar() or 0
+            base_role_name = "Super Admin" if users_count == 0 else "Consulta"
             role_row = db.session.execute(
-                text("SELECT id FROM roles WHERE nombre = 'Consulta' LIMIT 1")
+                text("SELECT id FROM roles WHERE nombre = :role_name LIMIT 1"),
+                {"role_name": base_role_name},
             ).mappings().first()
         except OperationalError:
             return (
                 jsonify(
                     {
-                        "message": "No se pudo conectar a la base de datos. Revisa DATABASE_URL y credenciales de MySQL."
+                        "message": "No se pudo conectar a la base de datos local. Revisa DATABASE_URL o el archivo SQLite."
                     }
                 ),
                 503,
@@ -58,17 +61,23 @@ def login_with_email():
                 text(
                     """
                     INSERT INTO roles (nombre, descripcion, es_sistemico, activo)
-                    VALUES ('Consulta', 'Rol base de solo lectura', 1, 1)
+                    VALUES (:role_name, :descripcion, :es_sistemico, 1)
                     """
-                )
+                ),
+                {
+                    "role_name": base_role_name,
+                    "descripcion": "Acceso total inicial" if base_role_name == "Super Admin" else "Rol base de solo lectura",
+                    "es_sistemico": 1 if base_role_name == "Super Admin" else 0,
+                },
             )
             db.session.commit()
             role_row = db.session.execute(
-                text("SELECT id FROM roles WHERE nombre = 'Consulta' LIMIT 1")
+                text("SELECT id FROM roles WHERE nombre = :role_name LIMIT 1"),
+                {"role_name": base_role_name},
             ).mappings().first()
 
         if role_row is None:
-            return jsonify({"message": "No existe el rol base Consulta"}), 500
+            return jsonify({"message": f"No existe el rol base {base_role_name}"}), 500
 
         cols = ["nombre", "email", "id_rol", "activo"]
         vals = [":nombre", ":email", ":id_rol", "1"]

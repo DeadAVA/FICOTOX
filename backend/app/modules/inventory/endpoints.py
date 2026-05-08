@@ -5,9 +5,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
+from app.modules.inventory.consumables import ensure_consumibles_schema
 from app.utils.auth import token_required
+from app.utils.inventory_usage import ensure_movimientos_schema
 from app.utils.rbac import permission_required
-from app.utils.schema import add_column_if_missing
+from app.utils.schema import add_column_if_missing, is_sqlite
 
 inventory_bp = Blueprint("inventory", __name__)
 
@@ -95,6 +97,21 @@ def _to_str_or_none(value, max_length=None):
 def ensure_reactivos_schema():
     db.session.execute(
         text(
+            """
+            CREATE TABLE IF NOT EXISTS reactivos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre VARCHAR(180) DEFAULT NULL,
+                numero_cas VARCHAR(120) DEFAULT NULL,
+                categoria VARCHAR(120) DEFAULT NULL,
+                cantidad_actual REAL DEFAULT 0,
+                unidad VARCHAR(40) DEFAULT NULL,
+                ubicacion VARCHAR(180) DEFAULT NULL,
+                fecha_vencimiento DATE DEFAULT NULL,
+                stock_minimo REAL DEFAULT 0
+            )
+            """
+            if is_sqlite()
+            else
             """
             CREATE TABLE IF NOT EXISTS reactivos (
                 id INT NOT NULL AUTO_INCREMENT,
@@ -208,6 +225,8 @@ def _normalize_reactivo_payload(raw):
 @permission_required("dashboard", "read")
 def inventory_summary():
     ensure_reactivos_schema()
+    ensure_consumibles_schema()
+    ensure_equipos_schema()
     summary = db.session.execute(
         text(
             """
@@ -348,6 +367,22 @@ def ensure_equipos_schema():
         text(
             """
             CREATE TABLE IF NOT EXISTS equipos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre VARCHAR(150) NOT NULL,
+                marca VARCHAR(100) DEFAULT NULL,
+                modelo VARCHAR(100) DEFAULT NULL,
+                numero_serie VARCHAR(100) DEFAULT NULL UNIQUE,
+                ubicacion VARCHAR(150) DEFAULT NULL,
+                id_responsable INTEGER DEFAULT NULL,
+                fecha_prox_calibracion DATE DEFAULT NULL,
+                estado VARCHAR(40) NOT NULL DEFAULT 'operativo',
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite()
+            else
+            """
+            CREATE TABLE IF NOT EXISTS equipos (
                 id INT NOT NULL AUTO_INCREMENT,
                 nombre VARCHAR(150) NOT NULL,
                 marca VARCHAR(100) DEFAULT NULL,
@@ -385,6 +420,22 @@ def ensure_mantenimientos_schema():
         text(
             """
             CREATE TABLE IF NOT EXISTS mantenimientos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_equipo INTEGER NOT NULL,
+                tipo VARCHAR(40) NOT NULL,
+                fecha_programada DATE NOT NULL,
+                fecha_realizado DATE DEFAULT NULL,
+                tecnico_proveedor VARCHAR(150) DEFAULT NULL,
+                estado VARCHAR(40) DEFAULT 'programado',
+                observaciones TEXT,
+                id_responsable INTEGER DEFAULT NULL,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite()
+            else
+            """
+            CREATE TABLE IF NOT EXISTS mantenimientos (
                 id INT NOT NULL AUTO_INCREMENT,
                 id_equipo INT NOT NULL,
                 tipo ENUM('preventivo','correctivo','calibracion') NOT NULL,
@@ -411,6 +462,42 @@ def ensure_mantenimientos_schema():
         ("creado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP"),
     ]:
         add_column_if_missing("mantenimientos", column_name, column_definition)
+    db.session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS reportes_mantenimiento (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                codigo VARCHAR(50) NOT NULL UNIQUE,
+                id_mantenimiento INTEGER NOT NULL,
+                version VARCHAR(20) NOT NULL,
+                estado VARCHAR(40) DEFAULT 'borrador',
+                id_responsable INTEGER DEFAULT NULL,
+                fecha_reporte DATE NOT NULL,
+                archivo_url TEXT,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite()
+            else
+            """
+            CREATE TABLE IF NOT EXISTS reportes_mantenimiento (
+                id INT NOT NULL AUTO_INCREMENT,
+                codigo VARCHAR(50) NOT NULL,
+                id_mantenimiento INT NOT NULL,
+                version VARCHAR(20) NOT NULL,
+                estado ENUM('borrador','en_revision','aprobado','publicado') DEFAULT 'borrador',
+                id_responsable INT DEFAULT NULL,
+                fecha_reporte DATE NOT NULL,
+                archivo_url TEXT,
+                creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                UNIQUE KEY codigo (codigo),
+                KEY id_mantenimiento (id_mantenimiento),
+                KEY id_responsable (id_responsable)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+            """
+        )
+    )
     db.session.commit()
 
 
@@ -589,6 +676,7 @@ def delete_equipo(equipo_id: int):
 @token_required
 @permission_required("consumibles", "read")
 def list_consumibles():
+    ensure_consumibles_schema()
     # CORRECCIÓN: Usar los campos reales de la tabla consumibles
     rows = db.session.execute(
         text(
@@ -609,6 +697,7 @@ def list_consumibles():
 @token_required
 @permission_required("movimientos", "read")
 def list_movimientos():
+    ensure_movimientos_schema()
     rows = db.session.execute(
         text(
             """
@@ -637,10 +726,20 @@ def list_mantenimientos():
             SELECT mt.id, mt.id_equipo, mt.tipo, mt.fecha_programada, mt.fecha_realizado,
                    mt.tecnico_proveedor, mt.estado, mt.observaciones, mt.id_responsable,
                    e.nombre AS equipo, e.marca AS equipo_marca, e.modelo AS equipo_modelo,
-                   u.nombre AS responsable
+                   u.nombre AS responsable,
+                   rm.codigo AS reporte_codigo, rm.archivo_url AS reporte_pdf_url
             FROM mantenimientos mt
             LEFT JOIN equipos e ON e.id = mt.id_equipo
             LEFT JOIN usuarios u ON u.id = mt.id_responsable
+            LEFT JOIN (
+                SELECT r1.id_mantenimiento, r1.codigo, r1.archivo_url
+                FROM reportes_mantenimiento r1
+                INNER JOIN (
+                    SELECT id_mantenimiento, MAX(id) AS id
+                    FROM reportes_mantenimiento
+                    GROUP BY id_mantenimiento
+                ) latest ON latest.id = r1.id
+            ) rm ON rm.id_mantenimiento = mt.id
             WHERE (:search = ''
                    OR e.nombre LIKE :search_like
                    OR e.marca LIKE :search_like
@@ -670,10 +769,20 @@ def get_mantenimiento(mantenimiento_id: int):
             SELECT mt.id, mt.id_equipo, mt.tipo, mt.fecha_programada, mt.fecha_realizado,
                    mt.tecnico_proveedor, mt.estado, mt.observaciones, mt.id_responsable,
                    e.nombre AS equipo, e.marca AS equipo_marca, e.modelo AS equipo_modelo,
-                   u.nombre AS responsable
+                   u.nombre AS responsable,
+                   rm.codigo AS reporte_codigo, rm.archivo_url AS reporte_pdf_url
             FROM mantenimientos mt
             LEFT JOIN equipos e ON e.id = mt.id_equipo
             LEFT JOIN usuarios u ON u.id = mt.id_responsable
+            LEFT JOIN (
+                SELECT r1.id_mantenimiento, r1.codigo, r1.archivo_url
+                FROM reportes_mantenimiento r1
+                INNER JOIN (
+                    SELECT id_mantenimiento, MAX(id) AS id
+                    FROM reportes_mantenimiento
+                    GROUP BY id_mantenimiento
+                ) latest ON latest.id = r1.id
+            ) rm ON rm.id_mantenimiento = mt.id
             WHERE mt.id = :id
             LIMIT 1
             """

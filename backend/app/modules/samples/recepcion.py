@@ -6,6 +6,7 @@ from sqlalchemy import text
 from app.extensions import db
 from app.utils.auth import token_required
 from app.utils.rbac import permission_required
+from app.utils.schema import is_sqlite
 
 samples_recepcion_bp = Blueprint("samples_recepcion", __name__, url_prefix="/api/samples/reception")
 
@@ -13,6 +14,34 @@ samples_recepcion_bp = Blueprint("samples_recepcion", __name__, url_prefix="/api
 def ensure_samples_recepcion_schema():
 	db.session.execute(
 		text(
+			"""
+			CREATE TABLE IF NOT EXISTS muestras_recepcion (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				folio_num INTEGER NOT NULL UNIQUE,
+				tipo_registro VARCHAR(2) NOT NULL DEFAULT 'R',
+				clave_revision VARCHAR(50) DEFAULT 'FX-TCF-GMR',
+				fecha_emision DATE DEFAULT NULL,
+				fecha_recepcion DATE DEFAULT NULL,
+				hora_recepcion VARCHAR(20) DEFAULT NULL,
+				solicitante VARCHAR(180) DEFAULT NULL,
+				muestra_unica INTEGER DEFAULT 0,
+				fecha_muestra DATE DEFAULT NULL,
+				id_interno VARCHAR(100) DEFAULT NULL,
+				especificaciones TEXT,
+				lote_muestras_json TEXT,
+				analisis_json TEXT,
+				inspeccion_json TEXT,
+				datos_solicitante_json TEXT,
+				datos_custodio_json TEXT,
+				estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
+				creado_por INTEGER DEFAULT NULL,
+				actualizado_por INTEGER DEFAULT NULL,
+				creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			)
+			"""
+			if is_sqlite()
+			else
 			"""
 			CREATE TABLE IF NOT EXISTS muestras_recepcion (
 				id INT NOT NULL AUTO_INCREMENT,
