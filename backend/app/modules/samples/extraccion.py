@@ -33,7 +33,11 @@ def ensure_samples_extraccion_schema():
                 registro_pesos_json TEXT,
                 observaciones_generales TEXT,
                 nombre_quien_extrajo VARCHAR(180) DEFAULT NULL,
+                nombre_quien_limpieza VARCHAR(180) DEFAULT NULL,
                 nombre_quien_superviso VARCHAR(180) DEFAULT NULL,
+                firma_quien_extrajo TEXT,
+                firma_quien_limpieza TEXT,
+                firma_quien_superviso TEXT,
                 estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
                 creado_por INTEGER DEFAULT NULL,
                 actualizado_por INTEGER DEFAULT NULL,
@@ -61,7 +65,11 @@ def ensure_samples_extraccion_schema():
                 registro_pesos_json LONGTEXT,
                 observaciones_generales TEXT,
                 nombre_quien_extrajo VARCHAR(180) DEFAULT NULL,
+                nombre_quien_limpieza VARCHAR(180) DEFAULT NULL,
                 nombre_quien_superviso VARCHAR(180) DEFAULT NULL,
+                firma_quien_extrajo LONGTEXT,
+                firma_quien_limpieza LONGTEXT,
+                firma_quien_superviso LONGTEXT,
                 estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
                 creado_por INT DEFAULT NULL,
                 actualizado_por INT DEFAULT NULL,
@@ -79,6 +87,11 @@ def ensure_samples_extraccion_schema():
             """
         )
     )
+    from app.utils.schema import add_column_if_missing
+    add_column_if_missing("muestras_extraccion", "nombre_quien_limpieza", "VARCHAR(180) DEFAULT NULL AFTER `nombre_quien_extrajo`")
+    add_column_if_missing("muestras_extraccion", "firma_quien_extrajo", "LONGTEXT AFTER `nombre_quien_superviso`")
+    add_column_if_missing("muestras_extraccion", "firma_quien_limpieza", "LONGTEXT AFTER `firma_quien_extrajo`")
+    add_column_if_missing("muestras_extraccion", "firma_quien_superviso", "LONGTEXT AFTER `firma_quien_limpieza`")
     db.session.commit()
 
 
@@ -127,7 +140,11 @@ def _normalize_payload(raw):
         "registro_pesos_json": _json_text(payload.get("registro_pesos") or []),
         "observaciones_generales": (payload.get("observaciones_generales") or "").strip() or None,
         "nombre_quien_extrajo": (payload.get("nombre_quien_extrajo") or "").strip()[:180] or None,
+        "nombre_quien_limpieza": (payload.get("nombre_quien_limpieza") or "").strip()[:180] or None,
         "nombre_quien_superviso": (payload.get("nombre_quien_superviso") or "").strip()[:180] or None,
+        "firma_quien_extrajo": (payload.get("firma_quien_extrajo") or "").strip() or None,
+        "firma_quien_limpieza": (payload.get("firma_quien_limpieza") or "").strip() or None,
+        "firma_quien_superviso": (payload.get("firma_quien_superviso") or "").strip() or None,
         "estado": (payload.get("estado") or "registrada").strip()[:30] or "registrada",
     }
 
@@ -211,7 +228,9 @@ def get_extraction_sample(extraction_id: int):
                    folio_procesamiento_num, muestra_tipo, id_interno,
                    tipo_molienda, pasos_json, registro_pesos_json,
                    observaciones_generales, nombre_quien_extrajo,
-                   nombre_quien_superviso, estado, creado_en, actualizado_en
+                   nombre_quien_limpieza, nombre_quien_superviso,
+                   firma_quien_extrajo, firma_quien_limpieza,
+                   firma_quien_superviso, estado, creado_en, actualizado_en
             FROM muestras_extraccion
             WHERE id = :id
             """
@@ -245,14 +264,18 @@ def create_extraction_sample():
                     folio_procesamiento_num, muestra_tipo, id_interno,
                     tipo_molienda, pasos_json, registro_pesos_json,
                     observaciones_generales, nombre_quien_extrajo,
-                    nombre_quien_superviso, estado, creado_por, actualizado_por
+                    nombre_quien_limpieza, nombre_quien_superviso,
+                    firma_quien_extrajo, firma_quien_limpieza,
+                    firma_quien_superviso, estado, creado_por, actualizado_por
                 ) VALUES (
                     :folio_num, :tipo_registro, :clave_revision, :fecha_emision,
                     :fecha_extraccion, :hora_extraccion, :procesamiento_id,
                     :folio_procesamiento_num, :muestra_tipo, :id_interno,
                     :tipo_molienda, :pasos_json, :registro_pesos_json,
                     :observaciones_generales, :nombre_quien_extrajo,
-                    :nombre_quien_superviso, :estado, :creado_por, :actualizado_por
+                    :nombre_quien_limpieza, :nombre_quien_superviso,
+                    :firma_quien_extrajo, :firma_quien_limpieza,
+                    :firma_quien_superviso, :estado, :creado_por, :actualizado_por
                 )
                 """
             ),
@@ -300,7 +323,11 @@ def update_extraction_sample(extraction_id: int):
                     registro_pesos_json = :registro_pesos_json,
                     observaciones_generales = :observaciones_generales,
                     nombre_quien_extrajo = :nombre_quien_extrajo,
+                    nombre_quien_limpieza = :nombre_quien_limpieza,
                     nombre_quien_superviso = :nombre_quien_superviso,
+                    firma_quien_extrajo = :firma_quien_extrajo,
+                    firma_quien_limpieza = :firma_quien_limpieza,
+                    firma_quien_superviso = :firma_quien_superviso,
                     estado = :estado,
                     actualizado_por = :actualizado_por
                 WHERE id = :id

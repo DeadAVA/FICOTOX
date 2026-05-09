@@ -38,6 +38,8 @@ def ensure_samples_procesamiento_schema():
 				observaciones_generales TEXT,
 				nombre_quien_proceso VARCHAR(180) DEFAULT NULL,
 				nombre_quien_superviso VARCHAR(180) DEFAULT NULL,
+				firma_quien_proceso TEXT,
+				firma_quien_superviso TEXT,
 				estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
 				creado_por INTEGER DEFAULT NULL,
 				actualizado_por INTEGER DEFAULT NULL,
@@ -70,6 +72,8 @@ def ensure_samples_procesamiento_schema():
 				observaciones_generales TEXT,
 				nombre_quien_proceso VARCHAR(180) DEFAULT NULL,
 				nombre_quien_superviso VARCHAR(180) DEFAULT NULL,
+				firma_quien_proceso LONGTEXT,
+				firma_quien_superviso LONGTEXT,
 				estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
 				creado_por INT DEFAULT NULL,
 				actualizado_por INT DEFAULT NULL,
@@ -91,6 +95,16 @@ def ensure_samples_procesamiento_schema():
 		"muestras_procesamiento",
 		"lote_seleccion_json",
 		"LONGTEXT AFTER `id_interno`",
+	)
+	add_column_if_missing(
+		"muestras_procesamiento",
+		"firma_quien_proceso",
+		"LONGTEXT AFTER `nombre_quien_superviso`",
+	)
+	add_column_if_missing(
+		"muestras_procesamiento",
+		"firma_quien_superviso",
+		"LONGTEXT AFTER `firma_quien_proceso`",
 	)
 	db.session.commit()
 
@@ -145,6 +159,8 @@ def _normalize_payload(raw):
 		"observaciones_generales": (payload.get("observaciones_generales") or "").strip() or None,
 		"nombre_quien_proceso": (payload.get("nombre_quien_proceso") or "").strip()[:180] or None,
 		"nombre_quien_superviso": (payload.get("nombre_quien_superviso") or "").strip()[:180] or None,
+		"firma_quien_proceso": (payload.get("firma_quien_proceso") or "").strip() or None,
+		"firma_quien_superviso": (payload.get("firma_quien_superviso") or "").strip() or None,
 		"estado": (payload.get("estado") or "registrada").strip()[:30] or "registrada",
 	}
 
@@ -224,7 +240,8 @@ def get_processing_sample(processing_id: int):
 				   bivalvos_steps_json, sardinas_steps_json,
 				   otro_procesamiento, resguardo_json,
 				   observaciones_generales, nombre_quien_proceso,
-				   nombre_quien_superviso, estado, creado_en, actualizado_en
+				   nombre_quien_superviso, firma_quien_proceso,
+				   firma_quien_superviso, estado, creado_en, actualizado_en
 			FROM muestras_procesamiento
 			WHERE id = :id
 			"""
@@ -261,7 +278,8 @@ def create_processing_sample():
 					bivalvos_steps_json, sardinas_steps_json,
 					otro_procesamiento, resguardo_json,
 					observaciones_generales, nombre_quien_proceso,
-					nombre_quien_superviso, estado, creado_por, actualizado_por
+					nombre_quien_superviso, firma_quien_proceso,
+					firma_quien_superviso, estado, creado_por, actualizado_por
 				) VALUES (
 					:folio_num, :tipo_registro, :clave_revision, :fecha_emision,
 					:fecha_procesamiento, :hora_procesamiento, :recepcion_id,
@@ -271,7 +289,8 @@ def create_processing_sample():
 					:bivalvos_steps_json, :sardinas_steps_json,
 					:otro_procesamiento, :resguardo_json,
 					:observaciones_generales, :nombre_quien_proceso,
-					:nombre_quien_superviso, :estado, :creado_por, :actualizado_por
+					:nombre_quien_superviso, :firma_quien_proceso,
+					:firma_quien_superviso, :estado, :creado_por, :actualizado_por
 				)
 				"""
 			),
@@ -324,6 +343,8 @@ def update_processing_sample(processing_id: int):
 					observaciones_generales = :observaciones_generales,
 					nombre_quien_proceso = :nombre_quien_proceso,
 					nombre_quien_superviso = :nombre_quien_superviso,
+					firma_quien_proceso = :firma_quien_proceso,
+					firma_quien_superviso = :firma_quien_superviso,
 					estado = :estado,
 					actualizado_por = :actualizado_por
 				WHERE id = :id
