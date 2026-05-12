@@ -1,23 +1,24 @@
+import jwt
 from flask import Blueprint, current_app, g, jsonify, request
+from jwt import PyJWKClient
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 from app.extensions import db
 from app.utils.auth import create_access_token, token_required
 from app.utils.rbac import ensure_rbac_schema, get_permissions_for_user, get_role_permissions_map
+from app.utils.users import ensure_usuarios_schema
 
 auth_bp = Blueprint("auth", __name__)
 
 
-@auth_bp.post("/login")
-def login_with_email():
-    payload = request.get_json(silent=True) or {}
-    email = (payload.get("email") or "").strip().lower()
+def _domain_allowed(email: str) -> bool:
+    allowed_domain = current_app.config["MICROSOFT_ALLOWED_DOMAIN"].lower()
+    return bool(email) and email.lower().endswith(f"@{allowed_domain}")
 
-    if not email:
-        return jsonify({"message": "El correo es obligatorio"}), 400
 
-    user_query = text(
+def _user_query():
+    return text(
         """
         SELECT u.id, u.id_rol AS role_id, u.nombre, u.email, u.activo, r.nombre AS rol
         FROM usuarios u
@@ -26,77 +27,17 @@ def login_with_email():
         LIMIT 1
         """
     )
-    try:
-        row = db.session.execute(user_query, {"email": email}).mappings().first()
-    except OperationalError:
-        return (
-            jsonify(
-                {
-                    "message": "No se pudo conectar a la base de datos local. Revisa DATABASE_URL o el archivo SQLite."
-                }
-            ),
-            503,
-        )
 
-    if row is None and current_app.config["AUTH_AUTO_REGISTER"]:
-        try:
-            users_count = db.session.execute(text("SELECT COUNT(*) FROM usuarios")).scalar() or 0
-            base_role_name = "Super Admin" if users_count == 0 else "Consulta"
-            role_row = db.session.execute(
-                text("SELECT id FROM roles WHERE nombre = :role_name LIMIT 1"),
-                {"role_name": base_role_name},
-            ).mappings().first()
-        except OperationalError:
-            return (
-                jsonify(
-                    {
-                        "message": "No se pudo conectar a la base de datos local. Revisa DATABASE_URL o el archivo SQLite."
-                    }
-                ),
-                503,
-            )
 
-        if role_row is None:
-            db.session.execute(
-                text(
-                    """
-                    INSERT INTO roles (nombre, descripcion, es_sistemico, activo)
-                    VALUES (:role_name, :descripcion, :es_sistemico, 1)
-                    """
-                ),
-                {
-                    "role_name": base_role_name,
-                    "descripcion": "Acceso total inicial" if base_role_name == "Super Admin" else "Rol base de solo lectura",
-                    "es_sistemico": 1 if base_role_name == "Super Admin" else 0,
-                },
-            )
-            db.session.commit()
-            role_row = db.session.execute(
-                text("SELECT id FROM roles WHERE nombre = :role_name LIMIT 1"),
-                {"role_name": base_role_name},
-            ).mappings().first()
-
-        if role_row is None:
-            return jsonify({"message": f"No existe el rol base {base_role_name}"}), 500
-
-        cols = ["nombre", "email", "id_rol", "activo"]
-        vals = [":nombre", ":email", ":id_rol", "1"]
-        params = {
-            "nombre": email.split("@")[0],
-            "email": email,
-            "id_rol": role_row["id"],
-        }
-
-        insert_sql = f"INSERT INTO usuarios ({', '.join(cols)}) VALUES ({', '.join(vals)})"
-        db.session.execute(text(insert_sql), params)
-        db.session.commit()
-        row = db.session.execute(user_query, {"email": email}).mappings().first()
-
-    if row is None:
-        return jsonify({"message": "Usuario no encontrado"}), 404
-
+def _issue_session(row):
     if not row["activo"]:
         return jsonify({"message": "Usuario inactivo"}), 403
+
+    db.session.execute(
+        text("UPDATE usuarios SET ultimo_acceso = CURRENT_TIMESTAMP WHERE id = :user_id"),
+        {"user_id": row["id"]},
+    )
+    db.session.commit()
 
     token = create_access_token(
         {
@@ -127,6 +68,158 @@ def login_with_email():
         ),
         200,
     )
+
+
+def _get_user_by_email(email: str):
+    return db.session.execute(_user_query(), {"email": email}).mappings().first()
+
+
+def _build_microsoft_authority() -> str:
+    tenant_id = current_app.config["MICROSOFT_TENANT_ID"]
+    return f"https://login.microsoftonline.com/{tenant_id}/v2.0"
+
+
+def _validate_microsoft_id_token(id_token: str) -> dict:
+    authority = _build_microsoft_authority()
+    jwks_client = PyJWKClient(f"{authority}/discovery/v2.0/keys")
+    signing_key = jwks_client.get_signing_key_from_jwt(id_token)
+    return jwt.decode(
+        id_token,
+        signing_key.key,
+        algorithms=["RS256"],
+        audience=current_app.config["MICROSOFT_CLIENT_ID"],
+        issuer=authority,
+        options={"require": ["aud", "exp", "iat", "iss", "sub"]},
+    )
+
+
+def _email_from_claims(claims: dict) -> str:
+    for key in ("preferred_username", "email", "upn", "unique_name"):
+        value = (claims.get(key) or "").strip().lower()
+        if "@" in value:
+            return value
+    return ""
+
+
+@auth_bp.get("/config")
+def auth_config():
+    return (
+        jsonify(
+            {
+                "microsoft": {
+                    "enabled": current_app.config["MICROSOFT_AUTH_ENABLED"],
+                    "clientId": current_app.config["MICROSOFT_CLIENT_ID"],
+                    "tenantId": current_app.config["MICROSOFT_TENANT_ID"],
+                    "authority": _build_microsoft_authority()
+                    if current_app.config["MICROSOFT_AUTH_ENABLED"]
+                    else "",
+                    "allowedDomain": current_app.config["MICROSOFT_ALLOWED_DOMAIN"],
+                },
+                "manualLoginEnabled": current_app.config["LOCAL_LOGIN_ENABLED"],
+            }
+        ),
+        200,
+    )
+
+
+@auth_bp.post("/microsoft")
+def login_with_microsoft():
+    if not current_app.config["MICROSOFT_AUTH_ENABLED"]:
+        return jsonify({"message": "Microsoft Entra ID no esta configurado"}), 503
+
+    payload = request.get_json(silent=True) or {}
+    id_token = (payload.get("id_token") or "").strip()
+    if not id_token:
+        return jsonify({"message": "Token de Microsoft requerido"}), 400
+
+    try:
+        claims = _validate_microsoft_id_token(id_token)
+    except jwt.PyJWTError:
+        return jsonify({"message": "No se pudo validar la sesion de Microsoft"}), 401
+    except Exception:
+        return jsonify({"message": "No se pudo validar Microsoft Entra ID"}), 503
+
+    email = _email_from_claims(claims)
+    if not _domain_allowed(email):
+        return jsonify({"message": f"Solo se permiten cuentas @{current_app.config['MICROSOFT_ALLOWED_DOMAIN']}"}), 403
+
+    try:
+        ensure_usuarios_schema()
+        row = _get_user_by_email(email)
+    except OperationalError:
+        return (
+            jsonify(
+                {
+                    "message": "No se pudo conectar a la base de datos local. Revisa DATABASE_URL o el archivo SQLite."
+                }
+            ),
+            503,
+        )
+
+    if row is None:
+        return (
+            jsonify(
+                {
+                    "message": "Tu cuenta pertenece a CICESE, pero todavia no esta dada de alta en FICOTOX."
+                }
+            ),
+            403,
+        )
+
+    name = (claims.get("name") or row["nombre"] or email.split("@", 1)[0]).strip()[:100]
+    db.session.execute(
+        text(
+            """
+            UPDATE usuarios
+            SET nombre = :nombre,
+                auth_provider = 'microsoft',
+                microsoft_oid = :microsoft_oid,
+                microsoft_tid = :microsoft_tid,
+                microsoft_preferred_username = :preferred_username
+            WHERE id = :user_id
+            """
+        ),
+        {
+            "nombre": name,
+            "microsoft_oid": claims.get("oid"),
+            "microsoft_tid": claims.get("tid"),
+            "preferred_username": claims.get("preferred_username"),
+            "user_id": row["id"],
+        },
+    )
+    db.session.commit()
+    row = _get_user_by_email(email)
+    return _issue_session(row)
+
+
+@auth_bp.post("/login")
+def login_with_email():
+    payload = request.get_json(silent=True) or {}
+    email = (payload.get("email") or "").strip().lower()
+
+    if not email:
+        return jsonify({"message": "El correo es obligatorio"}), 400
+
+    if not current_app.config["LOCAL_LOGIN_ENABLED"]:
+        return jsonify({"message": "El acceso local esta desactivado"}), 403
+
+    try:
+        ensure_usuarios_schema()
+        row = _get_user_by_email(email)
+    except OperationalError:
+        return (
+            jsonify(
+                {
+                    "message": "No se pudo conectar a la base de datos local. Revisa DATABASE_URL o el archivo SQLite."
+                }
+            ),
+                503,
+        )
+
+    if row is None:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+
+    return _issue_session(row)
 
 
 @auth_bp.get("/me")

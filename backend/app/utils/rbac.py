@@ -116,8 +116,6 @@ def ensure_rbac_schema() -> None:
 
     for nombre, descripcion, es_sistemico in [
         ("Super Admin", "Acceso total al sistema", 1),
-        ("Analista", "Operacion de laboratorio", 1),
-        ("Consulta", "Rol base de solo lectura", 0),
     ]:
         existing = db.session.execute(
             text("SELECT id FROM roles WHERE LOWER(nombre) = LOWER(:nombre) LIMIT 1"),

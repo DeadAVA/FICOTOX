@@ -24,6 +24,15 @@ class Config:
 
     JWT_SECRET = os.getenv("JWT_SECRET", "ficotox-jwt-secret")
     JWT_EXPIRES_HOURS = int(os.getenv("JWT_EXPIRES_HOURS", "12"))
-    AUTH_AUTO_REGISTER = os.getenv("AUTH_AUTO_REGISTER", "true").lower() == "true"
+    LOCAL_LOGIN_ENABLED = os.getenv("LOCAL_LOGIN_ENABLED", "true").lower() == "true"
+
+    MICROSOFT_CLIENT_ID = os.getenv("MICROSOFT_CLIENT_ID", "").strip()
+    MICROSOFT_TENANT_ID = os.getenv("MICROSOFT_TENANT_ID", "").strip()
+    MICROSOFT_ALLOWED_DOMAIN = os.getenv("MICROSOFT_ALLOWED_DOMAIN", "cicese.mx").strip().lower()
+    MICROSOFT_AUTH_ENABLED = (
+        os.getenv("MICROSOFT_AUTH_ENABLED", "true").lower() == "true"
+        and bool(MICROSOFT_CLIENT_ID)
+        and bool(MICROSOFT_TENANT_ID)
+    )
 
     CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")

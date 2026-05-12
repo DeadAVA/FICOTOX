@@ -92,6 +92,7 @@ def ensure_samples_extraccion_schema():
     add_column_if_missing("muestras_extraccion", "firma_quien_extrajo", "LONGTEXT AFTER `nombre_quien_superviso`")
     add_column_if_missing("muestras_extraccion", "firma_quien_limpieza", "LONGTEXT AFTER `firma_quien_extrajo`")
     add_column_if_missing("muestras_extraccion", "firma_quien_superviso", "LONGTEXT AFTER `firma_quien_limpieza`")
+    add_column_if_missing("muestras_extraccion", "uso_inventario_json", "TEXT DEFAULT NULL")
     db.session.commit()
 
 
@@ -146,38 +147,43 @@ def _normalize_payload(raw):
         "firma_quien_limpieza": (payload.get("firma_quien_limpieza") or "").strip() or None,
         "firma_quien_superviso": (payload.get("firma_quien_superviso") or "").strip() or None,
         "estado": (payload.get("estado") or "registrada").strip()[:30] or "registrada",
+        "uso_inventario_json": _json_text(payload.get("uso_inventario") or []),
     }
 
 
 def _apply_inventory_usage(extraction_id: int, data: dict, user_id: int | None) -> None:
-    pasos = _safe_json_load(data.get("pasos_json"), {})
-    reactivo_ref = pasos.get("folio_reactivo")
-    reactivo_qty = pasos.get("reactivo_cantidad") or 16
-    if reactivo_ref:
-        consume_reactivo(
-            reactivo_ref,
-            reactivo_qty,
-            user_id=user_id,
-            motivo=f"Extraccion de muestra folio {data.get('folio_num')}",
-            referencia=f"EXT-{extraction_id}-REACTIVO",
-        )
-
-    consumible_ref = pasos.get("consumible_id") or pasos.get("consumible_ref")
-    consumible_qty = pasos.get("consumible_cantidad") or 1
-    if consumible_ref:
-        consume_consumible(
-            consumible_ref,
-            consumible_qty,
-            user_id=user_id,
-            motivo=f"Extraccion de muestra folio {data.get('folio_num')}",
-            referencia=f"EXT-{extraction_id}-CONSUMIBLE",
-        )
+    # Lista principal de insumos declarados en el formulario
+    insumos = _safe_json_load(data.get("uso_inventario_json"), [])
+    for idx, insumo in enumerate(insumos):
+        if not isinstance(insumo, dict):
+            continue
+        tipo = str(insumo.get("tipo") or "").strip().lower()
+        ref = insumo.get("ref") or insumo.get("nombre") or ""
+        cantidad = insumo.get("cantidad") or 1
+        if not ref:
+            continue
+        referencia_mov = f"EXT-{extraction_id}-INS-{idx}"
+        if tipo == "reactivo":
+            consume_reactivo(
+                ref, cantidad,
+                user_id=user_id,
+                motivo=f"Extraccion de muestra folio {data.get('folio_num')}",
+                referencia=referencia_mov,
+            )
+        elif tipo == "consumible":
+            consume_consumible(
+                ref, cantidad,
+                user_id=user_id,
+                motivo=f"Extraccion de muestra folio {data.get('folio_num')}",
+                referencia=referencia_mov,
+            )
 
 
 def _serialize_row(row):
     item = dict(row)
     item["pasos"] = _safe_json_load(item.pop("pasos_json", None), {})
     item["registro_pesos"] = _safe_json_load(item.pop("registro_pesos_json", None), [])
+    item["uso_inventario"] = _safe_json_load(item.pop("uso_inventario_json", None), [])
     return item
 
 
@@ -266,7 +272,8 @@ def create_extraction_sample():
                     observaciones_generales, nombre_quien_extrajo,
                     nombre_quien_limpieza, nombre_quien_superviso,
                     firma_quien_extrajo, firma_quien_limpieza,
-                    firma_quien_superviso, estado, creado_por, actualizado_por
+                    firma_quien_superviso, uso_inventario_json,
+                    estado, creado_por, actualizado_por
                 ) VALUES (
                     :folio_num, :tipo_registro, :clave_revision, :fecha_emision,
                     :fecha_extraccion, :hora_extraccion, :procesamiento_id,
@@ -275,7 +282,8 @@ def create_extraction_sample():
                     :observaciones_generales, :nombre_quien_extrajo,
                     :nombre_quien_limpieza, :nombre_quien_superviso,
                     :firma_quien_extrajo, :firma_quien_limpieza,
-                    :firma_quien_superviso, :estado, :creado_por, :actualizado_por
+                    :firma_quien_superviso, :uso_inventario_json,
+                    :estado, :creado_por, :actualizado_por
                 )
                 """
             ),
@@ -328,6 +336,7 @@ def update_extraction_sample(extraction_id: int):
                     firma_quien_extrajo = :firma_quien_extrajo,
                     firma_quien_limpieza = :firma_quien_limpieza,
                     firma_quien_superviso = :firma_quien_superviso,
+                    uso_inventario_json = :uso_inventario_json,
                     estado = :estado,
                     actualizado_por = :actualizado_por
                 WHERE id = :id

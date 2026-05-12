@@ -1,69 +1,13 @@
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.extensions import db
 from app.utils.auth import token_required
 from app.utils.rbac import _bool, ensure_rbac_schema, permission_required
-from app.utils.schema import add_column_if_missing, drop_column_if_exists, is_sqlite
+from app.utils.users import ensure_usuarios_schema, normalize_user_payload
 
 admin_bp = Blueprint("admin", __name__)
-
-
-def ensure_usuarios_schema() -> None:
-    ensure_rbac_schema()
-    db.session.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS usuarios (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              nombre VARCHAR(100) NOT NULL,
-              email VARCHAR(100) NOT NULL UNIQUE,
-              activo INTEGER DEFAULT 1,
-              id_rol INTEGER NOT NULL,
-              departamento VARCHAR(100) DEFAULT NULL,
-              creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-              ultimo_acceso TIMESTAMP DEFAULT NULL
-            )
-            """
-            if is_sqlite()
-            else
-            """
-            CREATE TABLE IF NOT EXISTS usuarios (
-              id INT NOT NULL AUTO_INCREMENT,
-              nombre VARCHAR(100) NOT NULL,
-              email VARCHAR(100) NOT NULL,
-              activo TINYINT(1) DEFAULT 1,
-              id_rol INT NOT NULL,
-              departamento VARCHAR(100) DEFAULT NULL,
-              creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-              PRIMARY KEY (id),
-              UNIQUE KEY email (email),
-              KEY id_rol (id_rol),
-              CONSTRAINT usuarios_ibfk_1 FOREIGN KEY (id_rol) REFERENCES roles(id) ON DELETE RESTRICT
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-            """
-        )
-    )
-    drop_column_if_exists("usuarios", "password_hash")
-    for column_name, column_definition in [
-        ("departamento", "VARCHAR(100) DEFAULT NULL"),
-        ("activo", "TINYINT(1) DEFAULT 1"),
-        ("creado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP"),
-        ("ultimo_acceso", "TIMESTAMP NULL DEFAULT NULL"),
-    ]:
-        add_column_if_missing("usuarios", column_name, column_definition)
-    db.session.commit()
-
-
-def _normalize_user_payload(payload: dict) -> dict:
-    return {
-        "nombre": (payload.get("nombre") or "").strip()[:100],
-        "email": (payload.get("email") or "").strip().lower()[:100],
-        "id_rol": int(payload.get("id_rol") or 0),
-        "departamento": (payload.get("departamento") or "").strip()[:100] or None,
-        "activo": _bool(payload.get("activo", True)),
-    }
 
 
 def _save_role_permissions(role_id: int, permissions: list[dict]) -> None:
@@ -97,6 +41,15 @@ def _save_role_permissions(role_id: int, permissions: list[dict]) -> None:
                 "can_delete": _bool(permission.get("can_delete")),
             },
         )
+
+
+def _email_domain_allowed(email: str) -> bool:
+    allowed_domain = current_app.config["MICROSOFT_ALLOWED_DOMAIN"].lower()
+    return bool(email) and email.endswith(f"@{allowed_domain}")
+
+
+def _domain_error_message() -> str:
+    return f"Solo puedes dar de alta correos @{current_app.config['MICROSOFT_ALLOWED_DOMAIN']}"
 
 
 @admin_bp.get("/roles")
@@ -360,7 +313,8 @@ def list_usuarios():
         text(
             """
             SELECT u.id, u.nombre, u.email, u.activo, u.id_rol, r.nombre AS rol,
-                   u.departamento, u.creado_en, u.ultimo_acceso
+                   u.departamento, u.auth_provider, u.microsoft_oid,
+                   u.creado_en, u.ultimo_acceso
             FROM usuarios u
             LEFT JOIN roles r ON r.id = u.id_rol
             ORDER BY u.id DESC
@@ -381,7 +335,8 @@ def get_usuario(user_id: int):
         text(
             """
             SELECT u.id, u.nombre, u.email, u.activo, u.id_rol, r.nombre AS rol,
-                   u.departamento, u.creado_en, u.ultimo_acceso
+                   u.departamento, u.auth_provider, u.microsoft_oid,
+                   u.creado_en, u.ultimo_acceso
             FROM usuarios u
             LEFT JOIN roles r ON r.id = u.id_rol
             WHERE u.id = :user_id
@@ -400,12 +355,14 @@ def get_usuario(user_id: int):
 @permission_required("usuarios", "create")
 def create_usuario():
     ensure_usuarios_schema()
-    data = _normalize_user_payload(request.get_json(silent=True) or {})
+    data = normalize_user_payload(request.get_json(silent=True) or {})
 
     if not data["nombre"]:
         return jsonify({"message": "El nombre es obligatorio"}), 400
     if not data["email"]:
         return jsonify({"message": "El email es obligatorio"}), 400
+    if not _email_domain_allowed(data["email"]):
+        return jsonify({"message": _domain_error_message()}), 400
     if not data["id_rol"]:
         return jsonify({"message": "Selecciona un rol"}), 400
 
@@ -420,8 +377,8 @@ def create_usuario():
         result = db.session.execute(
             text(
                 """
-                INSERT INTO usuarios (nombre, email, activo, id_rol, departamento)
-                VALUES (:nombre, :email, :activo, :id_rol, :departamento)
+                INSERT INTO usuarios (nombre, email, activo, id_rol, departamento, auth_provider)
+                VALUES (:nombre, :email, :activo, :id_rol, :departamento, 'microsoft')
                 """
             ),
             data,
@@ -439,12 +396,14 @@ def create_usuario():
 @permission_required("usuarios", "update")
 def update_usuario(user_id: int):
     ensure_usuarios_schema()
-    data = _normalize_user_payload(request.get_json(silent=True) or {})
+    data = normalize_user_payload(request.get_json(silent=True) or {})
 
     if not data["nombre"]:
         return jsonify({"message": "El nombre es obligatorio"}), 400
     if not data["email"]:
         return jsonify({"message": "El email es obligatorio"}), 400
+    if not _email_domain_allowed(data["email"]):
+        return jsonify({"message": _domain_error_message()}), 400
     if not data["id_rol"]:
         return jsonify({"message": "Selecciona un rol"}), 400
 

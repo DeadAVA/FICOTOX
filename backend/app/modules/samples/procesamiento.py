@@ -106,6 +106,11 @@ def ensure_samples_procesamiento_schema():
 		"firma_quien_superviso",
 		"LONGTEXT AFTER `firma_quien_proceso`",
 	)
+	add_column_if_missing(
+		"muestras_procesamiento",
+		"uso_inventario_json",
+		"TEXT DEFAULT NULL",
+	)
 	db.session.commit()
 
 
@@ -162,21 +167,35 @@ def _normalize_payload(raw):
 		"firma_quien_proceso": (payload.get("firma_quien_proceso") or "").strip() or None,
 		"firma_quien_superviso": (payload.get("firma_quien_superviso") or "").strip() or None,
 		"estado": (payload.get("estado") or "registrada").strip()[:30] or "registrada",
+		"uso_inventario_json": _json_text(payload.get("uso_inventario") or []),
 	}
 
 
 def _apply_inventory_usage(processing_id: int, data: dict, user_id: int | None) -> None:
-	resguardo = _safe_json_load(data.get("resguardo_json"), {})
-	consumible_ref = resguardo.get("consumible_id") or resguardo.get("consumible_ref")
-	consumible_qty = resguardo.get("consumible_cantidad") or 1
-	if consumible_ref:
-		consume_consumible(
-			consumible_ref,
-			consumible_qty,
-			user_id=user_id,
-			motivo=f"Procesamiento de muestra folio {data.get('folio_num')}",
-			referencia=f"PROC-{processing_id}-CONSUMIBLE",
-		)
+	insumos = _safe_json_load(data.get("uso_inventario_json"), [])
+	for idx, insumo in enumerate(insumos):
+		if not isinstance(insumo, dict):
+			continue
+		tipo = str(insumo.get("tipo") or "").strip().lower()
+		ref = insumo.get("ref") or insumo.get("nombre") or ""
+		cantidad = insumo.get("cantidad") or 1
+		if not ref:
+			continue
+		referencia_mov = f"PROC-{processing_id}-INS-{idx}"
+		if tipo == "reactivo":
+			consume_reactivo(
+				ref, cantidad,
+				user_id=user_id,
+				motivo=f"Procesamiento de muestra folio {data.get('folio_num')}",
+				referencia=referencia_mov,
+			)
+		elif tipo == "consumible":
+			consume_consumible(
+				ref, cantidad,
+				user_id=user_id,
+				motivo=f"Procesamiento de muestra folio {data.get('folio_num')}",
+				referencia=referencia_mov,
+			)
 
 
 def _serialize_row(row):
@@ -187,6 +206,7 @@ def _serialize_row(row):
 	item["bivalvos_steps"] = _safe_json_load(item.pop("bivalvos_steps_json", None), [])
 	item["sardinas_steps"] = _safe_json_load(item.pop("sardinas_steps_json", None), [])
 	item["resguardo"] = _safe_json_load(item.pop("resguardo_json", None), {})
+	item["uso_inventario"] = _safe_json_load(item.pop("uso_inventario_json", None), [])
 	return item
 
 
@@ -279,7 +299,8 @@ def create_processing_sample():
 					otro_procesamiento, resguardo_json,
 					observaciones_generales, nombre_quien_proceso,
 					nombre_quien_superviso, firma_quien_proceso,
-					firma_quien_superviso, estado, creado_por, actualizado_por
+					firma_quien_superviso, uso_inventario_json,
+					estado, creado_por, actualizado_por
 				) VALUES (
 					:folio_num, :tipo_registro, :clave_revision, :fecha_emision,
 					:fecha_procesamiento, :hora_procesamiento, :recepcion_id,
@@ -290,7 +311,8 @@ def create_processing_sample():
 					:otro_procesamiento, :resguardo_json,
 					:observaciones_generales, :nombre_quien_proceso,
 					:nombre_quien_superviso, :firma_quien_proceso,
-					:firma_quien_superviso, :estado, :creado_por, :actualizado_por
+					:firma_quien_superviso, :uso_inventario_json,
+					:estado, :creado_por, :actualizado_por
 				)
 				"""
 			),
@@ -345,6 +367,7 @@ def update_processing_sample(processing_id: int):
 					nombre_quien_superviso = :nombre_quien_superviso,
 					firma_quien_proceso = :firma_quien_proceso,
 					firma_quien_superviso = :firma_quien_superviso,
+					uso_inventario_json = :uso_inventario_json,
 					estado = :estado,
 					actualizado_por = :actualizado_por
 				WHERE id = :id

@@ -12,11 +12,12 @@ from app.utils.rbac import ensure_rbac_schema
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config.from_object(Config)
+    app.json.ensure_ascii = False
 
     db.init_app(app)
     cors.init_app(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}})
 
-    from app.modules.admin.endpoints import admin_bp, ensure_usuarios_schema
+    from app.modules.admin.endpoints import admin_bp
     from app.modules.auth.endpoints import auth_bp
     from app.modules.dashboard.endpoints import dashboard_bp
     from app.modules.documents.endpoints import documents_bp
@@ -30,6 +31,7 @@ def create_app() -> Flask:
     from app.modules.inventory.consumables import ensure_consumibles_schema
     from app.modules.inventory.endpoints import ensure_equipos_schema, ensure_mantenimientos_schema, ensure_reactivos_schema
     from app.utils.inventory_usage import ensure_movimientos_schema
+    from app.utils.users import ensure_usuarios_schema
 
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
