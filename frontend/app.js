@@ -2,6 +2,8 @@ const loginView = document.getElementById("loginView");
 const dashboardView = document.getElementById("dashboardView");
 const emailLoginForm = document.getElementById("emailLoginForm");
 const emailInput = document.getElementById("emailInput");
+const microsoftLoginBtn = document.getElementById("microsoftLoginBtn");
+const loginFeedback = document.getElementById("loginFeedback");
 const logoutBtn = document.getElementById("logoutBtn");
 const activeUserEmail = document.getElementById("activeUserEmail");
 const welcomeUserName = document.getElementById("welcomeUserName");
@@ -31,6 +33,7 @@ const contentPages = document.querySelectorAll(".content-page");
 const reactivosTableBody = document.getElementById("reactivosTableBody");
 const reactivosSearchInput = document.getElementById("reactivosSearchInput");
 const openCreateReactivoModalBtn = document.getElementById("openCreateReactivoModalBtn");
+const openImportReactivosModalBtn = document.getElementById("openImportReactivosModalBtn");
 const reactivosFeedback = document.getElementById("reactivosFeedback");
 const reactivosTotalCount = document.getElementById("reactivosTotalCount");
 const reactivosExpiryCount = document.getElementById("reactivosExpiryCount");
@@ -44,6 +47,14 @@ const reactivoTipoInput = document.getElementById("reactivoTipoInput");
 const reactivoTypeHint = document.getElementById("reactivoTypeHint");
 const reactivoDynamicFields = document.getElementById("reactivoDynamicFields");
 const reactivoSaveBtn = document.getElementById("reactivoSaveBtn");
+const importReactivosModalEl = document.getElementById("importReactivosModal");
+const importReactivosModal = importReactivosModalEl && window.bootstrap ? new window.bootstrap.Modal(importReactivosModalEl) : null;
+const importReactivosForm = document.getElementById("importReactivosForm");
+const importReactivosFileInput = document.getElementById("importReactivosFileInput");
+const importReactivosBtn = document.getElementById("importReactivosBtn");
+const importReactivosSummary = document.getElementById("importReactivosSummary");
+const importReactivosSheetsBody = document.getElementById("importReactivosSheetsBody");
+const importReactivosErrorsBody = document.getElementById("importReactivosErrorsBody");
 const consumiblesTableBody = document.getElementById("consumablesTableBody");
 const equiposTableBody = document.getElementById("equiposTableBody");
 const equiposSearchInput = document.getElementById("equiposSearchInput");
@@ -70,6 +81,14 @@ const equipoEstadoInput = document.getElementById("equipoEstadoInput");
 const equipoSaveBtn = document.getElementById("equipoSaveBtn");
 const muestrasTableBody = document.getElementById("muestrasTableBody");
 const movimientosTableBody = document.getElementById("movimientosTableBody");
+const movimientosReactivosTableBody = document.getElementById("movimientosReactivosTableBody");
+const movimientosConsumiblesTableBody = document.getElementById("movimientosConsumiblesTableBody");
+const movimientosTotalCount = document.getElementById("movimientosTotalCount");
+const movimientosTodayCount = document.getElementById("movimientosTodayCount");
+const movimientosWeekCount = document.getElementById("movimientosWeekCount");
+const movimientosMonthCount = document.getElementById("movimientosMonthCount");
+const movimientosReactivosCount = document.getElementById("movimientosReactivosCount");
+const movimientosConsumiblesCount = document.getElementById("movimientosConsumiblesCount");
 const mantenimientosTableBody = document.getElementById("mantenimientosTableBody");
 const mantenimientoSearchInput = document.getElementById("mantenimientoSearchInput");
 const mantenimientoTipoFilter = document.getElementById("mantenimientoTipoFilter");
@@ -176,6 +195,12 @@ const samplesSectionButtons = document.querySelectorAll("[data-samples-section-b
 const samplesSectionRecepcion = document.getElementById("samplesSectionRecepcion");
 const samplesSectionProcesamiento = document.getElementById("samplesSectionProcesamiento");
 const samplesSectionExtraccion = document.getElementById("samplesSectionExtraccion");
+const samplesFlowCards = document.querySelectorAll("[data-samples-flow-card]");
+const sampleReceptionCount = document.getElementById("sampleReceptionCount");
+const sampleProcessingCount = document.getElementById("sampleProcessingCount");
+const sampleExtractionCount = document.getElementById("sampleExtractionCount");
+const sampleTotalCount = document.getElementById("sampleTotalCount");
+const sampleReceptionCountLabel = document.getElementById("sampleReceptionCountLabel");
 const samplesFeedback = document.getElementById("samplesFeedback");
 const sampleModalEl = document.getElementById("sampleModal");
 const sampleModal = sampleModalEl && window.bootstrap ? new window.bootstrap.Modal(sampleModalEl) : null;
@@ -190,6 +215,7 @@ const sampleFechaRecepcionInput = document.getElementById("sampleFechaRecepcionI
 const sampleHoraRecepcionInput = document.getElementById("sampleHoraRecepcionInput");
 const sampleSolicitanteInput = document.getElementById("sampleSolicitanteInput");
 const sampleMuestraUnicaInput = document.getElementById("sampleMuestraUnicaInput");
+const sampleLoteModeVisualInput = document.getElementById("sampleLoteModeVisualInput");
 const sampleFechaMuestraInput = document.getElementById("sampleFechaMuestraInput");
 const sampleFechaMuestraFieldWrap = document.getElementById("sampleFechaMuestraFieldWrap");
 const sampleIdInternoInput = document.getElementById("sampleIdInternoInput");
@@ -211,9 +237,11 @@ const sampleInspeccionGeneralInput = document.getElementById("sampleInspeccionGe
 const sampleSolicitanteNombreInput = document.getElementById("sampleSolicitanteNombreInput");
 const sampleSolicitanteFirmaInput = document.getElementById("sampleSolicitanteFirmaInput");
 const sampleCustodioNombreInput = document.getElementById("sampleCustodioNombreInput");
+const sampleCustodioFirmaInput = document.getElementById("sampleCustodioFirmaInput");
 const sampleCustodioLugarInput = document.getElementById("sampleCustodioLugarInput");
 const sampleCustodioOtroInput = document.getElementById("sampleCustodioOtroInput");
 const sampleSaveBtn = document.getElementById("sampleSaveBtn");
+const sampleClearBtn = document.getElementById("sampleClearBtn");
 const processingSearchInput = document.getElementById("processingSearchInput");
 const openCreateProcessingModalBtn = document.getElementById("openCreateProcessingModalBtn");
 const processingTableBody = document.getElementById("processingTableBody");
@@ -240,10 +268,15 @@ const processingIdInternoInput = document.getElementById("processingIdInternoInp
 const processingLoteSelectionWrap = document.getElementById("processingLoteSelectionWrap");
 const processingLoteSelectionBody = document.getElementById("processingLoteSelectionBody");
 const processingMuestraTipoInput = document.getElementById("processingMuestraTipoInput");
+const processingSingleSampleVisualInput = document.getElementById("processingSingleSampleVisualInput");
+const processingLotSampleVisualInput = document.getElementById("processingLotSampleVisualInput");
+const processingLotIdVisualInput = document.getElementById("processingLotIdVisualInput");
 const processingOtroInput = document.getElementById("processingOtroInput");
 const processingObservacionesInput = document.getElementById("processingObservacionesInput");
 const processingQuienProcesoInput = document.getElementById("processingQuienProcesoInput");
 const processingQuienSupervisoInput = document.getElementById("processingQuienSupervisoInput");
+const processingFirmaProcesoInput = document.getElementById("processingFirmaProcesoInput");
+const processingFirmaSupervisoInput = document.getElementById("processingFirmaSupervisoInput");
 const processingSaveBtn = document.getElementById("processingSaveBtn");
 const processingBivalvosWrap = document.getElementById("processingBivalvosWrap");
 const processingSardinasWrap = document.getElementById("processingSardinasWrap");
@@ -290,11 +323,19 @@ const extractionEstadoInput = document.getElementById("extractionEstadoInput");
 const extractionProcessingSelect = document.getElementById("extractionProcessingSelect");
 const extractionIdInternoInput = document.getElementById("extractionIdInternoInput");
 const extractionMuestraTipoInput = document.getElementById("extractionMuestraTipoInput");
+const extractionSingleSampleVisualInput = document.getElementById("extractionSingleSampleVisualInput");
+const extractionLotSampleVisualInput = document.getElementById("extractionLotSampleVisualInput");
+const extractionLotIdVisualInput = document.getElementById("extractionLotIdVisualInput");
 const extractionProcessingSummary = document.getElementById("extractionProcessingSummary");
 const extractionSampleTableBody = document.getElementById("extractionSampleTableBody");
 const extractionObservacionesInput = document.getElementById("extractionObservacionesInput");
+const extractionObservacionesProcesoInput = document.getElementById("extractionObservacionesProcesoInput");
 const extractionQuienExtrajoInput = document.getElementById("extractionQuienExtrajoInput");
+const extractionQuienLimpiezaInput = document.getElementById("extractionQuienLimpiezaInput");
 const extractionQuienSupervisoInput = document.getElementById("extractionQuienSupervisoInput");
+const extractionFirmaExtrajoInput = document.getElementById("extractionFirmaExtrajoInput");
+const extractionFirmaLimpiezaInput = document.getElementById("extractionFirmaLimpiezaInput");
+const extractionFirmaSupervisoInput = document.getElementById("extractionFirmaSupervisoInput");
 const extractionSaveBtn = document.getElementById("extractionSaveBtn");
 
 const extrMolienda1 = document.getElementById("extrMolienda1");
@@ -326,6 +367,8 @@ const API_BASE_URL = "http://127.0.0.1:5000/api";
 const SESSION_TOKEN_KEY = "ficotox_access_token";
 const SESSION_USER_KEY = "ficotox_user";
 const SESSION_PERMISSIONS_KEY = "ficotox_permissions";
+let authConfig = null;
+let msalClient = null;
 let activePage = "dashboard";
 const loadedPages = new Set();
 let permissionsCatalog = [];
@@ -345,6 +388,7 @@ let extractionProcessingDetailCache = new Map();
 let activeSamplesSection = "recepcion";
 let importPreviewRows = [];
 let importDetectedColumns = [];
+let importReactivosSheets = [];
 
 const IMPORT_COLUMNS = [
   "producto",
@@ -371,94 +415,96 @@ const INSPECCION_REQUIREMENTS = [
 const REACTIVO_TYPES = [
   {
     value: "acidos",
-    label: "Acidos",
-    hint: "Inventario de acidos con control de caducidad, apertura, contenedor y capacidad en litros.",
-    fields: ["producto", "marca", "proveedor", "catalogo_parte_cas_lote", "caducidad", "fecha_apertura", "fecha_ingreso", "contenedor", "capacidad_litros", "piezas"],
+    label: "\u00c1cidos",
+    hint: "Registro principal de \u00e1cidos: identificaci\u00f3n, proveedor, caducidad, contenedor y existencia en litros.",
+    fields: ["id_interno", "producto", "marca", "proveedor", "catalogo_parte_cas_lote", "caducidad", "fecha_apertura", "fecha_ingreso", "contenedor", "capacidad_litros", "piezas", "total_litros_2025"],
   },
   {
     value: "alcoholes_solventes",
-    label: "Alcoholes y solventes organicos",
-    hint: "Incluye localizacion fisica para solventes y alcoholes de uso frecuente.",
-    fields: ["producto", "marca", "proveedor", "catalogo_parte_cas_lote", "localizacion", "caducidad", "fecha_apertura", "fecha_ingreso", "contenedor", "capacidad_litros", "piezas"],
-  },
-  {
-    value: "columnas_cromatograficas",
-    label: "Columnas cromatograficas",
-    hint: "Registro tecnico de columnas por lote, parte, serie, metodo y condicion de uso.",
-    fields: ["producto", "marca", "proveedor", "localizacion", "lote", "parte", "serie", "descripcion", "fecha_ingreso", "fecha_apertura", "nuevo_usado", "metodo", "observaciones"],
+    label: "Alcoholes y solventes org\u00e1nicos",
+    hint: "Incluye localizaci\u00f3n f\u00edsica, caducidad y remanente para solventes de uso frecuente.",
+    fields: ["id_interno", "producto", "marca", "proveedor", "catalogo_parte_cas_lote", "localizacion", "caducidad", "fecha_apertura", "fecha_ingreso", "contenedor", "capacidad_litros", "piezas", "total_litros_2025", "restante_190126"],
   },
   {
     value: "compuestos_amonio",
     label: "Compuestos de Amonio",
     hint: "Control de sales y compuestos de amonio con contenedor, piezas y capacidad.",
-    fields: ["producto", "marca", "proveedor", "catalogo_parte_cas_lote", "caducidad", "fecha_apertura", "fecha_ingreso", "contenedor", "capacidad_litros", "piezas"],
+    fields: ["id_interno", "producto", "marca", "proveedor", "catalogo_parte_cas_lote", "caducidad", "fecha_apertura", "fecha_ingreso", "contenedor", "capacidad_litros", "piezas", "total_litros_2025"],
   },
   {
     value: "compuestos_sodio",
     label: "Compuestos de Sodio",
-    hint: "Registro de compuestos solidos con capacidad en kilos.",
-    fields: ["producto", "marca", "proveedor", "catalogo_parte_cas_lote", "caducidad", "fecha_apertura", "fecha_ingreso", "contenedor", "capacidad_kilos", "piezas"],
+    hint: "Registro de compuestos s\u00f3lidos con capacidad en kilos.",
+    fields: ["id_interno", "producto", "marca", "proveedor", "catalogo_parte_cas_lote", "caducidad", "fecha_apertura", "fecha_ingreso", "contenedor", "capacidad_kilos", "piezas", "total_litros_2025"],
   },
   {
     value: "estandares_preparados",
-    label: "Estandares preparados",
-    hint: "Formato corto para preparaciones internas y notas de preparacion.",
+    label: "Est\u00e1ndares preparados",
+    hint: "Formato corto para preparaciones internas y notas de preparaci\u00f3n.",
     fields: ["item_name", "localizacion", "sub_localizacion", "fecha_preparacion", "informacion_extra"],
   },
   {
     value: "materiales_referencia",
     label: "Materiales de Referencia",
-    hint: "Control de CRM por lote, proveedor, metodo, estado, volumen y URL.",
-    fields: ["nombre_crm", "lot_number", "proveedor", "localizacion", "url", "metodo", "caducidad", "fecha_apertura", "estado_reactivo", "volumen"],
+    hint: "Control de CRM por lote, proveedor, m\u00e9todo, estado, volumen y URL.",
+    fields: ["id_interno", "nombre_crm", "lot_number", "proveedor", "localizacion", "url", "metodo", "caducidad", "fecha_apertura", "estado_reactivo", "volumen"],
   },
   {
     value: "miscelaneos",
-    label: "Miscelaneos",
+    label: "Miscel\u00e1neos",
     hint: "Registro flexible para sustancias, presentaciones y materiales no clasificados.",
-    fields: ["item_name", "vendor", "catalogo", "localizacion", "sub_localizacion", "amount_in_stock", "expiration_date", "lot_number", "cas_number", "bottle_tag_color", "date_opened", "fecha_ingreso", "formula", "id_interno", "physical_state", "presentacion", "tipo_sustancia"],
+    fields: ["item_name", "vendor", "catalogo", "localizacion", "sub_localizacion", "amount_in_stock", "expiration_date", "lot_number", "cas_number", "bottle_tag_color", "date_opened", "fecha_ingreso", "formula", "id_interno", "physical_state", "presentacion", "tipo_sustancia", "observaciones"],
+  },
+  {
+    value: "columnas_cromatograficas",
+    label: "Columnas cromatogr\u00e1ficas",
+    hint: "Registro t\u00e9cnico de columnas por lote, parte, serie, m\u00e9todo y condici\u00f3n de uso.",
+    fields: ["id_interno", "producto", "marca", "proveedor", "localizacion", "lote", "parte", "serie", "descripcion", "fecha_ingreso", "fecha_apertura", "nuevo_usado", "metodo", "observaciones"],
   },
 ];
 
 const REACTIVO_FIELD_META = {
   producto: { label: "Producto", required: true },
   marca: { label: "Marca" },
-  proveedor: { label: "Proveedor" },
-  catalogo_parte_cas_lote: { label: "# catalogo / # parte / CAS / lote" },
-  localizacion: { label: "Localizacion" },
-  sub_localizacion: { label: "Sub-localizacion" },
-  caducidad: { label: "Caducidad", type: "date" },
+  proveedor: { label: "Proveedor", required: true },
+  catalogo_parte_cas_lote: { label: "#cat\u00e1logo / #parte / CAS / lote" },
+  localizacion: { label: "Localizaci\u00f3n" },
+  sub_localizacion: { label: "Sub-location" },
+  caducidad: { label: "Caducidad", type: "date", required: true },
   fecha_apertura: { label: "Fecha de apertura", type: "date" },
   fecha_ingreso: { label: "Fecha de ingreso", type: "date" },
   contenedor: { label: "Contenedor" },
-  capacidad_litros: { label: "Capacidad (litros)", type: "number", step: "0.0001" },
-  capacidad_kilos: { label: "Capacidad (kilos)", type: "number", step: "0.0001" },
-  piezas: { label: "Piezas", type: "number", step: "1" },
-  lote: { label: "Lote" },
-  parte: { label: "Parte" },
-  serie: { label: "Serie" },
-  descripcion: { label: "Descripcion", textarea: true, wide: true },
+  capacidad_litros: { label: "Capacidad (litros)", type: "number", step: "0.0001", min: "0", required: true },
+  capacidad_kilos: { label: "Capacidad (kilos)", type: "number", step: "0.0001", min: "0", required: true },
+  piezas: { label: "Piezas", type: "number", step: "1", min: "0", required: true },
+  total_litros_2025: { label: "Total en litros 2025", type: "number", step: "0.0001", min: "0" },
+  restante_190126: { label: "Restante al 19/01/26", type: "number", step: "0.0001", min: "0" },
+  lote: { label: "# Lote" },
+  parte: { label: "# Parte" },
+  serie: { label: "# Serie" },
+  descripcion: { label: "Descripci\u00f3n", textarea: true, wide: true },
   nuevo_usado: { label: "Nuevo o usado", options: ["Nuevo", "Usado"] },
-  metodo: { label: "Metodo" },
+  metodo: { label: "M\u00e9todo" },
   observaciones: { label: "Observaciones", textarea: true, wide: true },
   item_name: { label: "Item Name", required: true },
-  fecha_preparacion: { label: "Fecha de preparacion", type: "date", target: "fecha_ingreso" },
-  informacion_extra: { label: "Informacion extra", textarea: true, wide: true },
+  fecha_preparacion: { label: "Fecha de preparaci\u00f3n", type: "date" },
+  informacion_extra: { label: "Informaci\u00f3n extra", textarea: true, wide: true },
   nombre_crm: { label: "Nombre del CRM", required: true },
   lot_number: { label: "Lot Number" },
   url: { label: "URL", type: "url", wide: true },
   estado_reactivo: { label: "Estado", options: ["Nuevo", "Abierto"] },
-  volumen: { label: "Volumen" },
+  volumen: { label: "Volumen", type: "number", step: "0.0001", min: "0", required: true },
   vendor: { label: "Vendor" },
   catalogo: { label: "Catalog #" },
-  amount_in_stock: { label: "Amount in Stock", type: "number", step: "0.0001" },
+  amount_in_stock: { label: "Amount in Stock", type: "number", step: "0.0001", min: "0", required: true },
   expiration_date: { label: "Expiration Date", type: "date" },
   cas_number: { label: "CAS Number" },
   bottle_tag_color: { label: "Bottle Tag Color" },
   date_opened: { label: "Date Opened", type: "date" },
   formula: { label: "Formula" },
-  id_interno: { label: "ID interno" },
-  physical_state: { label: "Physical State", options: ["Solido", "Liquido", "Gas", "Mixto"] },
-  presentacion: { label: "Presentacion" },
+  id_interno: { label: "ID", required: true },
+  physical_state: { label: "Physical State", options: ["S\u00f3lido", "L\u00edquido", "Gas", "Mixto"] },
+  presentacion: { label: "Presentaci\u00f3n" },
   tipo_sustancia: { label: "Tipo de sustancia" },
 };
 
@@ -507,9 +553,9 @@ const toDateOnly = (value) => {
 };
 
 const showDashboard = (user) => {
-  activeUserEmail.textContent = user.email || "usuario@ficotox.com";
+  activeUserEmail.textContent = user.email || "usuario@cicese.mx";
   welcomeUserName.textContent = `Bienvenido, ${user.nombre || "Usuario"}`;
-  welcomeUserRole.textContent = user.rol || "Analista";
+  welcomeUserRole.textContent = user.rol || "Sin rol";
   loginView.classList.remove("active-view");
   dashboardView.classList.add("active-view");
 };
@@ -519,6 +565,8 @@ const showLogin = () => {
   loginView.classList.add("active-view");
   emailLoginForm.reset();
   emailInput.classList.remove("is-invalid");
+  if (loginFeedback) loginFeedback.textContent = "";
+  updateLoginOptions();
 };
 
 const getStoredToken = () => {
@@ -600,6 +648,10 @@ const applyNavigationPermissions = () => {
 
   if (openCreateReactivoModalBtn) {
     openCreateReactivoModalBtn.classList.toggle("d-none", !canModuleAction("reactivos", "create"));
+  }
+
+  if (openImportReactivosModalBtn) {
+    openImportReactivosModalBtn.classList.toggle("d-none", !canModuleAction("reactivos", "create"));
   }
 
   if (openCreateEquipoBtn) {
@@ -719,6 +771,87 @@ const sendFormAuth = async (url, token, formData) => {
   return data;
 };
 
+const showLoginFeedback = (message, isError = false) => {
+  if (!loginFeedback) return;
+  loginFeedback.textContent = message || "";
+  loginFeedback.classList.toggle("text-danger", !!isError);
+  loginFeedback.classList.toggle("text-secondary", !isError);
+};
+
+const loadAuthConfig = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/config`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.message || "No se pudo leer la configuraci\u00f3n de acceso");
+    }
+    authConfig = data;
+  } catch (_error) {
+    authConfig = { microsoft: { enabled: false }, manualLoginEnabled: true };
+  }
+  updateLoginOptions();
+  return authConfig;
+};
+
+const updateLoginOptions = () => {
+  const microsoftEnabled = !!authConfig.microsoft.enabled && !!window.msal;
+  const manualEnabled = authConfig.manualLoginEnabled !== false;
+  if (microsoftLoginBtn) {
+    microsoftLoginBtn.classList.toggle("d-none", !microsoftEnabled);
+    microsoftLoginBtn.disabled = !microsoftEnabled;
+  }
+  if (emailLoginForm) {
+    emailLoginForm.classList.toggle("d-none", !manualEnabled);
+  }
+  if (loginFeedback && authConfig && !microsoftEnabled) {
+    loginFeedback.textContent = "Microsoft no est\u00e1 configurado en este entorno; usa el acceso manual de desarrollo.";
+  }
+};
+
+const getMsalClient = () => {
+  if (msalClient) return msalClient;
+  const config = authConfig.microsoft || {};
+  if (!config.enabled || !window.msal) {
+    throw new Error("Microsoft Entra ID no est\u00e1 configurado");
+  }
+  msalClient = new window.msal.PublicClientApplication({
+    auth: {
+      clientId: config.clientId,
+      authority: config.authority,
+      redirectUri: window.location.origin + "/",
+    },
+    cache: {
+      cacheLocation: "sessionStorage",
+      storeAuthStateInCookie: false,
+    },
+  });
+  return msalClient;
+};
+
+const loginWithMicrosoft = async () => {
+  if (!authConfig) {
+    await loadAuthConfig();
+  }
+  const client = getMsalClient();
+  const request = { scopes: ["openid", "profile", "email"] };
+  let authResult;
+  try {
+    authResult = await client.loginPopup(request);
+  } catch (error) {
+    if (String(error.errorCode || "").includes("popup")) {
+      await client.loginRedirect(request);
+      return null;
+    }
+    throw error;
+  }
+
+  if (!authResult.idToken) {
+    throw new Error("Microsoft no devolvi\u00f3 un token de identidad");
+  }
+
+  return postJson(`${API_BASE_URL}/auth/microsoft`, { id_token: authResult.idToken });
+};
+
 const safelyHideModal = (modalInstance, fallbackFocusEl) => {
   if (!modalInstance) {
     return;
@@ -757,6 +890,43 @@ const showRolesFeedback = (message, isError = false) => {
   rolesFeedback.classList.toggle("text-danger", isError);
   rolesFeedback.classList.toggle("text-success", !isError && !!message);
   rolesFeedback.classList.toggle("text-secondary", !message);
+};
+
+const setButtonSubmittingState = (button, isSubmitting, busyLabel) => {
+  if (!button) {
+    return;
+  }
+
+  if (!button.dataset.idleHtml) {
+    button.dataset.idleHtml = button.innerHTML;
+  }
+
+  button.disabled = !!isSubmitting;
+  button.innerHTML = isSubmitting
+    ? `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>${busyLabel}`
+    : button.dataset.idleHtml;
+};
+
+const getRoleNameById = (roleId) => {
+  const role = rolesCache.find((item) => Number(item.id) === Number(roleId));
+  return role.nombre || "Sin rol";
+};
+
+const adjustRoleUserCount = (roleId, delta) => {
+  if (!Number.isFinite(Number(roleId)) || !Number.isFinite(Number(delta)) || Number(delta) === 0) {
+    return;
+  }
+
+  const idx = rolesCache.findIndex((item) => Number(item.id) === Number(roleId));
+  if (idx < 0) {
+    return;
+  }
+
+  const role = rolesCache[idx];
+  const nextTotal = Math.max(0, Number(role.total_usuarios || 0) + Number(delta));
+  rolesCache[idx] = { ...role, total_usuarios: nextTotal };
+  updateRoleStats(rolesCache);
+  filterAndRenderRoles();
 };
 
 const resetRoleForm = () => {
@@ -1278,6 +1448,89 @@ const formatSampleFolio = (item) => {
   return `${type} ${String(num).padStart(7, "0")}`;
 };
 
+const normalizeSampleStatus = (status) => String(status || "registrada").toLowerCase().replace(/\s+/g, "_");
+
+const sampleStatusLabel = (status) => {
+  const normalized = normalizeSampleStatus(status);
+  const labels = {
+    registrada: "Registrada",
+    procesamiento: "En proceso",
+    extraccion: "Extracci\u00f3n",
+    en_proceso: "En proceso",
+    completada: "Completada",
+    finalizada: "Finalizada",
+    cancelada: "Cancelada",
+  };
+  return labels[normalized] || String(status || "Registrada");
+};
+
+const sampleStatusChip = (status) => {
+  const normalized = normalizeSampleStatus(status);
+  return `<span class="sample-status-chip ${normalized}">${sampleStatusLabel(status)}</span>`;
+};
+
+const sampleFolioChip = (folio, type = "R") => {
+  return `<span class="sample-folio-chip ${type.toLowerCase()}"><span>${type}</span>${folio}</span>`;
+};
+
+const SAMPLE_ANALYSIS_LABELS = {
+  acido_domoico: "Acido domoico",
+  toxinas_lipofilicas: "Toxinas lipofilicas",
+  toxinas_paralizantes: "Toxinas paralizantes",
+  pigmentos: "Pigmentos",
+  plancton: "Plancton",
+  otro: "Otro",
+};
+
+const SAMPLE_MATRIX_LABELS = {
+  organismo: "Organismo",
+  organismo_plancton: "Organismo plancton",
+  fitotox: "Fitotox",
+  agua_mar: "Agua de mar",
+  otro: "Otro",
+};
+
+const getSampleAnalysisSummary = (item) => {
+  const analysis = item.analisis || {};
+  const values = Array.isArray(analysis.tipos) ? analysis.tipos : [];
+  const labels = values.map((value) => SAMPLE_ANALYSIS_LABELS[value] || value).filter(Boolean);
+  if (analysis.metodo_otro) {
+    labels.push(analysis.metodo_otro);
+  }
+  return labels.length ? labels.join(", ") : "-";
+};
+
+const getSampleTypeSummary = (item) => {
+  const analysis = item.analisis || {};
+  const matrix = Array.isArray(analysis.tipos_muestra) ? analysis.tipos_muestra : [];
+  const matrixLabel = matrix.map((value) => SAMPLE_MATRIX_LABELS[value] || value).filter(Boolean).join(", ");
+  if (matrixLabel) {
+    return matrixLabel;
+  }
+  if (item.muestra_unica) {
+    return "Muestra \u00fanica";
+  }
+  return "Lote";
+};
+
+const samplePriorityChip = (priority = "normal") => {
+  const normalized = String(priority || "normal").toLowerCase();
+  const labels = {
+    normal: "Normal",
+    alta: "Alta",
+    urgente: "Urgente",
+  };
+  return `<span class="sample-priority-chip ${normalized}">${labels[normalized] || priority}</span>`;
+};
+
+const updateSamplesFlowCounts = () => {
+  if (sampleReceptionCount) sampleReceptionCount.textContent = fmt(samplesCache.length);
+  if (sampleProcessingCount) sampleProcessingCount.textContent = fmt(processingCache.length);
+  if (sampleExtractionCount) sampleExtractionCount.textContent = fmt(extractionCache.length);
+  if (sampleReceptionCountLabel) sampleReceptionCountLabel.textContent = fmt(samplesCache.length);
+  if (sampleTotalCount) sampleTotalCount.textContent = fmt(samplesCache.length + processingCache.length + extractionCache.length);
+};
+
 const buildSampleLoteRow = (item = {}) => {
   const row = document.createElement("tr");
   row.innerHTML = `
@@ -1326,7 +1579,7 @@ const syncSampleLoteRowsCount = (targetCount) => {
 
   if (nextCount < currentCount) {
     for (let i = currentCount; i > nextCount; i -= 1) {
-      sampleLoteTableBody.querySelector("tr:last-child")?.remove();
+      sampleLoteTableBody.querySelector("tr:last-child").remove();
     }
   }
 
@@ -1350,12 +1603,12 @@ const collectSampleLoteRows = (selectedOnly = false) => {
     })
     .map((row) => ({
       trabajar: !!row.querySelector(".sample-lote-selected:checked"),
-      id_interno: (row.querySelector(".sample-lote-id-interno")?.value || "").trim() || null,
-      nombre_organismo: (row.querySelector(".sample-lote-organismo")?.value || "").trim() || null,
-      cantidad_volumen: (row.querySelector(".sample-lote-cantidad")?.value || "").trim() || null,
-      sitio_muestreo: (row.querySelector(".sample-lote-sitio")?.value || "").trim() || null,
-      fecha_muestra: row.querySelector(".sample-lote-fecha")?.value || null,
-      informacion_adicional: (row.querySelector(".sample-lote-info")?.value || "").trim() || null,
+      id_interno: (row.querySelector(".sample-lote-id-interno").value || "").trim() || null,
+      nombre_organismo: (row.querySelector(".sample-lote-organismo").value || "").trim() || null,
+      cantidad_volumen: (row.querySelector(".sample-lote-cantidad").value || "").trim() || null,
+      sitio_muestreo: (row.querySelector(".sample-lote-sitio").value || "").trim() || null,
+      fecha_muestra: row.querySelector(".sample-lote-fecha").value || null,
+      informacion_adicional: (row.querySelector(".sample-lote-info").value || "").trim() || null,
     }))
     .filter((row) =>
       [
@@ -1370,7 +1623,10 @@ const collectSampleLoteRows = (selectedOnly = false) => {
 };
 
 const toggleSampleModeUI = () => {
-  const isUnique = !!sampleMuestraUnicaInput?.checked;
+  const isUnique = !!sampleMuestraUnicaInput.checked;
+  if (sampleLoteModeVisualInput) {
+    sampleLoteModeVisualInput.checked = !isUnique;
+  }
   if (sampleFechaMuestraFieldWrap) {
     sampleFechaMuestraFieldWrap.classList.toggle("d-none", !isUnique);
   }
@@ -1402,7 +1658,7 @@ const toggleSampleModeUI = () => {
     sampleLoteSectionWrap.classList.toggle("d-none", isUnique);
   }
   if (!isUnique) {
-    syncSampleLoteRowsCount(sampleLoteCountInput?.value || 1);
+    syncSampleLoteRowsCount(sampleLoteCountInput.value || 1);
   }
   if (addSampleLoteRowBtn) {
     addSampleLoteRowBtn.disabled = isUnique;
@@ -1413,8 +1669,8 @@ const toggleSampleModeUI = () => {
 };
 
 const toggleSampleAnalysisOtherFields = () => {
-  const methodOtherChecked = !!document.getElementById("analisisMetodo5")?.checked;
-  const sampleOtherChecked = !!document.getElementById("analisisMuestra5")?.checked;
+  const methodOtherChecked = !!document.getElementById("analisisMetodo5").checked;
+  const sampleOtherChecked = !!document.getElementById("analisisMuestra5").checked;
 
   if (analisisMetodoOtroWrap) {
     analisisMetodoOtroWrap.classList.toggle("d-none", !methodOtherChecked);
@@ -1434,6 +1690,15 @@ const toggleSampleAnalysisOtherFields = () => {
       analisisMuestraOtroInput.value = "";
     }
   }
+};
+
+const syncSampleReceptionMirrors = () => {
+  document.querySelectorAll(".sample-reception-date-mirror").forEach((input) => {
+    input.value = sampleFechaRecepcionInput.value || "";
+  });
+  document.querySelectorAll(".sample-reception-time-mirror").forEach((input) => {
+    input.value = sampleHoraRecepcionInput.value || "";
+  });
 };
 
 const renderInspeccionRows = (existing = []) => {
@@ -1469,7 +1734,7 @@ const collectInspeccionRows = () => {
     return {
       requisito: req,
       estado: selected ? selected.value : "",
-      observacion: (obs?.value || "").trim() || null,
+      observacion: (obs.value || "").trim() || null,
     };
   });
 };
@@ -1481,7 +1746,7 @@ const resetSampleForm = async (withNextFolio = true) => {
 
   sampleForm.reset();
   sampleIdInput.value = "";
-  sampleFormTitle.textContent = "Formato de Recepcion de Muestras";
+  sampleFormTitle.textContent = "Nueva Muestra - Recepci\u00f3n";
   sampleClaveRevisionInput.value = "FX-TCF-GMR";
   sampleTipoRegistroInput.value = "R";
   sampleFechaEmisionInput.value = isoDate(new Date());
@@ -1491,12 +1756,17 @@ const resetSampleForm = async (withNextFolio = true) => {
   if (sampleCustodioNombreInput) {
     sampleCustodioNombreInput.value = formatActiveUserSignature();
   }
+  clearSignaturePadsIn(sampleForm);
+  document.querySelectorAll(".sample-custody-radio").forEach((input) => {
+    input.checked = false;
+  });
   ensureSampleLoteRows();
   if (sampleLoteCountInput) {
     sampleLoteCountInput.value = "1";
   }
   toggleSampleModeUI();
   toggleSampleAnalysisOtherFields();
+  syncSampleReceptionMirrors();
   renderInspeccionRows();
 
   if (!withNextFolio) {
@@ -1535,9 +1805,9 @@ const buildSamplePayload = () => {
     analisis: {
       tipos: Array.from(document.querySelectorAll(".sample-analisis-tipo:checked")).map((el) => el.value),
       metodos: Array.from(document.querySelectorAll(".sample-analisis-metodo:checked")).map((el) => el.value),
-      metodo_otro: document.getElementById("analisisMetodo5")?.checked ? (analisisMetodoOtroInput?.value || "").trim() || null : null,
+      metodo_otro: document.getElementById("analisisMetodo5").checked ? (analisisMetodoOtroInput.value || "").trim() || null : null,
       tipos_muestra: Array.from(document.querySelectorAll(".sample-analisis-muestra:checked")).map((el) => el.value),
-      tipo_muestra_otro: document.getElementById("analisisMuestra5")?.checked ? (analisisMuestraOtroInput?.value || "").trim() || null : null,
+      tipo_muestra_otro: document.getElementById("analisisMuestra5").checked ? (analisisMuestraOtroInput.value || "").trim() || null : null,
       observaciones: (sampleAnalisisObservacionesInput.value || "").trim() || null,
     },
     inspeccion: {
@@ -1550,6 +1820,7 @@ const buildSamplePayload = () => {
     },
     datos_custodio: {
       nombre_cargo_firma: (sampleCustodioNombreInput.value || "").trim() || null,
+      firma_digital: (sampleCustodioFirmaInput.value || "").trim() || null,
       lugar_resguardo: sampleCustodioLugarInput.value || null,
       lugar_otro: (sampleCustodioOtroInput.value || "").trim() || null,
     },
@@ -1558,7 +1829,7 @@ const buildSamplePayload = () => {
 
 const fillSampleForm = (item) => {
   sampleIdInput.value = item.id || "";
-  sampleFormTitle.textContent = `Editar Recepcion ${formatSampleFolio(item)}`;
+  sampleFormTitle.textContent = `Editar Muestra - ${formatSampleFolio(item)}`;
   sampleClaveRevisionInput.value = item.clave_revision || "FX-TCF-GMR";
   sampleFechaEmisionInput.value = isoDate(item.fecha_emision);
   sampleTipoRegistroInput.value = item.tipo_registro || "R";
@@ -1576,6 +1847,7 @@ const fillSampleForm = (item) => {
     sampleLoteCountInput.value = String((item.lote_muestras || []).length || 1);
   }
   toggleSampleModeUI();
+  syncSampleReceptionMirrors();
 
   const analisis = item.analisis || {};
   document.querySelectorAll(".sample-analisis-tipo").forEach((el) => {
@@ -1606,7 +1878,12 @@ const fillSampleForm = (item) => {
 
   const custodio = item.datos_custodio || {};
   sampleCustodioNombreInput.value = custodio.nombre_cargo_firma || "";
+  setSignatureInputValue(sampleSolicitanteFirmaInput, solicitante.firma_conformidad || "");
+  setSignatureInputValue(sampleCustodioFirmaInput, custodio.firma_digital || "");
   sampleCustodioLugarInput.value = custodio.lugar_resguardo || "";
+  document.querySelectorAll(".sample-custody-radio").forEach((input) => {
+    input.checked = !!custodio.lugar_resguardo && input.value === custodio.lugar_resguardo;
+  });
   sampleCustodioOtroInput.value = custodio.lugar_otro || "";
 };
 
@@ -1614,18 +1891,24 @@ const mapSampleRow = (item) => {
   const canUpdate = canModuleAction("muestras", "update");
   const canDelete = canModuleAction("muestras", "delete");
   const canCreate = canModuleAction("muestras", "create");
+  const folio = formatSampleFolio(item);
   return `
-    <tr>
-      <td><span class="fw-semibold">${formatSampleFolio(item)}</span></td>
-      <td>${item.solicitante || "-"}</td>
+    <tr class="samples-data-row">
+      <td>${sampleFolioChip(folio, "R")}</td>
       <td>${fmtDate(item.fecha_recepcion)}</td>
-      <td>${item.hora_recepcion || "-"}</td>
-      <td>${item.estado || "registrada"}</td>
-      <td>
-        <div class="d-flex gap-1">
-          <button class="role-action-btn" data-sample-action="process" data-sample-id="${item.id}" ${canCreate ? "" : "disabled"}>Procesar</button>
-          <button class="role-action-btn" data-sample-action="edit" data-sample-id="${item.id}" ${canUpdate ? "" : "disabled"}>Editar</button>
-          <button class="role-action-btn" data-sample-action="delete" data-sample-id="${item.id}" ${canDelete ? "" : "disabled"}>Eliminar</button>
+      <td>${item.solicitante || "-"}</td>
+      <td>${item.id_interno || folio}</td>
+      <td>${getSampleTypeSummary(item)}</td>
+      <td class="samples-analysis-cell">${getSampleAnalysisSummary(item)}</td>
+      <td>${samplePriorityChip(item.prioridad || "normal")}</td>
+      <td>${sampleStatusChip(item.estado)}</td>
+      <td class="text-end">
+        <div class="samples-actions">
+          <button class="icon-action-btn sample-action-btn" type="button" title="Ver detalle" aria-label="Ver detalle" data-sample-action="edit" data-sample-id="${item.id}" ${canUpdate ? "" : "disabled"}><i class="bi bi-eye"></i></button>
+          <button class="icon-action-btn sample-action-btn" type="button" title="Editar" aria-label="Editar" data-sample-action="edit" data-sample-id="${item.id}" ${canUpdate ? "" : "disabled"}><i class="bi bi-pencil"></i></button>
+          <button class="icon-action-btn sample-action-btn" type="button" title="Imprimir etiqueta" aria-label="Imprimir etiqueta" disabled><i class="bi bi-printer"></i></button>
+          <button class="icon-action-btn sample-action-btn" type="button" title="Procesar" aria-label="Procesar" data-sample-action="process" data-sample-id="${item.id}" ${canCreate ? "" : "disabled"}><i class="bi bi-arrow-right"></i></button>
+          <button class="icon-action-btn sample-action-btn danger" type="button" title="Cancelar recepcion" aria-label="Cancelar recepcion" data-sample-action="delete" data-sample-id="${item.id}" ${canDelete ? "" : "disabled"}><i class="bi bi-x-circle"></i></button>
         </div>
       </td>
     </tr>
@@ -1642,16 +1925,18 @@ const loadSamplesData = async (force = false) => {
     return;
   }
 
-  const search = (samplesSearchInput?.value || "").trim();
+  const search = (samplesSearchInput.value || "").trim();
   try {
     const data = await getJsonAuth(`${API_BASE_URL}/samples/reception/?search=${encodeURIComponent(search)}`, token);
     samplesCache = data.items || [];
-    renderRows(muestrasTableBody, samplesCache, mapSampleRow, 6);
+    renderRows(muestrasTableBody, samplesCache, mapSampleRow, 9);
+    updateSamplesFlowCounts();
     showSamplesFeedback("");
     loadedPages.add("muestras");
   } catch (error) {
     samplesCache = [];
-    renderRows(muestrasTableBody, [], mapSampleRow, 6);
+    renderRows(muestrasTableBody, [], mapSampleRow, 9);
+    updateSamplesFlowCounts();
     showSamplesFeedback(error.message || "No se pudieron cargar muestras", true);
   }
 };
@@ -1673,7 +1958,7 @@ const editSample = async (id) => {
 };
 
 const deleteSample = async (id) => {
-  if (!window.confirm("¿Eliminar este registro de recepcion?")) {
+  if (!window.confirm("\u00bfEliminar este registro de recepci\u00f3n?")) {
     return;
   }
   const token = getStoredToken();
@@ -1682,7 +1967,7 @@ const deleteSample = async (id) => {
   }
   try {
     await sendJsonAuth("DELETE", `${API_BASE_URL}/samples/reception/${id}`, token);
-    showSamplesFeedback("Recepcion eliminada");
+    showSamplesFeedback("Recepci\u00f3n eliminada");
     loadedPages.delete("muestras");
     await loadSamplesData(true);
   } catch (error) {
@@ -1722,17 +2007,17 @@ const mapExtractionRow = (item) => {
   const folioE = item.folio_num ? formatExtractionFolio(item) : "-";
   const folioP = item.folio_procesamiento_num ? `P ${String(item.folio_procesamiento_num).padStart(7, "0")}` : "-";
   return `
-    <tr>
-      <td>${folioE}</td>
-      <td>${folioP}</td>
+    <tr class="samples-data-row">
+      <td>${sampleFolioChip(folioE, "E")}</td>
+      <td>${folioP === "-" ? "-" : sampleFolioChip(folioP, "P")}</td>
       <td>${item.id_interno || "-"}</td>
       <td>${fmtDate(item.fecha_extraccion)}</td>
       <td>${item.hora_extraccion || "-"}</td>
-      <td>${item.estado || "registrada"}</td>
+      <td>${sampleStatusChip(item.estado)}</td>
       <td>
-        <div class="d-flex gap-1">
-          <button class="role-action-btn" data-extraction-action="edit" data-extraction-id="${item.id}" ${canUpdate ? "" : "disabled"}>Editar</button>
-          <button class="role-action-btn" data-extraction-action="delete" data-extraction-id="${item.id}" ${canDelete ? "" : "disabled"}>Eliminar</button>
+        <div class="samples-actions">
+          <button class="icon-action-btn sample-action-btn" type="button" title="Editar" aria-label="Editar" data-extraction-action="edit" data-extraction-id="${item.id}" ${canUpdate ? "" : "disabled"}><i class="bi bi-pencil"></i></button>
+          <button class="icon-action-btn sample-action-btn danger" type="button" title="Eliminar" aria-label="Eliminar" data-extraction-action="delete" data-extraction-id="${item.id}" ${canDelete ? "" : "disabled"}><i class="bi bi-trash3"></i></button>
         </div>
       </td>
     </tr>
@@ -1778,7 +2063,7 @@ const getProcessingDetailForExtraction = async (processingId) => {
   }
 
   const data = await getJsonAuth(`${API_BASE_URL}/samples/processing/${processingId}`, token);
-  const item = data?.item || null;
+  const item = data.item || null;
   if (item) {
     extractionProcessingDetailCache.set(processingId, item);
   }
@@ -1809,6 +2094,7 @@ const clearExtractionProcessingDerivedData = () => {
   }
   if (extractionMuestraTipoInput) {
     extractionMuestraTipoInput.value = "unica";
+    syncExtractionSampleTypeVisual();
   }
   if (extractionProcessingSummary) {
     extractionProcessingSummary.textContent = "";
@@ -1852,6 +2138,204 @@ const renderExtractionSampleRows = (rows = [], existingWeights = []) => {
     .join("");
 };
 
+// ── Insumos / Descuento de inventario helpers ─────────────────────────────
+let _insumoReactivosCache = null;
+let _insumoConsumiblesCache = null;
+let _insumoEquiposCache = null;
+let _insumoLoadingPromise = null;
+
+const loadInsumoOptions = () => {
+  if (_insumoReactivosCache !== null) return Promise.resolve();
+  if (_insumoLoadingPromise) return _insumoLoadingPromise;
+  const token = getStoredToken();
+  if (!token) return Promise.resolve();
+  _insumoLoadingPromise = Promise.all([
+    getJsonAuth(`${API_BASE_URL}/inventory/reactivos?search=`, token).catch(() => ({})),
+    getJsonAuth(`${API_BASE_URL}/consumables/?search=`, token).catch(() => ({})),
+    getJsonAuth(`${API_BASE_URL}/inventory/equipos?search=`, token).catch(() => ({})),
+  ]).then(([rData, cData, eData]) => {
+    _insumoReactivosCache = (rData.items || []).map((r) => ({
+      ref: r.producto || r.nombre || String(r.id),
+      label: [r.producto, r.catalogo].filter(Boolean).join(" · ") || String(r.id),
+      cantidad_actual: r.cantidad_actual ?? null,
+      unidad: r.unidad || "",
+    }));
+    _insumoConsumiblesCache = (Array.isArray(cData) ? cData : cData.items || []).map((c) => ({
+      ref: c.producto || c.nombre || String(c.id),
+      label: [c.producto, c.catalogo_parte_cas].filter(Boolean).join(" · ") || String(c.id),
+    }));
+    _insumoEquiposCache = (eData.items || []).map((e) => ({
+      ref: e.nombre || String(e.id),
+      label: [e.nombre, e.marca, e.modelo].filter(Boolean).join(" · ") || String(e.id),
+    }));
+    _insumoLoadingPromise = null;
+  }).catch(() => { _insumoLoadingPromise = null; });
+  return _insumoLoadingPromise;
+};
+
+const _getInsumoOptions = (tipo) => {
+  if (tipo === "reactivo") return _insumoReactivosCache || [];
+  if (tipo === "equipo") return _insumoEquiposCache || [];
+  return _insumoConsumiblesCache || [];
+};
+
+const _renderInsumoDropdown = (dropdown, tipo, query) => {
+  if (!dropdown) return;
+  const q = (query || "").toLowerCase();
+  const options = _getInsumoOptions(tipo);
+  const filtered = q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
+  const shown = filtered.slice(0, 60);
+  if (!shown.length) {
+    dropdown.innerHTML = `<div class="list-group-item text-secondary small py-1">${_insumoReactivosCache === null ? "Cargando..." : "Sin resultados"}</div>`;
+  } else {
+    dropdown.innerHTML = shown
+      .map((o) => `<button type="button" class="list-group-item list-group-item-action py-1 small insumo-ref-option" data-ref="${o.ref.replace(/"/g, "&quot;")}" data-label="${o.label.replace(/"/g, "&quot;")}">${o.label}</button>`)
+      .join("");
+  }
+  dropdown.style.display = "block";
+};
+
+const addInventarioRow = (tbodyId) => {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td>
+      <select class="form-select form-select-sm insumo-tipo">
+        <option value="consumible">Consumible</option>
+        <option value="reactivo">Reactivo</option>
+      </select>
+    </td>
+    <td>
+      <div class="position-relative insumo-search-wrapper">
+        <input type="text" class="form-control form-control-sm insumo-ref-search" placeholder="Buscar insumo..." autocomplete="off" />
+        <input type="hidden" class="insumo-ref" />
+        <div class="insumo-ref-dropdown list-group shadow-sm" style="position:absolute;top:100%;left:0;width:100%;max-height:210px;overflow-y:auto;z-index:1060;display:none;"></div>
+      </div>
+    </td>
+    <td><input type="number" class="form-control form-control-sm insumo-cantidad" min="0.001" step="0.001" value="1" /></td>
+    <td><button type="button" class="btn btn-link btn-sm text-danger p-0 remove-insumo-row" title="Quitar"><i class="bi bi-x-circle"></i></button></td>
+  `;
+  tbody.appendChild(tr);
+};
+
+const collectInventarioRows = (tbodyId) => {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return [];
+  return Array.from(tbody.querySelectorAll("tr"))
+    .map((tr) => {
+      const hidden = (tr.querySelector(".insumo-ref")?.value || "").trim();
+      const search = (tr.querySelector(".insumo-ref-search")?.value || "").trim();
+      return {
+        tipo: tr.querySelector(".insumo-tipo")?.value || "consumible",
+        ref: hidden || search,
+        cantidad: parseFloat(tr.querySelector(".insumo-cantidad")?.value) || 1,
+      };
+    })
+    .filter((r) => r.ref !== "");
+};
+
+const renderInventarioRows = (tbodyId, rows) => {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  (rows || []).forEach((row) => {
+    addInventarioRow(tbodyId);
+    const tr = tbody.lastElementChild;
+    if (!tr) return;
+    const tipoSel = tr.querySelector(".insumo-tipo");
+    if (tipoSel) tipoSel.value = row.tipo || "consumible";
+    const refInput = tr.querySelector(".insumo-ref");
+    if (refInput) refInput.value = row.ref || row.nombre || "";
+    const searchInput = tr.querySelector(".insumo-ref-search");
+    if (searchInput) searchInput.value = row.ref || row.nombre || "";
+    const cantInput = tr.querySelector(".insumo-cantidad");
+    if (cantInput) cantInput.value = row.cantidad ?? 1;
+  });
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Llena un search-wrapper estático (con data-tipo fijo) a partir de un valor guardado
+const _fillSearchWrapper = (idOrEl, value) => {
+  const el = typeof idOrEl === "string" ? document.getElementById(idOrEl) : idOrEl;
+  if (!el) return;
+  el.value = value || "";
+  const wrapper = el.closest(".insumo-search-wrapper");
+  if (!wrapper) return;
+  const search = wrapper.querySelector(".insumo-ref-search");
+  if (search) search.value = value || "";
+};
+
+// Construye uso_inventario automáticamente desde los campos de protocolo con cantidad fija
+const _buildExtractionInventario = () => {
+  const result = [];
+  const form = document.getElementById("extractionForm");
+  if (!form) return result;
+  form.querySelectorAll(".insumo-ref[data-cantidad-fija]").forEach((el) => {
+    const ref = (el.value || "").trim();
+    if (!ref) return;
+    const tipo = el.closest(".insumo-search-wrapper")?.dataset?.tipo || "reactivo";
+    const cantidad = parseFloat(el.dataset.cantidadFija) || 1;
+    result.push({ tipo, ref, cantidad });
+  });
+  const puntasRef = (document.getElementById("extrTotalPuntasRef")?.value || "").trim();
+  const puntasCantidad = parseFloat(document.getElementById("extrTotalPuntasCantidad")?.value) || 0;
+  if (puntasRef && puntasCantidad > 0) result.push({ tipo: "consumible", ref: puntasRef, cantidad: puntasCantidad });
+  return result;
+};
+
+// Muestra badge de stock bajo el wrapper de un reactivo con cantidad fija
+const _checkReactivoStock = (wrapper) => {
+  const hiddenInput = wrapper.querySelector(".insumo-ref");
+  if (!hiddenInput) return;
+  const cantidadFija = parseFloat(hiddenInput.dataset.cantidadFija);
+  if (!cantidadFija) return;
+  let badge = wrapper.querySelector(".insumo-stock-badge");
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.className = "insumo-stock-badge small mt-1";
+    wrapper.appendChild(badge);
+  }
+  const ref = (hiddenInput.value || "").trim();
+  if (!ref) { badge.innerHTML = ""; return; }
+  const item = (_insumoReactivosCache || []).find((r) => r.ref === ref);
+  if (!item) {
+    badge.innerHTML = `<span class="text-warning"><i class="bi bi-exclamation-triangle-fill"></i> No encontrado en inventario</span>`;
+    return;
+  }
+  const stock = item.cantidad_actual ?? null;
+  const u = item.unidad || "";
+  if (stock === null) {
+    badge.innerHTML = `<span class="text-secondary"><i class="bi bi-dash-circle"></i> Stock no registrado</span>`;
+    return;
+  }
+  if (stock >= cantidadFija) {
+    badge.innerHTML = `<span class="text-success"><i class="bi bi-check-circle-fill"></i> Disponible: ${stock} ${u} &nbsp;(requerido: ${cantidadFija} ${u})</span>`;
+  } else {
+    badge.innerHTML = `<span class="text-danger fw-semibold"><i class="bi bi-x-circle-fill"></i> Stock insuficiente: ${stock} ${u} disponibles, se requieren ${cantidadFija} ${u}</span>`;
+  }
+};
+
+// Valida stock de todos los reactivos con cantidad fija del formulario de extraccion
+const _validateExtractionStock = () => {
+  const errors = [];
+  document.getElementById("extractionForm")?.querySelectorAll(".insumo-search-wrapper[data-tipo='reactivo']").forEach((wrapper) => {
+    const hiddenInput = wrapper.querySelector(".insumo-ref");
+    const cantidadFija = parseFloat(hiddenInput?.dataset?.cantidadFija);
+    if (!cantidadFija) return;
+    const ref = (hiddenInput?.value || "").trim();
+    if (!ref) return;
+    const item = (_insumoReactivosCache || []).find((r) => r.ref === ref);
+    if (!item) return;
+    const stock = item.cantidad_actual ?? null;
+    if (stock !== null && stock < cantidadFija) {
+      const u = item.unidad || "";
+      errors.push(`• ${ref}: ${stock} ${u} disponibles, se requieren ${cantidadFija} ${u}`);
+    }
+  });
+  return errors;
+};
+
 const collectExtractionSampleWeights = () => {
   if (!extractionSampleTableBody) {
     return [];
@@ -1862,9 +2346,9 @@ const collectExtractionSampleWeights = () => {
       id_muestra: row.dataset.idMuestra || null,
       organismo: row.dataset.organismo || null,
       sitio_muestreo: row.dataset.sitio || null,
-      peso_muestra: parseFloatOrNull(row.querySelector(".extraction-sample-weight")?.value),
-      replica: (row.querySelector(".extraction-sample-replica")?.value || "").trim() || null,
-      peso_replica: parseFloatOrNull(row.querySelector(".extraction-replica-weight")?.value),
+      peso_muestra: parseFloatOrNull(row.querySelector(".extraction-sample-weight").value),
+      replica: (row.querySelector(".extraction-sample-replica").value || "").trim() || null,
+      peso_replica: parseFloatOrNull(row.querySelector(".extraction-replica-weight").value),
     }))
     .filter((entry) => entry.id_muestra);
 };
@@ -1901,7 +2385,7 @@ const applyProcessingToExtractionForm = (processing, existingWeights = []) => {
   const rows = getExtractionRowsFromProcessing(processing);
   const ids = rows.map((row) => row.id_interno).filter(Boolean).join(", ");
   const muestraTipo = processing.muestra_tipo || (rows.length > 1 ? "lote" : "unica");
-  const frozen = !!processing.resguardo?.congelador_co1 || !!processing.resguardo?.congelador_co2 || !!processing.resguardo?.congelador_co3;
+  const frozen = !!processing.resguardo.congelador_co1 || !!processing.resguardo.congelador_co2 || !!processing.resguardo.congelador_co3;
 
   if (extractionIdInternoInput) {
     extractionIdInternoInput.value = ids || processing.id_interno || "";
@@ -1909,6 +2393,7 @@ const applyProcessingToExtractionForm = (processing, existingWeights = []) => {
   if (extractionMuestraTipoInput) {
     extractionMuestraTipoInput.value = muestraTipo;
   }
+  syncExtractionSampleTypeVisual();
   if (extrMolienda1) {
     extrMolienda1.checked = !frozen;
   }
@@ -1925,7 +2410,7 @@ const applyProcessingToExtractionForm = (processing, existingWeights = []) => {
 };
 
 const handleExtractionProcessingSelection = async (existingWeights = []) => {
-  const processingId = parseIntOrNull(extractionProcessingSelect?.value);
+  const processingId = parseIntOrNull(extractionProcessingSelect.value);
   if (!processingId) {
     clearExtractionProcessingDerivedData();
     return;
@@ -1946,7 +2431,9 @@ const resetExtractionForm = async (withNextFolio = true, prefillProcessing = nul
   }
   extractionForm.reset();
   extractionIdInput.value = "";
-  extractionFormTitle.textContent = "Formato de Extraccion de Muestra";
+  extractionFormTitle.textContent = prefillProcessing?.id_interno
+    ? `Extraer Muestra - ${prefillProcessing.id_interno}`
+    : "Nueva Muestra - Extracción";
   extractionClaveRevisionInput.value = "FX-TCF-GME-A";
   extractionTipoRegistroInput.value = "E-A";
   extractionFechaEmisionInput.value = isoDate(new Date());
@@ -1955,6 +2442,7 @@ const resetExtractionForm = async (withNextFolio = true, prefillProcessing = nul
   if (extractionQuienExtrajoInput) {
     extractionQuienExtrajoInput.value = formatActiveUserSignature();
   }
+  clearSignaturePadsIn(extractionForm);
   clearExtractionProcessingDerivedData();
   extractionProcessingDetailCache = new Map();
   setExtractionDefaultChecklist();
@@ -1982,9 +2470,9 @@ const resetExtractionForm = async (withNextFolio = true, prefillProcessing = nul
 };
 
 const buildExtractionPayload = () => {
-  const selectedOption = extractionProcessingSelect?.selectedOptions?.[0];
-  const selectedMolienda = document.querySelector('.extraction-molienda:checked')?.value || null;
-  const limpieza = extrLimpiezaSi?.checked ? "si" : extrLimpiezaNo?.checked ? "no" : null;
+  const selectedOption = extractionProcessingSelect.selectedOptions?.[0];
+  const selectedMolienda = document.querySelector('.extraction-molienda:checked').value || null;
+  const limpieza = extrLimpiezaSi.checked ? "si" : extrLimpiezaNo.checked ? "no" : null;
   const sampleWeights = collectExtractionSampleWeights();
   return {
     folio_num: parseIntOrNull(extractionFolioInput.value),
@@ -1994,37 +2482,73 @@ const buildExtractionPayload = () => {
     fecha_extraccion: extractionFechaInput.value || null,
     hora_extraccion: extractionHoraInput.value || null,
     procesamiento_id: parseIntOrNull(extractionProcessingSelect.value),
-    folio_procesamiento_num: parseIntOrNull(selectedOption?.dataset?.folioP),
+    folio_procesamiento_num: parseIntOrNull(selectedOption.dataset.folioP),
     muestra_tipo: extractionMuestraTipoInput.value || null,
     id_interno: (extractionIdInternoInput.value || "").trim() || null,
     tipo_molienda: selectedMolienda,
     pasos: {
       checklist: collectCheckedValues(".extraction-step:checked"),
-      id_equipo_licuadora: (extrLicuadoraEquipoInput?.value || "").trim() || null,
-      id_ba1: (extrBA1Input?.value || "").trim() || null,
-      id_probeta: (extrProbetaInput?.value || "").trim() || null,
+      id_equipo_licuadora: (extrLicuadoraEquipoInput.value || "").trim() || null,
+      id_ba1: (extrBA1Input.value || "").trim() || null,
+      id_probeta: (extrProbetaInput.value || "").trim() || null,
       folio_reactivo: (extrReactivoInput?.value || "").trim() || null,
-      id_homogeneizador: (extrHomogeneizadorInput?.value || "").trim() || null,
-      id_cronometro: (extrCronometroInput?.value || "").trim() || null,
+      id_homogeneizador: (extrHomogeneizadorInput.value || "").trim() || null,
+      id_cronometro: (extrCronometroInput.value || "").trim() || null,
       limpieza,
+      observaciones_extraccion: (extractionObservacionesProcesoInput.value || "").trim() || null,
+      limp_micropipeta_1: (document.getElementById("extrLimpMicropipeta1")?.value || "").trim() || null,
+      limp_reactivo_metanol: (document.getElementById("extrLimpReactivoMetanol")?.value || "").trim() || null,
+      limp_micropipeta_2: (document.getElementById("extrLimpMicropipeta2")?.value || "").trim() || null,
+      limp_micropipeta_4: (document.getElementById("extrLimpMicropipeta4")?.value || "").trim() || null,
+      limp_micropipeta_5: (document.getElementById("extrLimpMicropipeta5")?.value || "").trim() || null,
+      limp_micropipeta_8: (document.getElementById("extrLimpMicropipeta8")?.value || "").trim() || null,
+      limp_reactivo_acetico: (document.getElementById("extrLimpReactivoAcetico")?.value || "").trim() || null,
+      limp_vortex: (document.getElementById("extrLimpVortex")?.value || "").trim() || null,
+      limp_micropipeta_10: (document.getElementById("extrLimpMicropipeta10")?.value || "").trim() || null,
+      limp_total_puntas_ref: (document.getElementById("extrTotalPuntasRef")?.value || "").trim() || null,
+      limp_total_puntas_cantidad: parseFloat(document.getElementById("extrTotalPuntasCantidad")?.value) || null,
+      filtrado: {
+        volumen_filtrado: (document.getElementById("extrVolumenFiltradoInput").value || "").trim() || null,
+        volumen_recuperado: (document.getElementById("extrVolumenRecuperadoInput").value || "").trim() || null,
+        filtro: (document.getElementById("extrFiltroInput").value || "").trim() || null,
+      },
+      resguardo_extracto: {
+        entregado_fx106: !!document.getElementById("extrResExtracto1").checked,
+        refrigerador_re1: !!document.getElementById("extrResExtracto2").checked,
+        congelador_co1: !!document.getElementById("extrResExtracto3").checked,
+        congelador_co2: !!document.getElementById("extrResExtracto4").checked,
+        congelador_co3: !!document.getElementById("extrResExtracto5").checked,
+      },
+      resguardo_molienda_restante: {
+        no_sobro: !!document.getElementById("extrResMolida1").checked,
+        refrigerador_re1: !!document.getElementById("extrResMolida2").checked,
+        congelador_co1: !!document.getElementById("extrResMolida3").checked,
+        congelador_co2: !!document.getElementById("extrResMolida4").checked,
+        congelador_co3: !!document.getElementById("extrResMolida5").checked,
+      },
     },
     registro_pesos: sampleWeights.length ? sampleWeights : [
-      { submuestra: 1, peso: parseFloatOrNull(extrSub1PesoInput?.value) },
-      { submuestra: 2, peso: parseFloatOrNull(extrSub2PesoInput?.value) },
-      { submuestra: 3, peso: parseFloatOrNull(extrSub3PesoInput?.value) },
-      { submuestra: "total", peso: parseFloatOrNull(extrPesoTotalInput?.value) },
+      { submuestra: 1, peso: parseFloatOrNull(extrSub1PesoInput.value) },
+      { submuestra: 2, peso: parseFloatOrNull(extrSub2PesoInput.value) },
+      { submuestra: 3, peso: parseFloatOrNull(extrSub3PesoInput.value) },
+      { submuestra: "total", peso: parseFloatOrNull(extrPesoTotalInput.value) },
     ].filter((it) => it.peso !== null),
     observaciones_generales: (extractionObservacionesInput.value || "").trim() || null,
     nombre_quien_extrajo: (extractionQuienExtrajoInput.value || "").trim() || null,
+    nombre_quien_limpieza: (extractionQuienLimpiezaInput.value || "").trim() || null,
     nombre_quien_superviso: (extractionQuienSupervisoInput.value || "").trim() || null,
+    firma_quien_extrajo: (extractionFirmaExtrajoInput.value || "").trim() || null,
+    firma_quien_limpieza: (extractionFirmaLimpiezaInput.value || "").trim() || null,
+    firma_quien_superviso: (extractionFirmaSupervisoInput.value || "").trim() || null,
     estado: extractionEstadoInput.value || "registrada",
+    uso_inventario: _buildExtractionInventario(),
   };
 };
 
 const fillExtractionForm = async (item) => {
   await loadProcessingOptionsForExtraction(item.procesamiento_id);
   extractionIdInput.value = item.id || "";
-  extractionFormTitle.textContent = `Editar Extraccion ${formatExtractionFolio(item)}`;
+  extractionFormTitle.textContent = `Editar Extracci\u00f3n - ${formatExtractionFolio(item)}`;
   extractionClaveRevisionInput.value = item.clave_revision || "FX-TCF-GME-A";
   extractionFechaEmisionInput.value = isoDate(item.fecha_emision);
   extractionTipoRegistroInput.value = item.tipo_registro || "E-A";
@@ -2034,6 +2558,7 @@ const fillExtractionForm = async (item) => {
   extractionEstadoInput.value = item.estado || "registrada";
   extractionMuestraTipoInput.value = item.muestra_tipo || "unica";
   extractionIdInternoInput.value = item.id_interno || "";
+  syncExtractionSampleTypeVisual();
   if (item.procesamiento_id) {
     await handleExtractionProcessingSelection(item.registro_pesos || []);
   }
@@ -2050,14 +2575,47 @@ const fillExtractionForm = async (item) => {
     el.checked = selectedSteps.includes(el.value);
   });
 
-  if (extrLicuadoraEquipoInput) extrLicuadoraEquipoInput.value = pasos.id_equipo_licuadora || "";
+  if (extrLicuadoraEquipoInput) _fillSearchWrapper(extrLicuadoraEquipoInput, pasos.id_equipo_licuadora);
   if (extrBA1Input) extrBA1Input.value = pasos.id_ba1 || "";
-  if (extrProbetaInput) extrProbetaInput.value = pasos.id_probeta || "";
-  if (extrReactivoInput) extrReactivoInput.value = pasos.folio_reactivo || "";
-  if (extrHomogeneizadorInput) extrHomogeneizadorInput.value = pasos.id_homogeneizador || "";
-  if (extrCronometroInput) extrCronometroInput.value = pasos.id_cronometro || "";
+  if (extrProbetaInput) _fillSearchWrapper(extrProbetaInput, pasos.id_probeta);
+  if (extrReactivoInput) _fillSearchWrapper(extrReactivoInput, pasos.folio_reactivo);
+  if (extrHomogeneizadorInput) _fillSearchWrapper(extrHomogeneizadorInput, pasos.id_homogeneizador);
+  if (extrCronometroInput) _fillSearchWrapper(extrCronometroInput, pasos.id_cronometro);
   if (extrLimpiezaSi) extrLimpiezaSi.checked = pasos.limpieza === "si";
   if (extrLimpiezaNo) extrLimpiezaNo.checked = pasos.limpieza === "no";
+  _fillSearchWrapper("extrLimpMicropipeta1", pasos.limp_micropipeta_1);
+  _fillSearchWrapper("extrLimpReactivoMetanol", pasos.limp_reactivo_metanol);
+  _fillSearchWrapper("extrLimpMicropipeta2", pasos.limp_micropipeta_2);
+  _fillSearchWrapper("extrLimpMicropipeta4", pasos.limp_micropipeta_4);
+  _fillSearchWrapper("extrLimpMicropipeta5", pasos.limp_micropipeta_5);
+  _fillSearchWrapper("extrLimpMicropipeta8", pasos.limp_micropipeta_8);
+  _fillSearchWrapper("extrLimpReactivoAcetico", pasos.limp_reactivo_acetico);
+  _fillSearchWrapper("extrLimpVortex", pasos.limp_vortex);
+  _fillSearchWrapper("extrLimpMicropipeta10", pasos.limp_micropipeta_10);
+  _fillSearchWrapper("extrTotalPuntasRef", pasos.limp_total_puntas_ref);
+  const puntasCantInput = document.getElementById("extrTotalPuntasCantidad");
+  if (puntasCantInput) puntasCantInput.value = pasos.limp_total_puntas_cantidad || "";
+  if (extractionObservacionesProcesoInput) extractionObservacionesProcesoInput.value = pasos.observaciones_extraccion || "";
+  // Mostrar badges de stock para los reactivos con cantidad fija
+  loadInsumoOptions().then(() => {
+    document.getElementById("extractionForm")?.querySelectorAll(".insumo-search-wrapper[data-tipo='reactivo']").forEach(_checkReactivoStock);
+  });
+  const filtrado = pasos.filtrado || {};
+  const resguardoExtracto = pasos.resguardo_extracto || {};
+  const resguardoMolida = pasos.resguardo_molienda_restante || {};
+  if (document.getElementById("extrVolumenFiltradoInput")) document.getElementById("extrVolumenFiltradoInput").value = filtrado.volumen_filtrado || "";
+  if (document.getElementById("extrVolumenRecuperadoInput")) document.getElementById("extrVolumenRecuperadoInput").value = filtrado.volumen_recuperado || "";
+  if (document.getElementById("extrFiltroInput")) document.getElementById("extrFiltroInput").value = filtrado.filtro || "0.45 µm";
+  if (document.getElementById("extrResExtracto1")) document.getElementById("extrResExtracto1").checked = !!resguardoExtracto.entregado_fx106;
+  if (document.getElementById("extrResExtracto2")) document.getElementById("extrResExtracto2").checked = !!resguardoExtracto.refrigerador_re1;
+  if (document.getElementById("extrResExtracto3")) document.getElementById("extrResExtracto3").checked = !!resguardoExtracto.congelador_co1;
+  if (document.getElementById("extrResExtracto4")) document.getElementById("extrResExtracto4").checked = !!resguardoExtracto.congelador_co2;
+  if (document.getElementById("extrResExtracto5")) document.getElementById("extrResExtracto5").checked = !!resguardoExtracto.congelador_co3;
+  if (document.getElementById("extrResMolida1")) document.getElementById("extrResMolida1").checked = !!resguardoMolida.no_sobro;
+  if (document.getElementById("extrResMolida2")) document.getElementById("extrResMolida2").checked = !!resguardoMolida.refrigerador_re1;
+  if (document.getElementById("extrResMolida3")) document.getElementById("extrResMolida3").checked = !!resguardoMolida.congelador_co1;
+  if (document.getElementById("extrResMolida4")) document.getElementById("extrResMolida4").checked = !!resguardoMolida.congelador_co2;
+  if (document.getElementById("extrResMolida5")) document.getElementById("extrResMolida5").checked = !!resguardoMolida.congelador_co3;
 
   const pesosMap = new Map();
   (item.registro_pesos || []).forEach((entry) => {
@@ -2073,7 +2631,11 @@ const fillExtractionForm = async (item) => {
 
   extractionObservacionesInput.value = item.observaciones_generales || "";
   extractionQuienExtrajoInput.value = item.nombre_quien_extrajo || "";
+  if (extractionQuienLimpiezaInput) extractionQuienLimpiezaInput.value = item.nombre_quien_limpieza || "";
   extractionQuienSupervisoInput.value = item.nombre_quien_superviso || "";
+  setSignatureInputValue(extractionFirmaExtrajoInput, item.firma_quien_extrajo || "");
+  setSignatureInputValue(extractionFirmaLimpiezaInput, item.firma_quien_limpieza || "");
+  setSignatureInputValue(extractionFirmaSupervisoInput, item.firma_quien_superviso || "");
 };
 
 const editExtraction = async (id) => {
@@ -2093,7 +2655,7 @@ const editExtraction = async (id) => {
 };
 
 const deleteExtraction = async (id) => {
-  if (!window.confirm("¿Eliminar este registro de extraccion?")) {
+  if (!window.confirm("\u00bfEliminar este registro de extracci\u00f3n?")) {
     return;
   }
   const token = getStoredToken();
@@ -2102,7 +2664,7 @@ const deleteExtraction = async (id) => {
   }
   try {
     await sendJsonAuth("DELETE", `${API_BASE_URL}/samples/extraction/${id}`, token);
-    showExtractionFeedback("Extraccion eliminada");
+    showExtractionFeedback("Extracci\u00f3n eliminada");
     loadedPages.delete("muestras-extraction");
     await loadExtractionData(true);
   } catch (error) {
@@ -2118,16 +2680,18 @@ const loadExtractionData = async (force = false) => {
   if (!token) {
     return;
   }
-  const search = (extractionSearchInput?.value || "").trim();
+  const search = (extractionSearchInput.value || "").trim();
   try {
     const data = await getJsonAuth(`${API_BASE_URL}/samples/extraction/?search=${encodeURIComponent(search)}`, token);
     extractionCache = data.items || [];
     renderRows(extractionTableBody, extractionCache, mapExtractionRow, 7);
+    updateSamplesFlowCounts();
     showExtractionFeedback("");
     loadedPages.add("muestras-extraction");
   } catch (error) {
     extractionCache = [];
     renderRows(extractionTableBody, [], mapExtractionRow, 7);
+    updateSamplesFlowCounts();
     showExtractionFeedback(error.message || "No se pudieron cargar extracciones", true);
   }
 };
@@ -2137,25 +2701,23 @@ const setSamplesSection = async (section, loadData = true) => {
   samplesSectionButtons.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.samplesSectionBtn === section);
   });
+  samplesFlowCards.forEach((card) => {
+    card.classList.toggle("active", card.dataset.samplesFlowCard === section);
+  });
 
-  if (samplesSectionRecepcion) {
-    const hide = section !== "recepcion";
-    samplesSectionRecepcion.hidden = hide;
-    samplesSectionRecepcion.classList.toggle("d-none", hide);
-    samplesSectionRecepcion.style.display = hide ? "none" : "block";
-  }
-  if (samplesSectionProcesamiento) {
-    const hide = section !== "procesamiento";
-    samplesSectionProcesamiento.hidden = hide;
-    samplesSectionProcesamiento.classList.toggle("d-none", hide);
-    samplesSectionProcesamiento.style.display = hide ? "none" : "block";
-  }
-  if (samplesSectionExtraccion) {
-    const hide = section !== "extraccion";
-    samplesSectionExtraccion.hidden = hide;
-    samplesSectionExtraccion.classList.toggle("d-none", hide);
-    samplesSectionExtraccion.style.display = hide ? "none" : "block";
-  }
+  const setSectionVisibility = (element, visible) => {
+    if (!element) {
+      return;
+    }
+    element.hidden = !visible;
+    element.classList.toggle("d-none", !visible);
+    element.classList.toggle("active", visible);
+    element.style.display = visible ? "block" : "none";
+  };
+
+  setSectionVisibility(samplesSectionRecepcion, section === "recepcion");
+  setSectionVisibility(samplesSectionProcesamiento, section === "procesamiento");
+  setSectionVisibility(samplesSectionExtraccion, section === "extraccion");
 
   if (!loadData) {
     return;
@@ -2198,25 +2760,25 @@ const renderProcessingLoteSelectionRows = (items = [], selectedIds = []) => {
   const selectedSet = new Set((selectedIds || []).map((it) => String(it || "")).filter(Boolean));
   processingLoteSelectionBody.innerHTML = items
     .map((item, index) => {
-      const idInterno = String(item?.id_interno || "").trim();
-      const selectedByDefault = item?.trabajar !== false;
+      const idInterno = String(item.id_interno || "").trim();
+      const selectedByDefault = item.trabajar !== false;
       const checked = selectedSet.size ? selectedSet.has(idInterno) : selectedByDefault;
       return `
         <tr
           data-id-interno="${idInterno}"
-          data-nombre-organismo="${String(item?.nombre_organismo || "").trim()}"
-          data-cantidad-volumen="${String(item?.cantidad_volumen || "").trim()}"
-          data-sitio-muestreo="${String(item?.sitio_muestreo || "").trim()}"
-          data-fecha-muestra="${item?.fecha_muestra || ""}"
-          data-informacion-adicional="${String(item?.informacion_adicional || "").trim()}"
+          data-nombre-organismo="${String(item.nombre_organismo || "").trim()}"
+          data-cantidad-volumen="${String(item.cantidad_volumen || "").trim()}"
+          data-sitio-muestreo="${String(item.sitio_muestreo || "").trim()}"
+          data-fecha-muestra="${item.fecha_muestra || ""}"
+          data-informacion-adicional="${String(item.informacion_adicional || "").trim()}"
         >
           <td><input type="checkbox" class="form-check-input processing-lote-selected" ${checked ? "checked" : ""} /></td>
           <td>${idInterno || `Muestra ${index + 1}`}</td>
-          <td>${item?.nombre_organismo || "-"}</td>
-          <td>${item?.cantidad_volumen || "-"}</td>
-          <td>${item?.sitio_muestreo || "-"}</td>
-          <td>${fmtDate(item?.fecha_muestra)}</td>
-          <td>${item?.informacion_adicional || "-"}</td>
+          <td>${item.nombre_organismo || "-"}</td>
+          <td>${item.cantidad_volumen || "-"}</td>
+          <td>${item.sitio_muestreo || "-"}</td>
+          <td>${fmtDate(item.fecha_muestra)}</td>
+          <td>${item.informacion_adicional || "-"}</td>
         </tr>
       `;
     })
@@ -2242,12 +2804,50 @@ const collectProcessingSelectedLoteRows = () => {
 };
 
 const syncProcessingIdInternoFromLoteSelection = () => {
-  if (!processingIdInternoInput || processingMuestraTipoInput?.value !== "lote") {
+  if (!processingIdInternoInput || processingMuestraTipoInput.value !== "lote") {
     return;
   }
   const selected = collectProcessingSelectedLoteRows();
   const joinedIds = selected.map((row) => row.id_interno).filter(Boolean).join(", ");
   processingIdInternoInput.value = joinedIds;
+  if (processingLotIdVisualInput) {
+    processingLotIdVisualInput.value = joinedIds;
+  }
+};
+
+const syncExtractionSampleTypeVisual = () => {
+  const isLote = extractionMuestraTipoInput.value === "lote";
+  if (extractionSingleSampleVisualInput) {
+    extractionSingleSampleVisualInput.checked = !isLote;
+  }
+  if (extractionLotSampleVisualInput) {
+    extractionLotSampleVisualInput.checked = isLote;
+  }
+  if (extractionIdInternoInput) {
+    extractionIdInternoInput.disabled = isLote;
+  }
+  if (extractionLotIdVisualInput) {
+    extractionLotIdVisualInput.value = isLote ? extractionIdInternoInput.value || "" : "";
+  }
+};
+
+const syncProcessingSampleTypeVisual = () => {
+  const isLote = processingMuestraTipoInput.value === "lote";
+  if (processingSingleSampleVisualInput) {
+    processingSingleSampleVisualInput.checked = !isLote;
+  }
+  if (processingLotSampleVisualInput) {
+    processingLotSampleVisualInput.checked = isLote;
+  }
+  if (processingIdInternoInput) {
+    processingIdInternoInput.disabled = isLote;
+  }
+  if (processingLoteSelectionWrap) {
+    processingLoteSelectionWrap.classList.toggle("d-none", !isLote);
+  }
+  if (processingLotIdVisualInput && !isLote) {
+    processingLotIdVisualInput.value = "";
+  }
 };
 
 const clearProcessingReceptionDerivedData = () => {
@@ -2265,6 +2865,164 @@ const clearProcessingReceptionDerivedData = () => {
   if (processingLoteSelectionBody) {
     processingLoteSelectionBody.innerHTML = '<tr><td colspan="7" class="text-secondary">Selecciona un folio de recepcion para cargar muestras.</td></tr>';
   }
+  syncProcessingSampleTypeVisual();
+};
+
+const signaturePadControllers = new Map();
+
+const drawSignaturePlaceholder = (canvas) => {
+  const ctx = canvas.getContext?.("2d");
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.fillStyle = "#64748b";
+  ctx.font = "24px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("Firma digital", canvas.width / 2, canvas.height / 2 - 4);
+  ctx.font = "16px sans-serif";
+  ctx.fillText("Sube una imagen o usa el pincel", canvas.width / 2, canvas.height / 2 + 24);
+  ctx.restore();
+};
+
+const setSignaturePadValue = (pad, dataUrl = "") => {
+  if (!pad) return;
+  const target = document.getElementById(pad.dataset.target || "");
+  const canvas = pad.querySelector(".signature-canvas");
+  const ctx = canvas.getContext?.("2d");
+  if (target) {
+    target.value = dataUrl || "";
+  }
+  if (!ctx || !canvas) return;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!dataUrl) {
+    pad.classList.add("is-empty");
+    drawSignaturePlaceholder(canvas);
+    return;
+  }
+
+  const image = new Image();
+  image.onload = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const scale = Math.min(canvas.width / image.width, canvas.height / image.height);
+    const width = image.width * scale;
+    const height = image.height * scale;
+    ctx.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+  };
+  image.src = dataUrl;
+  pad.classList.remove("is-empty");
+};
+
+const updateSignaturePadHiddenValue = (pad) => {
+  const canvas = pad.querySelector?.(".signature-canvas");
+  const target = document.getElementById(pad.dataset.target || "");
+  if (!canvas || !target) return;
+  target.value = canvas.toDataURL("image/png");
+  pad.classList.remove("is-empty");
+};
+
+const setSignaturePadMode = (pad, mode) => {
+  if (!pad) return;
+  const nextMode = mode === "draw" ? "draw" : "upload";
+  pad.dataset.mode = nextMode;
+  pad.classList.toggle("is-draw-mode", nextMode === "draw");
+  pad.classList.toggle("is-upload-mode", nextMode === "upload");
+  pad.querySelectorAll("[data-signature-action]").forEach((button) => {
+    const isActive = button.dataset.signatureAction === nextMode;
+    if (button.dataset.signatureAction === "clear") return;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+};
+
+const initializeSignaturePads = () => {
+  document.querySelectorAll("[data-signature-pad]").forEach((pad) => {
+    if (signaturePadControllers.has(pad)) return;
+
+    const canvas = pad.querySelector(".signature-canvas");
+    const fileInput = pad.querySelector(".signature-file-input");
+    const ctx = canvas.getContext?.("2d");
+    if (!canvas || !ctx) return;
+
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#0f172a";
+
+    let drawing = false;
+    const getPoint = (event) => {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: ((event.clientX - rect.left) / rect.width) * canvas.width,
+        y: ((event.clientY - rect.top) / rect.height) * canvas.height,
+      };
+    };
+    const startDrawing = (event) => {
+      if (pad.dataset.mode !== "draw") {
+        return;
+      }
+      event.preventDefault();
+      drawing = true;
+      const { x, y } = getPoint(event);
+      if (pad.classList.contains("is-empty")) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        pad.classList.remove("is-empty");
+      }
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    };
+    const draw = (event) => {
+      if (!drawing) return;
+      event.preventDefault();
+      const { x, y } = getPoint(event);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    };
+    const stopDrawing = () => {
+      if (!drawing) return;
+      drawing = false;
+      updateSignaturePadHiddenValue(pad);
+    };
+
+    canvas.addEventListener("pointerdown", startDrawing);
+    canvas.addEventListener("pointermove", draw);
+    canvas.addEventListener("pointerup", stopDrawing);
+    canvas.addEventListener("pointerleave", stopDrawing);
+    canvas.addEventListener("pointercancel", stopDrawing);
+
+    pad.querySelector('[data-signature-action="upload"]').addEventListener("click", () => {
+      setSignaturePadMode(pad, "upload");
+      fileInput.click();
+    });
+    pad.querySelector('[data-signature-action="draw"]').addEventListener("click", () => {
+      setSignaturePadMode(pad, "draw");
+      canvas.focus();
+    });
+    pad.querySelector('[data-signature-action="clear"]').addEventListener("click", () => setSignaturePadValue(pad, ""));
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => setSignaturePadValue(pad, String(reader.result || ""));
+      reader.readAsDataURL(file);
+    });
+
+    setSignaturePadMode(pad, pad.dataset.mode || "upload");
+    setSignaturePadValue(pad, document.getElementById(pad.dataset.target || "").value || "");
+    signaturePadControllers.set(pad, true);
+  });
+};
+
+const setSignatureInputValue = (input, dataUrl) => {
+  if (!input) return;
+  input.value = dataUrl || "";
+  const pad = document.querySelector(`[data-signature-pad][data-target="${input.id}"]`);
+  setSignaturePadValue(pad, input.value);
+};
+
+const clearSignaturePadsIn = (root) => {
+  root.querySelectorAll?.("[data-signature-pad]").forEach((pad) => setSignaturePadValue(pad, ""));
 };
 
 const getReceptionDetailForProcessing = async (receptionId) => {
@@ -2282,7 +3040,7 @@ const getReceptionDetailForProcessing = async (receptionId) => {
   }
 
   const data = await getJsonAuth(`${API_BASE_URL}/samples/reception/${receptionId}`, token);
-  const item = data?.item || null;
+  const item = data.item || null;
   if (item) {
     processingReceptionDetailCache.set(receptionId, item);
   }
@@ -2300,6 +3058,7 @@ const applyReceptionToProcessingForm = (reception, selectedLoteRows = []) => {
     processingMuestraTipoInput.value = isUnique ? "unica" : "lote";
     processingMuestraTipoInput.disabled = true;
   }
+  syncProcessingSampleTypeVisual();
 
   if (isUnique) {
     if (processingLoteSelectionWrap) {
@@ -2315,16 +3074,17 @@ const applyReceptionToProcessingForm = (reception, selectedLoteRows = []) => {
   if (processingLoteSelectionWrap) {
     processingLoteSelectionWrap.classList.remove("d-none");
   }
-  const selectedIds = (selectedLoteRows || []).map((row) => row?.id_interno || "").filter(Boolean);
+  const selectedIds = (selectedLoteRows || []).map((row) => row.id_interno || "").filter(Boolean);
   renderProcessingLoteSelectionRows(reception.lote_muestras || [], selectedIds);
   if (processingIdInternoInput) {
     processingIdInternoInput.disabled = true;
   }
   syncProcessingIdInternoFromLoteSelection();
+  syncProcessingSampleTypeVisual();
 };
 
 const handleProcessingReceptionSelection = async (selectedLoteRows = []) => {
-  const receptionId = parseIntOrNull(processingReceptionSelect?.value);
+  const receptionId = parseIntOrNull(processingReceptionSelect.value);
   if (!receptionId) {
     clearProcessingReceptionDerivedData();
     return;
@@ -2368,8 +3128,9 @@ const resetProcessingForm = async (withNextFolio = true) => {
     return;
   }
   processingForm.reset();
+  renderInventarioRows("processingInventarioBody", []);
   processingIdInput.value = "";
-  processingFormTitle.textContent = "Formato de Procesamiento de Muestra";
+  processingFormTitle.textContent = "Nueva Muestra - Procesamiento";
   processingClaveRevisionInput.value = "FX-TCF-GMP";
   processingTipoRegistroInput.value = "P";
   processingFechaEmisionInput.value = isoDate(new Date());
@@ -2378,6 +3139,7 @@ const resetProcessingForm = async (withNextFolio = true) => {
   if (processingQuienProcesoInput) {
     processingQuienProcesoInput.value = formatActiveUserSignature();
   }
+  clearSignaturePadsIn(processingForm);
   clearProcessingReceptionDerivedData();
   processingReceptionDetailCache = new Map();
   document.querySelectorAll(".processing-organismo").forEach((el) => {
@@ -2421,16 +3183,16 @@ const getProcessingSelectedOrganism = () => {
 
 const setProcessingStepExtraVisibility = () => {
   if (procBiv7Extra) {
-    procBiv7Extra.classList.toggle("d-none", !procBiv7?.checked);
+    procBiv7Extra.classList.toggle("d-none", !procBiv7.checked);
   }
   if (procBiv8Extra) {
-    procBiv8Extra.classList.toggle("d-none", !procBiv8?.checked);
+    procBiv8Extra.classList.toggle("d-none", !procBiv8.checked);
   }
   if (procSar3Extra) {
-    procSar3Extra.classList.toggle("d-none", !procSar3?.checked);
+    procSar3Extra.classList.toggle("d-none", !procSar3.checked);
   }
   if (procSar4Extra) {
-    procSar4Extra.classList.toggle("d-none", !procSar4?.checked);
+    procSar4Extra.classList.toggle("d-none", !procSar4.checked);
   }
 };
 
@@ -2500,7 +3262,7 @@ const collectProcessingStepObjects = (selector, extrasMap = {}) => {
 };
 
 const buildProcessingPayload = () => {
-  const selectedOption = processingReceptionSelect?.selectedOptions?.[0];
+  const selectedOption = processingReceptionSelect.selectedOptions?.[0];
   const selectedLoteRows = collectProcessingSelectedLoteRows();
   const isLote = processingMuestraTipoInput.value === "lote";
   const idInternoLote = selectedLoteRows.map((row) => row.id_interno).filter(Boolean).join(", ");
@@ -2521,7 +3283,7 @@ const buildProcessingPayload = () => {
     fecha_procesamiento: processingFechaInput.value || null,
     hora_procesamiento: processingHoraInput.value || null,
     recepcion_id: parseIntOrNull(processingReceptionSelect.value),
-    folio_recepcion_num: parseIntOrNull(selectedOption?.dataset?.folioR),
+    folio_recepcion_num: parseIntOrNull(selectedOption.dataset.folioR),
     muestra_tipo: processingMuestraTipoInput.value || null,
     id_interno: (isLote ? idInternoLote : processingIdInternoInput.value || "").trim() || null,
     lote_seleccion: isLote ? selectedLoteRows : [],
@@ -2531,23 +3293,26 @@ const buildProcessingPayload = () => {
     sardinas_steps: sardinas,
     otro_procesamiento: selectedOrganism === "otro" ? (processingOtroInput.value || "").trim() || null : null,
     resguardo: {
-      entregado_extraccion: !!procRes1?.checked,
-      refrigerador_re1: !!procRes2?.checked,
-      congelador_co1: !!procRes3?.checked,
-      congelador_co2: !!procRes4?.checked,
-      congelador_co3: !!procRes5?.checked,
+      entregado_extraccion: !!procRes1.checked,
+      refrigerador_re1: !!procRes2.checked,
+      congelador_co1: !!procRes3.checked,
+      congelador_co2: !!procRes4.checked,
+      congelador_co3: !!procRes5.checked,
     },
     observaciones_generales: (processingObservacionesInput.value || "").trim() || null,
     nombre_quien_proceso: (processingQuienProcesoInput.value || "").trim() || null,
     nombre_quien_superviso: (processingQuienSupervisoInput.value || "").trim() || null,
+    firma_quien_proceso: (processingFirmaProcesoInput.value || "").trim() || null,
+    firma_quien_superviso: (processingFirmaSupervisoInput.value || "").trim() || null,
     estado: processingEstadoInput.value || "registrada",
+    uso_inventario: collectInventarioRows("processingInventarioBody"),
   };
 };
 
 const fillProcessingForm = async (item) => {
   await loadReceptionOptionsForProcessing(item.recepcion_id);
   processingIdInput.value = item.id || "";
-  processingFormTitle.textContent = `Editar Procesamiento ${formatProcessingFolio(item)}`;
+  processingFormTitle.textContent = `Editar Procesamiento - ${formatProcessingFolio(item)}`;
   processingClaveRevisionInput.value = item.clave_revision || "FX-TCF-GMP";
   processingFechaEmisionInput.value = isoDate(item.fecha_emision);
   processingTipoRegistroInput.value = item.tipo_registro || "P";
@@ -2565,6 +3330,7 @@ const fillProcessingForm = async (item) => {
     clearProcessingReceptionDerivedData();
     processingMuestraTipoInput.value = item.muestra_tipo || "unica";
     processingIdInternoInput.value = item.id_interno || "";
+    syncProcessingSampleTypeVisual();
   }
 
   const tipoOrganismo = Array.isArray(item.tipo_organismo) ? item.tipo_organismo[0] || "" : "";
@@ -2592,15 +3358,15 @@ const fillProcessingForm = async (item) => {
   const sar3Obj = getStepObj(item.sardinas_steps, "Moler 1-2 min 100-150g");
   const sar4Obj = getStepObj(item.sardinas_steps, "Pesar molienda obtenida");
 
-  if (procBiv7Equipo) procBiv7Equipo.value = biv7Obj?.equipo_id || "";
-  if (procBiv8Equipo) procBiv8Equipo.value = biv8Obj?.equipo_id || "";
-  if (procSar3Equipo) procSar3Equipo.value = sar3Obj?.equipo_id || "";
-  if (procSar4Equipo) procSar4Equipo.value = sar4Obj?.equipo_id || "";
+  if (procBiv7Equipo) procBiv7Equipo.value = biv7Obj.equipo_id || "";
+  if (procBiv8Equipo) procBiv8Equipo.value = biv8Obj.equipo_id || "";
+  if (procSar3Equipo) procSar3Equipo.value = sar3Obj.equipo_id || "";
+  if (procSar4Equipo) procSar4Equipo.value = sar4Obj.equipo_id || "";
 
-  if (procBiv7Peso) procBiv7Peso.value = biv7Obj?.peso ?? "";
-  if (procBiv8Peso) procBiv8Peso.value = biv8Obj?.peso ?? "";
-  if (procSar3Peso) procSar3Peso.value = sar3Obj?.peso ?? "";
-  if (procSar4Peso) procSar4Peso.value = sar4Obj?.peso ?? "";
+  if (procBiv7Peso) procBiv7Peso.value = biv7Obj.peso ?? "";
+  if (procBiv8Peso) procBiv8Peso.value = biv8Obj.peso ?? "";
+  if (procSar3Peso) procSar3Peso.value = sar3Obj.peso ?? "";
+  if (procSar4Peso) procSar4Peso.value = sar4Obj.peso ?? "";
 
   processingOtroInput.value = item.otro_procesamiento || "";
   const res = item.resguardo || {};
@@ -2612,6 +3378,9 @@ const fillProcessingForm = async (item) => {
   processingObservacionesInput.value = item.observaciones_generales || "";
   processingQuienProcesoInput.value = item.nombre_quien_proceso || "";
   processingQuienSupervisoInput.value = item.nombre_quien_superviso || "";
+  setSignatureInputValue(processingFirmaProcesoInput, item.firma_quien_proceso || "");
+  setSignatureInputValue(processingFirmaSupervisoInput, item.firma_quien_superviso || "");
+  renderInventarioRows("processingInventarioBody", item.uso_inventario || []);
   setProcessingOrganismSections();
 };
 
@@ -2619,19 +3388,20 @@ const mapProcessingRow = (item) => {
   const canCreate = canModuleAction("muestras", "create");
   const canUpdate = canModuleAction("muestras", "update");
   const canDelete = canModuleAction("muestras", "delete");
+  const folioR = item.folio_recepcion_num ? `R ${String(item.folio_recepcion_num).padStart(7, "0")}` : "-";
   return `
-    <tr>
-      <td><span class="fw-semibold">${formatProcessingFolio(item)}</span></td>
-      <td>${item.folio_recepcion_num ? `R ${String(item.folio_recepcion_num).padStart(7, "0")}` : "-"}</td>
+    <tr class="samples-data-row">
+      <td>${sampleFolioChip(formatProcessingFolio(item), "P")}</td>
+      <td>${folioR === "-" ? "-" : sampleFolioChip(folioR, "R")}</td>
       <td>${item.id_interno || "-"}</td>
       <td>${fmtDate(item.fecha_procesamiento)}</td>
       <td>${item.hora_procesamiento || "-"}</td>
-      <td>${item.estado || "registrada"}</td>
+      <td>${sampleStatusChip(item.estado)}</td>
       <td>
-        <div class="d-flex gap-1">
-          <button class="role-action-btn" data-processing-action="extract" data-processing-id="${item.id}" ${canCreate ? "" : "disabled"}>Extraer</button>
-          <button class="role-action-btn" data-processing-action="edit" data-processing-id="${item.id}" ${canUpdate ? "" : "disabled"}>Editar</button>
-          <button class="role-action-btn" data-processing-action="delete" data-processing-id="${item.id}" ${canDelete ? "" : "disabled"}>Eliminar</button>
+        <div class="samples-actions">
+          <button class="icon-action-btn sample-action-btn" type="button" title="Extraer" aria-label="Extraer" data-processing-action="extract" data-processing-id="${item.id}" ${canCreate ? "" : "disabled"}><i class="bi bi-droplet-half"></i></button>
+          <button class="icon-action-btn sample-action-btn" type="button" title="Editar" aria-label="Editar" data-processing-action="edit" data-processing-id="${item.id}" ${canUpdate ? "" : "disabled"}><i class="bi bi-pencil"></i></button>
+          <button class="icon-action-btn sample-action-btn danger" type="button" title="Eliminar" aria-label="Eliminar" data-processing-action="delete" data-processing-id="${item.id}" ${canDelete ? "" : "disabled"}><i class="bi bi-trash3"></i></button>
         </div>
       </td>
     </tr>
@@ -2646,16 +3416,18 @@ const loadProcessingData = async (force = false) => {
   if (!token) {
     return;
   }
-  const search = (processingSearchInput?.value || "").trim();
+  const search = (processingSearchInput.value || "").trim();
   try {
     const data = await getJsonAuth(`${API_BASE_URL}/samples/processing/?search=${encodeURIComponent(search)}`, token);
     processingCache = data.items || [];
     renderRows(processingTableBody, processingCache, mapProcessingRow, 7);
+    updateSamplesFlowCounts();
     showProcessingFeedback("");
     loadedPages.add("muestras-processing");
   } catch (error) {
     processingCache = [];
     renderRows(processingTableBody, [], mapProcessingRow, 7);
+    updateSamplesFlowCounts();
     showProcessingFeedback(error.message || "No se pudieron cargar procesamientos", true);
   }
 };
@@ -2720,7 +3492,7 @@ const loadConsumablesData = async (force = false) => {
     return;
   }
 
-  const search = (consumablesSearchInput?.value || "").trim();
+  const search = (consumablesSearchInput.value || "").trim();
   const url = `${API_BASE_URL}/consumables/?search=${encodeURIComponent(search)}`;
 
   try {
@@ -2768,7 +3540,52 @@ const deleteConsumable = async (id) => {
 };
 
 const getReactivoTypeConfig = (type) => {
-  return REACTIVO_TYPES.find((item) => item.value === type) || REACTIVO_TYPES[0];
+  return REACTIVO_TYPES.find((item) => item.value === type) || null;
+};
+
+const REACTIVO_SHEET_TYPE_LABELS = {
+  acidos: "\u00c1cidos",
+  alcoholes_solventes: "Alcoholes y solventes org\u00e1nicos",
+  compuestos_amonio: "Compuestos de Amonio",
+  compuestos_sodio: "Compuestos de Sodio",
+  estandares_preparados: "Est\u00e1ndares preparados",
+  materiales_referencia: "Materiales de Referencia",
+  miscelaneos: "Miscel\u00e1neos",
+  columnas_cromatograficas: "Columnas cromatogr\u00e1ficas",
+};
+
+const getReactivoSheetType = (sheetName) => {
+  const normalized = normalizeImportKey(sheetName);
+  if (normalized === "consumibles" || normalized.includes("consumible")) return "";
+  const aliases = {
+    acidos: "acidos",
+    alcoholes_y_solventes_organicos: "alcoholes_solventes",
+    alcoholes_solventes_organicos: "alcoholes_solventes",
+    alcoholes_y_solventes: "alcoholes_solventes",
+    alcoholes_solventes: "alcoholes_solventes",
+    compuestos_de_amonio: "compuestos_amonio",
+    compuestos_amonio: "compuestos_amonio",
+    compuestos_de_sodio: "compuestos_sodio",
+    compuestos_sodio: "compuestos_sodio",
+    estandares_preparados: "estandares_preparados",
+    materiales_de_referencia: "materiales_referencia",
+    materiales_referencia: "materiales_referencia",
+    miscelaneos: "miscelaneos",
+    columnas_cromatograficas: "columnas_cromatograficas",
+  };
+  return aliases[normalized] || "";
+};
+
+const getReactivoTypeLabel = (type) => {
+  return getReactivoTypeConfig(type)?.label || type || "Sin tipo";
+};
+
+const escapeReactivoValue = (value) => {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 };
 
 const showReactivosFeedback = (message, isError = false) => {
@@ -2783,20 +3600,131 @@ const getReactivoExpiry = (item) => item.caducidad || item.expiration_date || it
 const getReactivoLocation = (item) => [item.localizacion || item.ubicacion, item.sub_localizacion].filter(Boolean).join(" / ") || "-";
 
 const getReactivoStockText = (item) => {
-  if (item.piezas !== null && item.piezas !== undefined && item.piezas !== "") return `${fmt(item.piezas)} piezas`;
+  if (item.restante_190126 !== null && item.restante_190126 !== undefined && item.restante_190126 !== "") return `${fmt(item.restante_190126)} L restantes`;
+  if (item.total_litros_2025 !== null && item.total_litros_2025 !== undefined && item.total_litros_2025 !== "") return `${fmt(item.total_litros_2025)} L`;
+  if (item.amount_in_stock !== null && item.amount_in_stock !== undefined && item.amount_in_stock !== "") return fmt(item.amount_in_stock);
   if (item.capacidad_litros !== null && item.capacidad_litros !== undefined && item.capacidad_litros !== "") return `${fmt(item.capacidad_litros)} L`;
   if (item.capacidad_kilos !== null && item.capacidad_kilos !== undefined && item.capacidad_kilos !== "") return `${fmt(item.capacidad_kilos)} kg`;
-  if (item.amount_in_stock !== null && item.amount_in_stock !== undefined && item.amount_in_stock !== "") return fmt(item.amount_in_stock);
+  if (item.volumen !== null && item.volumen !== undefined && item.volumen !== "") return `${fmt(item.volumen)} volumen`;
+  if (item.piezas !== null && item.piezas !== undefined && item.piezas !== "") return `${fmt(item.piezas)} piezas`;
   return "-";
+};
+
+const renderReactivosImportSheets = (summary = null) => {
+  if (!importReactivosSheetsBody) return;
+  if (!importReactivosSheets.length && !summary) {
+    importReactivosSheetsBody.innerHTML = '<tr><td colspan="4" class="text-secondary">Sin archivo cargado.</td></tr>';
+    return;
+  }
+
+  const processedByName = new Map((summary?.hojas_procesadas || []).map((sheet) => [sheet.hoja, sheet]));
+  const ignoredByName = new Map((summary?.hojas_ignoradas || []).map((sheet) => [sheet.hoja, sheet]));
+  importReactivosSheetsBody.innerHTML = importReactivosSheets
+    .map((sheet) => {
+      const processed = processedByName.get(sheet.name);
+      const ignored = ignoredByName.get(sheet.name);
+      const status = processed
+        ? `Procesada: ${processed.insertados || 0} insertados, ${processed.actualizados || 0} actualizados`
+        : ignored
+        ? `Ignorada: ${ignored.motivo || "No aplica"}`
+        : sheet.valid
+        ? "Lista para importar"
+        : "Ignorada";
+      return `
+        <tr>
+          <td>${sheet.name}</td>
+          <td>${sheet.label || "-"}</td>
+          <td>${fmt(sheet.rows.length)}</td>
+          <td>${status}</td>
+        </tr>
+      `;
+    })
+    .join("");
+};
+
+const renderReactivosImportSummary = (summary = null) => {
+  if (!importReactivosSummary) return;
+  if (!summary) {
+    const validSheets = importReactivosSheets.filter((sheet) => sheet.valid).length;
+    const ignoredSheets = importReactivosSheets.length - validSheets;
+    importReactivosSummary.innerHTML = `
+      <div class="d-flex flex-wrap gap-3">
+        <span><strong>${fmt(importReactivosSheets.length)}</strong> hojas le\u00eddas</span>
+        <span><strong>${fmt(validSheets)}</strong> hojas de reactivos</span>
+        <span><strong>${fmt(ignoredSheets)}</strong> hojas ignoradas</span>
+      </div>
+    `;
+    return;
+  }
+
+  importReactivosSummary.innerHTML = `
+    <div class="d-flex flex-wrap gap-3">
+      <span><strong>${fmt(summary.total_hojas_leidas || 0)}</strong> hojas le\u00eddas</span>
+      <span><strong>${fmt((summary.hojas_procesadas || []).length)}</strong> procesadas</span>
+      <span><strong>${fmt((summary.hojas_ignoradas || []).length)}</strong> ignoradas</span>
+      <span><strong>${fmt(summary.reactivos_insertados || 0)}</strong> insertados</span>
+      <span><strong>${fmt(summary.reactivos_actualizados || 0)}</strong> actualizados</span>
+      <span><strong>${fmt(summary.filas_ignoradas || 0)}</strong> filas ignoradas</span>
+      <span><strong>${fmt((summary.errores || []).length)}</strong> errores</span>
+    </div>
+  `;
+};
+
+const renderReactivosImportErrors = (errors = []) => {
+  if (!importReactivosErrorsBody) return;
+  if (!errors.length) {
+    importReactivosErrorsBody.innerHTML = '<tr><td colspan="3" class="text-secondary">Sin errores reportados.</td></tr>';
+    return;
+  }
+  importReactivosErrorsBody.innerHTML = errors.slice(0, 80).map((item) => `
+    <tr>
+      <td>${item.hoja || "-"}</td>
+      <td>${item.fila || "-"}</td>
+      <td>${item.error || "-"}</td>
+    </tr>
+  `).join("");
+};
+
+const resetReactivosImportUi = () => {
+  importReactivosSheets = [];
+  if (importReactivosForm) importReactivosForm.reset();
+  renderReactivosImportSummary();
+  renderReactivosImportSheets();
+  renderReactivosImportErrors([]);
+};
+
+const workbookToReactivoSheets = async (file) => {
+  const ext = file.name.split(".").pop().toLowerCase();
+  if (!["xlsx", "xls"].includes(ext)) {
+    throw new Error("Formato inv\u00e1lido. Solo se aceptan archivos .xlsx o .xls");
+  }
+  if (!window.XLSX) {
+    throw new Error("No se pudo cargar el lector de Excel");
+  }
+
+  const buffer = await file.arrayBuffer();
+  const workbook = window.XLSX.read(buffer, { type: "array", cellDates: true });
+  return workbook.SheetNames.map((sheetName) => {
+    const sheet = workbook.Sheets[sheetName];
+    const rows = window.XLSX.utils.sheet_to_json(sheet, { defval: "", raw: true });
+    const sheetType = getReactivoSheetType(sheetName);
+    return {
+      name: sheetName,
+      type: sheetType,
+      label: REACTIVO_SHEET_TYPE_LABELS[sheetType] || "",
+      valid: !!sheetType,
+      rows,
+    };
+  });
 };
 
 const mapReactivoRow = (item) => {
   const canUpdate = canModuleAction("reactivos", "update");
   const canDelete = canModuleAction("reactivos", "delete");
-  const type = getReactivoTypeConfig(item.tipo_reactivo || item.categoria);
+  const typeLabel = getReactivoTypeLabel(item.tipo_reactivo || item.categoria);
   return `
     <tr>
-      <td><span class="badge-row ajuste">${type.label}</span></td>
+      <td><span class="badge-row ajuste">${typeLabel}</span></td>
       <td><span class="fw-semibold">${formatReactivoName(item)}</span><div class="small text-secondary">${item.catalogo_parte_cas_lote || item.catalogo || item.cas_number || item.numero_cas || ""}</div></td>
       <td>${[item.marca, item.proveedor || item.vendor].filter(Boolean).join(" / ") || "-"}</td>
       <td>${getReactivoLocation(item)}</td>
@@ -2815,12 +3743,27 @@ const updateReactivosStats = (items = []) => {
 
 const setupReactivoTypeOptions = () => {
   if (!reactivoTipoInput) return;
-  reactivoTipoInput.innerHTML = REACTIVO_TYPES.map((type) => `<option value="${type.value}">${type.label}</option>`).join("");
+  reactivoTipoInput.innerHTML = [
+    '<option value="">Seleccionar categor\u00eda</option>',
+    ...REACTIVO_TYPES.map((type) => `<option value="${type.value}">${type.label}</option>`),
+  ].join("");
 };
 
 const renderReactivoDynamicFields = (values = {}) => {
   if (!reactivoDynamicFields || !reactivoTipoInput) return;
   const config = getReactivoTypeConfig(reactivoTipoInput.value);
+  if (!config) {
+    if (reactivoTypeHint) reactivoTypeHint.textContent = "Selecciona una categor\u00eda para cargar solo los campos necesarios.";
+    reactivoDynamicFields.innerHTML = `
+      <div class="col-12">
+        <div class="reactivo-empty-state">
+          <i class="bi bi-ui-checks-grid"></i>
+          <span>Elige el tipo de reactivo para mostrar su formato de captura.</span>
+        </div>
+      </div>
+    `;
+    return;
+  }
   if (reactivoTypeHint) reactivoTypeHint.textContent = config.hint;
   reactivoDynamicFields.innerHTML = config.fields
     .map((fieldKey) => {
@@ -2828,19 +3771,23 @@ const renderReactivoDynamicFields = (values = {}) => {
       const target = meta.target || fieldKey;
       const value = values[fieldKey] ?? values[target] ?? "";
       const colClass = meta.wide ? "col-12" : "col-12 col-md-6 col-xl-4";
+      const required = meta.required ? "required" : "";
+      const requiredMark = meta.required ? " *" : "";
+      const min = meta.min !== undefined ? ` min="${meta.min}"` : "";
+      const step = meta.step !== undefined ? ` step="${meta.step}"` : "";
       if (meta.textarea) {
-        return `<div class="${colClass}"><label class="form-label" for="reactivoField_${fieldKey}">${meta.label}${meta.required ? " *" : ""}</label><textarea id="reactivoField_${fieldKey}" class="form-control reactivo-field" data-field="${fieldKey}" data-target="${target}" rows="3" ${meta.required ? "required" : ""}>${value || ""}</textarea></div>`;
+        return `<div class="${colClass}"><label class="form-label" for="reactivoField_${fieldKey}">${meta.label}${requiredMark}</label><textarea id="reactivoField_${fieldKey}" class="form-control reactivo-field" data-field="${fieldKey}" data-target="${target}" rows="3" ${required}>${escapeReactivoValue(value)}</textarea></div>`;
       }
       if (meta.options) {
-        return `<div class="${colClass}"><label class="form-label" for="reactivoField_${fieldKey}">${meta.label}${meta.required ? " *" : ""}</label><select id="reactivoField_${fieldKey}" class="form-select reactivo-field" data-field="${fieldKey}" data-target="${target}" ${meta.required ? "required" : ""}><option value="">Seleccionar</option>${meta.options.map((option) => `<option value="${option}" ${value === option ? "selected" : ""}>${option}</option>`).join("")}</select></div>`;
+        return `<div class="${colClass}"><label class="form-label" for="reactivoField_${fieldKey}">${meta.label}${requiredMark}</label><select id="reactivoField_${fieldKey}" class="form-select reactivo-field" data-field="${fieldKey}" data-target="${target}" ${required}><option value="">Seleccionar</option>${meta.options.map((option) => `<option value="${escapeReactivoValue(option)}" ${value === option ? "selected" : ""}>${option}</option>`).join("")}</select></div>`;
       }
-      return `<div class="${colClass}"><label class="form-label" for="reactivoField_${fieldKey}">${meta.label}${meta.required ? " *" : ""}</label><input id="reactivoField_${fieldKey}" class="form-control reactivo-field" data-field="${fieldKey}" data-target="${target}" type="${meta.type || "text"}" step="${meta.step || ""}" value="${value || ""}" ${meta.required ? "required" : ""} /></div>`;
+      return `<div class="${colClass}"><label class="form-label" for="reactivoField_${fieldKey}">${meta.label}${requiredMark}</label><input id="reactivoField_${fieldKey}" class="form-control reactivo-field" data-field="${fieldKey}" data-target="${target}" type="${meta.type || "text"}"${step}${min} value="${escapeReactivoValue(value)}" ${required} /></div>`;
     })
     .join("");
 };
 
 const collectReactivoPayload = () => {
-  const payload = { tipo_reactivo: reactivoTipoInput?.value || "" };
+  const payload = { tipo_reactivo: reactivoTipoInput.value || "" };
   document.querySelectorAll(".reactivo-field").forEach((field) => {
     const key = field.dataset.target || field.dataset.field;
     payload[key] = field.value || null;
@@ -2854,7 +3801,7 @@ const resetReactivoForm = (item = null) => {
   setupReactivoTypeOptions();
   reactivoIdInput.value = item?.id || "";
   reactivoFormTitle.textContent = item ? "Editar Reactivo" : "Nuevo Reactivo";
-  reactivoTipoInput.value = item?.tipo_reactivo || item?.categoria || REACTIVO_TYPES[0].value;
+  reactivoTipoInput.value = item?.tipo_reactivo || item?.categoria || "";
   renderReactivoDynamicFields(item || {});
 };
 
@@ -2862,7 +3809,7 @@ const loadReactivosData = async (force = false) => {
   if (!force && loadedPages.has("reactivos")) return;
   const token = getStoredToken();
   if (!token) return;
-  const search = (reactivosSearchInput?.value || "").trim();
+  const search = (reactivosSearchInput.value || "").trim();
   try {
     const data = await getJsonAuth(`${API_BASE_URL}/inventory/reactivos?search=${encodeURIComponent(search)}`, token);
     reactivosCache = data.items || [];
@@ -2891,7 +3838,7 @@ const editReactivo = async (id) => {
 };
 
 const deleteReactivo = async (id) => {
-  if (!window.confirm("Â¿Eliminar este reactivo?")) return;
+  if (!window.confirm("¿Eliminar este reactivo?")) return;
   const token = getStoredToken();
   if (!token) return;
   try {
@@ -2911,6 +3858,13 @@ const getUserInitials = (name = "", email = "") => {
 };
 
 const normalizeText = (value) => String(value || "").toLowerCase();
+const escapeHtml = (value) =>
+  String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 
 const updateUsuariosStats = (items = []) => {
   if (usuariosTotalCount) usuariosTotalCount.textContent = fmt(items.length);
@@ -2944,7 +3898,7 @@ const updateUsuariosRoleFilter = (items = []) => {
 
 const getFilteredUsuarios = () => {
   const search = normalizeText(usuariosSearchInput?.value);
-  const role = usuariosRoleFilter?.value || "";
+  const role = usuariosRoleFilter.value || "";
   return usuariosCache.filter((item) => {
     const matchesSearch = !search || normalizeText(`${item.nombre || ""} ${item.email || ""}`).includes(search);
     const matchesRole = !role || item.rol === role;
@@ -3008,13 +3962,13 @@ const loadUserRoleOptions = async (selectedRoleId = null) => {
 const resetUserForm = async (item = null) => {
   if (!userForm) return;
   userForm.reset();
-  userIdInput.value = item?.id || "";
+  userIdInput.value = item.id || "";
   userFormTitle.textContent = item ? "Editar Usuario" : "Nuevo Usuario";
-  userNameInput.value = item?.nombre || "";
-  userEmailInput.value = item?.email || "";
-  userDepartmentInput.value = item?.departamento || "";
+  userNameInput.value = item.nombre || "";
+  userEmailInput.value = item.email || "";
+  userDepartmentInput.value = item.departamento || "";
   userActiveInput.checked = item ? !!item.activo : true;
-  await loadUserRoleOptions(item?.id_rol || null);
+  await loadUserRoleOptions(item.id_rol || null);
 };
 
 const buildUserPayload = () => ({
@@ -3176,6 +4130,63 @@ const mapMantenimientoRow = (item) => {
   `;
 };
 
+const mapMovimientoRow = (item, compact = false) => {
+  const originLabel = item.tabla_origen === "reactivos" ? "Reactivo" : item.tabla_origen === "consumibles" ? "Consumible" : item.tabla_origen || "-";
+  const insumo = item.item_nombre || item.item_codigo || `#${item.id_item || "-"}`;
+  if (compact) {
+    return `
+      <tr>
+        <td>${fmtDate(item.fecha_hora)}</td>
+        <td><span class="fw-semibold">${insumo}</span><div class="small text-secondary">${item.item_codigo || ""}</div></td>
+        <td>${item.referencia || "-"}</td>
+        <td>${fmt(item.cantidad)}</td>
+        <td>${item.motivo || "-"}</td>
+      </tr>
+    `;
+  }
+  return `
+    <tr>
+      <td>${fmtDate(item.fecha_hora)}</td>
+      <td><span class="fw-semibold">${insumo}</span><div class="small text-secondary">${item.item_codigo || ""}</div></td>
+      <td>${item.referencia || "-"}</td>
+      <td><span class="badge-row ajuste">${item.tipo || "-"}</span></td>
+      <td>${originLabel}</td>
+      <td>${fmt(item.cantidad)}</td>
+      <td>${item.motivo || "-"}</td>
+    </tr>
+  `;
+};
+
+const updateMovimientosStats = (summary = {}) => {
+  if (movimientosTotalCount) movimientosTotalCount.textContent = fmt(summary.total || 0);
+  if (movimientosTodayCount) movimientosTodayCount.textContent = fmt(summary.hoy || 0);
+  if (movimientosWeekCount) movimientosWeekCount.textContent = fmt(summary.semana || 0);
+  if (movimientosMonthCount) movimientosMonthCount.textContent = fmt(summary.mes || 0);
+  if (movimientosReactivosCount) movimientosReactivosCount.textContent = fmt(summary.reactivos || 0);
+  if (movimientosConsumiblesCount) movimientosConsumiblesCount.textContent = fmt(summary.consumibles || 0);
+};
+
+const loadMovimientosData = async (force = false) => {
+  if (!force && loadedPages.has("movimientos")) return;
+  const token = getStoredToken();
+  if (!token) return;
+
+  try {
+    const data = await getJsonAuth(`${API_BASE_URL}/inventory/movimientos`, token);
+    const items = data.items || [];
+    renderRows(movimientosTableBody, items, (row) => mapMovimientoRow(row), 7);
+    renderRows(movimientosReactivosTableBody, items.filter((row) => row.tabla_origen === "reactivos"), (row) => mapMovimientoRow(row, true), 5);
+    renderRows(movimientosConsumiblesTableBody, items.filter((row) => row.tabla_origen === "consumibles"), (row) => mapMovimientoRow(row, true), 5);
+    updateMovimientosStats(data.summary || {});
+    loadedPages.add("movimientos");
+  } catch (_error) {
+    renderRows(movimientosTableBody, [], (row) => mapMovimientoRow(row), 7);
+    renderRows(movimientosReactivosTableBody, [], (row) => mapMovimientoRow(row, true), 5);
+    renderRows(movimientosConsumiblesTableBody, [], (row) => mapMovimientoRow(row, true), 5);
+    updateMovimientosStats({});
+  }
+};
+
 const loadResponsableOptions = async (selectEl, selectedId = null) => {
   if (!selectEl) return;
   const token = getStoredToken();
@@ -3208,25 +4219,25 @@ const loadEquipoOptionsForMaintenance = async (selectedId = null) => {
 };
 
 const buildEquipoPayload = () => ({
-  nombre: (equipoNombreInput?.value || "").trim(),
-  marca: (equipoMarcaInput?.value || "").trim() || null,
-  modelo: (equipoModeloInput?.value || "").trim() || null,
-  numero_serie: (equipoSerieInput?.value || "").trim() || null,
-  ubicacion: (equipoUbicacionInput?.value || "").trim() || null,
-  id_responsable: Number(equipoResponsableInput?.value || 0) || null,
-  fecha_prox_calibracion: equipoCalibracionInput?.value || null,
-  estado: equipoEstadoInput?.value || "operativo",
+  nombre: (equipoNombreInput.value || "").trim(),
+  marca: (equipoMarcaInput.value || "").trim() || null,
+  modelo: (equipoModeloInput.value || "").trim() || null,
+  numero_serie: (equipoSerieInput.value || "").trim() || null,
+  ubicacion: (equipoUbicacionInput.value || "").trim() || null,
+  id_responsable: Number(equipoResponsableInput.value || 0) || null,
+  fecha_prox_calibracion: equipoCalibracionInput.value || null,
+  estado: equipoEstadoInput.value || "operativo",
 });
 
 const buildMantenimientoPayload = () => ({
-  id_equipo: Number(mantenimientoEquipoInput?.value || 0),
-  tipo: mantenimientoTipoInput?.value || "preventivo",
-  fecha_programada: mantenimientoFechaProgramadaInput?.value || null,
-  fecha_realizado: mantenimientoFechaRealizadoInput?.value || null,
-  tecnico_proveedor: (mantenimientoTecnicoInput?.value || "").trim() || null,
-  id_responsable: Number(mantenimientoResponsableInput?.value || 0) || null,
-  estado: mantenimientoEstadoInput?.value || "programado",
-  observaciones: (mantenimientoObservacionesInput?.value || "").trim() || null,
+  id_equipo: Number(mantenimientoEquipoInput.value || 0),
+  tipo: mantenimientoTipoInput.value || "preventivo",
+  fecha_programada: mantenimientoFechaProgramadaInput.value || null,
+  fecha_realizado: mantenimientoFechaRealizadoInput.value || null,
+  tecnico_proveedor: (mantenimientoTecnicoInput.value || "").trim() || null,
+  id_responsable: Number(mantenimientoResponsableInput.value || 0) || null,
+  estado: mantenimientoEstadoInput.value || "programado",
+  observaciones: (mantenimientoObservacionesInput.value || "").trim() || null,
 });
 
 const resetEquipoForm = async (item = null) => {
@@ -3247,17 +4258,17 @@ const resetEquipoForm = async (item = null) => {
 const resetMantenimientoForm = async (item = null) => {
   if (!mantenimientoForm) return;
   mantenimientoForm.reset();
-  mantenimientoIdInput.value = item?.id || "";
+  mantenimientoIdInput.value = item.id || "";
   mantenimientoFormTitle.textContent = item ? "Editar Mantenimiento" : "Programar Mantenimiento";
-  mantenimientoTipoInput.value = item?.tipo || "preventivo";
-  mantenimientoFechaProgramadaInput.value = toDateOnly(item?.fecha_programada);
-  mantenimientoFechaRealizadoInput.value = toDateOnly(item?.fecha_realizado);
-  mantenimientoTecnicoInput.value = item?.tecnico_proveedor || "";
-  mantenimientoEstadoInput.value = item?.estado || "programado";
-  mantenimientoObservacionesInput.value = item?.observaciones || "";
+  mantenimientoTipoInput.value = item.tipo || "preventivo";
+  mantenimientoFechaProgramadaInput.value = toDateOnly(item.fecha_programada);
+  mantenimientoFechaRealizadoInput.value = toDateOnly(item.fecha_realizado);
+  mantenimientoTecnicoInput.value = item.tecnico_proveedor || "";
+  mantenimientoEstadoInput.value = item.estado || "programado";
+  mantenimientoObservacionesInput.value = item.observaciones || "";
   await Promise.all([
-    loadEquipoOptionsForMaintenance(item?.id_equipo || null),
-    loadResponsableOptions(mantenimientoResponsableInput, item?.id_responsable || null),
+    loadEquipoOptionsForMaintenance(item.id_equipo || null),
+    loadResponsableOptions(mantenimientoResponsableInput, item.id_responsable || null),
   ]);
 };
 
@@ -3265,8 +4276,8 @@ const loadEquiposData = async (force = false) => {
   if (!force && loadedPages.has("equipos")) return;
   const token = getStoredToken();
   if (!token) return;
-  const search = (equiposSearchInput?.value || "").trim();
-  const estado = equiposEstadoFilter?.value || "";
+  const search = (equiposSearchInput.value || "").trim();
+  const estado = equiposEstadoFilter.value || "";
   try {
     const data = await getJsonAuth(`${API_BASE_URL}/inventory/equipos?search=${encodeURIComponent(search)}&estado=${encodeURIComponent(estado)}`, token);
     equiposCache = data.items || [];
@@ -3286,9 +4297,9 @@ const loadMantenimientosData = async (force = false) => {
   if (!force && loadedPages.has("mantenimiento")) return;
   const token = getStoredToken();
   if (!token) return;
-  const search = (mantenimientoSearchInput?.value || "").trim();
-  const tipo = mantenimientoTipoFilter?.value || "";
-  const estado = mantenimientoEstadoFilter?.value || "";
+  const search = (mantenimientoSearchInput.value || "").trim();
+  const tipo = mantenimientoTipoFilter.value || "";
+  const estado = mantenimientoEstadoFilter.value || "";
   try {
     const data = await getJsonAuth(`${API_BASE_URL}/inventory/mantenimientos?search=${encodeURIComponent(search)}&tipo=${encodeURIComponent(tipo)}&estado=${encodeURIComponent(estado)}`, token);
     mantenimientosCache = data.items || [];
@@ -3317,7 +4328,7 @@ const editEquipo = async (id) => {
 };
 
 const deleteEquipo = async (id) => {
-  if (!window.confirm("Eliminar este equipo?")) return;
+  if (!window.confirm("Eliminar este equipo")) return;
   const token = getStoredToken();
   if (!token) return;
   try {
@@ -3343,7 +4354,7 @@ const editMantenimiento = async (id) => {
 };
 
 const deleteMantenimiento = async (id) => {
-  if (!window.confirm("Eliminar este mantenimiento?")) return;
+  if (!window.confirm("Eliminar este mantenimiento")) return;
   const token = getStoredToken();
   if (!token) return;
   try {
@@ -3398,10 +4409,9 @@ const loadPageData = async (page) => {
       },
     },
     movimientos: {
-      url: `${API_BASE_URL}/inventory/movimientos`,
-      tbody: movimientosTableBody,
-      emptyCols: 5,
-      mapRow: (r) => `<tr><td>${fmtDate(r.fecha_hora)}</td><td>${r.referencia || "-"}</td><td>${r.tipo || "-"}</td><td>${r.tabla_origen || "-"}</td><td>${fmt(r.cantidad)}</td></tr>`,
+      loader: async () => {
+        await loadMovimientosData(true);
+      },
     },
     mantenimiento: {
       loader: async () => {
@@ -3458,9 +4468,16 @@ const loadPageData = async (page) => {
       if (page === "mantenimiento") {
         renderRows(mantenimientosTableBody, [], mapMantenimientoRow, 7);
       }
+      if (page === "movimientos") {
+        renderRows(movimientosTableBody, [], mapMovimientoRow, 7);
+        renderRows(movimientosReactivosTableBody, [], (row) => mapMovimientoRow(row, true), 5);
+        renderRows(movimientosConsumiblesTableBody, [], (row) => mapMovimientoRow(row, true), 5);
+        updateMovimientosStats({});
+      }
       if (page === "muestras") {
-        renderRows(muestrasTableBody, [], mapSampleRow, 6);
+        renderRows(muestrasTableBody, [], mapSampleRow, 9);
         renderRows(processingTableBody, [], mapProcessingRow, 7);
+        updateSamplesFlowCounts();
       }
     }
     return;
@@ -3608,6 +4625,7 @@ const loadDashboard = async () => {
 };
 
 const init = async () => {
+  await loadAuthConfig();
   const token = getStoredToken();
   if (!token) {
     showLogin();
@@ -3710,7 +4728,8 @@ if (roleForm) {
       return;
     }
 
-    roleSaveBtn.disabled = true;
+    setButtonSubmittingState(roleSaveBtn, true, "Aplicando...");
+    showRolesFeedback("Aplicando cambios...");
     try {
       const editingId = Number(roleIdInput.value || 0);
       if (editingId && !canModuleAction("roles", "update")) {
@@ -3722,14 +4741,47 @@ if (roleForm) {
 
       if (editingId) {
         await sendJsonAuth("PUT", `${API_BASE_URL}/admin/roles/${editingId}`, token, payload);
+        rolesCache = rolesCache.map((role) =>
+          Number(role.id) === editingId
+            ? {
+                ...role,
+                nombre: payload.nombre,
+                descripcion: payload.descripcion || null,
+                activo: !!payload.activo,
+              }
+            : role
+        );
+
+        usuariosCache = usuariosCache.map((user) =>
+          Number(user.id_rol) === editingId
+            ? {
+                ...user,
+                rol: payload.nombre,
+              }
+            : user
+        );
+
+        updateUsuariosRoleFilter(usuariosCache);
+        renderUsuariosTable();
+        updateRoleStats(rolesCache);
+        filterAndRenderRoles();
         showRolesFeedback("Rol actualizado");
       } else {
-        await sendJsonAuth("POST", `${API_BASE_URL}/admin/roles`, token, payload);
+        const created = await sendJsonAuth("POST", `${API_BASE_URL}/admin/roles`, token, payload);
+        rolesCache.unshift({
+          id: created.id,
+          nombre: payload.nombre,
+          descripcion: payload.descripcion || null,
+          activo: !!payload.activo,
+          es_sistemico: 0,
+          total_usuarios: 0,
+        });
+        updateRoleStats(rolesCache);
+        filterAndRenderRoles();
         showRolesFeedback("Rol creado");
       }
 
-      await loadRolesCrudData(true);
-      loadedPages.delete("roles");
+      await loadUserRoleOptions(Number(userRoleInput?.value || 0) || null);
       loadedPages.add("roles");
       if (roleModal) {
         roleModal.hide();
@@ -3737,7 +4789,7 @@ if (roleForm) {
     } catch (error) {
       showRolesFeedback(error.message || "No se pudo guardar el rol", true);
     } finally {
-      roleSaveBtn.disabled = false;
+      setButtonSubmittingState(roleSaveBtn, false, "Aplicando...");
     }
   });
 }
@@ -3783,16 +4835,45 @@ if (importConsumablesFileInput) {
     }
 
     try {
-      const text = await file.text();
-      const delimiter = detectCsvDelimiter(text);
-      const csvRows = parseCsvText(text, delimiter);
+      const ext = file.name.split(".").pop().toLowerCase();
+      let csvRows;
+
+      if (ext === "xlsx" || ext === "xls") {
+        // Parseo Excel con SheetJS
+        const buffer = await file.arrayBuffer();
+        const workbook = window.XLSX.read(buffer, { type: "array", cellDates: true });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonRows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+        // Convertir a array de strings (igual que parseCsvText)
+        csvRows = jsonRows.map((row) => row.map((cell) => {
+          if (cell === null || cell === undefined) return "";
+          if (cell instanceof Date) return cell.toISOString().slice(0, 10);
+          return String(cell);
+        }));
+      } else {
+        // Parseo CSV con detección de encoding
+        const readWithEncoding = (f, enc) =>
+          new Promise((resolve, reject) => {
+            const fr = new FileReader();
+            fr.onload = () => resolve(fr.result);
+            fr.onerror = () => reject(fr.error);
+            fr.readAsText(f, enc);
+          });
+        let text = await readWithEncoding(file, "UTF-8");
+        if (text.includes("\uFFFD")) {
+          text = await readWithEncoding(file, "windows-1252");
+        }
+        const delimiter = detectCsvDelimiter(text);
+        csvRows = parseCsvText(text, delimiter);
+      }
+
       const mapped = mapCsvToPreviewRows(csvRows);
       importDetectedColumns = mapped.detected;
       importPreviewRows = mapped.rows;
       renderImportPreview();
 
       if (importPreviewRows.length === 0) {
-        showConsumablesFeedback("El CSV no contiene filas para importar", true);
+        showConsumablesFeedback("El archivo no contiene filas para importar", true);
       } else {
         showConsumablesFeedback("");
       }
@@ -3800,7 +4881,7 @@ if (importConsumablesFileInput) {
       importPreviewRows = [];
       importDetectedColumns = [];
       renderImportPreview();
-      showConsumablesFeedback("No se pudo leer el archivo CSV", true);
+      showConsumablesFeedback("No se pudo leer el archivo", true);
     }
   });
 }
@@ -3838,6 +4919,49 @@ if (openCreateReactivoModalBtn) {
     showReactivosFeedback("");
     if (reactivoModal) {
       reactivoModal.show();
+    }
+  });
+}
+
+if (openImportReactivosModalBtn) {
+  openImportReactivosModalBtn.addEventListener("click", () => {
+    if (!canModuleAction("reactivos", "create")) {
+      return;
+    }
+    resetReactivosImportUi();
+    showReactivosFeedback("");
+    if (importReactivosModal) {
+      importReactivosModal.show();
+    }
+  });
+}
+
+if (importReactivosFileInput) {
+  importReactivosFileInput.addEventListener("change", async () => {
+    const file = importReactivosFileInput.files?.[0];
+    if (!file) {
+      resetReactivosImportUi();
+      return;
+    }
+
+    try {
+      importReactivosSheets = await workbookToReactivoSheets(file);
+      renderReactivosImportSummary();
+      renderReactivosImportSheets();
+      renderReactivosImportErrors([]);
+
+      const validSheets = importReactivosSheets.filter((sheet) => sheet.valid);
+      if (!validSheets.length) {
+        showReactivosFeedback("El Excel no contiene hojas de reactivos reconocidas", true);
+      } else {
+        showReactivosFeedback(`Excel leído: ${validSheets.length} hoja(s) de reactivos listas para importar`);
+      }
+    } catch (error) {
+      importReactivosSheets = [];
+      renderReactivosImportSummary();
+      renderReactivosImportSheets();
+      renderReactivosImportErrors([{ hoja: file.name, fila: "-", error: error.message || "No se pudo leer el Excel" }]);
+      showReactivosFeedback(error.message || "No se pudo leer el Excel", true);
     }
   });
 }
@@ -3896,7 +5020,14 @@ if (reactivoForm) {
     const payload = collectReactivoPayload();
     const productName = payload.producto || payload.item_name || payload.nombre_crm;
     if (!payload.tipo_reactivo || !productName) {
-      showReactivosFeedback("Selecciona el tipo y captura el nombre principal del reactivo", true);
+      showReactivosFeedback("Selecciona la categor\u00eda y captura el nombre principal del reactivo", true);
+      reactivoForm.reportValidity();
+      return;
+    }
+
+    if (!reactivoForm.checkValidity()) {
+      reactivoForm.reportValidity();
+      showReactivosFeedback("Completa los campos obligatorios de esta categor\u00eda", true);
       return;
     }
 
@@ -3925,6 +5056,46 @@ if (reactivoForm) {
       showReactivosFeedback(error.message || "No se pudo guardar el reactivo", true);
     } finally {
       reactivoSaveBtn.disabled = false;
+    }
+  });
+}
+
+if (importReactivosForm) {
+  importReactivosForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const token = getStoredToken();
+    if (!token) {
+      return;
+    }
+
+    const validSheets = importReactivosSheets.filter((sheet) => sheet.valid);
+    if (!validSheets.length) {
+      showReactivosFeedback("Primero carga un Excel con hojas de reactivos reconocidas", true);
+      return;
+    }
+
+    importReactivosBtn.disabled = true;
+    try {
+      const result = await sendJsonAuth("POST", `${API_BASE_URL}/inventory/reactivos/import`, token, {
+        sheets: importReactivosSheets.map((sheet) => ({
+          name: sheet.name,
+          rows: sheet.rows,
+        })),
+      });
+      const summary = result.summary || {};
+      renderReactivosImportSummary(summary);
+      renderReactivosImportSheets(summary);
+      renderReactivosImportErrors(summary.errores || []);
+      showReactivosFeedback(
+        `Importación completada. Insertados: ${fmt(summary.reactivos_insertados || 0)}. Actualizados: ${fmt(summary.reactivos_actualizados || 0)}. Filas ignoradas: ${fmt(summary.filas_ignoradas || 0)}.`
+      );
+      loadedPages.delete("reactivos");
+      await loadReactivosData(true);
+    } catch (error) {
+      renderReactivosImportErrors([{ hoja: "-", fila: "-", error: error.message || "No se pudo importar el Excel" }]);
+      showReactivosFeedback(error.message || "No se pudo importar el Excel", true);
+    } finally {
+      importReactivosBtn.disabled = false;
     }
   });
 }
@@ -3977,13 +5148,14 @@ if (userForm) {
     const token = getStoredToken();
     if (!token) return;
     const payload = buildUserPayload();
-    if (!payload.nombre) {
-      showUsuariosFeedback("El nombre es obligatorio", true);
-      userNameInput.focus();
-      return;
-    }
     if (!payload.email) {
       showUsuariosFeedback("El email es obligatorio", true);
+      userEmailInput.focus();
+      return;
+    }
+    const allowedDomain = authConfig.microsoft.allowedDomain || "cicese.mx";
+    if (!payload.email.toLowerCase().endsWith(`@${allowedDomain}`)) {
+      showUsuariosFeedback(`Solo puedes dar de alta correos @${allowedDomain}`, true);
       userEmailInput.focus();
       return;
     }
@@ -3993,25 +5165,63 @@ if (userForm) {
       return;
     }
 
-    userSaveBtn.disabled = true;
+    setButtonSubmittingState(userSaveBtn, true, "Aplicando...");
+    showUsuariosFeedback("Aplicando cambios...");
     try {
       const editingId = Number(userIdInput.value || 0);
+      const displayName = payload.nombre || payload.email.split("@")[0];
+      const previousUser = editingId ? usuariosCache.find((item) => Number(item.id) === editingId) : null;
       if (editingId) {
         if (!canModuleAction("usuarios", "update")) throw new Error("No tienes permiso para editar usuarios");
         await sendJsonAuth("PUT", `${API_BASE_URL}/admin/usuarios/${editingId}`, token, payload);
+
+        usuariosCache = usuariosCache.map((item) =>
+          Number(item.id) === editingId
+            ? {
+                ...item,
+                nombre: displayName,
+                email: payload.email,
+                id_rol: payload.id_rol,
+                rol: getRoleNameById(payload.id_rol),
+                departamento: payload.departamento,
+                activo: !!payload.activo,
+              }
+            : item
+        );
+
+        if (previousUser && Number(previousUser.id_rol) !== Number(payload.id_rol)) {
+          adjustRoleUserCount(previousUser.id_rol, -1);
+          adjustRoleUserCount(payload.id_rol, 1);
+        }
+
         showUsuariosFeedback("Usuario actualizado");
       } else {
         if (!canModuleAction("usuarios", "create")) throw new Error("No tienes permiso para crear usuarios");
-        await sendJsonAuth("POST", `${API_BASE_URL}/admin/usuarios`, token, payload);
+        const created = await sendJsonAuth("POST", `${API_BASE_URL}/admin/usuarios`, token, payload);
+        usuariosCache.unshift({
+          id: created.id,
+          nombre: displayName,
+          email: payload.email,
+          id_rol: payload.id_rol,
+          rol: getRoleNameById(payload.id_rol),
+          departamento: payload.departamento,
+          activo: !!payload.activo,
+          creado_en: new Date().toISOString(),
+          ultimo_acceso: null,
+        });
+        adjustRoleUserCount(payload.id_rol, 1);
         showUsuariosFeedback("Usuario creado");
       }
-      loadedPages.delete("usuarios");
-      await loadUsuariosData(true);
+
+      updateUsuariosStats(usuariosCache);
+      updateUsuariosRoleFilter(usuariosCache);
+      renderUsuariosTable();
+      loadedPages.add("usuarios");
       if (userModal) safelyHideModal(userModal, openCreateUserBtn || mobileUserBtn || null);
     } catch (error) {
       showUsuariosFeedback(error.message || "No se pudo guardar el usuario", true);
     } finally {
-      userSaveBtn.disabled = false;
+      setButtonSubmittingState(userSaveBtn, false, "Aplicando...");
     }
   });
 }
@@ -4342,6 +5552,48 @@ samplesSectionButtons.forEach((btn) => {
   });
 });
 
+samplesFlowCards.forEach((card) => {
+  card.addEventListener("click", async () => {
+    const section = card.dataset.samplesFlowCard;
+    if (!section) {
+      return;
+    }
+    await setSamplesSection(section, true);
+  });
+});
+
+if (sampleClearBtn) {
+  sampleClearBtn.addEventListener("click", async () => {
+    await resetSampleForm(true);
+    showSamplesFeedback("");
+  });
+}
+
+document.querySelectorAll(".sample-custody-radio").forEach((input) => {
+  input.addEventListener("change", () => {
+    if (sampleCustodioLugarInput) {
+      sampleCustodioLugarInput.value = input.value;
+    }
+    if (input.value !== "otro" && sampleCustodioOtroInput) {
+      sampleCustodioOtroInput.value = "";
+    }
+  });
+});
+
+if (sampleCustodioOtroInput) {
+  sampleCustodioOtroInput.addEventListener("input", () => {
+    if (!sampleCustodioOtroInput.value.trim()) {
+      return;
+    }
+    if (sampleCustodioLugarInput) {
+      sampleCustodioLugarInput.value = "otro";
+    }
+    document.querySelectorAll(".sample-custody-radio").forEach((input) => {
+      input.checked = input.value === "otro";
+    });
+  });
+}
+
 if (addSampleLoteRowBtn) {
   addSampleLoteRowBtn.addEventListener("click", () => {
     if (sampleLoteTableBody) {
@@ -4355,7 +5607,7 @@ if (addSampleLoteRowBtn) {
 
 if (sampleLoteCountInput) {
   sampleLoteCountInput.addEventListener("input", () => {
-    if (sampleMuestraUnicaInput?.checked) {
+    if (sampleMuestraUnicaInput.checked) {
       return;
     }
     syncSampleLoteRowsCount(sampleLoteCountInput.value);
@@ -4364,9 +5616,27 @@ if (sampleLoteCountInput) {
 
 if (sampleMuestraUnicaInput) {
   sampleMuestraUnicaInput.addEventListener("change", () => {
+    if (!sampleMuestraUnicaInput.checked && sampleLoteModeVisualInput) {
+      sampleLoteModeVisualInput.checked = true;
+    }
     toggleSampleModeUI();
   });
 }
+
+if (sampleLoteModeVisualInput) {
+  sampleLoteModeVisualInput.addEventListener("change", () => {
+    if (sampleMuestraUnicaInput) {
+      sampleMuestraUnicaInput.checked = !sampleLoteModeVisualInput.checked;
+    }
+    toggleSampleModeUI();
+  });
+}
+
+[sampleFechaRecepcionInput, sampleHoraRecepcionInput].forEach((input) => {
+  if (input) {
+    input.addEventListener("input", syncSampleReceptionMirrors);
+  }
+});
 
 document.querySelectorAll(".sample-analisis-metodo, .sample-analisis-muestra").forEach((input) => {
   input.addEventListener("change", toggleSampleAnalysisOtherFields);
@@ -4396,7 +5666,7 @@ if (sampleLoteTableBody) {
 
 if (muestrasTableBody) {
   muestrasTableBody.addEventListener("click", async (event) => {
-    const target = event.target;
+    const target = event.target instanceof HTMLElement ? event.target.closest("[data-sample-action]") : null;
     if (!(target instanceof HTMLElement)) {
       return;
     }
@@ -4482,7 +5752,7 @@ if (extractionSearchInput) {
 
 if (processingTableBody) {
   processingTableBody.addEventListener("click", async (event) => {
-    const target = event.target;
+    const target = event.target instanceof HTMLElement ? event.target.closest("[data-processing-action]") : null;
     if (!(target instanceof HTMLElement)) {
       return;
     }
@@ -4520,7 +5790,7 @@ if (processingTableBody) {
 
 if (extractionTableBody) {
   extractionTableBody.addEventListener("click", async (event) => {
-    const target = event.target;
+    const target = event.target instanceof HTMLElement ? event.target.closest("[data-extraction-action]") : null;
     if (!(target instanceof HTMLElement)) {
       return;
     }
@@ -4551,6 +5821,47 @@ if (processingReceptionSelect) {
   });
 }
 
+initializeSignaturePads();
+
+if (processingSingleSampleVisualInput) {
+  processingSingleSampleVisualInput.addEventListener("change", () => {
+    if (!processingSingleSampleVisualInput.checked) {
+      syncProcessingSampleTypeVisual();
+      return;
+    }
+    if (processingMuestraTipoInput) {
+      processingMuestraTipoInput.value = "unica";
+    }
+    if (processingIdInternoInput) {
+      processingIdInternoInput.disabled = false;
+    }
+    if (processingLoteSelectionWrap) {
+      processingLoteSelectionWrap.classList.add("d-none");
+    }
+    syncProcessingSampleTypeVisual();
+  });
+}
+
+if (processingLotSampleVisualInput) {
+  processingLotSampleVisualInput.addEventListener("change", () => {
+    if (!processingLotSampleVisualInput.checked) {
+      syncProcessingSampleTypeVisual();
+      return;
+    }
+    if (processingMuestraTipoInput) {
+      processingMuestraTipoInput.value = "lote";
+    }
+    if (processingIdInternoInput) {
+      processingIdInternoInput.disabled = true;
+    }
+    if (processingLoteSelectionWrap) {
+      processingLoteSelectionWrap.classList.remove("d-none");
+    }
+    syncProcessingIdInternoFromLoteSelection();
+    syncProcessingSampleTypeVisual();
+  });
+}
+
 if (processingLoteSelectionBody) {
   processingLoteSelectionBody.addEventListener("change", (event) => {
     const target = event.target;
@@ -4567,6 +5878,28 @@ if (processingLoteSelectionBody) {
 if (extractionProcessingSelect) {
   extractionProcessingSelect.addEventListener("change", async () => {
     await handleExtractionProcessingSelection();
+  });
+}
+
+if (extractionSingleSampleVisualInput) {
+  extractionSingleSampleVisualInput.addEventListener("change", () => {
+    if (!extractionSingleSampleVisualInput.checked) {
+      syncExtractionSampleTypeVisual();
+      return;
+    }
+    if (extractionMuestraTipoInput) extractionMuestraTipoInput.value = "unica";
+    syncExtractionSampleTypeVisual();
+  });
+}
+
+if (extractionLotSampleVisualInput) {
+  extractionLotSampleVisualInput.addEventListener("change", () => {
+    if (!extractionLotSampleVisualInput.checked) {
+      syncExtractionSampleTypeVisual();
+      return;
+    }
+    if (extractionMuestraTipoInput) extractionMuestraTipoInput.value = "lote";
+    syncExtractionSampleTypeVisual();
   });
 }
 
@@ -4600,7 +5933,7 @@ if (processingForm) {
     }
 
     if (payload.muestra_tipo === "unica" && !payload.id_interno) {
-      showProcessingFeedback("La recepcion seleccionada es muestra unica, falta ID interno", true);
+      showProcessingFeedback("La recepci\u00f3n seleccionada es muestra \u00fanica, falta ID interno", true);
       processingIdInternoInput.focus();
       return;
     }
@@ -4633,7 +5966,9 @@ if (processingForm) {
       }
 
       loadedPages.delete("muestras-processing");
+      loadedPages.delete("movimientos");
       await loadProcessingData(true);
+      await loadMovimientosData(true);
       if (processingModal) {
         safelyHideModal(processingModal, openCreateProcessingModalBtn || mobileUserBtn || null);
       }
@@ -4665,6 +6000,12 @@ if (extractionForm) {
       return;
     }
 
+    const stockErrors = _validateExtractionStock();
+    if (stockErrors.length > 0) {
+      showExtractionFeedback("No se puede guardar: stock insuficiente para los siguientes reactivos:\n" + stockErrors.join("\n"), true);
+      return;
+    }
+
     extractionSaveBtn.disabled = true;
     try {
       const editingId = Number(extractionIdInput.value || 0);
@@ -4673,17 +6014,19 @@ if (extractionForm) {
           throw new Error("No tienes permiso para editar extraccion");
         }
         await sendJsonAuth("PUT", `${API_BASE_URL}/samples/extraction/${editingId}`, token, payload);
-        showExtractionFeedback("Extraccion actualizada");
+        showExtractionFeedback("Extracci\u00f3n actualizada");
       } else {
         if (!canModuleAction("muestras", "create")) {
           throw new Error("No tienes permiso para crear extraccion");
         }
         await sendJsonAuth("POST", `${API_BASE_URL}/samples/extraction/`, token, payload);
-        showExtractionFeedback("Extraccion creada");
+        showExtractionFeedback("Extracci\u00f3n creada");
       }
 
       loadedPages.delete("muestras-extraction");
+      loadedPages.delete("movimientos");
       await loadExtractionData(true);
+      await loadMovimientosData(true);
       if (extractionModal) {
         safelyHideModal(extractionModal, openCreateExtractionModalBtn || mobileUserBtn || null);
       }
@@ -4711,7 +6054,7 @@ if (sampleForm) {
     }
 
     if (payload.muestra_unica && !payload.id_interno) {
-      showSamplesFeedback("En muestra unica, el ID interno es obligatorio", true);
+      showSamplesFeedback("En muestra \u00fanica, el ID interno es obligatorio", true);
       sampleIdInternoInput.focus();
       return;
     }
@@ -4729,13 +6072,13 @@ if (sampleForm) {
           throw new Error("No tienes permiso para editar muestras");
         }
         await sendJsonAuth("PUT", `${API_BASE_URL}/samples/reception/${editingId}`, token, payload);
-        showSamplesFeedback("Recepcion actualizada");
+        showSamplesFeedback("Recepci\u00f3n actualizada");
       } else {
         if (!canModuleAction("muestras", "create")) {
           throw new Error("No tienes permiso para crear muestras");
         }
         await sendJsonAuth("POST", `${API_BASE_URL}/samples/reception/`, token, payload);
-        showSamplesFeedback("Recepcion creada");
+        showSamplesFeedback("Recepci\u00f3n creada");
       }
 
       loadedPages.delete("muestras");
@@ -4751,10 +6094,109 @@ if (sampleForm) {
   });
 }
 
+// Botones "Agregar insumo" en formularios de extracción y procesamiento
+const extractionAddInsumoBtn = document.getElementById("extractionAddInsumoBtn");
+if (extractionAddInsumoBtn) {
+  extractionAddInsumoBtn.addEventListener("click", () => addInventarioRow("extractionInventarioBody"));
+}
+const processingAddInsumoBtn = document.getElementById("processingAddInsumoBtn");
+if (processingAddInsumoBtn) {
+  processingAddInsumoBtn.addEventListener("click", () => addInventarioRow("processingInventarioBody"));
+}
+// Delegación: quitar fila, seleccionar opción del dropdown, cerrar al hacer clic fuera
+document.addEventListener("click", (e) => {
+  if (e.target.closest(".remove-insumo-row")) {
+    e.target.closest("tr")?.remove();
+    return;
+  }
+  const opt = e.target.closest(".insumo-ref-option");
+  if (opt) {
+    const wrapper = opt.closest(".insumo-search-wrapper");
+    if (wrapper) {
+      const refInput = wrapper.querySelector(".insumo-ref");
+      const searchInput = wrapper.querySelector(".insumo-ref-search");
+      const dropdown = wrapper.querySelector(".insumo-ref-dropdown");
+      if (refInput) refInput.value = opt.dataset.ref || "";
+      if (searchInput) searchInput.value = opt.dataset.label || opt.dataset.ref || "";
+      if (dropdown) dropdown.style.display = "none";
+      if (wrapper.dataset.tipo === "reactivo") _checkReactivoStock(wrapper);
+    }
+    return;
+  }
+  if (!e.target.closest(".insumo-search-wrapper")) {
+    document.querySelectorAll(".insumo-ref-dropdown").forEach((d) => { d.style.display = "none"; });
+  }
+});
+// Mostrar dropdown al enfocar el input de búsqueda
+document.addEventListener("focusin", (e) => {
+  if (!e.target.matches(".insumo-ref-search")) return;
+  const wrapper = e.target.closest(".insumo-search-wrapper");
+  if (!wrapper) return;
+  const tipo = wrapper.dataset.tipo || e.target.closest("tr")?.querySelector(".insumo-tipo")?.value || "consumible";
+  const dropdown = wrapper.querySelector(".insumo-ref-dropdown");
+  loadInsumoOptions().then(() => _renderInsumoDropdown(dropdown, tipo, e.target.value));
+});
+// Filtrar al escribir
+document.addEventListener("input", (e) => {
+  if (!e.target.matches(".insumo-ref-search")) return;
+  const wrapper = e.target.closest(".insumo-search-wrapper");
+  if (!wrapper) return;
+  const tipo = wrapper.dataset.tipo || e.target.closest("tr")?.querySelector(".insumo-tipo")?.value || "consumible";
+  const dropdown = wrapper.querySelector(".insumo-ref-dropdown");
+  const refInput = wrapper.querySelector(".insumo-ref");
+  if (refInput) refInput.value = "";
+  loadInsumoOptions().then(() => _renderInsumoDropdown(dropdown, tipo, e.target.value));
+});
+// Limpiar y reabrir dropdown al cambiar tipo
+document.addEventListener("change", (e) => {
+  if (!e.target.matches(".insumo-tipo")) return;
+  const tr = e.target.closest("tr");
+  if (!tr) return;
+  const wrapper = tr.querySelector(".insumo-search-wrapper");
+  if (!wrapper) return;
+  const refInput = wrapper.querySelector(".insumo-ref");
+  const searchInput = wrapper.querySelector(".insumo-ref-search");
+  const dropdown = wrapper.querySelector(".insumo-ref-dropdown");
+  if (refInput) refInput.value = "";
+  if (searchInput) { searchInput.value = ""; searchInput.focus(); }
+  if (dropdown) dropdown.style.display = "none";
+});
+// Ocultar dropdown al perder el foco (con delay para permitir clicks)
+document.addEventListener("focusout", (e) => {
+  if (!e.target.matches(".insumo-ref-search")) return;
+  const wrapper = e.target.closest(".insumo-search-wrapper");
+  setTimeout(() => {
+    const dropdown = wrapper?.querySelector(".insumo-ref-dropdown");
+    if (dropdown) dropdown.style.display = "none";
+  }, 200);
+});
+
+if (microsoftLoginBtn) {
+  microsoftLoginBtn.addEventListener("click", async () => {
+
+    try {
+      const data = await loginWithMicrosoft();
+      if (!data) return;
+      setSession(data.token, data.user);
+      setPermissions(data.permissions || {});
+      applyNavigationPermissions();
+      showDashboard(data.user || {});
+      loadedPages.clear();
+      const firstPage = getFirstAllowedPage();
+      activePage = firstPage || "dashboard";
+      await setActivePage(activePage);
+    } catch (error) {
+      showLoginFeedback(error.message || "No fue posible iniciar sesion con Microsoft", true);
+    } finally {
+      setButtonSubmittingState(microsoftLoginBtn, false, "Conectando...");
+    }
+  });
+}
+
 emailLoginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
-  const email = emailInput.value.trim().toLowerCase();
+  const email = emailInput?.value.trim().toLowerCase();
   const isValid = emailInput.checkValidity();
   emailInput.classList.toggle("is-invalid", !isValid);
 
@@ -4785,6 +6227,12 @@ emailLoginForm.addEventListener("submit", async (event) => {
 
 logoutBtn.addEventListener("click", () => {
   clearSession();
+  if (msalClient) {
+    const account = msalClient.getActiveAccount && msalClient.getActiveAccount();
+    if (account) {
+      msalClient.logoutPopup({ account }).catch(() => {});
+    }
+  }
   showLogin();
 });
 
@@ -4819,7 +6267,7 @@ if (sidebarOverlay) {
 
 // ── Tarjetas de módulos en dashboard (móvil) ──────────────────
 const MODULE_CARDS_CONFIG = [
-  { page: "reactivos",    label: "Reactivos",                desc: "Gestiona el cat\u00e1logo de reactivos del laboratorio",    icon: "bi-flask",                       color: "" },
+  { page: "reactivos",    label: "Reactivos",                desc: "Gestiona el cat\u00e1logo de reactivos del laboratorio",    icon: "bi-prescription2",              color: "" },
   { page: "consumibles",  label: "Consumibles",              desc: "Control de materiales consumibles",                        icon: "bi-box-seam",                    color: "amber" },
   { page: "equipos",      label: "Equipos",                  desc: "Registro y calibraci\u00f3n de equipos",                   icon: "bi-magic",                       color: "violet" },
   { page: "muestras",     label: "Muestras",                 desc: "Recepci\u00f3n y seguimiento de muestras",                 icon: "bi-eyedropper",                  color: "green" },
