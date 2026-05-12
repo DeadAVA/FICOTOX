@@ -4,12 +4,16 @@ from sqlalchemy import text
 
 from app.extensions import db
 
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
 
 def is_sqlite() -> bool:
     return db.engine.dialect.name == "sqlite"
 
 
 def _quote(identifier: str) -> str:
+    if not _IDENTIFIER_RE.fullmatch(identifier or ""):
+        raise ValueError(f"Identificador SQL invalido: {identifier!r}")
     return f'"{identifier}"' if is_sqlite() else f"`{identifier}`"
 
 
@@ -26,6 +30,7 @@ def _sqlite_column_definition(column_definition: str) -> str:
 
 
 def get_table_columns(table_name: str) -> set[str]:
+    table_name = _quote(table_name).strip('"`')
     if is_sqlite():
         rows = db.session.execute(text(f'PRAGMA table_info("{table_name}")')).mappings().all()
         return {row["name"] for row in rows}
@@ -46,6 +51,14 @@ def get_table_columns(table_name: str) -> set[str]:
 
 
 def add_column_if_missing(table_name: str, column_name: str, column_definition: str) -> None:
+    """Agrega una columna si no existe, con validacion de identificadores.
+
+    Pseudocodigo:
+    1. Validar nombre de tabla/columna contra patron seguro.
+    2. Revisar columnas actuales.
+    3. Adaptar definicion si el motor es SQLite.
+    4. Ejecutar ALTER TABLE con identificadores escapados.
+    """
     if column_name in get_table_columns(table_name):
         return
 
@@ -58,6 +71,10 @@ def add_column_if_missing(table_name: str, column_name: str, column_definition: 
 
 
 def drop_column_if_exists(table_name: str, column_name: str) -> None:
+    """Elimina una columna solo si existe.
+
+    Nota: se usa para migraciones internas controladas; no debe recibir input de usuario.
+    """
     if column_name not in get_table_columns(table_name):
         return
 

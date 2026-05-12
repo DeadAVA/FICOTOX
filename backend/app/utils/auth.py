@@ -6,6 +6,7 @@ from flask import current_app, g, jsonify, request
 
 
 def create_access_token(payload: dict) -> str:
+    """Crea un JWT firmado con expiracion configurable."""
     expire_at = datetime.now(timezone.utc) + timedelta(
         hours=current_app.config["JWT_EXPIRES_HOURS"]
     )
@@ -23,6 +24,14 @@ def decode_access_token(token: str) -> dict:
 
 
 def token_required(view_func):
+    """Protege endpoints que requieren usuario autenticado.
+
+    Pseudocodigo:
+    1. Leer header Authorization.
+    2. Validar formato Bearer.
+    3. Decodificar JWT y manejar expiracion/token invalido.
+    4. Exponer usuario actual en flask.g para RBAC y auditoria.
+    """
     @wraps(view_func)
     def wrapper(*args, **kwargs):
         auth_header = request.headers.get("Authorization", "")

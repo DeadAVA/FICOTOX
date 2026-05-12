@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from flask import Flask, jsonify, send_from_directory
@@ -7,6 +8,8 @@ from sqlalchemy.exc import OperationalError
 from app.config import Config
 from app.extensions import cors, db
 from app.utils.rbac import ensure_rbac_schema
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> Flask:
@@ -47,6 +50,10 @@ def create_app() -> Flask:
 
     try:
         with app.app_context():
+            # Pseudocodigo:
+            # 1. Asegurar esquemas base y permisos.
+            # 2. Asegurar tablas operativas por modulo.
+            # 3. Confirmar cambios en una sola transaccion de arranque.
             ensure_rbac_schema()
             ensure_usuarios_schema()
             ensure_samples_recepcion_schema()
@@ -58,9 +65,11 @@ def create_app() -> Flask:
             ensure_mantenimientos_schema()
             ensure_movimientos_schema()
             db.session.commit()
-    except Exception:
-        # Si la BD no esta disponible en arranque, el health/db reportara el problema.
-        pass
+    except Exception as exc:
+        db.session.rollback()
+        # No detenemos el arranque para que /api/health/db pueda reportar el problema,
+        # pero si dejamos la causa en logs para diagnostico real.
+        logger.exception("No se pudieron asegurar los esquemas iniciales: %s", exc)
 
     @app.get("/api/health")
     def health_check():

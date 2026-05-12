@@ -3694,6 +3694,14 @@ const resetReactivosImportUi = () => {
 };
 
 const workbookToReactivoSheets = async (file) => {
+  /*
+   * Importacion Excel de reactivos.
+   * Pseudocodigo:
+   * 1. Validar extension .xlsx/.xls.
+   * 2. Leer workbook con SheetJS.
+   * 3. Convertir cada hoja a JSON conservando tipos basicos.
+   * 4. Clasificar hojas por nombre; el backend revalida antes de guardar.
+   */
   const ext = file.name.split(".").pop().toLowerCase();
   if (!["xlsx", "xls"].includes(ext)) {
     throw new Error("Formato inv\u00e1lido. Solo se aceptan archivos .xlsx o .xls");
@@ -3750,6 +3758,14 @@ const setupReactivoTypeOptions = () => {
 };
 
 const renderReactivoDynamicFields = (values = {}) => {
+  /*
+   * Formulario dinamico de reactivos.
+   * Pseudocodigo:
+   * 1. Leer la categoria seleccionada.
+   * 2. Buscar la configuracion de campos de esa categoria.
+   * 3. Renderizar solo inputs/selects/textareas necesarios.
+   * 4. Mantener data-target para que el payload sea compatible con backend.
+   */
   if (!reactivoDynamicFields || !reactivoTipoInput) return;
   const config = getReactivoTypeConfig(reactivoTipoInput.value);
   if (!config) {
@@ -4167,6 +4183,14 @@ const updateMovimientosStats = (summary = {}) => {
 };
 
 const loadMovimientosData = async (force = false) => {
+  /*
+   * Movimientos de inventario.
+   * Pseudocodigo:
+   * 1. Obtener historial y resumen desde backend.
+   * 2. Pintar tabla completa.
+   * 3. Pintar subconjuntos de reactivos y consumibles.
+   * 4. Actualizar contadores de hoy, semana, mes y totales.
+   */
   if (!force && loadedPages.has("movimientos")) return;
   const token = getStoredToken();
   if (!token) return;

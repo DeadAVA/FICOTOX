@@ -6,6 +6,14 @@ from app.utils.schema import add_column_if_missing, drop_column_if_exists, is_sq
 
 
 def ensure_usuarios_schema() -> None:
+    """Asegura usuarios locales para control de acceso.
+
+    Pseudocodigo:
+    1. Asegurar primero RBAC porque usuarios depende de roles.
+    2. Crear tabla si no existe.
+    3. Quitar credenciales locales obsoletas.
+    4. Agregar columnas nuevas sin borrar datos existentes.
+    """
     ensure_rbac_schema()
     db.session.execute(
         text(
@@ -67,6 +75,7 @@ def ensure_usuarios_schema() -> None:
 
 
 def normalize_user_payload(payload: dict) -> dict:
+    """Normaliza datos de usuarios administrados localmente."""
     email = (payload.get("email") or "").strip().lower()[:100]
     name = (payload.get("nombre") or "").strip()[:100]
     if not name and email:

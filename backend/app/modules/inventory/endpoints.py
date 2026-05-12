@@ -253,6 +253,14 @@ def _clean_import_value(value):
 
 
 def _map_reactivo_import_row(sheet_type: str, row: dict):
+    """Mapea una fila heterogenea de Excel hacia el modelo canonico.
+
+    Pseudocodigo:
+    1. Normalizar cada encabezado: acentos fuera, minusculas, separadores a "_".
+    2. Ignorar columnas vacias y columnas de movimientos mensuales.
+    3. Resolver alias conocidos hacia campos canonicos de reactivos.
+    4. Completar campos derivados usados por pantallas viejas y nuevas.
+    """
     mapped = {"tipo_reactivo": sheet_type, "categoria": sheet_type}
     ignored_columns = []
 
@@ -339,6 +347,13 @@ def _has_reactivo_identity(data: dict) -> bool:
 
 
 def _find_existing_reactivo_id(data: dict):
+    """Busca un reactivo existente para hacer upsert durante importacion.
+
+    Prioridad de coincidencia:
+    1. Codigo interno / ID del Excel.
+    2. Catalogo, lote o cadena catalogo-parte-CAS-lote.
+    3. Nombre + lote cuando no existe un identificador fuerte.
+    """
     category = data.get("tipo_reactivo") or data.get("categoria")
     checks = [
         ("codigo_interno", data.get("codigo_interno") or data.get("id_interno") or data.get("id_reactivo")),
@@ -708,6 +723,15 @@ def update_reactivo(reactivo_id: int):
 @token_required
 @permission_required("reactivos", "create")
 def import_reactivos():
+    """Importa hojas de reactivos preleidas desde el frontend.
+
+    Pseudocodigo de alto nivel:
+    1. Recibir todas las hojas del workbook.
+    2. Clasificar cada hoja por nombre; ignorar consumibles y hojas desconocidas.
+    3. Mapear fila por fila; los errores de una fila no detienen la hoja.
+    4. Normalizar al esquema canonico y hacer insert/update.
+    5. Regresar resumen operativo para la interfaz.
+    """
     ensure_reactivos_schema()
     payload = request.get_json(silent=True) or {}
     sheets = payload.get("sheets")

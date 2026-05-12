@@ -5,6 +5,8 @@ from sqlalchemy import text
 from app.extensions import db
 from app.utils.schema import is_sqlite
 
+_SUPPORTED_INVENTORY_TABLES = {"reactivos", "consumibles"}
+
 
 def ensure_movimientos_schema() -> None:
     db.session.execute(
@@ -53,6 +55,8 @@ def _to_float(value) -> float | None:
 
 
 def _resolve_item_id(table_name: str, value) -> int | None:
+    if table_name not in _SUPPORTED_INVENTORY_TABLES:
+        raise ValueError(f"Tabla de inventario no soportada: {table_name}")
     if value in (None, ""):
         return None
     value = str(value).strip()
@@ -101,6 +105,14 @@ def _movement_exists(reference: str) -> bool:
 
 
 def consume_reactivo(reference_value, cantidad, *, user_id: int | None, motivo: str, referencia: str) -> bool:
+    """Descuenta un reactivo y registra el movimiento de salida.
+
+    Pseudocodigo:
+    1. Resolver el reactivo por id, codigo, catalogo, lote, CAS o nombre.
+    2. Validar cantidad positiva y referencia no usada.
+    3. Restar cantidad del inventario disponible.
+    4. Insertar movimiento para trazabilidad.
+    """
     from app.modules.inventory.endpoints import ensure_reactivos_schema
 
     ensure_reactivos_schema()
@@ -129,6 +141,7 @@ def consume_reactivo(reference_value, cantidad, *, user_id: int | None, motivo: 
 
 
 def consume_consumible(reference_value, cantidad, *, user_id: int | None, motivo: str, referencia: str) -> bool:
+    """Descuenta un consumible y registra el movimiento de salida."""
     from app.modules.inventory.consumables import ensure_consumibles_schema
 
     ensure_consumibles_schema()
