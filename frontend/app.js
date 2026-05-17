@@ -2155,7 +2155,7 @@ const loadInsumoOptions = () => {
     getJsonAuth(`${API_BASE_URL}/inventory/equipos?search=`, token).catch(() => ({})),
   ]).then(([rData, cData, eData]) => {
     _insumoReactivosCache = (rData.items || []).map((r) => ({
-      ref: r.producto || r.nombre || String(r.id),
+      ref: String(r.id),
       label: [r.producto, r.catalogo].filter(Boolean).join(" · ") || String(r.id),
       cantidad_actual: r.cantidad_actual ?? null,
       unidad: r.unidad || "",
@@ -2185,6 +2185,31 @@ const _findInsumoOption = (tipo, ref) => {
   const value = String(ref || "").trim();
   if (!value) return null;
   return _getInsumoOptions(tipo).find((item) => String(item.ref) === value || item.label === value) || null;
+};
+
+const _normalizeInsumoText = (value) => String(value || "")
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, " ")
+  .trim();
+
+const _findReactivoByAutoQuery = (query) => {
+  const tokens = _normalizeInsumoText(query).split(" ").filter(Boolean);
+  if (!tokens.length) return null;
+  const indexed = (_insumoReactivosCache || [])
+    .map((item) => ({ item, text: _normalizeInsumoText(item.label) }));
+  const exact = indexed.filter(({ text }) => tokens.every((token) => text.includes(token)));
+  if (exact.length) return exact[0].item;
+  const alphaTokens = tokens.filter((token) => !/^\d+$/.test(token));
+  const candidates = indexed
+    .filter(({ text }) => alphaTokens.every((token) => text.includes(token)))
+    .map(({ item, text }) => ({
+      item,
+      score: tokens.reduce((total, token) => total + (text.includes(token) ? 1 : 0), 0),
+    }))
+    .sort((a, b) => b.score - a.score);
+  return candidates[0]?.item || null;
 };
 
 const _renderInsumoDropdown = (dropdown, tipo, query) => {
@@ -2274,7 +2299,30 @@ const _fillSearchWrapper = (idOrEl, value) => {
   const wrapper = el.closest(".insumo-search-wrapper");
   if (!wrapper) return;
   const search = wrapper.querySelector(".insumo-ref-search");
-  if (search) search.value = value || "";
+  if (search) {
+    const tipo = wrapper.dataset.tipo || "consumible";
+    const option = _findInsumoOption(tipo, value);
+    search.value = option?.label || value || "";
+  }
+};
+
+const _autoResolveFixedExtractionReactivos = () => {
+  const form = document.getElementById("extractionForm");
+  if (!form) return;
+  form.querySelectorAll(".insumo-ref[data-cantidad-fija][data-auto-query]").forEach((hiddenInput) => {
+    const wrapper = hiddenInput.closest(".insumo-search-wrapper");
+    if (!wrapper) return;
+    const currentRef = (hiddenInput.value || "").trim();
+    if (!currentRef || !_findInsumoOption("reactivo", currentRef)) {
+      const match = _findReactivoByAutoQuery(hiddenInput.dataset.autoQuery);
+      if (match) {
+        hiddenInput.value = match.ref;
+        const search = wrapper.querySelector(".insumo-ref-search");
+        if (search) search.value = match.label;
+      }
+    }
+    _checkReactivoStock(wrapper);
+  });
 };
 
 // Construye uso_inventario automáticamente desde los campos de protocolo con cantidad fija
@@ -2329,7 +2377,10 @@ const _checkReactivoStock = (wrapper) => {
     wrapper.appendChild(badge);
   }
   const ref = (hiddenInput.value || "").trim();
-  if (!ref) { badge.innerHTML = ""; return; }
+  if (!ref) {
+    badge.innerHTML = `<span class="text-warning"><i class="bi bi-exclamation-triangle-fill"></i> No se encontró en inventario para descuento automático</span>`;
+    return;
+  }
   const item = (_insumoReactivosCache || []).find((r) => r.ref === ref);
   if (!item) {
     badge.innerHTML = `<span class="text-warning"><i class="bi bi-exclamation-triangle-fill"></i> No encontrado en inventario</span>`;
@@ -2342,7 +2393,7 @@ const _checkReactivoStock = (wrapper) => {
     return;
   }
   if (stock >= cantidadFija) {
-    badge.innerHTML = `<span class="text-success"><i class="bi bi-check-circle-fill"></i> Disponible: ${stock} ${u} &nbsp;(requerido: ${cantidadFija} ${u})</span>`;
+    badge.innerHTML = `<span class="text-success"><i class="bi bi-check-circle-fill"></i> Descuento automático activo: se descontarán ${cantidadFija} ${u} al guardar. Disponible: ${stock} ${u}</span>`;
   } else {
     badge.innerHTML = `<span class="text-danger fw-semibold"><i class="bi bi-x-circle-fill"></i> Stock insuficiente: ${stock} ${u} disponibles, se requieren ${cantidadFija} ${u}</span>`;
   }
@@ -2356,7 +2407,10 @@ const _validateExtractionStock = () => {
     const cantidadFija = parseFloat(hiddenInput?.dataset?.cantidadFija);
     if (!cantidadFija) return;
     const ref = (hiddenInput?.value || "").trim();
-    if (!ref) return;
+    if (!ref) {
+      errors.push(`• ${hiddenInput?.dataset?.autoQuery || "reactivo fijo"}: no se encontró en inventario para descuento automático`);
+      return;
+    }
     const item = (_insumoReactivosCache || []).find((r) => r.ref === ref);
     if (!item) return;
     const stock = item.cantidad_actual ?? null;
@@ -2480,11 +2534,14 @@ const resetExtractionForm = async (withNextFolio = true, prefillProcessing = nul
   extractionProcessingDetailCache = new Map();
   setExtractionDefaultChecklist();
   await loadProcessingOptionsForExtraction(prefillProcessing?.id || null);
+  await loadInsumoOptions();
+  _autoResolveFixedExtractionReactivos();
 
   if (prefillProcessing && extractionProcessingSelect) {
     extractionProcessingSelect.value = String(prefillProcessing.id || "");
     const processing = await getProcessingDetailForExtraction(prefillProcessing.id);
     applyProcessingToExtractionForm(processing || prefillProcessing);
+    _autoResolveFixedExtractionReactivos();
   }
 
   if (!withNextFolio) {
@@ -2629,10 +2686,8 @@ const fillExtractionForm = async (item) => {
   const puntasCantInput = document.getElementById("extrTotalPuntasCantidad");
   if (puntasCantInput) puntasCantInput.value = pasos.limp_total_puntas_cantidad || "";
   if (extractionObservacionesProcesoInput) extractionObservacionesProcesoInput.value = pasos.observaciones_extraccion || "";
-  // Mostrar badges de stock para los reactivos con cantidad fija
-  loadInsumoOptions().then(() => {
-    document.getElementById("extractionForm")?.querySelectorAll(".insumo-search-wrapper[data-tipo='reactivo']").forEach(_checkReactivoStock);
-  });
+  await loadInsumoOptions();
+  _autoResolveFixedExtractionReactivos();
   const filtrado = pasos.filtrado || {};
   const resguardoExtracto = pasos.resguardo_extracto || {};
   const resguardoMolida = pasos.resguardo_molienda_restante || {};
@@ -6048,6 +6103,8 @@ if (extractionForm) {
       return;
     }
 
+    await loadInsumoOptions();
+    _autoResolveFixedExtractionReactivos();
     const payload = buildExtractionPayload();
     if (!payload.folio_num) {
       showExtractionFeedback("El folio de extraccion es obligatorio", true);
@@ -6074,13 +6131,13 @@ if (extractionForm) {
           throw new Error("No tienes permiso para editar extraccion");
         }
         await sendJsonAuth("PUT", `${API_BASE_URL}/samples/extraction/${editingId}`, token, payload);
-        showExtractionFeedback("Extracci\u00f3n actualizada");
+        showExtractionFeedback("Extracci\u00f3n actualizada. Inventario descontado autom\u00e1ticamente.");
       } else {
         if (!canModuleAction("muestras", "create")) {
           throw new Error("No tienes permiso para crear extraccion");
         }
         await sendJsonAuth("POST", `${API_BASE_URL}/samples/extraction/`, token, payload);
-        showExtractionFeedback("Extracci\u00f3n creada");
+        showExtractionFeedback("Extracci\u00f3n creada. Inventario descontado autom\u00e1ticamente.");
       }
 
       loadedPages.delete("muestras-extraction");
