@@ -5,7 +5,7 @@ from sqlalchemy import text
 
 from app.extensions import db
 from app.utils.auth import token_required
-from app.utils.inventory_usage import consume_consumible, consume_reactivo
+from app.utils.inventory_usage import consume_consumible, consume_reactivo, restore_inventory_usage
 from app.utils.rbac import permission_required
 from app.utils.schema import is_sqlite
 
@@ -179,6 +179,11 @@ def _apply_inventory_usage(extraction_id: int, data: dict, user_id: int | None) 
             )
 
 
+def _replace_inventory_usage(extraction_id: int, data: dict, user_id: int | None) -> None:
+    restore_inventory_usage(f"EXT-{extraction_id}-INS-")
+    _apply_inventory_usage(extraction_id, data, user_id)
+
+
 def _serialize_row(row):
     item = dict(row)
     item["pasos"] = _safe_json_load(item.pop("pasos_json", None), {})
@@ -236,7 +241,8 @@ def get_extraction_sample(extraction_id: int):
                    observaciones_generales, nombre_quien_extrajo,
                    nombre_quien_limpieza, nombre_quien_superviso,
                    firma_quien_extrajo, firma_quien_limpieza,
-                   firma_quien_superviso, estado, creado_en, actualizado_en
+                   firma_quien_superviso, uso_inventario_json,
+                   estado, creado_en, actualizado_en
             FROM muestras_extraccion
             WHERE id = :id
             """
@@ -344,9 +350,11 @@ def update_extraction_sample(extraction_id: int):
             ),
             {**data, "id": extraction_id, "actualizado_por": user_id},
         )
-        db.session.commit()
         if result.rowcount == 0:
+            db.session.rollback()
             return jsonify({"message": "Registro no encontrado"}), 404
+        _replace_inventory_usage(extraction_id, data, user_id)
+        db.session.commit()
         return jsonify({"message": "Extraccion actualizada"}), 200
     except Exception as exc:
         db.session.rollback()

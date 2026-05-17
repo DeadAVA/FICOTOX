@@ -104,6 +104,69 @@ def _movement_exists(reference: str) -> bool:
     return bool(existing)
 
 
+def restore_inventory_usage(reference_prefix: str) -> int:
+    """Revierte salidas de inventario registradas bajo un prefijo de referencia."""
+    if not reference_prefix:
+        return 0
+    ensure_movimientos_schema()
+    rows = db.session.execute(
+        text(
+            """
+            SELECT id, tabla_origen, id_item, cantidad
+            FROM movimientos
+            WHERE tipo = 'salida'
+              AND referencia LIKE :reference_like
+              AND tabla_origen IN ('reactivos', 'consumibles')
+            """
+        ),
+        {"reference_like": f"{reference_prefix}%"},
+    ).mappings().all()
+
+    for row in rows:
+        table_name = row["tabla_origen"]
+        item_id = row["id_item"]
+        amount = float(row["cantidad"] or 0)
+        if table_name == "reactivos":
+            db.session.execute(
+                text(
+                    """
+                    UPDATE reactivos
+                    SET cantidad_actual = COALESCE(cantidad_actual, 0) + :cantidad,
+                        amount_in_stock = CASE
+                            WHEN amount_in_stock IS NULL THEN amount_in_stock
+                            ELSE amount_in_stock + :cantidad
+                        END
+                    WHERE id = :id
+                    """
+                ),
+                {"id": item_id, "cantidad": amount},
+            )
+        elif table_name == "consumibles":
+            db.session.execute(
+                text(
+                    """
+                    UPDATE consumibles
+                    SET piezas = COALESCE(piezas, 0) + :cantidad
+                    WHERE id = :id
+                    """
+                ),
+                {"id": item_id, "cantidad": amount},
+            )
+
+    db.session.execute(
+        text(
+            """
+            DELETE FROM movimientos
+            WHERE tipo = 'salida'
+              AND referencia LIKE :reference_like
+              AND tabla_origen IN ('reactivos', 'consumibles')
+            """
+        ),
+        {"reference_like": f"{reference_prefix}%"},
+    )
+    return len(rows)
+
+
 def consume_reactivo(reference_value, cantidad, *, user_id: int | None, motivo: str, referencia: str) -> bool:
     """Descuenta un reactivo y registra el movimiento de salida.
 

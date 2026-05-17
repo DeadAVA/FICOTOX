@@ -2060,6 +2060,17 @@
               </div>
 
               <div class="sample-section-card sample-step-card extraction-card">
+                <div class="sample-section-heading"><span class="sample-step-number"><i class="bi bi-box-arrow-in-down"></i></span><div><h6 class="sample-section-title">INSUMOS UTILIZADOS (DESCUENTO DE INVENTARIO)</h6><p>Reactivos y consumibles adicionales usados en esta extracción. Se descontarán del inventario al guardar.</p></div></div>
+                <div class="table-responsive mb-2">
+                  <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th style="width:130px">Tipo</th><th>Nombre / ID del insumo</th><th style="width:100px">Cantidad</th><th style="width:48px"></th></tr></thead>
+                    <tbody id="extractionInventarioBody"></tbody>
+                  </table>
+                </div>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="extractionAddInsumoBtn"><i class="bi bi-plus-circle"></i> Agregar insumo</button>
+              </div>
+
+              <div class="sample-section-card sample-step-card extraction-card">
                 <div class="sample-section-heading"><span class="sample-step-number"><i class="bi bi-person"></i></span><div><h6 class="sample-section-title">PERSONAL RESPONSABLE</h6><p>Registro de personal que participó en el proceso de extracción</p></div></div>
                 <div class="table-responsive extraction-section-table">
                   <table class="table table-sm align-middle movement-table mb-0 extraction-person-table">

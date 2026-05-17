@@ -5,7 +5,7 @@ from sqlalchemy import text
 
 from app.extensions import db
 from app.utils.auth import token_required
-from app.utils.inventory_usage import consume_consumible
+from app.utils.inventory_usage import consume_consumible, consume_reactivo, restore_inventory_usage
 from app.utils.rbac import permission_required
 from app.utils.schema import add_column_if_missing, is_sqlite
 
@@ -198,6 +198,11 @@ def _apply_inventory_usage(processing_id: int, data: dict, user_id: int | None) 
 			)
 
 
+def _replace_inventory_usage(processing_id: int, data: dict, user_id: int | None) -> None:
+	restore_inventory_usage(f"PROC-{processing_id}-INS-")
+	_apply_inventory_usage(processing_id, data, user_id)
+
+
 def _serialize_row(row):
 	item = dict(row)
 	item["tipo_organismo"] = _safe_json_load(item.pop("tipo_organismo_json", None), [])
@@ -261,7 +266,8 @@ def get_processing_sample(processing_id: int):
 				   otro_procesamiento, resguardo_json,
 				   observaciones_generales, nombre_quien_proceso,
 				   nombre_quien_superviso, firma_quien_proceso,
-				   firma_quien_superviso, estado, creado_en, actualizado_en
+				   firma_quien_superviso, uso_inventario_json,
+				   estado, creado_en, actualizado_en
 			FROM muestras_procesamiento
 			WHERE id = :id
 			"""
@@ -375,9 +381,11 @@ def update_processing_sample(processing_id: int):
 			),
 			{**data, "id": processing_id, "actualizado_por": user_id},
 		)
-		db.session.commit()
 		if result.rowcount == 0:
+			db.session.rollback()
 			return jsonify({"message": "Registro no encontrado"}), 404
+		_replace_inventory_usage(processing_id, data, user_id)
+		db.session.commit()
 		return jsonify({"message": "Procesamiento actualizado"}), 200
 	except Exception as exc:
 		db.session.rollback()

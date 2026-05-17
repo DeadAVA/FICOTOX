@@ -2161,7 +2161,9 @@ const loadInsumoOptions = () => {
       unidad: r.unidad || "",
     }));
     _insumoConsumiblesCache = (Array.isArray(cData) ? cData : cData.items || []).map((c) => ({
-      ref: c.producto || c.nombre || String(c.id),
+      ref: String(c.id),
+      piezas: c.piezas ?? null,
+      unidad: "piezas",
       label: [c.producto, c.catalogo_parte_cas].filter(Boolean).join(" · ") || String(c.id),
     }));
     _insumoEquiposCache = (eData.items || []).map((e) => ({
@@ -2177,6 +2179,12 @@ const _getInsumoOptions = (tipo) => {
   if (tipo === "reactivo") return _insumoReactivosCache || [];
   if (tipo === "equipo") return _insumoEquiposCache || [];
   return _insumoConsumiblesCache || [];
+};
+
+const _findInsumoOption = (tipo, ref) => {
+  const value = String(ref || "").trim();
+  if (!value) return null;
+  return _getInsumoOptions(tipo).find((item) => String(item.ref) === value || item.label === value) || null;
 };
 
 const _renderInsumoDropdown = (dropdown, tipo, query) => {
@@ -2248,7 +2256,10 @@ const renderInventarioRows = (tbodyId, rows) => {
     const refInput = tr.querySelector(".insumo-ref");
     if (refInput) refInput.value = row.ref || row.nombre || "";
     const searchInput = tr.querySelector(".insumo-ref-search");
-    if (searchInput) searchInput.value = row.ref || row.nombre || "";
+    if (searchInput) {
+      const option = _findInsumoOption(row.tipo || "consumible", row.ref || row.nombre || "");
+      searchInput.value = option?.label || row.nombre || row.ref || "";
+    }
     const cantInput = tr.querySelector(".insumo-cantidad");
     if (cantInput) cantInput.value = row.cantidad ?? 1;
   });
@@ -2267,7 +2278,7 @@ const _fillSearchWrapper = (idOrEl, value) => {
 };
 
 // Construye uso_inventario automáticamente desde los campos de protocolo con cantidad fija
-const _buildExtractionInventario = () => {
+const _buildExtractionProtocolInventario = () => {
   const result = [];
   const form = document.getElementById("extractionForm");
   if (!form) return result;
@@ -2282,6 +2293,27 @@ const _buildExtractionInventario = () => {
   const puntasCantidad = parseFloat(document.getElementById("extrTotalPuntasCantidad")?.value) || 0;
   if (puntasRef && puntasCantidad > 0) result.push({ tipo: "consumible", ref: puntasRef, cantidad: puntasCantidad });
   return result;
+};
+
+const _buildExtractionInventario = () => {
+  const result = _buildExtractionProtocolInventario();
+  result.push(...collectInventarioRows("extractionInventarioBody"));
+  return result;
+};
+
+const _filterExtractionManualInventario = (rows) => {
+  const protocolCounts = new Map();
+  _buildExtractionProtocolInventario().forEach((row) => {
+    const key = `${row.tipo}|${row.ref}|${row.cantidad}`;
+    protocolCounts.set(key, (protocolCounts.get(key) || 0) + 1);
+  });
+  return (rows || []).filter((row) => {
+    const key = `${row.tipo || "consumible"}|${row.ref || row.nombre || ""}|${row.cantidad ?? 1}`;
+    const count = protocolCounts.get(key) || 0;
+    if (count <= 0) return true;
+    protocolCounts.set(key, count - 1);
+    return false;
+  });
 };
 
 // Muestra badge de stock bajo el wrapper de un reactivo con cantidad fija
@@ -2443,6 +2475,7 @@ const resetExtractionForm = async (withNextFolio = true, prefillProcessing = nul
     extractionQuienExtrajoInput.value = formatActiveUserSignature();
   }
   clearSignaturePadsIn(extractionForm);
+  renderInventarioRows("extractionInventarioBody", []);
   clearExtractionProcessingDerivedData();
   extractionProcessingDetailCache = new Map();
   setExtractionDefaultChecklist();
@@ -2636,6 +2669,8 @@ const fillExtractionForm = async (item) => {
   setSignatureInputValue(extractionFirmaExtrajoInput, item.firma_quien_extrajo || "");
   setSignatureInputValue(extractionFirmaLimpiezaInput, item.firma_quien_limpieza || "");
   setSignatureInputValue(extractionFirmaSupervisoInput, item.firma_quien_superviso || "");
+  await loadInsumoOptions();
+  renderInventarioRows("extractionInventarioBody", _filterExtractionManualInventario(item.uso_inventario || []));
 };
 
 const editExtraction = async (id) => {
@@ -3380,6 +3415,7 @@ const fillProcessingForm = async (item) => {
   processingQuienSupervisoInput.value = item.nombre_quien_superviso || "";
   setSignatureInputValue(processingFirmaProcesoInput, item.firma_quien_proceso || "");
   setSignatureInputValue(processingFirmaSupervisoInput, item.firma_quien_superviso || "");
+  await loadInsumoOptions();
   renderInventarioRows("processingInventarioBody", item.uso_inventario || []);
   setProcessingOrganismSections();
 };
