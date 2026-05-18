@@ -1,12 +1,15 @@
 import argparse
 import fnmatch
+import json
 import os
 import shutil
 import subprocess
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.error import HTTPError
+from urllib.parse import quote, unquote, urlencode, urlparse
+from urllib.request import Request, urlopen
 from zipfile import ZIP_DEFLATED, ZipFile
 
 
@@ -58,7 +61,167 @@ def detect_onedrive_dir() -> Path | None:
     return None
 
 
-def copy_to_onedrive(file_path: Path, remote_folder: str, remote: str, sync_dir: str) -> Path | None:
+def microsoft_graph_token(dotenv: dict[str, str]) -> str:
+    tenant_id = config_value(dotenv, "FICOTOX_GRAPH_TENANT_ID") or config_value(dotenv, "MICROSOFT_TENANT_ID")
+    client_id = config_value(dotenv, "FICOTOX_GRAPH_CLIENT_ID") or config_value(dotenv, "MICROSOFT_CLIENT_ID")
+    client_secret = (
+        config_value(dotenv, "FICOTOX_GRAPH_CLIENT_SECRET")
+        or config_value(dotenv, "MICROSOFT_CLIENT_SECRET")
+        or config_value(dotenv, "MICROSOFT_SECRET_KEY")
+        or config_value(dotenv, "MMICROSOFT_SECRET_KEY")
+    )
+
+    if not tenant_id or not client_id or not client_secret:
+        raise RuntimeError(
+            "Para subir online a OneDrive configura FICOTOX_GRAPH_CLIENT_SECRET "
+            "y tenant/client id en backend/.env."
+        )
+
+    token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+    data = urlencode(
+        {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "scope": "https://graph.microsoft.com/.default",
+            "grant_type": "client_credentials",
+        }
+    ).encode("utf-8")
+    request = Request(
+        token_url,
+        data=data,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=60) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"No se pudo obtener token de Microsoft Graph: {detail}") from exc
+
+    token = payload.get("access_token")
+    if not token:
+        raise RuntimeError("Microsoft Graph no devolvio access_token.")
+
+    return token
+
+
+def graph_drive_prefix(dotenv: dict[str, str]) -> str:
+    drive_id = config_value(dotenv, "FICOTOX_GRAPH_DRIVE_ID")
+    site_id = config_value(dotenv, "FICOTOX_GRAPH_SITE_ID")
+    user = config_value(dotenv, "FICOTOX_GRAPH_USER")
+
+    if drive_id:
+        return f"https://graph.microsoft.com/v1.0/drives/{quote(drive_id, safe='')}"
+    if site_id:
+        return f"https://graph.microsoft.com/v1.0/sites/{quote(site_id, safe='')}/drive"
+    if user:
+        return f"https://graph.microsoft.com/v1.0/users/{quote(user, safe='')}/drive"
+
+    raise RuntimeError(
+        "Para subir online configura FICOTOX_GRAPH_DRIVE_ID, "
+        "FICOTOX_GRAPH_SITE_ID o FICOTOX_GRAPH_USER."
+    )
+
+
+def graph_path_url(dotenv: dict[str, str], item_path: str, suffix: str = "") -> str:
+    encoded_path = quote(item_path.strip("/"), safe="/")
+    return f"{graph_drive_prefix(dotenv)}/root:/{encoded_path}:{suffix}"
+
+
+def graph_request(url: str, token: str, method: str = "GET", payload: dict | None = None) -> dict:
+    data = None
+    headers = {"Authorization": f"Bearer {token}"}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    request = Request(url, data=data, headers=headers, method=method)
+    with urlopen(request, timeout=120) as response:
+        body = response.read().decode("utf-8")
+        return json.loads(body) if body else {}
+
+
+def graph_item_exists(dotenv: dict[str, str], token: str, item_path: str) -> bool:
+    try:
+        graph_request(graph_path_url(dotenv, item_path), token)
+        return True
+    except HTTPError as exc:
+        if exc.code == 404:
+            return False
+        raise
+
+
+def create_graph_folder(dotenv: dict[str, str], token: str, parent_path: str, folder_name: str) -> None:
+    payload = {
+        "name": folder_name,
+        "folder": {},
+        "@microsoft.graph.conflictBehavior": "fail",
+    }
+    if parent_path:
+        url = graph_path_url(dotenv, parent_path, "/children")
+    else:
+        url = f"{graph_drive_prefix(dotenv)}/root/children"
+
+    try:
+        graph_request(url, token, method="POST", payload=payload)
+    except HTTPError as exc:
+        if exc.code == 409:
+            return
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"No se pudo crear la carpeta online '{folder_name}': {detail}") from exc
+
+
+def ensure_graph_folder(dotenv: dict[str, str], token: str, folder_path: str) -> None:
+    current_parts: list[str] = []
+    for folder_name in [part for part in folder_path.strip("/").split("/") if part]:
+        parent_path = "/".join(current_parts)
+        current_parts.append(folder_name)
+        current_path = "/".join(current_parts)
+        if not graph_item_exists(dotenv, token, current_path):
+            create_graph_folder(dotenv, token, parent_path, folder_name)
+
+
+def upload_to_graph(file_path: Path, remote_folder: str, dotenv: dict[str, str]) -> str:
+    token = microsoft_graph_token(dotenv)
+    base_path = config_value(dotenv, "FICOTOX_GRAPH_BASE_PATH").strip("/")
+    upload_parts = [part for part in [base_path, remote_folder.strip("/"), file_path.name] if part]
+    upload_path = "/".join(upload_parts)
+    folder_path = "/".join(upload_parts[:-1])
+    ensure_graph_folder(dotenv, token, folder_path)
+    url = graph_path_url(dotenv, upload_path, "/content")
+
+    request = Request(
+        url,
+        data=file_path.read_bytes(),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/octet-stream",
+        },
+        method="PUT",
+    )
+
+    try:
+        with urlopen(request, timeout=300) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"No se pudo subir respaldo a Microsoft Graph: {detail}") from exc
+
+    return payload.get("webUrl") or f"Microsoft Graph: {upload_path}"
+
+
+def copy_to_onedrive(
+    file_path: Path,
+    remote_folder: str,
+    remote: str,
+    sync_dir: str,
+    dotenv: dict[str, str],
+) -> Path | str | None:
+    if config_value(dotenv, "FICOTOX_GRAPH_ENABLED", "false").lower() == "true":
+        return upload_to_graph(file_path, remote_folder, dotenv)
+
     if remote:
         if not shutil.which("rclone"):
             raise RuntimeError("FICOTOX_ONEDRIVE_REMOTE esta configurado, pero rclone no esta instalado o no esta en PATH.")
@@ -172,15 +335,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Crea respaldos locales y los copia a Microsoft OneDrive.")
     parser.add_argument("--target", choices=("database", "code", "all"), default="all")
     parser.add_argument("--project-root", default=str(Path(__file__).resolve().parents[1]))
-    parser.add_argument("--onedrive-remote", default=os.environ.get("FICOTOX_ONEDRIVE_REMOTE", ""))
-    parser.add_argument("--onedrive-sync-dir", default=os.environ.get("FICOTOX_ONEDRIVE_SYNC_DIR", ""))
-    parser.add_argument("--local-backup-dir", default=os.environ.get("FICOTOX_BACKUP_DIR", ""))
+    parser.add_argument("--onedrive-remote", default="")
+    parser.add_argument("--onedrive-sync-dir", default="")
+    parser.add_argument("--local-backup-dir", default="")
     args = parser.parse_args()
 
     project_root = Path(args.project_root).resolve()
     backend_dir = project_root / "backend"
     dotenv = read_dotenv(backend_dir / ".env")
-    local_backup_dir = Path(args.local_backup_dir).resolve() if args.local_backup_dir else project_root / "backups"
+    onedrive_remote = args.onedrive_remote or config_value(dotenv, "FICOTOX_ONEDRIVE_REMOTE")
+    onedrive_sync_dir = args.onedrive_sync_dir or config_value(dotenv, "FICOTOX_ONEDRIVE_SYNC_DIR")
+    local_backup_dir_value = args.local_backup_dir or config_value(dotenv, "FICOTOX_BACKUP_DIR")
+    local_backup_dir = Path(local_backup_dir_value).resolve() if local_backup_dir_value else project_root / "backups"
     database_backup_dir = local_backup_dir / "database"
     code_backup_dir = local_backup_dir / "code"
     ensure_dir(database_backup_dir)
@@ -190,14 +356,14 @@ def main() -> int:
 
     if args.target in {"database", "all"}:
         database_backup = make_database_backup(dotenv, backend_dir, database_backup_dir)
-        copied_path = copy_to_onedrive(database_backup, "FICOTOX/database", args.onedrive_remote, args.onedrive_sync_dir)
+        copied_path = copy_to_onedrive(database_backup, "backup/database", onedrive_remote, onedrive_sync_dir, dotenv)
         created.append(database_backup)
         if copied_path:
             created.append(copied_path)
 
     if args.target in {"code", "all"}:
         code_backup = make_code_backup(project_root, code_backup_dir)
-        copied_path = copy_to_onedrive(code_backup, "FICOTOX/code", args.onedrive_remote, args.onedrive_sync_dir)
+        copied_path = copy_to_onedrive(code_backup, "backup/code", onedrive_remote, onedrive_sync_dir, dotenv)
         created.append(code_backup)
         if copied_path:
             created.append(copied_path)
@@ -210,4 +376,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print(f"ERROR: {exc}")
+        raise SystemExit(1)

@@ -1,8 +1,14 @@
 @echo off
 setlocal
 
-py -3 "%~dp0backup_ficotox.py" %*
-if %ERRORLEVEL% EQU 0 exit /b 0
+where py >nul 2>nul
+if %ERRORLEVEL% EQU 0 (
+  py -3 "%~dp0backup_ficotox.py" %*
+  goto :done
+)
 
 python "%~dp0backup_ficotox.py" %*
-exit /b %ERRORLEVEL%
+
+:done
+set "RESULT=%ERRORLEVEL%"
+endlocal & exit /b %RESULT%
