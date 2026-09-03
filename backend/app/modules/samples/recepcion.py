@@ -6,6 +6,7 @@ from sqlalchemy import text
 from app.extensions import db
 from app.utils.auth import token_required
 from app.utils.rbac import permission_required
+from app.utils.schema import add_column_if_missing
 from app.utils.schema import is_sqlite
 
 samples_recepcion_bp = Blueprint("samples_recepcion", __name__, url_prefix="/api/samples/reception")
@@ -23,6 +24,8 @@ def ensure_samples_recepcion_schema():
 				fecha_emision DATE DEFAULT NULL,
 				fecha_recepcion DATE DEFAULT NULL,
 				hora_recepcion VARCHAR(20) DEFAULT NULL,
+				recibido_por VARCHAR(150) DEFAULT NULL,
+				medio_recepcion VARCHAR(50) DEFAULT NULL,
 				solicitante VARCHAR(180) DEFAULT NULL,
 				muestra_unica INTEGER DEFAULT 0,
 				fecha_muestra DATE DEFAULT NULL,
@@ -51,6 +54,8 @@ def ensure_samples_recepcion_schema():
 				fecha_emision DATE DEFAULT NULL,
 				fecha_recepcion DATE DEFAULT NULL,
 				hora_recepcion VARCHAR(20) DEFAULT NULL,
+				recibido_por VARCHAR(150) DEFAULT NULL,
+				medio_recepcion VARCHAR(50) DEFAULT NULL,
 				solicitante VARCHAR(180) DEFAULT NULL,
 				muestra_unica TINYINT(1) DEFAULT 0,
 				fecha_muestra DATE DEFAULT NULL,
@@ -75,6 +80,16 @@ def ensure_samples_recepcion_schema():
 			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 			"""
 		)
+	)
+	add_column_if_missing(
+		"muestras_recepcion",
+		"recibido_por",
+		"VARCHAR(150) DEFAULT NULL",
+	)
+	add_column_if_missing(
+		"muestras_recepcion",
+		"medio_recepcion",
+		"VARCHAR(50) DEFAULT NULL",
 	)
 	db.session.commit()
 
@@ -125,6 +140,8 @@ def _normalize_payload(raw):
 		"fecha_emision": payload.get("fecha_emision") or None,
 		"fecha_recepcion": payload.get("fecha_recepcion") or None,
 		"hora_recepcion": (payload.get("hora_recepcion") or "").strip()[:20] or None,
+		"recibido_por": (payload.get("recibido_por") or "").strip()[:150] or None,
+		"medio_recepcion": (payload.get("medio_recepcion") or "").strip()[:50] or None,
 		"solicitante": (payload.get("solicitante") or "").strip()[:180] or None,
 		"muestra_unica": 1 if payload.get("muestra_unica") else 0,
 		"fecha_muestra": payload.get("fecha_muestra") or None,
@@ -158,10 +175,12 @@ def list_reception_samples():
 		text(
 			"""
 			SELECT id, folio_num, tipo_registro, clave_revision, fecha_emision,
-				     fecha_recepcion, hora_recepcion, solicitante, id_interno, estado, creado_en
+				     fecha_recepcion, hora_recepcion, recibido_por, medio_recepcion,
+				     solicitante, id_interno, estado, creado_en
 			FROM muestras_recepcion
 			WHERE :search = ''
 			   OR solicitante LIKE :search_like
+			   OR recibido_por LIKE :search_like
 			   OR id_interno LIKE :search_like
 			ORDER BY folio_num DESC
 			LIMIT 400
@@ -182,7 +201,8 @@ def get_reception_sample(sample_id: int):
 		text(
 			"""
 			SELECT id, folio_num, tipo_registro, clave_revision, fecha_emision,
-				   fecha_recepcion, hora_recepcion, solicitante, muestra_unica,
+				   fecha_recepcion, hora_recepcion, recibido_por, medio_recepcion,
+				   solicitante, muestra_unica,
 				   fecha_muestra, id_interno, especificaciones,
 				   lote_muestras_json, analisis_json, inspeccion_json,
 				   datos_solicitante_json, datos_custodio_json,
@@ -219,14 +239,16 @@ def create_reception_sample():
 				"""
 				INSERT INTO muestras_recepcion (
 					folio_num, tipo_registro, clave_revision, fecha_emision,
-					fecha_recepcion, hora_recepcion, solicitante, muestra_unica,
+						fecha_recepcion, hora_recepcion, recibido_por, medio_recepcion,
+						solicitante, muestra_unica,
 					fecha_muestra, id_interno, especificaciones,
 					lote_muestras_json, analisis_json, inspeccion_json,
 					datos_solicitante_json, datos_custodio_json, estado,
 					creado_por, actualizado_por
 				) VALUES (
 					:folio_num, :tipo_registro, :clave_revision, :fecha_emision,
-					:fecha_recepcion, :hora_recepcion, :solicitante, :muestra_unica,
+						:fecha_recepcion, :hora_recepcion, :recibido_por, :medio_recepcion,
+						:solicitante, :muestra_unica,
 					:fecha_muestra, :id_interno, :especificaciones,
 					:lote_muestras_json, :analisis_json, :inspeccion_json,
 					:datos_solicitante_json, :datos_custodio_json, :estado,
@@ -268,6 +290,8 @@ def update_reception_sample(sample_id: int):
 					fecha_emision = :fecha_emision,
 					fecha_recepcion = :fecha_recepcion,
 					hora_recepcion = :hora_recepcion,
+					recibido_por = :recibido_por,
+					medio_recepcion = :medio_recepcion,
 					solicitante = :solicitante,
 					muestra_unica = :muestra_unica,
 					fecha_muestra = :fecha_muestra,

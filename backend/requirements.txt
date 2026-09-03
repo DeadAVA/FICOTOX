@@ -15,3 +15,4 @@ requests==2.32.3
 requests-cache==1.2.1
 SQLAlchemy==2.0.44
 Werkzeug==3.1.8
+waitress==3.0.0

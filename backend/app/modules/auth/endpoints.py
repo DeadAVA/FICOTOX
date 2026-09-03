@@ -23,7 +23,7 @@ def _user_query():
         SELECT u.id, u.id_rol AS role_id, u.nombre, u.email, u.activo, r.nombre AS rol
         FROM usuarios u
         INNER JOIN roles r ON r.id = u.id_rol
-        WHERE u.email = :email
+        WHERE LOWER(u.email) = LOWER(:email)
         LIMIT 1
         """
     )

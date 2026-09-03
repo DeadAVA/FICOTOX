@@ -4,7 +4,25 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+
+
+def _load_environment() -> None:
+    configured_env = os.getenv("FICOTOX_ENV_FILE", "").strip()
+    if configured_env:
+        load_dotenv(Path(configured_env), override=False)
+        return
+
+    default_env = BASE_DIR / ".env"
+    if default_env.exists():
+        load_dotenv(default_env, override=False)
+        return
+
+    fallback_env = Path.cwd() / ".env"
+    if fallback_env.exists():
+        load_dotenv(fallback_env, override=False)
+
+
+_load_environment()
 
 
 def _build_database_uri() -> str:

@@ -452,9 +452,63 @@ h5,
   font-size: 0.84rem;
 }
 
+.role-permissions-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f8fbfe 0%, #f3f7fb 100%);
+}
+
+.role-permissions-toolbar .form-check-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #2c4760;
+}
+
 .role-permissions-table th:not(:first-child),
 .role-permissions-table td:not(:first-child) {
   text-align: center;
+}
+
+.role-permissions-table thead th {
+  background: #eef4fa;
+  color: #34506b;
+  border-bottom: 1px solid #d7e2ee;
+}
+
+.role-permissions-table tbody tr:hover {
+  background: #f8fbff;
+}
+
+.role-module-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.role-row-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid #d7e3ef;
+  border-radius: 999px;
+  background: #f6fafe;
+}
+
+.role-row-toggle .form-check-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #33506c;
+}
+
+.role-permissions-table input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
 }
 
 .role-action-btn {
@@ -1054,6 +1108,61 @@ h5,
 
 .reactivo-import-summary strong {
   color: #0f6772;
+}
+
+.stock-meter {
+  min-width: 150px;
+  max-width: 220px;
+}
+
+.stock-meter-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+  color: #405466;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.stock-meter-top span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stock-meter-top strong {
+  color: #1f3444;
+  font-size: 0.8rem;
+}
+
+.stock-meter-track {
+  height: 0.52rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8edf0;
+  box-shadow: inset 0 0 0 1px rgba(35, 67, 87, 0.08);
+}
+
+.stock-meter-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.18s ease;
+}
+
+.stock-meter.good .stock-meter-track span {
+  background: #159a77;
+}
+
+.stock-meter.medium .stock-meter-track span {
+  background: #d39b22;
+}
+
+.stock-meter.low .stock-meter-track span,
+.stock-meter.empty .stock-meter-track span {
+  background: #d9534f;
 }
 
 .organismo-choice-grid {
@@ -4362,6 +4471,84 @@ body {
   background: #f8fbfd;
   color: #0f172a;
   line-height: 1.45;
+}
+
+/* Layout de insumos usados (procesamiento / extraccion) */
+#processingModal #processingInventarioBody tr,
+#extractionModal #extractionInventarioBody tr {
+  height: auto;
+}
+
+#processingModal #processingInventarioBody td,
+#extractionModal #extractionInventarioBody td {
+  vertical-align: top;
+  padding-top: 0.6rem;
+  padding-bottom: 0.6rem;
+}
+
+#processingModal .processing-card .table-responsive,
+#extractionModal .extraction-card .table-responsive {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+#processingModal #processingInventarioBody .insumo-search-wrapper,
+#extractionModal #extractionInventarioBody .insumo-search-wrapper {
+  position: relative;
+  width: 100%;
+  min-width: 320px;
+}
+
+#processingModal #processingInventarioBody .insumo-ref-search,
+#extractionModal #extractionInventarioBody .insumo-ref-search {
+  width: 100%;
+  min-height: 2.45rem;
+}
+
+#processingModal #processingInventarioBody .insumo-ref-dropdown,
+#extractionModal #extractionInventarioBody .insumo-ref-dropdown {
+  border: 1px solid #d1dde7;
+  border-radius: 10px;
+  background: #ffffff;
+  z-index: 1085;
+}
+
+#processingModal #processingInventarioBody .insumo-tipo,
+#extractionModal #extractionInventarioBody .insumo-tipo {
+  min-width: 132px;
+}
+
+#processingModal #processingInventarioBody .insumo-cantidad,
+#extractionModal #extractionInventarioBody .insumo-cantidad {
+  min-width: 96px;
+}
+
+#processingModal #processingInventarioBody td:nth-child(1),
+#extractionModal #extractionInventarioBody td:nth-child(1) {
+  width: 150px;
+}
+
+#processingModal #processingInventarioBody td:nth-child(3),
+#extractionModal #extractionInventarioBody td:nth-child(3) {
+  width: 120px;
+}
+
+#processingModal #processingInventarioBody td:nth-child(4),
+#extractionModal #extractionInventarioBody td:nth-child(4) {
+  width: 48px;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  #processingModal #processingInventarioBody .insumo-search-wrapper,
+  #extractionModal #extractionInventarioBody .insumo-search-wrapper {
+    min-width: 260px;
+  }
+
+  #processingModal #processingInventarioBody .insumo-tipo,
+  #extractionModal #extractionInventarioBody .insumo-tipo {
+    min-width: 116px;
+  }
 }
 
 #extractionModal .extraction-modal-form {

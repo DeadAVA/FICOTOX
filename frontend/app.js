@@ -146,6 +146,7 @@ const roleIdInput = document.getElementById("roleIdInput");
 const roleNameInput = document.getElementById("roleNameInput");
 const roleDescriptionInput = document.getElementById("roleDescriptionInput");
 const roleActiveInput = document.getElementById("roleActiveInput");
+const rolePermissionsSelectAll = document.getElementById("rolePermissionsSelectAll");
 const rolePermissionsBody = document.getElementById("rolePermissionsBody");
 const roleFormTitle = document.getElementById("roleFormTitle");
 const roleSaveBtn = document.getElementById("roleSaveBtn");
@@ -178,6 +179,16 @@ const consumableContenedorInput = document.getElementById("consumableContenedorI
 const consumablePiezasInput = document.getElementById("consumablePiezasInput");
 const consumableCantidadPiezaInput = document.getElementById("consumableCantidadPiezaInput");
 const consumableSaveBtn = document.getElementById("consumableSaveBtn");
+const stockRefillModalEl = document.getElementById("stockRefillModal");
+const stockRefillModal = stockRefillModalEl && window.bootstrap ? new window.bootstrap.Modal(stockRefillModalEl) : null;
+const stockRefillForm = document.getElementById("stockRefillForm");
+const stockRefillTitle = document.getElementById("stockRefillTitle");
+const stockRefillItemLabel = document.getElementById("stockRefillItemLabel");
+const stockRefillTypeInput = document.getElementById("stockRefillTypeInput");
+const stockRefillIdInput = document.getElementById("stockRefillIdInput");
+const stockRefillAmountInput = document.getElementById("stockRefillAmountInput");
+const stockRefillReasonInput = document.getElementById("stockRefillReasonInput");
+const stockRefillSaveBtn = document.getElementById("stockRefillSaveBtn");
 
 const importConsumablesModalEl = document.getElementById("importConsumablesModal");
 const importConsumablesModal = importConsumablesModalEl && window.bootstrap ? new window.bootstrap.Modal(importConsumablesModalEl) : null;
@@ -213,6 +224,8 @@ const sampleTipoRegistroInput = document.getElementById("sampleTipoRegistroInput
 const sampleFolioInput = document.getElementById("sampleFolioInput");
 const sampleFechaRecepcionInput = document.getElementById("sampleFechaRecepcionInput");
 const sampleHoraRecepcionInput = document.getElementById("sampleHoraRecepcionInput");
+const sampleRecibidoPorVisualInput = document.getElementById("sampleRecibidoPorVisualInput");
+const sampleReceptionMethodVisualInput = document.getElementById("sampleReceptionMethodVisualInput");
 const sampleSolicitanteInput = document.getElementById("sampleSolicitanteInput");
 const sampleMuestraUnicaInput = document.getElementById("sampleMuestraUnicaInput");
 const sampleLoteModeVisualInput = document.getElementById("sampleLoteModeVisualInput");
@@ -363,7 +376,7 @@ const extrCronometroInput = document.getElementById("extrCronometroInput");
 const extrLimpiezaSi = document.getElementById("extrLimpiezaSi");
 const extrLimpiezaNo = document.getElementById("extrLimpiezaNo");
 
-const API_BASE_URL = "http://127.0.0.1:5000/api";
+const API_BASE_URL = "/api";
 const SESSION_TOKEN_KEY = "ficotox_access_token";
 const SESSION_USER_KEY = "ficotox_user";
 const SESSION_PERMISSIONS_KEY = "ficotox_permissions";
@@ -540,6 +553,32 @@ const fmtDate = (value) => {
     month: "2-digit",
     day: "2-digit",
   });
+};
+
+const parseNumberOrNull = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const clampPercent = (value) => Math.max(0, Math.min(100, Math.round(value)));
+
+const buildStockProgress = (currentValue, maxValue, label = "") => {
+  const current = parseNumberOrNull(currentValue) ?? 0;
+  const max = parseNumberOrNull(maxValue);
+  const percent = max && max > 0 ? clampPercent((current / max) * 100) : current > 0 ? 100 : 0;
+  const stateClass = percent <= 0 ? "empty" : percent <= 25 ? "low" : percent <= 60 ? "medium" : "good";
+  return `
+    <div class="stock-meter ${stateClass}" title="${escapeHtml(label || `${percent}% en stock`)}">
+      <div class="stock-meter-top">
+        <span>${escapeHtml(label || "Stock")}</span>
+        <strong>${percent}%</strong>
+      </div>
+      <div class="stock-meter-track"><span style="width:${percent}%"></span></div>
+    </div>
+  `;
 };
 
 const toDateOnly = (value) => {
@@ -794,17 +833,16 @@ const loadAuthConfig = async () => {
 };
 
 const updateLoginOptions = () => {
-  const microsoftEnabled = !!authConfig.microsoft.enabled && !!window.msal;
   const manualEnabled = authConfig.manualLoginEnabled !== false;
   if (microsoftLoginBtn) {
-    microsoftLoginBtn.classList.toggle("d-none", !microsoftEnabled);
-    microsoftLoginBtn.disabled = !microsoftEnabled;
+    microsoftLoginBtn.classList.add("d-none");
+    microsoftLoginBtn.disabled = true;
   }
   if (emailLoginForm) {
     emailLoginForm.classList.toggle("d-none", !manualEnabled);
   }
-  if (loginFeedback && authConfig && !microsoftEnabled) {
-    loginFeedback.textContent = "Microsoft no est\u00e1 configurado en este entorno; usa el acceso manual de desarrollo.";
+  if (loginFeedback) {
+    loginFeedback.textContent = "";
   }
 };
 
@@ -941,6 +979,53 @@ const resetRoleForm = () => {
   renderPermissionsMatrix(permissionsCatalog);
 };
 
+const permissionFlags = ["can_read", "can_create", "can_update", "can_delete"];
+
+const getRolePermissionRows = () => {
+  if (!rolePermissionsBody) {
+    return [];
+  }
+  return Array.from(rolePermissionsBody.querySelectorAll("tr[data-permission-row]"));
+};
+
+const getRowPermissionCheckboxes = (row) => {
+  return permissionFlags
+    .map((flag) => row.querySelector(`input[data-flag="${flag}"]`))
+    .filter((input) => input instanceof HTMLInputElement);
+};
+
+const setRowPermissionsChecked = (row, checked) => {
+  getRowPermissionCheckboxes(row).forEach((input) => {
+    input.checked = checked;
+  });
+};
+
+const updateRowSelectAllControl = (row) => {
+  const rowSelectAllInput = row.querySelector(".role-row-select-all");
+  if (!(rowSelectAllInput instanceof HTMLInputElement)) {
+    return;
+  }
+  const rowPermissionInputs = getRowPermissionCheckboxes(row);
+  rowSelectAllInput.checked = rowPermissionInputs.length > 0 && rowPermissionInputs.every((input) => input.checked);
+};
+
+const updateGlobalPermissionsSelectAll = () => {
+  if (!(rolePermissionsSelectAll instanceof HTMLInputElement)) {
+    return;
+  }
+
+  const rows = getRolePermissionRows();
+  const rowCount = rows.length;
+  const rowsFullyChecked = rows.filter((row) => {
+    const inputs = getRowPermissionCheckboxes(row);
+    return inputs.length > 0 && inputs.every((input) => input.checked);
+  }).length;
+
+  rolePermissionsSelectAll.disabled = rowCount === 0;
+  rolePermissionsSelectAll.indeterminate = rowCount > 0 && rowsFullyChecked > 0 && rowsFullyChecked < rowCount;
+  rolePermissionsSelectAll.checked = rowCount > 0 && rowsFullyChecked === rowCount;
+};
+
 const renderPermissionsMatrix = (items) => {
   if (!rolePermissionsBody) {
     return;
@@ -948,6 +1033,7 @@ const renderPermissionsMatrix = (items) => {
 
   if (!items || items.length === 0) {
     rolePermissionsBody.innerHTML = '<tr><td colspan="5" class="text-secondary">Sin permisos configurados.</td></tr>';
+    updateGlobalPermissionsSelectAll();
     return;
   }
 
@@ -956,8 +1042,16 @@ const renderPermissionsMatrix = (items) => {
       (perm) => `
       <tr data-permission-row="${perm.permiso_id || perm.id}">
         <td>
-          <div class="fw-semibold">${perm.nombre}</div>
-          <small class="text-secondary">${perm.descripcion || ""}</small>
+          <div class="role-module-cell">
+            <div>
+              <div class="fw-semibold">${perm.nombre}</div>
+              <small class="text-secondary">${perm.descripcion || ""}</small>
+            </div>
+            <label class="form-check form-switch role-row-toggle mb-0">
+              <input type="checkbox" class="form-check-input role-row-select-all" ${perm.can_read && perm.can_create && perm.can_update && perm.can_delete ? "checked" : ""} />
+              <span class="form-check-label">Todo</span>
+            </label>
+          </div>
         </td>
         <td><input type="checkbox" data-flag="can_read" ${perm.can_read ? "checked" : ""} /></td>
         <td><input type="checkbox" data-flag="can_create" ${perm.can_create ? "checked" : ""} /></td>
@@ -967,6 +1061,9 @@ const renderPermissionsMatrix = (items) => {
     `
     )
     .join("");
+
+  getRolePermissionRows().forEach((row) => updateRowSelectAllControl(row));
+  updateGlobalPermissionsSelectAll();
 };
 
 const collectRolePermissions = () => {
@@ -1102,13 +1199,13 @@ const editRole = async (roleId) => {
 
   try {
     const data = await getJsonAuth(`${API_BASE_URL}/admin/roles/${roleId}`, token);
-    const role = data.role || {};
+    const role = resolveApiEntity(data, ["role"]);
     roleIdInput.value = role.id || "";
     roleNameInput.value = role.nombre || "";
     roleDescriptionInput.value = role.descripcion || "";
     roleActiveInput.checked = !!role.activo;
     roleFormTitle.textContent = `Editar Rol #${role.id}`;
-    renderPermissionsMatrix(data.permissions || permissionsCatalog);
+    renderPermissionsMatrix(data.permissions || role.permissions || permissionsCatalog);
     showRolesFeedback("");
     if (roleModal) {
       roleModal.show();
@@ -1159,8 +1256,47 @@ const normalizeImportCell = (value) => {
   if (value === null || value === undefined) {
     return null;
   }
-  const trimmed = String(value).trim();
+  const trimmed = String(value).replace(/\s+/g, " ").trim();
+  if (["", "-", "--", "n/a", "na", "null", "undefined"].includes(trimmed.toLowerCase())) {
+    return null;
+  }
   return trimmed ? trimmed : null;
+};
+
+const normalizeImportInteger = (value) => {
+  const normalized = normalizeImportCell(value);
+  if (!normalized) {
+    return null;
+  }
+  const clean = String(normalized).replace(/[^0-9-]/g, "");
+  return parseIntOrNull(clean);
+};
+
+const normalizeImportDate = (value) => {
+  const normalized = normalizeImportCell(value);
+  if (!normalized) {
+    return null;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return normalized;
+  }
+  const slashMatch = normalized.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+  if (slashMatch) {
+    const day = Number(slashMatch[1]);
+    const month = Number(slashMatch[2]);
+    let year = Number(slashMatch[3]);
+    if (year < 100) {
+      year += year >= 70 ? 1900 : 2000;
+    }
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+  const parsed = new Date(normalized);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return null;
 };
 
 const normalizeImportKey = (key) => {
@@ -1277,11 +1413,11 @@ const mapCsvToPreviewRows = (csvRows) => {
       marca: normalizeImportCell(rawRow.marca),
       proveedor: normalizeImportCell(rawRow.proveedor),
       catalogo_parte_cas: normalizeImportCell(rawRow.catalogo_parte_cas),
-      fecha_ingreso: normalizeImportCell(rawRow.fecha_ingreso),
+      fecha_ingreso: normalizeImportDate(rawRow.fecha_ingreso),
       tamano_capacidad: normalizeImportCell(rawRow.tamano_capacidad),
       contenedor: normalizeImportCell(rawRow.contenedor),
-      piezas: parseIntOrNull(rawRow.piezas),
-      cantidad_por_pieza: parseIntOrNull(rawRow.cantidad_por_pieza),
+      piezas: normalizeImportInteger(rawRow.piezas),
+      cantidad_por_pieza: normalizeImportInteger(rawRow.cantidad_por_pieza),
     };
 
     row._valid = !!row.producto;
@@ -1293,6 +1429,28 @@ const mapCsvToPreviewRows = (csvRows) => {
   });
 
   return { detected, rows };
+};
+
+const isConsumablesSheetName = (sheetName) => {
+  const normalized = normalizeImportKey(sheetName);
+  return normalized === "consumibles" || normalized.includes("consumible");
+};
+
+const hasConsumablesHeaderSignature = (detectedHeaders) => {
+  const detected = Array.isArray(detectedHeaders) ? detectedHeaders : [];
+  if (!detected.includes("producto")) {
+    return false;
+  }
+
+  const distinctiveFields = [
+    "catalogo_parte_cas",
+    "tamano_capacidad",
+    "contenedor",
+    "piezas",
+    "cantidad_por_pieza",
+  ];
+
+  return distinctiveFields.some((field) => detected.includes(field));
 };
 
 const renderImportDetectedFields = () => {
@@ -1316,7 +1474,7 @@ const renderImportPreview = () => {
   }
 
   if (!importPreviewRows.length) {
-    importConsumablesPreviewBody.innerHTML = '<tr><td colspan="11" class="text-secondary">Selecciona un CSV para previsualizar.</td></tr>';
+    importConsumablesPreviewBody.innerHTML = '<tr><td colspan="11" class="text-secondary">Selecciona un archivo CSV o Excel para previsualizar.</td></tr>';
     if (importValidRowsCount) {
       importValidRowsCount.textContent = "0";
     }
@@ -1399,6 +1557,9 @@ const buildConsumablePayload = () => {
 const mapConsumableRow = (r) => {
   const canUpdate = canModuleAction("consumibles", "update");
   const canDelete = canModuleAction("consumibles", "delete");
+  const pieces = parseNumberOrNull(r.piezas) ?? 0;
+  const maxStock = parseNumberOrNull(r.stock_maximo) || pieces;
+  const stockLabel = `${fmt(pieces)} de ${fmt(maxStock)} piezas`;
 
   return `
     <tr>
@@ -1409,10 +1570,11 @@ const mapConsumableRow = (r) => {
       <td>${fmtDate(r.fecha_ingreso)}</td>
       <td>${r.tamano_capacidad || "-"}</td>
       <td>${r.contenedor || "-"}</td>
-      <td>${fmt(r.piezas)}</td>
+      <td>${buildStockProgress(pieces, maxStock, stockLabel)}</td>
       <td>${fmt(r.cantidad_por_pieza)}</td>
       <td>
-        <div class="d-flex gap-1">
+        <div class="d-flex gap-1 flex-wrap">
+          <button class="role-action-btn" data-consumable-action="refill" data-consumable-id="${r.id}" ${canUpdate ? "" : "disabled"}>Rellenar</button>
           <button class="role-action-btn" data-consumable-action="edit" data-consumable-id="${r.id}" ${canUpdate ? "" : "disabled"}>Editar</button>
           <button class="role-action-btn" data-consumable-action="delete" data-consumable-id="${r.id}" ${canDelete ? "" : "disabled"}>Eliminar</button>
         </div>
@@ -1795,6 +1957,8 @@ const buildSamplePayload = () => {
     fecha_emision: sampleFechaEmisionInput.value || null,
     fecha_recepcion: sampleFechaRecepcionInput.value || null,
     hora_recepcion: sampleHoraRecepcionInput.value || null,
+    recibido_por: (sampleRecibidoPorVisualInput?.value || "").trim() || null,
+    medio_recepcion: (sampleReceptionMethodVisualInput?.value || "").trim() || null,
     solicitante: (sampleSolicitanteInput.value || "").trim() || null,
     muestra_unica: isUnique,
     fecha_muestra: sampleFechaMuestraInput.value || null,
@@ -1836,6 +2000,12 @@ const fillSampleForm = (item) => {
   sampleFolioInput.value = item.folio_num || "";
   sampleFechaRecepcionInput.value = isoDate(item.fecha_recepcion);
   sampleHoraRecepcionInput.value = item.hora_recepcion || "";
+  if (sampleRecibidoPorVisualInput) {
+    sampleRecibidoPorVisualInput.value = item.recibido_por || "";
+  }
+  if (sampleReceptionMethodVisualInput) {
+    sampleReceptionMethodVisualInput.value = item.medio_recepcion || "";
+  }
   sampleSolicitanteInput.value = item.solicitante || "";
   sampleMuestraUnicaInput.checked = !!item.muestra_unica;
   sampleFechaMuestraInput.value = isoDate(item.fecha_muestra);
@@ -1948,7 +2118,7 @@ const editSample = async (id) => {
   }
   try {
     const data = await getJsonAuth(`${API_BASE_URL}/samples/reception/${id}`, token);
-    fillSampleForm(data.item || {});
+    fillSampleForm(resolveApiEntity(data));
     if (sampleModal) {
       sampleModal.show();
     }
@@ -2194,10 +2364,10 @@ const _normalizeInsumoText = (value) => String(value || "")
   .replace(/[^a-z0-9]+/g, " ")
   .trim();
 
-const _findReactivoByAutoQuery = (query) => {
+const _findInsumoByAutoQuery = (tipo, query) => {
   const tokens = _normalizeInsumoText(query).split(" ").filter(Boolean);
   if (!tokens.length) return null;
-  const indexed = (_insumoReactivosCache || [])
+  const indexed = _getInsumoOptions(tipo)
     .map((item) => ({ item, text: _normalizeInsumoText(item.label) }));
   const exact = indexed.filter(({ text }) => tokens.every((token) => text.includes(token)));
   if (exact.length) return exact[0].item;
@@ -2210,6 +2380,28 @@ const _findReactivoByAutoQuery = (query) => {
     }))
     .sort((a, b) => b.score - a.score);
   return candidates[0]?.item || null;
+};
+
+const _positionInsumoDropdown = (wrapper, dropdown) => {
+  if (!wrapper || !dropdown) return;
+
+  const gap = 4;
+  const minHeight = 120;
+  const defaultMaxHeight = 210;
+  const margin = 12;
+  const wrapperRect = wrapper.getBoundingClientRect();
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const spaceBelow = Math.max(0, viewportHeight - wrapperRect.bottom - margin);
+  const spaceAbove = Math.max(0, wrapperRect.top - margin);
+  const shouldOpenUp = spaceBelow < 160 && spaceAbove > spaceBelow;
+
+  dropdown.style.top = shouldOpenUp ? "auto" : `calc(100% + ${gap}px)`;
+  dropdown.style.bottom = shouldOpenUp ? `calc(100% + ${gap}px)` : "auto";
+
+  const available = shouldOpenUp ? spaceAbove : spaceBelow;
+  const measuredHeight = dropdown.scrollHeight || defaultMaxHeight;
+  const dynamicMaxHeight = Math.min(defaultMaxHeight, Math.max(minHeight, Math.min(available, measuredHeight)));
+  dropdown.style.maxHeight = `${dynamicMaxHeight}px`;
 };
 
 const _renderInsumoDropdown = (dropdown, tipo, query) => {
@@ -2226,6 +2418,8 @@ const _renderInsumoDropdown = (dropdown, tipo, query) => {
       .join("");
   }
   dropdown.style.display = "block";
+  const wrapper = dropdown.closest(".insumo-search-wrapper");
+  _positionInsumoDropdown(wrapper, dropdown);
 };
 
 const addInventarioRow = (tbodyId) => {
@@ -2306,37 +2500,99 @@ const _fillSearchWrapper = (idOrEl, value) => {
   }
 };
 
-const _autoResolveFixedExtractionReactivos = () => {
-  const form = document.getElementById("extractionForm");
+const _autoResolveFixedFormInsumos = (formId, { showReactivoStock = false } = {}) => {
+  const form = document.getElementById(formId);
   if (!form) return;
   form.querySelectorAll(".insumo-ref[data-cantidad-fija][data-auto-query]").forEach((hiddenInput) => {
     const wrapper = hiddenInput.closest(".insumo-search-wrapper");
     if (!wrapper) return;
+    const tipo = wrapper.dataset.tipo || "consumible";
     const currentRef = (hiddenInput.value || "").trim();
-    if (!currentRef || !_findInsumoOption("reactivo", currentRef)) {
-      const match = _findReactivoByAutoQuery(hiddenInput.dataset.autoQuery);
+    if (!currentRef || !_findInsumoOption(tipo, currentRef)) {
+      const match = _findInsumoByAutoQuery(tipo, hiddenInput.dataset.autoQuery);
       if (match) {
         hiddenInput.value = match.ref;
         const search = wrapper.querySelector(".insumo-ref-search");
         if (search) search.value = match.label;
       }
     }
-    _checkReactivoStock(wrapper);
+    if (showReactivoStock && tipo === "reactivo") {
+      _checkReactivoStock(wrapper);
+    }
   });
 };
 
+const _autoResolveFixedExtractionReactivos = () => {
+  _autoResolveFixedFormInsumos("extractionForm", { showReactivoStock: true });
+};
+
+const _normalizeInventoryUnit = (unit) => {
+  const value = String(unit || "").trim().toLowerCase();
+  if (!value) return "";
+  if (["l", "lt", "ltr", "litro", "litros"].includes(value)) return "litros";
+  if (["ml", "mililitro", "mililitros"].includes(value)) return "ml";
+  return value;
+};
+
+const _formatInventoryAmount = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "0";
+  return numeric.toLocaleString("es-MX", { maximumFractionDigits: 4 });
+};
+
+const _resolveFixedInventoryAmount = (input, item = null) => {
+  const protocolAmount = parseFloat(input?.dataset?.cantidadFija);
+  if (!protocolAmount) {
+    return null;
+  }
+
+  const protocolUnit = _normalizeInventoryUnit(input?.dataset?.cantidadUnidad);
+  const stockUnit = _normalizeInventoryUnit(item?.unidad);
+
+  let amount = protocolAmount;
+  if (protocolUnit && stockUnit && protocolUnit !== stockUnit) {
+    if (protocolUnit === "ml" && stockUnit === "litros") {
+      amount = protocolAmount / 1000;
+    } else if (protocolUnit === "litros" && stockUnit === "ml") {
+      amount = protocolAmount * 1000;
+    }
+  }
+
+  return {
+    amount,
+    protocolAmount,
+    protocolUnit,
+    stockUnit: stockUnit || item?.unidad || "",
+  };
+};
+
+const _isProtocolInsumoEnabled = (input) => {
+  const stepCheckboxId = String(input?.dataset?.stepCheckbox || "").trim();
+  if (!stepCheckboxId) return true;
+  const checkbox = document.getElementById(stepCheckboxId);
+  return !!checkbox?.checked;
+};
+
 // Construye uso_inventario automáticamente desde los campos de protocolo con cantidad fija
-const _buildExtractionProtocolInventario = () => {
+const _buildProtocolInventarioFromForm = (formId) => {
   const result = [];
-  const form = document.getElementById("extractionForm");
+  const form = document.getElementById(formId);
   if (!form) return result;
   form.querySelectorAll(".insumo-ref[data-cantidad-fija]").forEach((el) => {
+    if (!_isProtocolInsumoEnabled(el)) return;
     const ref = (el.value || "").trim();
     if (!ref) return;
     const tipo = el.closest(".insumo-search-wrapper")?.dataset?.tipo || "reactivo";
-    const cantidad = parseFloat(el.dataset.cantidadFija) || 1;
+    const item = _findInsumoOption(tipo, ref);
+    const resolved = _resolveFixedInventoryAmount(el, item);
+    const cantidad = resolved?.amount || 1;
     result.push({ tipo, ref, cantidad });
   });
+  return result;
+};
+
+const _buildExtractionProtocolInventario = () => {
+  const result = _buildProtocolInventarioFromForm("extractionForm");
   const puntasRef = (document.getElementById("extrTotalPuntasRef")?.value || "").trim();
   const puntasCantidad = parseFloat(document.getElementById("extrTotalPuntasCantidad")?.value) || 0;
   if (puntasRef && puntasCantidad > 0) result.push({ tipo: "consumible", ref: puntasRef, cantidad: puntasCantidad });
@@ -2346,6 +2602,14 @@ const _buildExtractionProtocolInventario = () => {
 const _buildExtractionInventario = () => {
   const result = _buildExtractionProtocolInventario();
   result.push(...collectInventarioRows("extractionInventarioBody"));
+  return result;
+};
+
+const _buildProcessingProtocolInventario = () => _buildProtocolInventarioFromForm("processingForm");
+
+const _buildProcessingInventario = () => {
+  const result = _buildProcessingProtocolInventario();
+  result.push(...collectInventarioRows("processingInventarioBody"));
   return result;
 };
 
@@ -2364,12 +2628,32 @@ const _filterExtractionManualInventario = (rows) => {
   });
 };
 
+const _filterProcessingManualInventario = (rows) => {
+  const protocolCounts = new Map();
+  _buildProcessingProtocolInventario().forEach((row) => {
+    const key = `${row.tipo}|${row.ref}|${row.cantidad}`;
+    protocolCounts.set(key, (protocolCounts.get(key) || 0) + 1);
+  });
+  return (rows || []).filter((row) => {
+    const key = `${row.tipo || "consumible"}|${row.ref || row.nombre || ""}|${row.cantidad ?? 1}`;
+    const count = protocolCounts.get(key) || 0;
+    if (count <= 0) return true;
+    protocolCounts.set(key, count - 1);
+    return false;
+  });
+};
+
 // Muestra badge de stock bajo el wrapper de un reactivo con cantidad fija
 const _checkReactivoStock = (wrapper) => {
   const hiddenInput = wrapper.querySelector(".insumo-ref");
   if (!hiddenInput) return;
-  const cantidadFija = parseFloat(hiddenInput.dataset.cantidadFija);
-  if (!cantidadFija) return;
+  if (!_isProtocolInsumoEnabled(hiddenInput)) {
+    const badge = wrapper.querySelector(".insumo-stock-badge");
+    if (badge) badge.innerHTML = "";
+    return;
+  }
+  const resolvedBase = _resolveFixedInventoryAmount(hiddenInput);
+  if (!resolvedBase) return;
   let badge = wrapper.querySelector(".insumo-stock-badge");
   if (!badge) {
     badge = document.createElement("div");
@@ -2386,16 +2670,22 @@ const _checkReactivoStock = (wrapper) => {
     badge.innerHTML = `<span class="text-warning"><i class="bi bi-exclamation-triangle-fill"></i> No encontrado en inventario</span>`;
     return;
   }
+  const resolved = _resolveFixedInventoryAmount(hiddenInput, item);
+  if (!resolved) return;
+  const cantidadFija = resolved.amount;
   const stock = item.cantidad_actual ?? null;
   const u = item.unidad || "";
   if (stock === null) {
     badge.innerHTML = `<span class="text-secondary"><i class="bi bi-dash-circle"></i> Stock no registrado</span>`;
     return;
   }
+  const protocolInfo = resolved.protocolUnit && resolved.protocolUnit !== _normalizeInventoryUnit(u)
+    ? ` (${_formatInventoryAmount(resolved.protocolAmount)} ${resolved.protocolUnit})`
+    : "";
   if (stock >= cantidadFija) {
-    badge.innerHTML = `<span class="text-success"><i class="bi bi-check-circle-fill"></i> Descuento automático activo: se descontarán ${cantidadFija} ${u} al guardar. Disponible: ${stock} ${u}</span>`;
+    badge.innerHTML = `<span class="text-success"><i class="bi bi-check-circle-fill"></i> Descuento automático activo: se descontarán ${_formatInventoryAmount(cantidadFija)} ${u}${protocolInfo} al guardar. Disponible: ${_formatInventoryAmount(stock)} ${u}</span>`;
   } else {
-    badge.innerHTML = `<span class="text-danger fw-semibold"><i class="bi bi-x-circle-fill"></i> Stock insuficiente: ${stock} ${u} disponibles, se requieren ${cantidadFija} ${u}</span>`;
+    badge.innerHTML = `<span class="text-danger fw-semibold"><i class="bi bi-x-circle-fill"></i> Stock insuficiente: ${_formatInventoryAmount(stock)} ${u} disponibles, se requieren ${_formatInventoryAmount(cantidadFija)} ${u}${protocolInfo}</span>`;
   }
 };
 
@@ -2404,8 +2694,9 @@ const _validateExtractionStock = () => {
   const errors = [];
   document.getElementById("extractionForm")?.querySelectorAll(".insumo-search-wrapper[data-tipo='reactivo']").forEach((wrapper) => {
     const hiddenInput = wrapper.querySelector(".insumo-ref");
-    const cantidadFija = parseFloat(hiddenInput?.dataset?.cantidadFija);
-    if (!cantidadFija) return;
+    if (!_isProtocolInsumoEnabled(hiddenInput)) return;
+    const resolvedBase = _resolveFixedInventoryAmount(hiddenInput);
+    if (!resolvedBase) return;
     const ref = (hiddenInput?.value || "").trim();
     if (!ref) {
       errors.push(`• ${hiddenInput?.dataset?.autoQuery || "reactivo fijo"}: no se encontró en inventario para descuento automático`);
@@ -2413,10 +2704,13 @@ const _validateExtractionStock = () => {
     }
     const item = (_insumoReactivosCache || []).find((r) => r.ref === ref);
     if (!item) return;
+    const resolved = _resolveFixedInventoryAmount(hiddenInput, item);
+    if (!resolved) return;
+    const cantidadFija = resolved.amount;
     const stock = item.cantidad_actual ?? null;
     if (stock !== null && stock < cantidadFija) {
       const u = item.unidad || "";
-      errors.push(`• ${ref}: ${stock} ${u} disponibles, se requieren ${cantidadFija} ${u}`);
+      errors.push(`• ${ref}: ${_formatInventoryAmount(stock)} ${u} disponibles, se requieren ${_formatInventoryAmount(cantidadFija)} ${u}`);
     }
   });
   return errors;
@@ -2735,7 +3029,7 @@ const editExtraction = async (id) => {
   }
   try {
     const data = await getJsonAuth(`${API_BASE_URL}/samples/extraction/${id}`, token);
-    await fillExtractionForm(data.item || {});
+    await fillExtractionForm(resolveApiEntity(data));
     if (extractionModal) {
       extractionModal.show();
     }
@@ -3237,6 +3531,8 @@ const resetProcessingForm = async (withNextFolio = true) => {
   });
   setProcessingOrganismSections();
   await loadEquipmentOptionsForProcessing();
+  await loadInsumoOptions();
+  _autoResolveFixedFormInsumos("processingForm");
   await loadReceptionOptionsForProcessing();
 
   if (!withNextFolio) {
@@ -3395,7 +3691,7 @@ const buildProcessingPayload = () => {
     firma_quien_proceso: (processingFirmaProcesoInput.value || "").trim() || null,
     firma_quien_superviso: (processingFirmaSupervisoInput.value || "").trim() || null,
     estado: processingEstadoInput.value || "registrada",
-    uso_inventario: collectInventarioRows("processingInventarioBody"),
+    uso_inventario: _buildProcessingInventario(),
   };
 };
 
@@ -3448,15 +3744,15 @@ const fillProcessingForm = async (item) => {
   const sar3Obj = getStepObj(item.sardinas_steps, "Moler 1-2 min 100-150g");
   const sar4Obj = getStepObj(item.sardinas_steps, "Pesar molienda obtenida");
 
-  if (procBiv7Equipo) procBiv7Equipo.value = biv7Obj.equipo_id || "";
-  if (procBiv8Equipo) procBiv8Equipo.value = biv8Obj.equipo_id || "";
-  if (procSar3Equipo) procSar3Equipo.value = sar3Obj.equipo_id || "";
-  if (procSar4Equipo) procSar4Equipo.value = sar4Obj.equipo_id || "";
+  if (procBiv7Equipo) procBiv7Equipo.value = biv7Obj?.equipo_id || "";
+  if (procBiv8Equipo) procBiv8Equipo.value = biv8Obj?.equipo_id || "";
+  if (procSar3Equipo) procSar3Equipo.value = sar3Obj?.equipo_id || "";
+  if (procSar4Equipo) procSar4Equipo.value = sar4Obj?.equipo_id || "";
 
-  if (procBiv7Peso) procBiv7Peso.value = biv7Obj.peso ?? "";
-  if (procBiv8Peso) procBiv8Peso.value = biv8Obj.peso ?? "";
-  if (procSar3Peso) procSar3Peso.value = sar3Obj.peso ?? "";
-  if (procSar4Peso) procSar4Peso.value = sar4Obj.peso ?? "";
+  if (procBiv7Peso) procBiv7Peso.value = biv7Obj?.peso ?? "";
+  if (procBiv8Peso) procBiv8Peso.value = biv8Obj?.peso ?? "";
+  if (procSar3Peso) procSar3Peso.value = sar3Obj?.peso ?? "";
+  if (procSar4Peso) procSar4Peso.value = sar4Obj?.peso ?? "";
 
   processingOtroInput.value = item.otro_procesamiento || "";
   const res = item.resguardo || {};
@@ -3471,7 +3767,8 @@ const fillProcessingForm = async (item) => {
   setSignatureInputValue(processingFirmaProcesoInput, item.firma_quien_proceso || "");
   setSignatureInputValue(processingFirmaSupervisoInput, item.firma_quien_superviso || "");
   await loadInsumoOptions();
-  renderInventarioRows("processingInventarioBody", item.uso_inventario || []);
+  _autoResolveFixedFormInsumos("processingForm");
+  renderInventarioRows("processingInventarioBody", _filterProcessingManualInventario(item.uso_inventario || []));
   setProcessingOrganismSections();
 };
 
@@ -3530,7 +3827,7 @@ const editProcessing = async (id) => {
   }
   try {
     const data = await getJsonAuth(`${API_BASE_URL}/samples/processing/${id}`, token);
-    await fillProcessingForm(data.item || {});
+    await fillProcessingForm(resolveApiEntity(data));
     if (processingModal) {
       processingModal.show();
     }
@@ -3602,12 +3899,26 @@ const loadConsumablesData = async (force = false) => {
 };
 
 const editConsumable = (id) => {
-  const item = consumablesCache.find((row) => Number(row.id) === Number(id));
-  if (!item || !consumableModal) {
+  const token = getStoredToken();
+  if (!token || !consumableModal) {
     return;
   }
-  fillConsumableForm(item);
-  consumableModal.show();
+
+  getJsonAuth(`${API_BASE_URL}/consumables/${id}`, token)
+    .then((data) => {
+      const item = resolveApiEntity(data);
+      fillConsumableForm(item || {});
+      consumableModal.show();
+    })
+    .catch(() => {
+      const fallback = consumablesCache.find((row) => Number(row.id) === Number(id));
+      if (!fallback) {
+        showConsumablesFeedback("No se pudo cargar el consumible", true);
+        return;
+      }
+      fillConsumableForm(fallback);
+      consumableModal.show();
+    });
 };
 
 const deleteConsumable = async (id) => {
@@ -3628,6 +3939,26 @@ const deleteConsumable = async (id) => {
   } catch (error) {
     showConsumablesFeedback(error.message || "No se pudo eliminar", true);
   }
+};
+
+const openStockRefillModal = (type, id) => {
+  if (!stockRefillModal || !stockRefillForm) {
+    return;
+  }
+  const isReactivo = type === "reactivo";
+  const collection = isReactivo ? reactivosCache : consumablesCache;
+  const item = collection.find((row) => Number(row.id) === Number(id)) || {};
+  const name = isReactivo ? formatReactivoName(item) : item.producto || "Consumible";
+
+  stockRefillForm.reset();
+  stockRefillTypeInput.value = type;
+  stockRefillIdInput.value = id;
+  stockRefillTitle.textContent = isReactivo ? "Rellenar Reactivo" : "Rellenar Consumible";
+  stockRefillItemLabel.textContent = name;
+  stockRefillAmountInput.step = isReactivo ? "0.0001" : "1";
+  stockRefillAmountInput.placeholder = isReactivo ? "Cantidad a sumar" : "Piezas a sumar";
+  stockRefillReasonInput.value = "Relleno manual de stock";
+  stockRefillModal.show();
 };
 
 const getReactivoTypeConfig = (type) => {
@@ -3690,6 +4021,31 @@ const formatReactivoName = (item) => item.producto || item.item_name || item.nom
 const getReactivoExpiry = (item) => item.caducidad || item.expiration_date || item.fecha_vencimiento || null;
 const getReactivoLocation = (item) => [item.localizacion || item.ubicacion, item.sub_localizacion].filter(Boolean).join(" / ") || "-";
 
+const getReactivoStockInfo = (item) => {
+  const fields = [
+    ["restante_190126", "L"],
+    ["amount_in_stock", item.unidad || ""],
+    ["cantidad_actual", item.unidad || ""],
+    ["total_litros_2025", "L"],
+    ["capacidad_litros", "L"],
+    ["capacidad_kilos", "kg"],
+    ["volumen", "volumen"],
+    ["piezas", "piezas"],
+  ];
+  const source = fields.find(([key]) => parseNumberOrNull(item[key]) !== null);
+  const current = source ? parseNumberOrNull(item[source[0]]) : null;
+  const unit = source ? source[1] : "";
+  const max =
+    parseNumberOrNull(item.stock_maximo) ??
+    parseNumberOrNull(item.capacidad_litros) ??
+    parseNumberOrNull(item.capacidad_kilos) ??
+    parseNumberOrNull(item.cantidad_total) ??
+    parseNumberOrNull(item.total_litros_2025) ??
+    parseNumberOrNull(item.amount_in_stock) ??
+    current;
+  return { current, max, unit };
+};
+
 const getReactivoStockText = (item) => {
   if (item.restante_190126 !== null && item.restante_190126 !== undefined && item.restante_190126 !== "") return `${fmt(item.restante_190126)} L restantes`;
   if (item.total_litros_2025 !== null && item.total_litros_2025 !== undefined && item.total_litros_2025 !== "") return `${fmt(item.total_litros_2025)} L`;
@@ -3699,6 +4055,15 @@ const getReactivoStockText = (item) => {
   if (item.volumen !== null && item.volumen !== undefined && item.volumen !== "") return `${fmt(item.volumen)} volumen`;
   if (item.piezas !== null && item.piezas !== undefined && item.piezas !== "") return `${fmt(item.piezas)} piezas`;
   return "-";
+};
+
+const getReactivoStockView = (item) => {
+  const { current, max, unit } = getReactivoStockInfo(item);
+  if (current === null) {
+    return "-";
+  }
+  const unitText = unit ? ` ${unit}` : "";
+  return buildStockProgress(current, max || current, `${fmt(current)} de ${fmt(max || current)}${unitText}`);
 };
 
 const renderReactivosImportSheets = (summary = null) => {
@@ -3828,8 +4193,8 @@ const mapReactivoRow = (item) => {
       <td>${[item.marca, item.proveedor || item.vendor].filter(Boolean).join(" / ") || "-"}</td>
       <td>${getReactivoLocation(item)}</td>
       <td>${fmtDate(getReactivoExpiry(item))}</td>
-      <td>${getReactivoStockText(item)}</td>
-      <td><div class="d-flex gap-1"><button class="role-action-btn" data-reactivo-action="edit" data-reactivo-id="${item.id}" ${canUpdate ? "" : "disabled"}>Editar</button><button class="role-action-btn" data-reactivo-action="delete" data-reactivo-id="${item.id}" ${canDelete ? "" : "disabled"}>Eliminar</button></div></td>
+      <td>${getReactivoStockView(item)}</td>
+      <td><div class="d-flex gap-1 flex-wrap"><button class="role-action-btn" data-reactivo-action="refill" data-reactivo-id="${item.id}" ${canUpdate ? "" : "disabled"}>Rellenar</button><button class="role-action-btn" data-reactivo-action="edit" data-reactivo-id="${item.id}" ${canUpdate ? "" : "disabled"}>Editar</button><button class="role-action-btn" data-reactivo-action="delete" data-reactivo-id="${item.id}" ${canDelete ? "" : "disabled"}>Eliminar</button></div></td>
     </tr>
   `;
 };
@@ -3937,7 +4302,7 @@ const editReactivo = async (id) => {
   if (!token) return;
   try {
     const data = await getJsonAuth(`${API_BASE_URL}/inventory/reactivos/${id}`, token);
-    resetReactivoForm(data.item || {});
+    resetReactivoForm(resolveApiEntity(data));
     if (reactivoModal) reactivoModal.show();
   } catch (error) {
     showReactivosFeedback(error.message || "No se pudo cargar el reactivo", true);
@@ -3972,6 +4337,26 @@ const escapeHtml = (value) =>
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+
+const resolveApiEntity = (payload, preferredKeys = []) => {
+  if (!payload || typeof payload !== "object") {
+    return {};
+  }
+
+  const keys = [...preferredKeys, "item", "role", "user", "usuario", "data", "result"];
+  for (const key of keys) {
+    const value = payload[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value;
+    }
+  }
+
+  if (Array.isArray(payload.items) && payload.items.length === 1 && typeof payload.items[0] === "object") {
+    return payload.items[0];
+  }
+
+  return payload;
+};
 
 const updateUsuariosStats = (items = []) => {
   if (usuariosTotalCount) usuariosTotalCount.textContent = fmt(items.length);
@@ -4069,13 +4454,13 @@ const loadUserRoleOptions = async (selectedRoleId = null) => {
 const resetUserForm = async (item = null) => {
   if (!userForm) return;
   userForm.reset();
-  userIdInput.value = item.id || "";
+  userIdInput.value = item?.id || "";
   userFormTitle.textContent = item ? "Editar Usuario" : "Nuevo Usuario";
-  userNameInput.value = item.nombre || "";
-  userEmailInput.value = item.email || "";
-  userDepartmentInput.value = item.departamento || "";
+  userNameInput.value = item?.nombre || "";
+  userEmailInput.value = item?.email || "";
+  userDepartmentInput.value = item?.departamento || "";
   userActiveInput.checked = item ? !!item.activo : true;
-  await loadUserRoleOptions(item.id_rol || null);
+  await loadUserRoleOptions(item?.id_rol || null);
 };
 
 const buildUserPayload = () => ({
@@ -4091,7 +4476,7 @@ const editUsuario = async (id) => {
   if (!token) return;
   try {
     const data = await getJsonAuth(`${API_BASE_URL}/admin/usuarios/${id}`, token);
-    await resetUserForm(data.item || {});
+    await resetUserForm(resolveApiEntity(data));
     if (userModal) userModal.show();
   } catch (error) {
     showUsuariosFeedback(error.message || "No se pudo cargar el usuario", true);
@@ -4373,17 +4758,17 @@ const resetEquipoForm = async (item = null) => {
 const resetMantenimientoForm = async (item = null) => {
   if (!mantenimientoForm) return;
   mantenimientoForm.reset();
-  mantenimientoIdInput.value = item.id || "";
+  mantenimientoIdInput.value = item?.id || "";
   mantenimientoFormTitle.textContent = item ? "Editar Mantenimiento" : "Programar Mantenimiento";
-  mantenimientoTipoInput.value = item.tipo || "preventivo";
-  mantenimientoFechaProgramadaInput.value = toDateOnly(item.fecha_programada);
-  mantenimientoFechaRealizadoInput.value = toDateOnly(item.fecha_realizado);
-  mantenimientoTecnicoInput.value = item.tecnico_proveedor || "";
-  mantenimientoEstadoInput.value = item.estado || "programado";
-  mantenimientoObservacionesInput.value = item.observaciones || "";
+  mantenimientoTipoInput.value = item?.tipo || "preventivo";
+  mantenimientoFechaProgramadaInput.value = toDateOnly(item?.fecha_programada);
+  mantenimientoFechaRealizadoInput.value = toDateOnly(item?.fecha_realizado);
+  mantenimientoTecnicoInput.value = item?.tecnico_proveedor || "";
+  mantenimientoEstadoInput.value = item?.estado || "programado";
+  mantenimientoObservacionesInput.value = item?.observaciones || "";
   await Promise.all([
-    loadEquipoOptionsForMaintenance(item.id_equipo || null),
-    loadResponsableOptions(mantenimientoResponsableInput, item.id_responsable || null),
+    loadEquipoOptionsForMaintenance(item?.id_equipo || null),
+    loadResponsableOptions(mantenimientoResponsableInput, item?.id_responsable || null),
   ]);
 };
 
@@ -4435,7 +4820,7 @@ const editEquipo = async (id) => {
   if (!token) return;
   try {
     const data = await getJsonAuth(`${API_BASE_URL}/inventory/equipos/${id}`, token);
-    await resetEquipoForm(data.item || {});
+    await resetEquipoForm(resolveApiEntity(data));
     if (equipoModal) equipoModal.show();
   } catch (error) {
     showEquiposFeedback(error.message || "No se pudo cargar el equipo", true);
@@ -4461,7 +4846,7 @@ const editMantenimiento = async (id) => {
   if (!token) return;
   try {
     const data = await getJsonAuth(`${API_BASE_URL}/inventory/mantenimientos/${id}`, token);
-    await resetMantenimientoForm(data.item || {});
+    await resetMantenimientoForm(resolveApiEntity(data));
     if (mantenimientoModal) mantenimientoModal.show();
   } catch (error) {
     showMantenimientoFeedback(error.message || "No se pudo cargar el mantenimiento", true);
@@ -4775,7 +5160,7 @@ navItems.forEach((item) => {
 
 if (rolesTableBody) {
   rolesTableBody.addEventListener("click", async (event) => {
-    const target = event.target;
+    const target = event.target instanceof HTMLElement ? event.target.closest("[data-role-action]") : null;
     if (!(target instanceof HTMLElement)) {
       return;
     }
@@ -4818,6 +5203,38 @@ if (rolesSearchInput) {
 if (roleCancelBtn) {
   roleCancelBtn.addEventListener("click", () => {
     resetRoleForm();
+  });
+}
+
+if (rolePermissionsBody) {
+  rolePermissionsBody.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const row = target.closest("tr[data-permission-row]");
+    if (!(row instanceof HTMLTableRowElement)) {
+      return;
+    }
+
+    if (target.classList.contains("role-row-select-all")) {
+      setRowPermissionsChecked(row, target.checked);
+    }
+
+    updateRowSelectAllControl(row);
+    updateGlobalPermissionsSelectAll();
+  });
+}
+
+if (rolePermissionsSelectAll instanceof HTMLInputElement) {
+  rolePermissionsSelectAll.addEventListener("change", () => {
+    const rows = getRolePermissionRows();
+    rows.forEach((row) => {
+      setRowPermissionsChecked(row, rolePermissionsSelectAll.checked);
+      updateRowSelectAllControl(row);
+    });
+    updateGlobalPermissionsSelectAll();
   });
 }
 
@@ -4954,19 +5371,59 @@ if (importConsumablesFileInput) {
       let csvRows;
 
       if (ext === "xlsx" || ext === "xls") {
-        // Parseo Excel con SheetJS
         const buffer = await file.arrayBuffer();
         const workbook = window.XLSX.read(buffer, { type: "array", cellDates: true });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonRows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-        // Convertir a array de strings (igual que parseCsvText)
-        csvRows = jsonRows.map((row) => row.map((cell) => {
-          if (cell === null || cell === undefined) return "";
-          if (cell instanceof Date) return cell.toISOString().slice(0, 10);
-          return String(cell);
-        }));
+        const workbookHasSingleSheet = workbook.SheetNames.length === 1;
+        let mergedRows = [];
+        const detectedSet = new Set();
+        const ignoredSheets = [];
+        let validSheets = 0;
+
+        workbook.SheetNames.forEach((sheetName) => {
+          const sheet = workbook.Sheets[sheetName];
+          if (!sheet) {
+            return;
+          }
+
+          const jsonRows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+          const matrix = jsonRows.map((row) => row.map((cell) => {
+            if (cell === null || cell === undefined) return "";
+            if (cell instanceof Date) return cell.toISOString().slice(0, 10);
+            return String(cell);
+          }));
+
+          const mapped = mapCsvToPreviewRows(matrix);
+          const hasConsumibleHeaders = hasConsumablesHeaderSignature(mapped.detected);
+          const isConsumibleSheet =
+            isConsumablesSheetName(sheetName) ||
+            (workbookHasSingleSheet && hasConsumibleHeaders);
+          if (!isConsumibleSheet) {
+            ignoredSheets.push(sheetName);
+            return;
+          }
+
+          validSheets += 1;
+          mapped.detected.forEach((field) => detectedSet.add(field));
+          mergedRows = mergedRows.concat(mapped.rows);
+        });
+
+        importDetectedColumns = Array.from(detectedSet);
+        importPreviewRows = mergedRows;
+        renderImportPreview();
+
+        if (!validSheets) {
+          showConsumablesFeedback("El Excel no contiene hojas de consumibles reconocidas", true);
+          return;
+        }
+
+        if (!importPreviewRows.length) {
+          showConsumablesFeedback("Las hojas de consumibles no contienen filas válidas", true);
+          return;
+        }
+
+        showConsumablesFeedback(`Excel leído: ${validSheets} hoja(s) de consumibles. Hojas descartadas: ${ignoredSheets.length}`);
+        return;
       } else {
-        // Parseo CSV con detección de encoding
         const readWithEncoding = (f, enc) =>
           new Promise((resolve, reject) => {
             const fr = new FileReader();
@@ -4990,7 +5447,7 @@ if (importConsumablesFileInput) {
       if (importPreviewRows.length === 0) {
         showConsumablesFeedback("El archivo no contiene filas para importar", true);
       } else {
-        showConsumablesFeedback("");
+        showConsumablesFeedback("Archivo cargado correctamente");
       }
     } catch (_error) {
       importPreviewRows = [];
@@ -5096,7 +5553,7 @@ if (reactivosSearchInput) {
 
 if (reactivosTableBody) {
   reactivosTableBody.addEventListener("click", async (event) => {
-    const target = event.target;
+    const target = event.target instanceof HTMLElement ? event.target.closest("[data-reactivo-action]") : null;
     if (!(target instanceof HTMLElement)) {
       return;
     }
@@ -5112,6 +5569,14 @@ if (reactivosTableBody) {
         return;
       }
       await editReactivo(rowId);
+      return;
+    }
+
+    if (action === "refill") {
+      if (!canModuleAction("reactivos", "update")) {
+        return;
+      }
+      openStockRefillModal("reactivo", rowId);
       return;
     }
 
@@ -5508,7 +5973,7 @@ if (mantenimientoForm) {
 
 if (consumiblesTableBody) {
   consumiblesTableBody.addEventListener("click", async (event) => {
-    const target = event.target;
+    const target = event.target instanceof HTMLElement ? event.target.closest("[data-consumable-action]") : null;
     if (!(target instanceof HTMLElement)) {
       return;
     }
@@ -5527,11 +5992,69 @@ if (consumiblesTableBody) {
       return;
     }
 
+    if (action === "refill") {
+      if (!canModuleAction("consumibles", "update")) {
+        return;
+      }
+      openStockRefillModal("consumible", rowId);
+      return;
+    }
+
     if (action === "delete") {
       if (!canModuleAction("consumibles", "delete")) {
         return;
       }
       await deleteConsumable(rowId);
+    }
+  });
+}
+
+if (stockRefillForm) {
+  stockRefillForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const token = getStoredToken();
+    if (!token) {
+      return;
+    }
+
+    const type = stockRefillTypeInput.value;
+    const id = Number(stockRefillIdInput.value || 0);
+    const amount = parseNumberOrNull(stockRefillAmountInput.value);
+    if (!id || !type || amount === null || amount <= 0) {
+      stockRefillAmountInput.focus();
+      return;
+    }
+
+    stockRefillSaveBtn.disabled = true;
+    try {
+      const payload = {
+        cantidad: type === "consumible" ? Math.round(amount) : amount,
+        motivo: (stockRefillReasonInput.value || "").trim() || "Relleno manual de stock",
+      };
+      if (type === "reactivo") {
+        await sendJsonAuth("POST", `${API_BASE_URL}/inventory/reactivos/${id}/refill`, token, payload);
+        showReactivosFeedback("Stock de reactivo rellenado");
+        loadedPages.delete("reactivos");
+        await loadReactivosData(true);
+      } else {
+        await sendJsonAuth("POST", `${API_BASE_URL}/consumables/${id}/refill`, token, payload);
+        showConsumablesFeedback("Stock de consumible rellenado");
+        loadedPages.delete("consumibles");
+        await loadConsumablesData(true);
+      }
+      loadedPages.delete("movimientos");
+      if (stockRefillModal) {
+        safelyHideModal(stockRefillModal, type === "reactivo" ? reactivosSearchInput : consumablesSearchInput);
+      }
+    } catch (error) {
+      const message = error.message || "No se pudo rellenar stock";
+      if (type === "reactivo") {
+        showReactivosFeedback(message, true);
+      } else {
+        showConsumablesFeedback(message, true);
+      }
+    } finally {
+      stockRefillSaveBtn.disabled = false;
     }
   });
 }
@@ -5592,7 +6115,7 @@ if (importConsumablesForm) {
     }
 
     if (!importPreviewRows.length) {
-      showConsumablesFeedback("Primero carga un CSV y valida filas", true);
+      showConsumablesFeedback("Primero carga un archivo CSV o Excel y valida filas", true);
       return;
     }
 
@@ -5630,7 +6153,7 @@ if (importConsumablesForm) {
         safelyHideModal(importConsumablesModal, openImportConsumablesModalBtn || mobileUserBtn || null);
       }
     } catch (error) {
-      showConsumablesFeedback(error.message || "No se pudo importar el CSV", true);
+      showConsumablesFeedback(error.message || "No se pudo importar el archivo", true);
     } finally {
       importConsumablesBtn.disabled = false;
     }
@@ -6040,6 +6563,8 @@ if (processingForm) {
     if (!token) {
       return;
     }
+    await loadInsumoOptions();
+    _autoResolveFixedFormInsumos("processingForm");
     const payload = buildProcessingPayload();
     if (!payload.folio_num) {
       showProcessingFeedback("El folio de procesamiento es obligatorio", true);
@@ -6167,6 +6692,18 @@ if (sampleForm) {
     if (!payload.folio_num) {
       showSamplesFeedback("El folio es obligatorio", true);
       sampleFolioInput.focus();
+      return;
+    }
+
+    if (!payload.recibido_por) {
+      showSamplesFeedback("El campo Recibido por es obligatorio", true);
+      sampleRecibidoPorVisualInput?.focus();
+      return;
+    }
+
+    if (!payload.medio_recepcion) {
+      showSamplesFeedback("El campo Medio de recepcion es obligatorio", true);
+      sampleReceptionMethodVisualInput?.focus();
       return;
     }
 

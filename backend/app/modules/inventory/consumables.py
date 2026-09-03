@@ -1,10 +1,13 @@
 from flask import Blueprint, g, jsonify, request
 from app.extensions import db
 from app.utils.auth import token_required
+from app.utils.inventory_usage import ensure_movimientos_schema
 from app.utils.rbac import permission_required
+from app.utils.schema import add_column_if_missing
 from sqlalchemy.sql import text
 import csv
 import io
+from datetime import datetime
 
 bp = Blueprint("consumables", __name__, url_prefix="/api/consumables")
 
@@ -24,9 +27,20 @@ def ensure_consumibles_schema():
                 contenedor VARCHAR(120) DEFAULT NULL,
                 piezas INTEGER DEFAULT 0,
                 cantidad_por_pieza INTEGER DEFAULT NULL,
+                stock_maximo INTEGER DEFAULT NULL,
                 creado_por INTEGER DEFAULT NULL,
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+            """
+        )
+    )
+    add_column_if_missing("consumibles", "stock_maximo", "INTEGER DEFAULT NULL")
+    db.session.execute(
+        text(
+            """
+            UPDATE consumibles
+            SET stock_maximo = piezas
+            WHERE stock_maximo IS NULL AND piezas IS NOT NULL AND piezas > 0
             """
         )
     )
@@ -127,7 +141,7 @@ def get_consumables():
     query = """
         SELECT id, producto, marca, proveedor, catalogo_parte_cas,
                fecha_ingreso, tamano_capacidad, contenedor, piezas,
-               cantidad_por_pieza, creado_por, creado_en
+               cantidad_por_pieza, stock_maximo, creado_por, creado_en
         FROM consumibles
         WHERE producto LIKE :search OR marca LIKE :search
         ORDER BY producto ASC
@@ -152,12 +166,31 @@ def create_consumable():
     data["creado_por"] = _to_int_or_none(current_user.get("sub"))
 
     query = """
-        INSERT INTO consumibles (producto, marca, proveedor, catalogo_parte_cas, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza, creado_por)
-        VALUES (:producto, :marca, :proveedor, :catalogo_parte_cas, :fecha_ingreso, :tamano_capacidad, :contenedor, :piezas, :cantidad_por_pieza, :creado_por)
+        INSERT INTO consumibles (producto, marca, proveedor, catalogo_parte_cas, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza, stock_maximo, creado_por)
+        VALUES (:producto, :marca, :proveedor, :catalogo_parte_cas, :fecha_ingreso, :tamano_capacidad, :contenedor, :piezas, :cantidad_por_pieza, :piezas, :creado_por)
     """
     result = db.session.execute(text(query), data)
     db.session.commit()
     return jsonify({"message": "Consumible creado", "id": result.lastrowid}), 201
+
+
+@bp.route("/<int:consumable_id>", methods=["GET"])
+@token_required
+@permission_required("consumibles", "read")
+def get_consumable(consumable_id):
+    ensure_consumibles_schema()
+    query = """
+        SELECT id, producto, marca, proveedor, catalogo_parte_cas,
+               fecha_ingreso, tamano_capacidad, contenedor, piezas,
+               cantidad_por_pieza, stock_maximo, creado_por, creado_en
+        FROM consumibles
+        WHERE id = :id
+        LIMIT 1
+    """
+    row = db.session.execute(text(query), {"id": consumable_id}).fetchone()
+    if not row:
+        return jsonify({"message": "Consumible no encontrado"}), 404
+    return jsonify({"item": dict(row._mapping)}), 200
 
 
 @bp.route("/<int:consumable_id>", methods=["PUT"])
@@ -182,6 +215,59 @@ def update_consumable(consumable_id):
     if result.rowcount == 0:
         return jsonify({"message": "Consumible no encontrado"}), 404
     return jsonify({"message": "Consumible actualizado"}), 200
+
+
+@bp.route("/<int:consumable_id>/refill", methods=["POST"])
+@token_required
+@permission_required("consumibles", "update")
+def refill_consumable(consumable_id):
+    ensure_consumibles_schema()
+    ensure_movimientos_schema()
+    data = request.get_json(silent=True) or {}
+    amount = _to_int_or_none(data.get("cantidad"))
+    if amount is None or amount <= 0:
+        return jsonify({"message": "Captura una cantidad mayor a cero"}), 400
+
+    current_user = getattr(g, "current_user", {}) or {}
+    user_id = _to_int_or_none(current_user.get("sub"))
+    motivo = (data.get("motivo") or "Relleno manual de stock").strip()
+
+    result = db.session.execute(
+        text(
+            """
+            UPDATE consumibles
+            SET piezas = COALESCE(piezas, 0) + :cantidad,
+                stock_maximo = CASE
+                    WHEN stock_maximo IS NULL OR stock_maximo < COALESCE(piezas, 0) + :cantidad
+                    THEN COALESCE(piezas, 0) + :cantidad
+                    ELSE stock_maximo
+                END
+            WHERE id = :id
+            """
+        ),
+        {"id": consumable_id, "cantidad": amount},
+    )
+    if result.rowcount == 0:
+        db.session.rollback()
+        return jsonify({"message": "Consumible no encontrado"}), 404
+
+    db.session.execute(
+        text(
+            """
+            INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario)
+            VALUES ('entrada', 'consumibles', :id, :cantidad, :motivo, :referencia, :id_usuario)
+            """
+        ),
+        {
+            "id": consumable_id,
+            "cantidad": amount,
+            "motivo": motivo,
+            "referencia": f"consumible-refill-{consumable_id}-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}",
+            "id_usuario": user_id,
+        },
+    )
+    db.session.commit()
+    return jsonify({"message": "Stock de consumible rellenado"}), 200
 
 
 @bp.route("/<int:consumable_id>", methods=["DELETE"])
@@ -217,8 +303,8 @@ def import_consumables():
                 continue
 
             query = """
-                INSERT INTO consumibles (producto, marca, proveedor, catalogo_parte_cas, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza)
-                VALUES (:producto, :marca, :proveedor, :catalogo_parte_cas, :fecha_ingreso, :tamano_capacidad, :contenedor, :piezas, :cantidad_por_pieza)
+                INSERT INTO consumibles (producto, marca, proveedor, catalogo_parte_cas, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza, stock_maximo)
+                VALUES (:producto, :marca, :proveedor, :catalogo_parte_cas, :fecha_ingreso, :tamano_capacidad, :contenedor, :piezas, :cantidad_por_pieza, :piezas)
             """
             db.session.execute(text(query), data)
             inserted += 1
@@ -243,8 +329,8 @@ def import_consumables():
                 continue
 
             query = """
-                INSERT INTO consumibles (producto, marca, proveedor, catalogo_parte_cas, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza)
-                VALUES (:producto, :marca, :proveedor, :catalogo_parte_cas, :fecha_ingreso, :tamano_capacidad, :contenedor, :piezas, :cantidad_por_pieza)
+                INSERT INTO consumibles (producto, marca, proveedor, catalogo_parte_cas, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza, stock_maximo)
+                VALUES (:producto, :marca, :proveedor, :catalogo_parte_cas, :fecha_ingreso, :tamano_capacidad, :contenedor, :piezas, :cantidad_por_pieza, :piezas)
             """
             db.session.execute(text(query), data)
             inserted += 1

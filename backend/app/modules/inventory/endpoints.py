@@ -3,7 +3,7 @@ import re
 import unicodedata
 from datetime import date, datetime
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -81,6 +81,7 @@ REACTIVO_COLUMNS = [
     "ubicacion",
     "fecha_vencimiento",
     "stock_minimo",
+    "stock_maximo",
 ]
 
 
@@ -476,9 +477,38 @@ def ensure_reactivos_schema():
         ("extra_json", "LONGTEXT"),
         ("creado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP"),
         ("actualizado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+        ("stock_maximo", "DECIMAL(12,4) DEFAULT NULL"),
     ]
     for column_name, column_definition in column_definitions:
         add_column_if_missing("reactivos", column_name, column_definition)
+    db.session.execute(
+        text(
+            """
+            UPDATE reactivos
+            SET stock_maximo = COALESCE(
+                capacidad_litros,
+                capacidad_kilos,
+                cantidad_total,
+                total_litros_2025,
+                amount_in_stock,
+                cantidad_actual,
+                piezas,
+                volumen
+            )
+            WHERE stock_maximo IS NULL
+              AND COALESCE(
+                capacidad_litros,
+                capacidad_kilos,
+                cantidad_total,
+                total_litros_2025,
+                amount_in_stock,
+                cantidad_actual,
+                piezas,
+                volumen
+              ) IS NOT NULL
+            """
+        )
+    )
     db.session.commit()
 
 
@@ -563,6 +593,13 @@ def _normalize_reactivo_payload(raw):
             "ubicacion": ubicacion,
             "fecha_vencimiento": fecha_vencimiento,
             "stock_minimo": _to_float_or_none(payload.get("stock_minimo")) or 0,
+            "stock_maximo": _to_float_or_none(payload.get("stock_maximo"))
+            or capacidad_litros
+            or capacidad_kilos
+            or cantidad_total
+            or total_litros_2025
+            or amount
+            or cantidad_actual,
             "capacidad": capacidad,
             "unidad_capacidad": unidad_capacidad,
             "capacidad_litros": capacidad_litros,
@@ -646,7 +683,7 @@ def list_reactivos():
                    expiration_date, cas_number, bottle_tag_color, date_opened,
                    formula, id_interno, physical_state, estado_fisico, presentacion,
                    tipo_sustancia, numero_cas, categoria, cantidad_actual,
-                   unidad, ubicacion, fecha_vencimiento, stock_minimo
+                   unidad, ubicacion, fecha_vencimiento, stock_minimo, stock_maximo
             FROM reactivos
             WHERE :search = ''
                OR nombre LIKE :search_like
@@ -717,6 +754,83 @@ def update_reactivo(reactivo_id: int):
     if result.rowcount == 0:
         return jsonify({"message": "Reactivo no encontrado"}), 404
     return jsonify({"message": "Reactivo actualizado"}), 200
+
+
+@inventory_bp.post("/reactivos/<int:reactivo_id>/refill")
+@token_required
+@permission_required("reactivos", "update")
+def refill_reactivo(reactivo_id: int):
+    ensure_reactivos_schema()
+    ensure_movimientos_schema()
+    payload = request.get_json(silent=True) or {}
+    amount = _to_float_or_none(payload.get("cantidad"))
+    if amount is None or amount <= 0:
+        return jsonify({"message": "Captura una cantidad mayor a cero"}), 400
+
+    row = db.session.execute(
+        text("SELECT * FROM reactivos WHERE id = :id LIMIT 1"),
+        {"id": reactivo_id},
+    ).mappings().first()
+    if not row:
+        return jsonify({"message": "Reactivo no encontrado"}), 404
+
+    updates = ["cantidad_actual = COALESCE(cantidad_actual, 0) + :cantidad"]
+    visible_current = row.get("cantidad_actual")
+    if row.get("restante_190126") is not None:
+        updates.extend(["restante_190126 = COALESCE(restante_190126, 0) + :cantidad", "restante = COALESCE(restante, 0) + :cantidad"])
+        visible_current = row.get("restante_190126")
+    elif row.get("amount_in_stock") is not None:
+        updates.append("amount_in_stock = COALESCE(amount_in_stock, 0) + :cantidad")
+        visible_current = row.get("amount_in_stock")
+    elif row.get("total_litros_2025") is not None:
+        updates.extend(["total_litros_2025 = COALESCE(total_litros_2025, 0) + :cantidad", "cantidad_total = COALESCE(cantidad_total, 0) + :cantidad"])
+        visible_current = row.get("total_litros_2025")
+    elif row.get("piezas") is not None:
+        updates.append("piezas = COALESCE(piezas, 0) + :cantidad")
+        visible_current = row.get("piezas")
+    elif row.get("volumen") is not None:
+        updates.append("volumen = COALESCE(volumen, 0) + :cantidad")
+        visible_current = row.get("volumen")
+    else:
+        updates.append("amount_in_stock = COALESCE(amount_in_stock, 0) + :cantidad")
+        visible_current = 0
+
+    current_after = (_to_float_or_none(visible_current) or 0) + amount
+    updates.append(
+        """
+        stock_maximo = CASE
+            WHEN stock_maximo IS NULL OR stock_maximo < :current_after THEN :current_after
+            ELSE stock_maximo
+        END
+        """
+    )
+
+    db.session.execute(
+        text(f"UPDATE reactivos SET {', '.join(updates)} WHERE id = :id"),
+        {"id": reactivo_id, "cantidad": amount, "current_after": current_after},
+    )
+
+    current_user = getattr(g, "current_user", {}) or {}
+    user_id = _to_int_or_none(current_user.get("sub"))
+    motivo = (payload.get("motivo") or "Relleno manual de stock").strip()
+    reference = f"reactivo-refill-{reactivo_id}-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+    db.session.execute(
+        text(
+            """
+            INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario)
+            VALUES ('entrada', 'reactivos', :id, :cantidad, :motivo, :referencia, :id_usuario)
+            """
+        ),
+        {
+            "id": reactivo_id,
+            "cantidad": amount,
+            "motivo": motivo,
+            "referencia": reference,
+            "id_usuario": user_id,
+        },
+    )
+    db.session.commit()
+    return jsonify({"message": "Stock de reactivo rellenado"}), 200
 
 
 @inventory_bp.post("/reactivos/import")

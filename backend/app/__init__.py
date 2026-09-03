@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 
 from flask import Flask, jsonify, send_from_directory
@@ -92,7 +93,9 @@ def create_app() -> Flask:
                 503,
             )
 
-    frontend_dir = Path(app.root_path).parent.parent / "frontend"
+    frontend_dir = Path(
+        os.getenv("FICOTOX_FRONTEND_DIR", str(Path(app.root_path).parent.parent / "frontend"))
+    )
 
     @app.get("/")
     def serve_frontend_index():
