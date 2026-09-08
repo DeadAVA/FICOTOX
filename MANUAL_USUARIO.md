@@ -15,47 +15,41 @@ El sistema esta orientado al seguimiento de actividades de laboratorio bajo un f
 
 ## 2. Acceso al sistema
 
-1. Abra el sistema en el navegador.
-2. En la pantalla inicial, seleccione **Ingresar con Microsoft** si la autenticacion Microsoft esta habilitada.
-3. Si el acceso local esta habilitado, capture su correo institucional en el formulario de correo.
-4. Al iniciar sesion correctamente, el sistema mostrara el **Dashboard**.
+1. Abra el sistema en el navegador (`http://localhost:3000` en desarrollo o la direccion que le indique el laboratorio).
+2. Capture su correo institucional y su contrasena y presione **Entrar**.
+3. Si la autenticacion Microsoft esta habilitada, tambien vera el boton **Continuar con Microsoft**.
+4. Al iniciar sesion correctamente, el sistema mostrara la pantalla de **Inicio**.
 
-Si no puede ingresar, contacte al administrador del sistema para validar que su usuario este dado de alta, activo y con un rol asignado.
+Si no puede ingresar, contacte al administrador del sistema para validar que su usuario este dado de alta, activo, con un rol asignado y con contrasena definida.
 
 ## 3. Navegacion general
 
-El menu lateral permite acceder a las secciones disponibles segun los permisos del usuario:
+La barra superior contiene las cinco secciones principales, visibles segun los permisos del usuario:
 
-- **Dashboard**
-- **Reactivos**
-- **Consumibles**
-- **Equipos**
-- **Muestras**
-- **Movimientos**
-- **Mantenimiento**
-- **Documentos SGC**
-- **Reportes Mantenimiento**
-- **Roles**
-- **Usuarios**
+- **Inicio**: estado general del laboratorio.
+- **Muestras**: recepcion, procesamiento y extraccion (en pestanas).
+- **Inventario**: reactivos, consumibles, equipos y mantenimiento (en pestanas).
+- **Movimientos**: entradas y salidas de inventario.
+- **Documentos**: documentos SGC y reportes de mantenimiento.
 
-En dispositivos moviles, use el boton de menu para abrir o cerrar la navegacion lateral.
+Las secciones de **Usuarios** y **Roles** se abren desde el menu de usuario (su nombre, en la esquina superior derecha), junto con **Cerrar sesion**.
 
-Para salir del sistema, use el boton **Cerrar sesion** ubicado en el encabezado del Dashboard.
+Atajos y ayudas:
 
-## 4. Dashboard
+- **Buscar o ir a** (o la combinacion `Ctrl+K` / `Cmd+K`) abre la paleta de comandos: escriba el nombre de una seccion, de un reactivo, de un consumible o un folio de muestra y presione Enter para ir directamente.
+- Los formularios de catalogo (reactivos, consumibles, equipos, mantenimiento, usuarios, roles) se abren en un panel lateral sin salir de la tabla.
+- Los formatos de muestra (recepcion, procesamiento y extraccion) se abren en pantalla completa con un indice de secciones a la izquierda.
+- En dispositivos moviles, use el boton de menu (tres lineas) para abrir la navegacion.
 
-El Dashboard muestra un resumen general del laboratorio:
+## 4. Inicio
 
-- Total de reactivos.
-- Total de consumibles.
-- Mantenimientos proximos.
-- Muestras registradas.
-- Resumen de entradas y salidas de inventario.
-- Estado de mantenimiento: realizados, pendientes y vencidos.
+La pantalla de Inicio muestra un resumen del laboratorio:
+
+- Accesos rapidos para nueva recepcion, nuevo reactivo, nuevo consumible y programar mantenimiento.
+- Totales de reactivos, consumibles, muestras y mantenimientos proximos.
+- Muestras en curso (puede hacer clic en una fila para abrirla).
+- Mantenimientos proximos y recientes.
 - Ultimos movimientos de inventario.
-- Proximos y recientes mantenimientos.
-
-Use esta pantalla para revisar rapidamente el estado operativo del laboratorio.
 
 ## 5. Reactivos
 
@@ -63,7 +57,7 @@ La seccion **Reactivos** permite consultar, registrar, editar, eliminar e import
 
 ### 5.1 Consultar reactivos
 
-1. Ingrese a **Reactivos** desde el menu lateral.
+1. Ingrese a **Inventario** y seleccione la pestana **Reactivos**.
 2. Revise la tabla de inventario.
 3. Use el campo de busqueda para localizar un reactivo por nombre, marca, proveedor, ubicacion u otros datos visibles.
 
@@ -71,10 +65,10 @@ La pantalla muestra indicadores de total de reactivos, reactivos con caducidad y
 
 ### 5.2 Crear un reactivo
 
-1. Presione **Nuevo Reactivo**.
+1. Presione **Nuevo reactivo**.
 2. Seleccione el tipo o categoria.
 3. Capture los campos solicitados por el formulario.
-4. Presione **Guardar Reactivo**.
+4. Presione **Crear reactivo** (o **Guardar cambios** al editar).
 
 Categorias soportadas:
 
@@ -89,10 +83,11 @@ Categorias soportadas:
 
 ### 5.3 Editar o eliminar reactivos
 
-En la tabla, use los botones de accion del registro correspondiente:
+Al pasar el cursor sobre una fila aparecen sus acciones:
 
-- **Editar** para modificar datos del reactivo.
-- **Eliminar** para retirar el registro, si cuenta con permiso.
+- **Rellenar stock** para sumar existencia al reactivo.
+- **Editar** para modificar sus datos.
+- **Mas acciones** (tres puntos) > **Eliminar reactivo**, si cuenta con permiso. El sistema pide confirmacion antes de borrar.
 
 ### 5.4 Importar reactivos desde Excel
 
@@ -169,7 +164,7 @@ Este flujo permite registrar la muestra desde su ingreso hasta su extraccion fin
 
 1. Ingrese a **Muestras**.
 2. Seleccione la pestana **Recepcion**.
-3. Presione **Nueva muestra**.
+3. Presione **Nueva recepcion**.
 4. Capture los datos del formato de recepcion:
    - Folio.
    - Fecha y hora de recepcion.
@@ -179,7 +174,7 @@ Este flujo permite registrar la muestra desde su ingreso hasta su extraccion fin
    - Datos de analisis.
    - Observaciones.
    - Firmas cuando aplique.
-5. Presione **Guardar muestra**.
+5. Presione **Registrar recepcion**. Al editar una recepcion existente, el boton dice **Guardar cambios**.
 
 Validaciones principales:
 
@@ -190,24 +185,24 @@ Validaciones principales:
 ### 8.2 Procesamiento de muestras
 
 1. Seleccione la pestana **Procesamiento**.
-2. Presione **Nuevo Procesamiento**.
+2. Presione **Nuevo procesamiento**, o use la accion **Procesar** (flecha) en la fila de una recepcion para llegar con el folio ya vinculado.
 3. Seleccione el folio de recepcion.
 4. Complete los campos de procesamiento.
 5. Seleccione el tipo de organismo.
 6. Capture o seleccione los insumos utilizados cuando aplique.
-7. Presione **Guardar Procesamiento**.
+7. Presione **Registrar procesamiento**.
 
 Cuando se registran insumos, el sistema puede descontar inventario y generar movimientos.
 
 ### 8.3 Extraccion de muestras
 
 1. Seleccione la pestana **Extraccion**.
-2. Presione **Nueva Extraccion**.
+2. Presione **Nueva extraccion**, o use la accion **Extraer** (gota) en la fila de un procesamiento para llegar con el folio ya vinculado.
 3. Seleccione el folio de procesamiento.
 4. Complete los pasos del formato de extraccion.
 5. Seleccione reactivos, consumibles y equipos usados cuando aplique.
 6. Registre volumenes, limpieza del extracto, resguardo, observaciones y personal responsable.
-7. Presione **Extraer**.
+7. Presione **Registrar extraccion**.
 
 Antes de guardar, el sistema valida disponibilidad de stock para los reactivos seleccionados.
 
@@ -243,9 +238,7 @@ Use los filtros para revisar mantenimientos pendientes, completados o vencidos.
 
 ## 11. Documentos SGC y reportes
 
-La seccion **Documentos SGC** permite consultar documentos del sistema de gestion de calidad.
-
-La seccion **Reportes Mantenimiento** permite consultar reportes relacionados con mantenimientos registrados.
+La seccion **Documentos** permite consultar los documentos del sistema de gestion de calidad y los reportes de mantenimiento en PDF. Use **Abrir PDF** para descargar o ver un reporte.
 
 El acceso a estas secciones depende de los permisos asignados al usuario.
 
@@ -255,15 +248,15 @@ La seccion **Roles** esta destinada a usuarios administradores.
 
 ### 12.1 Crear rol
 
-1. Ingrese a **Roles**.
-2. Presione **Crear rol**.
+1. Abra el menu de usuario (su nombre, arriba a la derecha) y elija **Roles**.
+2. Presione **Nuevo rol**.
 3. Capture nombre y descripcion.
 4. Marque los permisos necesarios por modulo:
    - Leer.
    - Crear.
    - Editar.
    - Eliminar.
-5. Presione **Guardar Rol**.
+5. Presione **Crear rol** (o **Guardar cambios** al editar).
 
 Los modulos con permisos configurables son:
 
@@ -284,10 +277,12 @@ La seccion **Usuarios** permite administrar cuentas de acceso.
 
 ### 13.1 Crear usuario
 
-1. Ingrese a **Usuarios**.
-2. Presione **Nuevo Usuario**.
-3. Capture nombre, correo electronico, rol, departamento y estado.
-4. Presione **Guardar Usuario**.
+1. Abra el menu de usuario (su nombre, arriba a la derecha) y elija **Usuarios**.
+2. Presione **Nuevo usuario**.
+3. Capture nombre, correo electronico, rol, departamento, contrasena inicial (minimo 8 caracteres) y estado.
+4. Presione **Crear usuario**.
+
+Para cambiar la contrasena de un usuario existente, editelo y capture una nueva contrasena; si deja el campo vacio se conserva la actual.
 
 ### 13.2 Activar o desactivar usuario
 
@@ -307,7 +302,7 @@ Edite el usuario y cambie su estado a activo o inactivo. Un usuario inactivo no 
 
 ### No puedo iniciar sesion
 
-Verifique que su correo este registrado, que el usuario este activo y que tenga un rol asignado.
+Verifique que su correo este registrado, que la contrasena sea correcta, que el usuario este activo y que tenga un rol asignado. El mensaje "Correo o contrasena incorrectos" aparece en ambos casos.
 
 ### No veo una seccion del menu
 

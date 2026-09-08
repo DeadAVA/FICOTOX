@@ -13,7 +13,7 @@ from urllib.request import Request, urlopen
 from zipfile import ZIP_DEFLATED, ZipFile
 
 
-EXCLUDED_DIRS = {".git", ".venv", "__pycache__", "instance", "backups", "node_modules"}
+EXCLUDED_DIRS = {".git", ".venv", "__pycache__", "instance", "backups", "node_modules", ".next", "dist", "build"}
 EXCLUDED_FILES = {".env"}
 EXCLUDED_FILE_PATTERNS = ("*.pyc", "*.sqlite", "*.sqlite3", "*.db")
 
@@ -74,7 +74,7 @@ def microsoft_graph_token(dotenv: dict[str, str]) -> str:
     if not tenant_id or not client_id or not client_secret:
         raise RuntimeError(
             "Para subir online a OneDrive configura FICOTOX_GRAPH_CLIENT_SECRET "
-            "y tenant/client id en backend/.env."
+            "y tenant/client id en .env."
         )
 
     token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
@@ -277,10 +277,18 @@ def make_code_backup(project_root: Path, destination_dir: Path) -> Path:
     return zip_path
 
 
-def make_sqlite_backup(dotenv: dict[str, str], backend_dir: Path, destination_dir: Path) -> Path:
-    sqlite_path = Path(config_value(dotenv, "SQLITE_PATH", "instance/ficotox.sqlite3"))
-    if not sqlite_path.is_absolute():
-        sqlite_path = backend_dir / sqlite_path
+def resolve_sqlite_path(dotenv: dict[str, str], project_root: Path) -> Path:
+    """Misma resolucion que src/lib/server/config.ts: SQLITE_PATH o instance/ficotox.sqlite3."""
+    configured = config_value(dotenv, "SQLITE_PATH")
+    if configured:
+        sqlite_path = Path(configured)
+        return sqlite_path if sqlite_path.is_absolute() else project_root / sqlite_path
+
+    return project_root / "instance" / "ficotox.sqlite3"
+
+
+def make_sqlite_backup(dotenv: dict[str, str], project_root: Path, destination_dir: Path) -> Path:
+    sqlite_path = resolve_sqlite_path(dotenv, project_root)
 
     if not sqlite_path.exists():
         raise FileNotFoundError(f"No existe la base SQLite esperada: {sqlite_path}")
@@ -323,12 +331,12 @@ def make_mysql_backup(database_url: str, destination_dir: Path) -> Path:
     return backup_path
 
 
-def make_database_backup(dotenv: dict[str, str], backend_dir: Path, destination_dir: Path) -> Path:
+def make_database_backup(dotenv: dict[str, str], project_root: Path, destination_dir: Path) -> Path:
     database_url = config_value(dotenv, "DATABASE_URL")
     if database_url.startswith("mysql"):
         return make_mysql_backup(database_url, destination_dir)
 
-    return make_sqlite_backup(dotenv, backend_dir, destination_dir)
+    return make_sqlite_backup(dotenv, project_root, destination_dir)
 
 
 def main() -> int:
@@ -341,8 +349,7 @@ def main() -> int:
     args = parser.parse_args()
 
     project_root = Path(args.project_root).resolve()
-    backend_dir = project_root / "backend"
-    dotenv = read_dotenv(backend_dir / ".env")
+    dotenv = read_dotenv(project_root / ".env")
     onedrive_remote = args.onedrive_remote or config_value(dotenv, "FICOTOX_ONEDRIVE_REMOTE")
     onedrive_sync_dir = args.onedrive_sync_dir or config_value(dotenv, "FICOTOX_ONEDRIVE_SYNC_DIR")
     local_backup_dir_value = args.local_backup_dir or config_value(dotenv, "FICOTOX_BACKUP_DIR")
@@ -355,7 +362,7 @@ def main() -> int:
     created: list[Path] = []
 
     if args.target in {"database", "all"}:
-        database_backup = make_database_backup(dotenv, backend_dir, database_backup_dir)
+        database_backup = make_database_backup(dotenv, project_root, database_backup_dir)
         copied_path = copy_to_onedrive(database_backup, "backup/database", onedrive_remote, onedrive_sync_dir, dotenv)
         created.append(database_backup)
         if copied_path:

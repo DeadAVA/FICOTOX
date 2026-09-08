@@ -16,7 +16,7 @@ Si quieres indicar otra carpeta de OneDrive:
 [Environment]::SetEnvironmentVariable("FICOTOX_ONEDRIVE_SYNC_DIR", "C:\Users\alanv\OneDrive\Respaldos", "User")
 ```
 
-Tambien puedes guardar esa misma configuracion en `backend/.env`:
+Tambien puedes guardar esa misma configuracion en `.env` (raiz del proyecto):
 
 ```env
 FICOTOX_ONEDRIVE_SYNC_DIR=C:\Users\alanv\OneDrive\Respaldos
@@ -29,7 +29,7 @@ rclone config
 [Environment]::SetEnvironmentVariable("FICOTOX_ONEDRIVE_REMOTE", "onedrive:FICOTOX", "User")
 ```
 
-O en `backend/.env`:
+O en `.env`:
 
 ```env
 FICOTOX_ONEDRIVE_REMOTE=onedrive:FICOTOX
@@ -37,7 +37,7 @@ FICOTOX_ONEDRIVE_REMOTE=onedrive:FICOTOX
 
 ## Destino online con Microsoft Graph
 
-Para un servidor online, no uses la carpeta local de OneDrive. Configura subida directa por Microsoft Graph en `backend/.env`:
+Para un servidor online, no uses la carpeta local de OneDrive. Configura subida directa por Microsoft Graph en `.env`:
 
 ```env
 FICOTOX_GRAPH_ENABLED=true
@@ -47,7 +47,7 @@ FICOTOX_GRAPH_CLIENT_SECRET=tu-client-secret
 FICOTOX_GRAPH_DRIVE_ID=drive-id-del-onedrive-o-sharepoint
 ```
 
-Opcionalmente puedes usar `MICROSOFT_TENANT_ID` y `MICROSOFT_CLIENT_ID` existentes; para Graph sigue siendo necesario `FICOTOX_GRAPH_CLIENT_SECRET`.
+Opcionalmente puedes usar `MICROSOFT_TENANT_ID` y `MICROSOFT_CLIENT_ID` existentes; para Graph sigue siendo necesario `FICOTOX_GRAPH_CLIENT_SECRET`. El script lee `.env` de la raiz.
 
 Si el destino es el OneDrive de un usuario, puedes usar esto en vez de `FICOTOX_GRAPH_DRIVE_ID`:
 
@@ -103,10 +103,10 @@ Si prefieres que la base se respalde una vez al mes:
 
 Base de datos:
 
-- SQLite local desde `backend/.env` o `backend/instance/ficotox.sqlite3`.
+- SQLite local segun `SQLITE_PATH`, o bien `instance/ficotox.sqlite3`.
 - MySQL/MariaDB si `DATABASE_URL` empieza con `mysql` y `mysqldump` esta instalado.
 
 Codigo:
 
-- Incluye `backend`, `frontend`, documentacion y scripts.
-- Excluye `.git`, entornos virtuales, caches, `.env`, bases locales y la carpeta `backups`.
+- Incluye el codigo fuente (`src`, `public`, `scripts`, documentacion y las carpetas legadas `backend` y `frontend`).
+- Excluye `.git`, `node_modules`, `.next`, `dist`, entornos virtuales, caches, `.env`, bases locales y la carpeta `backups`.

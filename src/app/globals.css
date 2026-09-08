@@ -1,0 +1,253 @@
+@import "tailwindcss";
+
+/*
+ * Sistema de diseño FICOTOX (ver docs/DISENO_UI.md).
+ * Tokens en @theme: generan utilidades (bg-brand, text-ink-2, rounded-card...).
+ */
+@theme {
+  --color-canvas: #f3f6f8;
+  --color-surface: #ffffff;
+  --color-surface-2: #ebf0f3;
+  --color-surface-3: #e1e8ed;
+  --color-line: #dce4ea;
+  --color-line-strong: #c3cfd8;
+
+  --color-ink: #0b1f2a;
+  --color-ink-2: #3a5060;
+  --color-ink-3: #6b8090;
+  --color-ink-4: #9aabb7;
+
+  --color-brand: #0e7c82;
+  --color-brand-strong: #0a5f66;
+  --color-brand-soft: #ddf1f2;
+  --color-brand-faint: #eef8f8;
+  --color-brand-bright: #3fc7c4;
+
+  --color-bloom: #e0684b;
+  --color-bloom-soft: #fbe7e1;
+  --color-success: #2e8b6a;
+  --color-success-soft: #e1f2ea;
+  --color-warning: #c98a1b;
+  --color-warning-soft: #fbf0d9;
+  --color-danger: #c9463d;
+  --color-danger-soft: #f9e3e1;
+
+  --color-deep: #07202b;
+  --color-deep-2: #0e4a55;
+
+  --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --radius-panel: 14px;
+  --radius-hero: 20px;
+
+  --shadow-card: 0 1px 2px rgba(11, 31, 42, 0.05), 0 6px 20px -10px rgba(11, 31, 42, 0.12);
+  --shadow-panel: 0 2px 6px rgba(11, 31, 42, 0.06), 0 24px 60px -24px rgba(11, 31, 42, 0.25);
+  --shadow-pop: 0 1px 2px rgba(11, 31, 42, 0.06), 0 12px 32px -12px rgba(11, 31, 42, 0.22);
+  --shadow-focus: 0 0 0 3px rgba(14, 124, 130, 0.22);
+
+  --ease-fluid: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --animate-fade-in: fade-in 220ms var(--ease-fluid) both;
+  --animate-rise-in: rise-in 260ms var(--ease-fluid) both;
+  --animate-bloom: bloom 26s ease-in-out infinite alternate;
+  --animate-bloom-2: bloom-2 32s ease-in-out infinite alternate;
+  --animate-fade-out: fade-out 160ms var(--ease-fluid) both;
+  --animate-sheet-in: sheet-in 320ms var(--ease-out-expo) both;
+  --animate-sheet-out: sheet-out 200ms var(--ease-fluid) both;
+  --animate-pop-in: pop-in 220ms var(--ease-out-expo) both;
+  --animate-pop-out: pop-out 140ms var(--ease-fluid) both;
+  --animate-menu-in: menu-in 160ms var(--ease-out-expo) both;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes rise-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes bloom {
+    from { transform: translate3d(-6%, -4%, 0) scale(1); }
+    to { transform: translate3d(8%, 10%, 0) scale(1.18); }
+  }
+  @keyframes fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  @keyframes sheet-in {
+    from { opacity: 0; transform: translateX(24px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes sheet-out {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(24px); }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes pop-out {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to { opacity: 0; transform: translateY(6px) scale(0.985); }
+  }
+  @keyframes menu-in {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes bloom-2 {
+    from { transform: translate3d(10%, 12%, 0) scale(1.1); }
+    to { transform: translate3d(-8%, -6%, 0) scale(0.92); }
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  h1, h2, h3, h4 {
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  p {
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  button, input, select, textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--color-brand-soft);
+    color: var(--color-ink);
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .checkbox-mark:checked {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+
+  .display {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+  }
+
+  .code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    letter-spacing: -0.01em;
+  }
+
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+
+  .press {
+    transition: transform 120ms var(--ease-fluid), background-color 160ms var(--ease-fluid), border-color 160ms var(--ease-fluid), color 160ms var(--ease-fluid), box-shadow 160ms var(--ease-fluid);
+  }
+  .press:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  .fade-edge-b {
+    mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent);
+  }
+
+  /* Fondo del panel de acceso: bloom lento en teal y coral. */
+  .bloom-field {
+    position: absolute;
+    inset: -20%;
+    pointer-events: none;
+    filter: blur(60px);
+    opacity: 0.9;
+  }
+  .bloom-field::before,
+  .bloom-field::after {
+    content: "";
+    position: absolute;
+    border-radius: 9999px;
+  }
+  .bloom-field::before {
+    width: 58%;
+    height: 58%;
+    left: 8%;
+    top: 12%;
+    background: radial-gradient(circle at 40% 40%, rgba(63, 199, 196, 0.55), rgba(14, 124, 130, 0.2) 60%, transparent 72%);
+    animation: var(--animate-bloom);
+  }
+  .bloom-field::after {
+    width: 46%;
+    height: 46%;
+    right: 6%;
+    bottom: 10%;
+    background: radial-gradient(circle at 60% 60%, rgba(224, 104, 75, 0.45), rgba(224, 104, 75, 0.12) 60%, transparent 72%);
+    animation: var(--animate-bloom-2);
+  }
+
+  .grain {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.08;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode: soft-light;
+  }
+}

@@ -13,66 +13,69 @@ Incluye:
 - Generacion y consulta de documentos.
 - Respaldo local y sincronizacion con OneDrive/Graph.
 
+En septiembre de 2026 el sistema se migro de Flask + frontend estatico a una sola aplicacion Next.js, conservando la misma funcionalidad, la misma API REST y la misma apariencia. El detalle de esa migracion esta en `docs/MIGRACION_NEXTJS.md`.
+
 ## 2. Arquitectura general
 
-El sistema sigue una arquitectura web clasica de 3 capas:
+Una sola aplicacion Next.js (App Router) cubre las tres capas:
 
 1. Presentacion:
-   - Frontend estatico (HTML/CSS/JavaScript) en `frontend/`.
+   - Interfaz React en `src/components/` (misma estructura HTML y CSS que la interfaz original).
 2. Logica de negocio:
-   - API REST Flask en `backend/app/`.
+   - Route handlers REST en `src/app/api/**/route.ts` que delegan en `src/lib/server/modules/`.
 3. Persistencia:
-   - SQLite por defecto (`backend/instance/ficotox.sqlite3`).
+   - SQLite por defecto (`instance/ficotox.sqlite3`).
    - MySQL/MariaDB opcional por `DATABASE_URL`.
 
 Flujo basico:
 
 ```text
 Navegador
-  -> Frontend estatico (index.html + app.js)
+  -> Interfaz React (src/components)
   -> Llamadas HTTP a /api/*
-  -> Blueprints Flask por modulo
-  -> SQLAlchemy
+  -> Route handlers por modulo (src/app/api)
+  -> Modulos de negocio (src/lib/server/modules)
+  -> Capa de datos con SQL parametrizado (src/lib/server/db.ts)
   -> SQLite/MySQL
 ```
 
 ## 3. Estructura de carpetas
 
-- `backend/`: servidor Flask y API.
-- `frontend/`: interfaz de usuario estatica.
+- `src/app/`: layout, pagina raiz, estilos globales y route handlers `/api/*`.
+- `src/components/`: interfaz (arranque, login, shell, paginas, modales, piezas reutilizables).
+- `src/lib/client/`: cliente API, sesion, formato, constantes, importaciones e insumos.
+- `src/lib/server/`: configuracion, base de datos, JWT, RBAC, esquema y modulos de negocio.
+- `public/`: favicon y SheetJS vendorizado.
+- `scripts/`: lanzador standalone, respaldo y tareas programadas.
 - `docs/`: documentacion tecnica y operativa.
-- `scripts/`: utilidades de respaldo y tareas programadas.
+- `instance/`: base SQLite y reportes PDF generados (se crea al usar el sistema).
 - `backups/`: salidas de respaldos de codigo y base.
-- `build/`: artefactos de compilacion del ejecutable.
-- `instance/`: base SQLite principal en modo desarrollo/local.
 
-## 4. Backend
+## 4. Servidor (API)
 
 ### 4.1 Punto de arranque
 
-- `backend/run.py`: arranque simple para desarrollo.
-- `backend/server_launcher.py`: arranque tipo servidor (Waitress).
-- `backend/server_launcher_flask.py`: launcher Flask (incluyendo flujo para binario).
+- `npm run dev`: servidor de desarrollo Next.js.
+- `npm run build` + `npm run start:standalone`: build de produccion y lanzador `scripts/start-ficotox.mjs` (puerto, host, IP LAN y apertura del navegador).
 
-### 4.2 App factory
+### 4.2 Ciclo de un request
 
-`backend/app/__init__.py`:
-- Crea la app Flask.
-- Carga configuracion de `app.config.Config`.
-- Inicializa extensiones (`db`, `cors`).
-- Registra blueprints.
-- Ejecuta funciones `ensure_*_schema()` para completar esquema.
-- Expone endpoints de salud (`/api/health`, `/api/health/db`).
-- Sirve frontend estatico.
+`src/lib/server/http.ts` (`apiRoute`):
+- Abre una sesion de base de datos por request (`withSession`).
+- Ejecuta el handler del modulo.
+- Hace `commit()` al terminar o `rollback()` si hay error.
+- Convierte `HttpError` en la respuesta JSON con el mismo codigo y mensaje que el backend anterior; cualquier otro error responde 500 con `{"message": "Error interno del servidor"}`.
+
+`src/proxy.ts` agrega los encabezados CORS a `/api/*` segun `CORS_ORIGINS` (equivale a Flask-CORS). Las URLs con barra final (`/api/consumables/`) se reescriben en `next.config.ts` para seguir siendo validas.
 
 ### 4.3 Configuracion
 
-`backend/app/config.py`:
+`src/lib/server/config.ts`:
 - Lee `.env` y variables de entorno.
-- Construye `SQLALCHEMY_DATABASE_URI`.
+- Resuelve la ruta SQLite o `DATABASE_URL`.
 - Usa SQLite local por defecto si no hay `DATABASE_URL`.
 
-Variables importantes:
+Variables importantes (mismos nombres que antes):
 - `SECRET_KEY`
 - `JWT_SECRET`
 - `JWT_EXPIRES_HOURS`
@@ -84,47 +87,50 @@ Variables importantes:
 - `MICROSOFT_TENANT_ID`
 - `MICROSOFT_ALLOWED_DOMAIN`
 - `CORS_ORIGINS`
+- `HOST`, `PORT`, `FICOTOX_OPEN_BROWSER` (lanzador standalone)
 
 ### 4.4 Modulos API
 
-Cada modulo esta en `backend/app/modules/<modulo>/`.
+Cada modulo esta en `src/lib/server/modules/` y sus rutas en `src/app/api/<modulo>/`.
 
 - `auth`: login local, login Microsoft, JWT, usuario actual.
 - `admin`: usuarios, roles y permisos.
 - `dashboard`: metricas y resumenes.
-- `inventory`: reactivos, consumibles, equipos, mantenimientos, movimientos.
-- `samples`: recepcion, procesamiento y extraccion de muestras.
-- `documents`: documentos y reportes.
+- `inventory`: reactivos, equipos, mantenimientos, movimientos y resumen de inventario.
+- `consumables`: consumibles e importacion.
+- `samples/`: recepcion, procesamiento y extraccion de muestras.
+- `documents`: documentos y reportes de mantenimiento en PDF.
 - `traceability`: consultas de trazabilidad y eventos recientes.
+- `health`: `/api/health` y `/api/health/db`.
 
-### 4.5 Utilidades backend
+### 4.5 Utilidades de servidor
 
-- `backend/app/utils/auth.py`: decorador `token_required`.
-- `backend/app/utils/rbac.py`: permisos por modulo/accion y validacion.
-- `backend/app/utils/schema.py`: helpers de migracion ligera.
-- `backend/app/utils/inventory_usage.py`: descuento de inventario y registro de movimientos.
-- `backend/app/utils/users.py`: esquema de usuarios locales.
+- `src/lib/server/auth.ts`: emision y validacion de JWT (`requireUser`).
+- `src/lib/server/rbac.ts`: permisos por modulo/accion y validacion (`requirePermission`).
+- `src/lib/server/schema.ts`: helpers de migracion ligera.
+- `src/lib/server/inventory-usage.ts`: descuento de inventario y registro de movimientos.
+- `src/lib/server/users.ts`: esquema de usuarios locales.
+- `src/lib/server/db.ts`: sesiones SQLite (`better-sqlite3`) y MySQL (`mysql2`) con parametros `:nombre`.
 
-## 5. Frontend
+## 5. Interfaz
 
-Frontend sin build, servido por Flask:
-- `frontend/index.html`: layout, secciones y modales.
-- `frontend/styles.css`: estilos.
-- `frontend/app.js`: logica de UI, estado, clientes API, eventos y render.
+Interfaz React con TypeScript y Tailwind CSS en `src/components/` y `src/app/(app)/` (ver `docs/DISENO_UI.md`):
+- `app/login/page.tsx`: acceso con correo y contrasena (Microsoft opcional).
+- `app/(app)/layout.tsx`: guardia de sesion y shell con navegacion superior.
+- `components/shell/`: barra superior, menu de usuario, navegacion movil y paleta de comandos (⌘K / Ctrl+K).
+- `components/session/`: sesion, permisos (`can(modulo, accion)`) y `RequireModule`.
+- `components/ui/`: sistema de diseño (botones, campos, tablas, hojas laterales, dialogos, badges, estados vacios y de carga).
+- `components/features/`: pantallas por dominio; los catalogos se editan en hojas laterales y los formatos de muestra son paginas completas con indice de secciones.
 
-Secciones principales:
-- Dashboard
-- Reactivos
-- Consumibles
-- Equipos
-- Muestras
-- Movimientos
-- Mantenimiento
-- Documentos
-- Roles
-- Usuarios
+Rutas principales:
+- `/` Inicio
+- `/muestras/recepcion`, `/muestras/procesamiento`, `/muestras/extraccion` (y `nueva` / `[id]` para cada formato)
+- `/inventario/reactivos`, `/inventario/consumibles`, `/inventario/equipos`, `/inventario/mantenimiento`
+- `/movimientos`
+- `/documentos`
+- `/administracion/usuarios`, `/administracion/roles`
 
-Helpers de consumo API (con token):
+Helpers de consumo API (con token) en `src/lib/client/api.ts`:
 - `getJsonAuth`
 - `sendJsonAuth`
 - `sendFormAuth`
@@ -134,15 +140,15 @@ Helpers de consumo API (con token):
 ### 6.1 Motor
 
 Por defecto SQLite:
-- Archivo principal: `backend/instance/ficotox.sqlite3`.
+- Archivo principal: `instance/ficotox.sqlite3`.
 
 Opcional MySQL/MariaDB:
 - Definido por `DATABASE_URL`.
 
 ### 6.2 Inicializacion de esquema
 
-No usa migraciones versionadas tipo Alembic como flujo principal.
-Se usan funciones `ensure_*_schema()` al arrancar para:
+No usa migraciones versionadas como flujo principal.
+Se usan funciones `ensure*Schema()` en cada request para:
 - Crear tablas faltantes.
 - Agregar columnas/indices cuando aplica.
 - Mantener compatibilidad en instalaciones existentes.
@@ -151,17 +157,17 @@ Se usan funciones `ensure_*_schema()` al arrancar para:
 
 ### 7.1 Autenticacion
 
-- JWT para endpoints protegidos.
-- Login local por correo/usuario segun configuracion.
-- Login Microsoft Entra ID opcional (validacion de tenant, audience y dominio).
+- JWT (HS256) para endpoints protegidos; mismos claims y secreto que antes, por lo que los tokens existentes siguen siendo validos.
+- Login local por correo y contrasena (scrypt) segun configuracion.
+- Login Microsoft Entra ID opcional (validacion de tenant, audience y dominio con las claves JWKS de Microsoft).
 
 ### 7.2 Autorizacion
 
 RBAC por modulo y accion:
 - Acciones tipicas: `read`, `create`, `update`, `delete`.
-- Decoradores esperados en endpoints sensibles:
-  - `@token_required`
-  - `@permission_required("modulo", "accion")`
+- Validacion en cada endpoint:
+  - `await requireUser(request)`
+  - `await requirePermission(s, user, "modulo", "accion")`
 
 ## 8. Inventario y muestras (flujo operativo)
 
@@ -174,7 +180,7 @@ Incluye:
 - Mantenimientos
 - Movimientos
 
-Soporta importacion masiva por Excel para reactivos/consumibles.
+Soporta importacion masiva por Excel/CSV para reactivos y consumibles.
 
 ### 8.2 Muestras
 
@@ -183,13 +189,13 @@ Fases:
 - Procesamiento
 - Extraccion
 
-Al guardar procesamiento/extraccion, el backend puede:
+Al guardar procesamiento/extraccion, el servidor puede:
 - Descontar insumos en inventario.
 - Registrar movimientos de salida.
 
 ## 9. Documentos y trazabilidad
 
-- `documents`: resumen documental y reportes.
+- `documents`: resumen documental, reportes de mantenimiento en PDF y descarga de archivos.
 - `traceability`: flujo y eventos recientes para auditoria operativa.
 
 ## 10. Respaldo y recuperacion
@@ -201,21 +207,17 @@ Scripts relevantes en `scripts/`:
 
 Capacidades:
 - Respaldo de base (SQLite o MySQL segun configuracion).
-- Respaldo de codigo (excluyendo secretos y basura temporal).
+- Respaldo de codigo (excluyendo secretos, `node_modules`, `.next` y basura temporal).
 - Copia a OneDrive local, rclone, o Microsoft Graph.
 
 Documentacion operativa:
 - `docs/backups.md`
 
-## 11. Empaquetado ejecutable
+## 11. Distribucion
 
-- Especificacion: `ficotox-server.spec`.
-- Entrypoint empaquetado: `backend/server_launcher_flask.py`.
-- Artefactos de build: `build/ficotox-server/`.
-
-Objetivo:
-- Ejecutar backend + frontend en modo portable.
-- Mantener compatibilidad de ruta de base de datos entre entorno local y ejecutable.
+- `npm run build` genera un build `standalone` de Next.js en `.next/standalone/`.
+- `npm run start:standalone` (o `node scripts/start-ficotox.mjs`) lo arranca con la configuracion de `.env`.
+- Solo se necesita Node.js LTS en la maquina destino.
 
 ## 12. Salud, monitoreo y soporte
 
@@ -229,13 +231,13 @@ Uso recomendado:
 
 ## 13. Riesgos tecnicos actuales
 
-- `frontend/app.js` concentra mucha logica (archivo grande).
 - Migracion de esquema ligera sin versionado formal centralizado.
 - SQLite es ideal para local, no para cargas concurrentes altas.
+- `better-sqlite3` es un modulo nativo y requiere Node.js LTS (22.13+ o 24).
 
 ## 14. Recomendaciones de evolucion
 
-1. Modularizar frontend por dominios (`api`, `auth`, `inventory`, `samples`, etc.).
+1. Convertir cada seccion en una ruta propia de Next.js (hoy toda la interfaz vive en `/`).
 2. Definir estrategia de migraciones versionadas para ambientes productivos.
 3. Estandarizar empaquetado/release con checklist de validacion.
 4. Agregar pruebas automatizadas minimas por modulo critico.
@@ -245,15 +247,23 @@ Uso recomendado:
 ### Desarrollo
 
 ```powershell
-cd backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python run.py
+Copy-Item .env.example .env
+npm install
+npm run dev
 ```
 
 Abrir:
-- `http://127.0.0.1:5000`
+- `http://localhost:3000`
+
+### Produccion
+
+```powershell
+npm run build
+npm run start:standalone
+```
+
+Abrir:
+- `http://127.0.0.1:5000` (o el `PORT` configurado)
 
 ### Operacion de respaldo manual
 
