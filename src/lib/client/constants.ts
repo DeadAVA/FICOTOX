@@ -1,6 +1,7 @@
 import type { PageKey } from "./types";
+import { LEGACY_RECEPTION_METHODS, LEGACY_RECEPTION_SAMPLE_TYPES, RECEPTION_ANALYSIS_TYPES, RECEPTION_INSPECTION_REQUIREMENTS, RECEPTION_METHODS, RECEPTION_SAMPLE_TYPES } from "../shared/sgc";
 
-/* Catalogos y metadatos identicos a los de el app.js de la interfaz original. */
+/* Catalogos y metadatos de la interfaz; los de recepcion salen del formato oficial (src/lib/shared/sgc.ts). */
 
 export const IMPORT_COLUMNS = [
   "producto",
@@ -14,15 +15,8 @@ export const IMPORT_COLUMNS = [
   "cantidad_por_pieza",
 ] as const;
 
-export const INSPECCION_REQUIREMENTS = [
-  "Se presentan en talla comercial",
-  "Sin alteraciones visibles (descomposicion, visceras alteradas, cuerpos discordes)",
-  "No han transcurrido mas de 24 horas desde su captura",
-  "Muestras transportadas en Styracones como contenedor primario",
-  "Contenedor primario transportado en hielera con hielo suficiente",
-  "Cantidad y volumen suficientes para analisis",
-  "Sin algun tipo de flujo (en caso previo especificar)",
-];
+/* Texto integro del formato FX-TCF-GMR (los registros viejos con el texto anterior se muestran tal cual). */
+export const INSPECCION_REQUIREMENTS = RECEPTION_INSPECTION_REQUIREMENTS;
 
 export interface ReactivoTypeConfig {
   value: string;
@@ -97,17 +91,18 @@ export interface ReactivoFieldMeta {
 export const REACTIVO_FIELD_META: Record<string, ReactivoFieldMeta> = {
   producto: { label: "Producto", required: true },
   marca: { label: "Marca" },
-  proveedor: { label: "Proveedor", required: true },
+  proveedor: { label: "Proveedor" },
   catalogo_parte_cas_lote: { label: "#catálogo / #parte / CAS / lote" },
   localizacion: { label: "Localización" },
   sub_localizacion: { label: "Sub-location" },
-  caducidad: { label: "Caducidad", type: "date", required: true },
+  caducidad: { label: "Caducidad", type: "date" },
   fecha_apertura: { label: "Fecha de apertura", type: "date" },
   fecha_ingreso: { label: "Fecha de ingreso", type: "date" },
   contenedor: { label: "Contenedor" },
-  capacidad_litros: { label: "Capacidad (litros)", type: "number", step: "0.0001", min: "0", required: true },
-  capacidad_kilos: { label: "Capacidad (kilos)", type: "number", step: "0.0001", min: "0", required: true },
-  piezas: { label: "Piezas", type: "number", step: "1", min: "0", required: true },
+  /* Columnas heredadas del Excel: informativas; la existencia real vive en "Existencias". */
+  capacidad_litros: { label: "Capacidad del envase (litros)", type: "number", step: "0.0001", min: "0" },
+  capacidad_kilos: { label: "Capacidad del envase (kilos)", type: "number", step: "0.0001", min: "0" },
+  piezas: { label: "Envases (piezas)", type: "number", step: "1", min: "0" },
   total_litros_2025: { label: "Total en litros 2025", type: "number", step: "0.0001", min: "0" },
   restante_190126: { label: "Restante al 19/01/26", type: "number", step: "0.0001", min: "0" },
   lote: { label: "# Lote" },
@@ -124,16 +119,16 @@ export const REACTIVO_FIELD_META: Record<string, ReactivoFieldMeta> = {
   lot_number: { label: "Lot Number" },
   url: { label: "URL", type: "url", wide: true },
   estado_reactivo: { label: "Estado", options: ["Nuevo", "Abierto"] },
-  volumen: { label: "Volumen", type: "number", step: "0.0001", min: "0", required: true },
+  volumen: { label: "Volumen", type: "number", step: "0.0001", min: "0" },
   vendor: { label: "Vendor" },
   catalogo: { label: "Catalog #" },
-  amount_in_stock: { label: "Amount in Stock", type: "number", step: "0.0001", min: "0", required: true },
+  amount_in_stock: { label: "Amount in Stock", type: "number", step: "0.0001", min: "0" },
   expiration_date: { label: "Expiration Date", type: "date" },
   cas_number: { label: "CAS Number" },
   bottle_tag_color: { label: "Bottle Tag Color" },
   date_opened: { label: "Date Opened", type: "date" },
   formula: { label: "Formula" },
-  id_interno: { label: "ID", required: true },
+  id_interno: { label: "ID interno" },
   physical_state: { label: "Physical State", options: ["Sólido", "Líquido", "Gas", "Mixto"] },
   presentacion: { label: "Presentación" },
   tipo_sustancia: { label: "Tipo de sustancia" },
@@ -209,22 +204,11 @@ export const MODULE_CARDS_CONFIG: ModuleCardConfig[] = [
   { page: "documentos", label: "Documentos SGC", desc: "Gestión documental del sistema de calidad", icon: "bi-file-earmark-text", color: "slate" },
 ];
 
-export const SAMPLE_ANALYSIS_LABELS: Record<string, string> = {
-  acido_domoico: "Acido domoico",
-  toxinas_lipofilicas: "Toxinas lipofilicas",
-  toxinas_paralizantes: "Toxinas paralizantes",
-  pigmentos: "Pigmentos",
-  plancton: "Plancton",
-  otro: "Otro",
-};
+export const SAMPLE_ANALYSIS_LABELS: Record<string, string> = Object.fromEntries(RECEPTION_ANALYSIS_TYPES.map((item) => [item.value, item.label]));
 
-export const SAMPLE_MATRIX_LABELS: Record<string, string> = {
-  organismo: "Organismo",
-  organismo_plancton: "Organismo plancton",
-  fitotox: "Fitotox",
-  agua_mar: "Agua de mar",
-  otro: "Otro",
-};
+export const SAMPLE_METHOD_LABELS: Record<string, string> = { ...LEGACY_RECEPTION_METHODS, ...Object.fromEntries(RECEPTION_METHODS.map((item) => [item.value, item.label])) };
+
+export const SAMPLE_MATRIX_LABELS: Record<string, string> = { ...LEGACY_RECEPTION_SAMPLE_TYPES, ...Object.fromEntries(RECEPTION_SAMPLE_TYPES.map((item) => [item.value, item.label])) };
 
 export interface StatusMeta {
   label: string;

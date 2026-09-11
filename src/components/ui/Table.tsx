@@ -4,15 +4,15 @@ import type { HTMLAttributes, ReactNode, TdHTMLAttributes, ThHTMLAttributes } fr
 import { cn } from "./cn";
 
 /*
- * Tabla de datos: cabecera fija con fondo tenue, filas con hover suave,
- * numeros tabulares y celdas de acciones alineadas a la derecha.
+ * Tabla de datos: contenedor sin borde (sombra fina), cabecera discreta,
+ * filas aireadas con hover suave, números tabulares y acciones a la derecha.
  */
 
 export function TableShell({ children, className, footer }: { children: ReactNode; className?: string; footer?: ReactNode }) {
   return (
-    <div className={cn("overflow-hidden rounded-card border border-line bg-surface shadow-card", className)}>
+    <div className={cn("overflow-hidden rounded-card bg-surface shadow-card", className)}>
       <div className="scroll-thin overflow-x-auto">{children}</div>
-      {footer ? <div className="border-t border-line bg-surface px-4 py-2.5 text-[12.5px] text-ink-3">{footer}</div> : null}
+      {footer ? <div className="border-t border-line px-4 py-2.5 text-[12.5px] text-ink-3">{footer}</div> : null}
     </div>
   );
 }
@@ -26,39 +26,59 @@ export function Table({ className, children, ...rest }: HTMLAttributes<HTMLTable
 }
 
 export function THead({ children, className }: { children: ReactNode; className?: string }) {
-  return <thead className={cn("bg-surface-2/70 text-[12px] font-medium text-ink-3", className)}>{children}</thead>;
+  return <thead className={cn("border-b border-line text-[12px] font-medium text-ink-3", className)}>{children}</thead>;
 }
 
 export function TBody({ children, className }: { children: ReactNode; className?: string }) {
   return <tbody className={cn("divide-y divide-line", className)}>{children}</tbody>;
 }
 
-export function Tr({ className, interactive, children, ...rest }: HTMLAttributes<HTMLTableRowElement> & { interactive?: boolean }) {
+/* Las filas interactivas se abren con clic y tambien con Enter/Espacio desde el teclado. */
+export function Tr({ className, interactive, children, onClick, onKeyDown, ...rest }: HTMLAttributes<HTMLTableRowElement> & { interactive?: boolean }) {
+  const keyboard = interactive && onClick;
   return (
-    <tr className={cn("group transition-colors duration-100", interactive && "cursor-pointer hover:bg-brand-faint", !interactive && "hover:bg-surface-2/50", className)} {...rest}>
+    <tr
+      className={cn("group transition-colors duration-100", interactive && "cursor-pointer hover:bg-brand-faint active:bg-brand-soft/60 focus-visible:bg-brand-faint", !interactive && "hover:bg-surface-2", className)}
+      tabIndex={keyboard ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        if (keyboard && !event.defaultPrevented && event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onClick?.(event as unknown as React.MouseEvent<HTMLTableRowElement>);
+        }
+      }}
+      {...rest}
+    >
       {children}
     </tr>
   );
 }
 
-export function Th({ className, children, align, ...rest }: ThHTMLAttributes<HTMLTableCellElement> & { align?: "left" | "right" | "center" }) {
+/*
+ * `sticky`: la columna se fija al borde derecho (acciones) para que siga a la
+ * vista aunque la tabla tenga scroll horizontal en pantallas angostas.
+ */
+const STICKY_END = "sticky right-0 z-[1] bg-surface shadow-[-10px_0_12px_-12px_rgba(16,32,43,0.35)]";
+
+export function Th({ className, children, align, sticky, ...rest }: ThHTMLAttributes<HTMLTableCellElement> & { align?: "left" | "right" | "center"; sticky?: boolean }) {
   return (
-    <th scope="col" className={cn("h-10 whitespace-nowrap px-4 font-medium", align === "right" && "text-right", align === "center" && "text-center", className)} {...rest}>
+    <th scope="col" className={cn("h-10 whitespace-nowrap px-4 font-medium", align === "right" && "text-right", align === "center" && "text-center", sticky && STICKY_END, className)} {...rest}>
       {children}
     </th>
   );
 }
 
-export function Td({ className, children, align, muted, mono, ...rest }: TdHTMLAttributes<HTMLTableCellElement> & { align?: "left" | "right" | "center"; muted?: boolean; mono?: boolean }) {
+export function Td({ className, children, align, muted, mono, sticky, ...rest }: TdHTMLAttributes<HTMLTableCellElement> & { align?: "left" | "right" | "center"; muted?: boolean; mono?: boolean; sticky?: boolean }) {
   return (
-    <td className={cn("px-4 py-2.5 align-middle", align === "right" && "tnum text-right", align === "center" && "text-center", muted && "text-ink-3", mono && "code text-ink-2", className)} {...rest}>
+    <td className={cn("px-4 py-3 align-middle", align === "right" && "tnum text-right", align === "center" && "text-center", muted && "text-ink-3", mono && "code text-ink-2", sticky && cn(STICKY_END, "group-hover:bg-surface-2 group-[.cursor-pointer]:group-hover:bg-brand-faint"), className)} {...rest}>
       {children}
     </td>
   );
 }
 
 export function RowActions({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("flex items-center justify-end gap-0.5 opacity-70 transition-opacity group-hover:opacity-100", className)}>{children}</div>;
+  return <div className={cn("flex items-center justify-end gap-0.5 opacity-80 transition-opacity group-hover:opacity-100 focus-within:opacity-100", className)}>{children}</div>;
 }
 
 export function CellPrimary({ title, subtitle, mono }: { title: ReactNode; subtitle?: ReactNode; mono?: boolean }) {

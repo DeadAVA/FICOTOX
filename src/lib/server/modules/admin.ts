@@ -1,4 +1,6 @@
+import { randomAvatar } from "../../shared/avatars";
 import { requireUser } from "../auth";
+import { registrarAuditoria, snapshotRow } from "../audit";
 import { getConfig } from "../config";
 import { isIntegrityError, isOperationalError, type Session } from "../db";
 import { intParam, json, readJson, type RouteContext } from "../http";
@@ -151,6 +153,7 @@ export async function createRole({ request, s }: RouteContext): Promise<Response
     );
     roleId = result.lastrowid;
     await saveRolePermissions(s, roleId as number, permissions);
+    await registrarAuditoria(s, user, { accion: "crear", entidad: "roles", entidadId: roleId, referencia: nombre, despues: await snapshotRow(s, "roles", roleId), detalle: { permisos: permissions } });
     await s.commit();
   } catch (error) {
     if (isOperationalError(error)) {
@@ -197,6 +200,8 @@ export async function updateRole({ request, s, params }: RouteContext): Promise<
     return json({ message: "Ya existe un rol con ese nombre" }, 409);
   }
 
+  const antes = await snapshotRow(s, "roles", roleId);
+  const permisosAntes = await s.query("SELECT p.clave, rp.can_read, rp.can_create, rp.can_update, rp.can_delete FROM rol_permisos rp INNER JOIN permisos p ON p.id = rp.id_permiso WHERE rp.id_rol = :role_id ORDER BY p.clave", { role_id: roleId });
   await s.execute(
     `
     UPDATE roles
@@ -208,6 +213,8 @@ export async function updateRole({ request, s, params }: RouteContext): Promise<
     { nombre, descripcion: descripcion || null, activo, role_id: roleId },
   );
   await saveRolePermissions(s, roleId, permissions);
+  const permisosDespues = await s.query("SELECT p.clave, rp.can_read, rp.can_create, rp.can_update, rp.can_delete FROM rol_permisos rp INNER JOIN permisos p ON p.id = rp.id_permiso WHERE rp.id_rol = :role_id ORDER BY p.clave", { role_id: roleId });
+  await registrarAuditoria(s, user, { accion: "editar", entidad: "roles", entidadId: roleId, referencia: nombre, antes: { ...antes, permisos: permisosAntes }, despues: { ...(await snapshotRow(s, "roles", roleId)), permisos: permisosDespues } });
   await s.commit();
 
   return json({ message: "Rol actualizado" });
@@ -240,8 +247,11 @@ export async function deleteRole({ request, s, params }: RouteContext): Promise<
     return json({ message: "No se puede eliminar el rol porque tiene usuarios asignados" }, 409);
   }
 
+  const antes = await snapshotRow(s, "roles", roleId);
   await s.execute("DELETE FROM rol_permisos WHERE id_rol = :role_id", { role_id: roleId });
   await s.execute("DELETE FROM roles WHERE id = :role_id", { role_id: roleId });
+  // Un rol sin usuarios ni registros asociados si se elimina; la bitacora conserva lo que era.
+  await registrarAuditoria(s, user, { accion: "eliminar", entidad: "roles", entidadId: roleId, referencia: String(antes?.nombre || roleId), antes });
   await s.commit();
 
   return json({ message: "Rol eliminado" });
@@ -249,7 +259,7 @@ export async function deleteRole({ request, s, params }: RouteContext): Promise<
 
 const USUARIO_SELECT = `
   SELECT u.id, u.nombre, u.email, u.activo, u.id_rol, r.nombre AS rol,
-         u.departamento, u.auth_provider, u.microsoft_oid,
+         u.departamento, u.auth_provider, u.microsoft_oid, u.avatar,
          u.creado_en, u.ultimo_acceso,
          CASE WHEN u.password_hash IS NULL THEN 0 ELSE 1 END AS tiene_password
   FROM usuarios u
@@ -310,12 +320,14 @@ export async function createUsuario({ request, s }: RouteContext): Promise<Respo
   try {
     const result = await s.execute(
       `
-      INSERT INTO usuarios (nombre, email, activo, id_rol, departamento, auth_provider, password_hash)
-      VALUES (:nombre, :email, :activo, :id_rol, :departamento, 'local', :password_hash)
+      INSERT INTO usuarios (nombre, email, activo, id_rol, departamento, auth_provider, password_hash, avatar)
+      VALUES (:nombre, :email, :activo, :id_rol, :departamento, 'local', :password_hash, :avatar)
       `,
-      { ...data, password_hash: validated.passwordHash },
+      // Cada cuenta nace con un avatar al azar del catalogo; la persona puede cambiarlo en "Mi cuenta".
+      { ...data, password_hash: validated.passwordHash, avatar: data.avatar ?? randomAvatar() },
     );
     insertedId = result.lastrowid;
+    await registrarAuditoria(s, user, { accion: "crear", entidad: "usuarios", entidadId: insertedId, referencia: String(data.email), despues: await snapshotRow(s, "usuarios", insertedId) });
     await s.commit();
   } catch (error) {
     if (isIntegrityError(error)) {
@@ -339,6 +351,7 @@ export async function updateUsuario({ request, s, params }: RouteContext): Promi
   const data = validated.data;
 
   let rowcount: number;
+  const antesUsuario = await snapshotRow(s, "usuarios", userId);
   try {
     const result = await s.execute(
       `
@@ -348,12 +361,16 @@ export async function updateUsuario({ request, s, params }: RouteContext): Promi
           activo = :activo,
           id_rol = :id_rol,
           departamento = :departamento,
-          password_hash = COALESCE(:password_hash, password_hash)
+          password_hash = COALESCE(:password_hash, password_hash),
+          avatar = CASE WHEN :avatar_set = 1 THEN :avatar ELSE avatar END
       WHERE id = :user_id
       `,
-      { ...data, password_hash: validated.passwordHash, user_id: userId },
+      { ...data, avatar: data.avatar ?? null, avatar_set: data.avatar === undefined ? 0 : 1, password_hash: validated.passwordHash, user_id: userId },
     );
     rowcount = result.rowcount;
+    if (rowcount > 0) {
+      await registrarAuditoria(s, user, { accion: "editar", entidad: "usuarios", entidadId: userId, referencia: String(data.email), antes: antesUsuario, despues: await snapshotRow(s, "usuarios", userId), detalle: validated.passwordHash ? { contrasena: "cambiada" } : null });
+    }
     await s.commit();
   } catch (error) {
     if (isIntegrityError(error)) {
@@ -376,24 +393,21 @@ export async function deleteUsuario({ request, s, params }: RouteContext): Promi
   await ensureUsuariosSchema(s);
 
   if (String(user.sub) === String(userId)) {
-    return json({ message: "No puedes eliminar tu propio usuario activo" }, 403);
+    return json({ message: "No puedes dar de baja tu propio usuario activo" }, 403);
   }
 
-  let rowcount: number;
-  try {
-    const result = await s.execute("DELETE FROM usuarios WHERE id = :user_id", { user_id: userId });
-    rowcount = result.rowcount;
-    await s.commit();
-  } catch (error) {
-    if (isIntegrityError(error)) {
-      await s.rollback();
-      return json({ message: "No se puede eliminar porque el usuario tiene registros relacionados" }, 409);
-    }
-    throw error;
+  // Las cuentas no se eliminan: la bitacora y los registros firmados siguen apuntando a ellas.
+  const payload = await readJson(request);
+  const motivo = String(payload.motivo || "").trim();
+  if (motivo.length < 5) {
+    return json({ message: "Indica el motivo de la baja del usuario (al menos 5 caracteres)" }, 400);
   }
-
-  if (rowcount === 0) {
+  const antes = await snapshotRow(s, "usuarios", userId);
+  if (!antes) {
     return json({ message: "Usuario no encontrado" }, 404);
   }
-  return json({ message: "Usuario eliminado" });
+  await s.execute("UPDATE usuarios SET activo = 0 WHERE id = :user_id", { user_id: userId });
+  await registrarAuditoria(s, user, { accion: "baja", entidad: "usuarios", entidadId: userId, referencia: String(antes.email || userId), motivo, antes, despues: await snapshotRow(s, "usuarios", userId) });
+  await s.commit();
+  return json({ message: "Usuario dado de baja (inactivo); su historial se conserva" });
 }

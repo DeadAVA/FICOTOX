@@ -1,21 +1,17 @@
 import type { Metadata, Viewport } from "next";
-import { Geist_Mono, Instrument_Sans, Instrument_Serif } from "next/font/google";
+import { Geist_Mono, Inter } from "next/font/google";
 import Script from "next/script";
 import { Toaster } from "sonner";
 import { Providers } from "./providers";
 import "./globals.css";
 
-const instrumentSans = Instrument_Sans({
+/*
+ * Una sola familia: la del sistema (SF Pro en Apple). Inter es el respaldo
+ * para Windows/Linux, con la misma métrica y las mismas variantes.
+ */
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-instrument-sans",
-  display: "swap",
-});
-
-const instrumentSerif = Instrument_Serif({
-  subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
-  variable: "--font-instrument-serif",
+  variable: "--font-inter",
   display: "swap",
 });
 
@@ -35,24 +31,24 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f3f6f8",
+  themeColor: "#f2f4f7",
   width: "device-width",
   initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`${instrumentSans.variable} ${instrumentSerif.variable} ${geistMono.variable}`}>
+    <html lang="es" className={`${inter.variable} ${geistMono.variable}`}>
       <body>
         <Providers>{children}</Providers>
         <Toaster
-          position="bottom-right"
+          position="bottom-center"
           toastOptions={{
             style: {
               fontFamily: "var(--font-sans)",
               fontSize: "13.5px",
-              borderRadius: "10px",
-              border: "1px solid var(--color-line)",
+              borderRadius: "14px",
+              border: "none",
               boxShadow: "var(--shadow-pop)",
             },
           }}

@@ -2,35 +2,113 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
-import { Command, List, ShieldCheck, SignOut, Users, X } from "@phosphor-icons/react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Dialog as RadixDialog } from "radix-ui";
+import { ArrowsLeftRight, CaretRight, ClockCounterClockwise, Cube, FileText, Flask, House, List, MagnifyingGlass, Package, Question, SealCheck, ShieldCheck, SidebarSimple, SignOut, TestTube, UserCircle, Users, Wrench, X } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
 import { cn } from "@/components/ui/cn";
-import { Dropdown } from "@/components/ui/Overlay";
-import { Avatar, Kbd } from "@/components/ui/Primitives";
-import { ADMIN_NAV, PRIMARY_NAV, canAny, isActivePath } from "@/lib/client/nav";
-import { BrandLockup } from "./Brand";
+import { Dropdown, Tooltip } from "@/components/ui/Overlay";
+import { Avatar } from "@/components/ui/Primitives";
+import { isActivePath, isItemActive, visibleNav, type NavChild, type NavIcon, type NavItem } from "@/lib/client/nav";
+import { BrandLockup, BrandMark } from "./Brand";
+import { AccountSheet } from "./AccountSheet";
 import { CommandPalette } from "./CommandPalette";
 
 /*
- * Shell de la aplicacion: barra superior translucida con la navegacion
- * principal, acceso a la paleta de comandos (⌘K) y menu de usuario.
- * En movil la navegacion vive en un panel desplegable.
+ * Shell de la aplicacion: barra lateral con seis destinos; los que agrupan
+ * pantallas (Muestras, Inventario, Calidad, Administracion) se despliegan
+ * con una animacion de altura y muestran sus subdestinos. Un solo buscador
+ * global (Inicio y ⌘K); en la barra solo queda un icono.
+ * En movil la barra se abre como panel; en escritorio puede colapsarse a
+ * solo iconos (se recuerda en localStorage).
  */
+
+const ICONS: Record<NavIcon, ReactNode> = {
+  house: <House size={18} />,
+  testtube: <TestTube size={18} />,
+  report: <FileText size={18} />,
+  package: <Package size={18} />,
+  flask: <Flask size={18} />,
+  cube: <Cube size={18} />,
+  wrench: <Wrench size={18} />,
+  arrows: <ArrowsLeftRight size={18} />,
+  filetext: <FileText size={18} />,
+  clock: <ClockCounterClockwise size={18} />,
+  users: <Users size={18} />,
+  shield: <ShieldCheck size={18} />,
+  seal: <SealCheck size={18} />,
+};
+
+const COLLAPSE_KEY = "ficotox.sidebar.collapsed";
+const COLLAPSE_EVENT = "ficotox:sidebar";
+const EXPANDED_KEY = "ficotox.sidebar.expanded";
+
+/* Estado colapsado de la barra lateral, persistido en localStorage y leido como fuente externa (sin desajuste de hidratacion). */
+function readCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(COLLAPSE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function subscribeCollapsed(listener: () => void): () => void {
+  window.addEventListener("storage", listener);
+  window.addEventListener(COLLAPSE_EVENT, listener);
+  return () => {
+    window.removeEventListener("storage", listener);
+    window.removeEventListener(COLLAPSE_EVENT, listener);
+  };
+}
+function writeCollapsed(value: boolean): void {
+  try {
+    window.localStorage.setItem(COLLAPSE_KEY, value ? "1" : "0");
+  } catch {
+    /* sin almacenamiento */
+  }
+  window.dispatchEvent(new Event(COLLAPSE_EVENT));
+}
+
+/* Secciones que la persona dejo abiertas a mano (ademas de la activa, que siempre se abre). */
+function readExpanded(): string[] {
+  try {
+    const raw = window.localStorage.getItem(EXPANDED_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+function writeExpanded(value: string[]): void {
+  try {
+    window.localStorage.setItem(EXPANDED_KEY, JSON.stringify(value));
+  } catch {
+    /* sin almacenamiento */
+  }
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { user, permissions, logout } = useSession();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
+  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
 
-  const visibleNav = PRIMARY_NAV.filter((item) => canAny(permissions, item.modules));
-  const visibleAdmin = ADMIN_NAV.filter((item) => canAny(permissions, item.modules));
-  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+  const toggleCollapsed = () => writeCollapsed(!collapsed);
 
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
+
+  // Si la ventana crece a escritorio con el panel abierto, se cierra (si no, quedaría bloqueando el scroll sin verse).
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => {
+      if (media.matches) setMobileOpen(false);
+    };
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -43,109 +121,254 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const items = visibleNav(permissions);
+
+  const sidebarProps = {
+    items,
+    pathname,
+    onSearch: () => {
+      setMobileOpen(false);
+      setPaletteOpen(true);
+    },
+    onToggle: toggleCollapsed,
+    onAccount: () => {
+      setMobileOpen(false);
+      setAccountOpen(true);
+    },
+    isMac,
+    user,
+    onLogout: logout,
+  };
+
   return (
-    <div className="flex min-h-dvh flex-col">
-      <a href="#contenido" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[60] focus:rounded-control focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:shadow-pop">
+    <div className="flex min-h-dvh">
+      <a href="#contenido" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[60] focus:rounded-[8px] focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:shadow-pop">
         Saltar al contenido
       </a>
-      <header className="sticky top-0 z-30 border-b border-line/80 bg-canvas/85 backdrop-blur-md supports-[backdrop-filter]:bg-canvas/70">
-        <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-3 px-4 sm:px-6">
-          <button type="button" className="press -ml-1 inline-flex h-9 w-9 items-center justify-center rounded-control text-ink-2 hover:bg-surface-2 lg:hidden" aria-label={mobileOpen ? "Cerrar menú" : "Abrir menú"} aria-expanded={mobileOpen} onClick={() => setMobileOpen((open) => !open)}>
-            {mobileOpen ? <X size={20} /> : <List size={20} />}
+
+      {/* Barra lateral de escritorio */}
+      <aside className={cn("sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line/70 bg-[#f7f8fa] transition-[width] duration-300 ease-[var(--ease-spring)] lg:flex", collapsed ? "w-[68px]" : "w-[240px]")} aria-label="Navegación principal">
+        <SidebarContent {...sidebarProps} collapsed={collapsed} />
+      </aside>
+
+      {/* Barra lateral móvil: panel con foco atrapado, Escape y bloqueo de scroll (Radix Dialog). Siempre expandida. */}
+      <RadixDialog.Root open={mobileOpen} onOpenChange={setMobileOpen}>
+        <RadixDialog.Portal>
+          <RadixDialog.Overlay className="fixed inset-0 z-40 bg-deep/35 backdrop-blur-[3px] data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out lg:hidden" />
+          <RadixDialog.Content className="material-thick fixed inset-y-0 left-0 z-50 flex w-[280px] max-w-[85vw] flex-col shadow-panel outline-none data-[state=open]:animate-sheet-in-left data-[state=closed]:animate-sheet-out-left lg:hidden" aria-label="Navegación principal">
+            <RadixDialog.Title className="sr-only">Navegación principal</RadixDialog.Title>
+            <RadixDialog.Description className="sr-only">Secciones del sistema</RadixDialog.Description>
+            <SidebarContent {...sidebarProps} collapsed={false} onClose={() => setMobileOpen(false)} />
+          </RadixDialog.Content>
+        </RadixDialog.Portal>
+      </RadixDialog.Root>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Barra superior solo en móvil */}
+        <header className="material sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line/70 px-3 lg:hidden">
+          <button type="button" className="press inline-flex h-9 w-9 items-center justify-center rounded-[9px] text-ink-2 hover:bg-surface-3" aria-label="Abrir menú" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)}>
+            <List size={20} />
           </button>
-
-          <Link href="/" className="rounded-control focus-visible:shadow-[var(--shadow-focus)]">
-            <BrandLockup />
+          <Link href="/" className="rounded-[8px]">
+            <BrandLockup size={26} />
           </Link>
+          <button type="button" onClick={() => setPaletteOpen(true)} className="press ml-auto inline-flex h-9 w-9 items-center justify-center rounded-[9px] text-ink-2 hover:bg-surface-3" aria-label="Buscar">
+            <MagnifyingGlass size={20} />
+          </button>
+        </header>
 
-          <nav className="ml-6 hidden items-center gap-1 lg:flex" aria-label="Principal">
-            {visibleNav.map((item) => {
-              const active = isActivePath(pathname, item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "press relative flex h-9 items-center rounded-[8px] px-3 text-[13.5px] font-medium transition-colors",
-                    active ? "bg-surface text-ink shadow-[0_1px_2px_rgba(11,31,42,0.08),inset_0_0_0_1px_var(--color-line)]" : "text-ink-2 hover:bg-surface/70 hover:text-ink",
-                  )}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPaletteOpen(true)}
-              className="press hidden h-9 items-center gap-2 rounded-[8px] border border-line bg-surface/80 pr-1.5 pl-3 text-[13px] text-ink-3 hover:border-line-strong hover:text-ink-2 md:flex"
-              aria-label="Abrir paleta de comandos"
-            >
-              <Command size={15} />
-              <span className="pr-4">Buscar o ir a…</span>
-              <span className="flex items-center gap-0.5">
-                <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
-                <Kbd>K</Kbd>
-              </span>
-            </button>
-            <button type="button" onClick={() => setPaletteOpen(true)} className="press inline-flex h-9 w-9 items-center justify-center rounded-control text-ink-2 hover:bg-surface-2 md:hidden" aria-label="Buscar">
-              <Command size={20} />
-            </button>
-
-            <Dropdown
-              label="Menú de usuario"
-              trigger={
-                <button type="button" className="press flex h-9 items-center gap-2 rounded-full pr-2.5 pl-1 hover:bg-surface-2" aria-label="Menú de usuario">
-                  <Avatar name={user?.nombre} email={user?.email} size="sm" />
-                  <span className="hidden max-w-[140px] truncate text-[13px] font-medium text-ink sm:block">{user?.nombre || user?.email}</span>
-                </button>
-              }
-              items={[
-                ...visibleAdmin.map((item) => ({
-                  label: item.label,
-                  icon: item.href.includes("roles") ? <ShieldCheck size={16} /> : <Users size={16} />,
-                  onSelect: () => {
-                    window.location.assign(item.href);
-                  },
-                })),
-                { label: "Cerrar sesión", icon: <SignOut size={16} />, onSelect: logout, tone: "danger", separatorBefore: visibleAdmin.length > 0 },
-              ]}
-            />
-          </div>
-        </div>
-
-        {mobileOpen ? (
-          <nav className="animate-fade-in border-t border-line bg-surface px-3 py-3 lg:hidden" aria-label="Principal">
-            <ul className="flex flex-col gap-0.5">
-              {[...visibleNav, ...visibleAdmin].map((item) => {
-                const active = isActivePath(pathname, item.href);
-                return (
-                  <li key={item.href}>
-                    <Link href={item.href} aria-current={active ? "page" : undefined} className={cn("flex flex-col rounded-[8px] px-3 py-2.5", active ? "bg-brand-faint text-ink" : "text-ink-2 hover:bg-surface-2")}>
-                      <span className="text-[14px] font-medium">{item.label}</span>
-                      <span className="text-[12px] text-ink-3">{item.description}</span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
-        ) : null}
-      </header>
-
-      <main id="contenido" className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 sm:px-6 sm:py-8">
-        {children}
-      </main>
+        {/* El ancho máximo lo pone cada página (PageBody / FormPage), así las cabeceras fijas pueden ocupar todo el ancho. */}
+        <main id="contenido" className="w-full flex-1 px-4 py-6 sm:px-8 sm:py-8">
+          {children}
+        </main>
+      </div>
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      {accountOpen ? <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} /> : null}
     </div>
+  );
+}
+
+type VisibleItem = NavItem & { children: NavChild[] };
+
+function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAccount, onClose, isMac, user, onLogout }: { items: VisibleItem[]; pathname: string; collapsed: boolean; onSearch: () => void; onToggle: () => void; onAccount: () => void; onClose?: () => void; isMac: boolean; user: { nombre?: string; email?: string; rol?: string; avatar?: string | null } | null; onLogout: () => void }) {
+  // El shell solo se monta ya autenticado (en el cliente), así que leer localStorage al iniciar no desajusta la hidratación.
+  const [expanded, setExpanded] = useState<string[]>(() => (typeof window === "undefined" ? [] : readExpanded()));
+
+  const toggleExpanded = (label: string, active: boolean) => {
+    setExpanded((current) => {
+      // La sección activa siempre está abierta: "cerrarla" se recuerda como preferencia y se aplica al salir de ella.
+      const isOpen = active ? !current.includes(`!${label}`) : current.includes(label);
+      const next = current.filter((entry) => entry !== label && entry !== `!${label}`);
+      if (active) {
+        if (isOpen) next.push(`!${label}`);
+      } else if (!isOpen) next.push(label);
+      writeExpanded(next);
+      return next;
+    });
+  };
+
+  const isOpen = (item: VisibleItem, active: boolean) => (active ? !expanded.includes(`!${item.label}`) : expanded.includes(item.label));
+
+  return (
+    <>
+      <div className={cn("flex h-14 items-center", collapsed ? "justify-center px-2" : "justify-between pr-2 pl-4")}>
+        <Link href="/" className="rounded-[8px]" aria-label="Inicio">
+          {collapsed ? <BrandMark size={28} /> : <BrandLockup size={28} />}
+        </Link>
+        {!collapsed ? (
+          <div className="flex items-center gap-0.5">
+            <Tooltip content={`Buscar (${isMac ? "⌘" : "Ctrl"} K)`} side="bottom">
+              <button type="button" onClick={onSearch} className="press inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-3 hover:bg-surface-3 hover:text-ink" aria-label="Buscar">
+                <MagnifyingGlass size={17} />
+              </button>
+            </Tooltip>
+            {onClose ? (
+              <button type="button" onClick={onClose} className="press inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-3 hover:bg-surface-3 hover:text-ink" aria-label="Cerrar menú">
+                <X size={18} />
+              </button>
+            ) : (
+              <button type="button" onClick={onToggle} className="press hidden h-8 w-8 items-center justify-center rounded-[8px] text-ink-3 hover:bg-surface-3 hover:text-ink lg:inline-flex" aria-label="Contraer barra lateral">
+                <SidebarSimple size={18} />
+              </button>
+            )}
+          </div>
+        ) : null}
+      </div>
+
+      {collapsed ? (
+        <div className="px-2">
+          <Tooltip content={`Buscar (${isMac ? "⌘" : "Ctrl"} K)`} side="right">
+            <button type="button" onClick={onSearch} className="press flex h-9 w-full items-center justify-center rounded-[9px] text-ink-3 hover:bg-surface-3 hover:text-ink" aria-label="Buscar">
+              <MagnifyingGlass size={18} />
+            </button>
+          </Tooltip>
+        </div>
+      ) : null}
+
+      <nav className={cn("scroll-thin mt-2 flex-1 overflow-y-auto pb-4", collapsed ? "px-2" : "px-3")}>
+        <ul className="flex flex-col gap-0.5">
+          {items.map((item) => {
+            const active = isItemActive(pathname, item);
+            const hasChildren = item.children.length > 0;
+            const open = hasChildren && !collapsed && isOpen(item, active);
+            const leafActive = active && !hasChildren;
+            const link = (
+              <Link
+                href={item.href}
+                aria-current={leafActive ? "page" : undefined}
+                aria-label={collapsed ? item.label : undefined}
+                onClick={() => {
+                  if (hasChildren && !collapsed && !open) toggleExpanded(item.label, active);
+                }}
+                className={cn(
+                  "press group/item flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-[9px] text-[13.5px]",
+                  collapsed ? "justify-center px-0" : "px-2.5",
+                  leafActive ? "bg-brand font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" : active ? "font-semibold text-ink hover:bg-surface-3/80" : "font-medium text-ink-2 hover:bg-surface-3/80 hover:text-ink",
+                )}
+              >
+                <span className={cn("shrink-0 transition-colors", leafActive ? "text-white" : active ? "text-brand" : "text-ink-3 group-hover/item:text-ink-2")}>{ICONS[item.icon]}</span>
+                {!collapsed ? <span className="truncate">{item.label}</span> : null}
+              </Link>
+            );
+            const row =
+              hasChildren && !collapsed ? (
+                <div className="flex items-center gap-0.5">
+                  {link}
+                  <button
+                    type="button"
+                    aria-label={open ? `Contraer ${item.label}` : `Desplegar ${item.label}`}
+                    aria-expanded={open}
+                    onClick={() => toggleExpanded(item.label, active)}
+                    className="press inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-ink-4 hover:bg-surface-3 hover:text-ink"
+                  >
+                    <CaretRight size={13} weight="bold" className={cn("transition-transform duration-300 ease-[var(--ease-spring)]", open && "rotate-90")} />
+                  </button>
+                </div>
+              ) : (
+                link
+              );
+            return (
+              <li key={item.label}>
+                {collapsed ? (
+                  <Tooltip content={item.label} side="right">
+                    {link}
+                  </Tooltip>
+                ) : (
+                  row
+                )}
+                {hasChildren && !collapsed ? (
+                  <div className={cn("grid transition-[grid-template-rows,opacity] duration-300 ease-[var(--ease-spring)]", open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")} aria-hidden={!open}>
+                    <ul className="ml-[21px] min-h-0 overflow-hidden border-l border-line pl-2.5">
+                      {item.children.map((child) => {
+                          const childActive = isActivePath(pathname, child.href);
+                        return (
+                          <li key={child.href} className="pt-0.5 last:pb-1.5">
+                            <Link
+                              href={child.href}
+                              tabIndex={open ? 0 : -1}
+                              aria-current={childActive ? "page" : undefined}
+                              className={cn("press flex h-8 items-center gap-2 rounded-[7px] px-2.5 text-[13px] transition-colors", childActive ? "bg-brand font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" : "text-ink-2 hover:bg-surface-3/80 hover:text-ink")}
+                            >
+                              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full transition-colors", childActive ? "bg-white" : "bg-line-strong")} aria-hidden="true" />
+                              <span className="truncate">{child.label}</span>
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+
+      <div className={cn("border-t border-line/70 p-2", collapsed && "flex flex-col items-center gap-1")}>
+        {/* Ayuda: siempre visible, no depende de permisos. */}
+        {collapsed ? (
+          <Tooltip content="Ayuda" side="right">
+            <Link href="/ayuda" aria-current={isActivePath(pathname, "/ayuda") ? "page" : undefined} className={cn("press inline-flex h-8 w-8 items-center justify-center rounded-[8px]", isActivePath(pathname, "/ayuda") ? "bg-brand-soft text-brand-strong" : "text-ink-3 hover:bg-surface-3 hover:text-ink")} aria-label="Ayuda">
+              <Question size={18} />
+            </Link>
+          </Tooltip>
+        ) : (
+          <Link href="/ayuda" aria-current={isActivePath(pathname, "/ayuda") ? "page" : undefined} className={cn("press mb-1 flex h-9 items-center gap-2.5 rounded-[9px] px-2.5 text-[13.5px] font-medium", isActivePath(pathname, "/ayuda") ? "bg-brand-soft text-brand-strong" : "text-ink-2 hover:bg-surface-3/80 hover:text-ink")}>
+            <Question size={18} className={isActivePath(pathname, "/ayuda") ? "text-brand" : "text-ink-3"} />
+            Ayuda
+          </Link>
+        )}
+        {collapsed ? (
+          <button type="button" onClick={onToggle} className="press hidden h-8 w-8 items-center justify-center rounded-[8px] text-ink-3 hover:bg-surface-3 hover:text-ink lg:inline-flex" aria-label="Expandir barra lateral">
+            <SidebarSimple size={18} />
+          </button>
+        ) : null}
+        <Dropdown
+          label="Menú de usuario"
+          align="start"
+          trigger={
+            <button type="button" className={cn("press flex w-full items-center gap-2.5 rounded-[10px] py-1.5 text-left hover:bg-surface-3/80", collapsed ? "justify-center px-0" : "px-2")} aria-label="Menú de usuario">
+              <Avatar name={user?.nombre} email={user?.email} avatar={user?.avatar} size="md" />
+              {!collapsed ? (
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-[13.5px] font-medium text-ink">{user?.nombre || user?.email}</span>
+                  <span className="truncate text-[12px] text-ink-3">{user?.rol || user?.email}</span>
+                </span>
+              ) : null}
+            </button>
+          }
+          items={[
+            { label: "Mi cuenta", icon: <UserCircle size={16} />, onSelect: onAccount },
+            { label: "Cerrar sesión", icon: <SignOut size={16} />, onSelect: onLogout, tone: "danger", separatorBefore: true },
+          ]}
+        />
+      </div>
+    </>
   );
 }
 
 /* Contenedor de secciones con animacion de entrada discreta. */
 export function PageBody({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("animate-rise-in flex flex-col gap-6", className)}>{children}</div>;
+  return <div className={cn("animate-rise-in mx-auto flex w-full max-w-[1216px] flex-col gap-6", className)}>{children}</div>;
 }

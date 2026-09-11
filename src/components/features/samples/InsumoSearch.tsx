@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { CheckCircle, MagnifyingGlass, MinusCircle, Warning, X, XCircle } from "@phosphor-icons/react";
+import { useEffect, useId, useRef, useState } from "react";
+import { CheckCircle, Info, MagnifyingGlass, MinusCircle, Warning, X, XCircle } from "@phosphor-icons/react";
 import { cn } from "@/components/ui/cn";
-import { controlClass } from "@/components/ui/Field";
+import { controlClass, controlClassSm } from "@/components/ui/Field";
 import { IconButton } from "@/components/ui/Button";
-import { findInsumoOption, findReactivoByRef, formatInventoryAmount, getInsumoOptions, isInsumoCacheLoaded, loadInsumoOptions, normalizeInventoryUnit, resolveFixedInventoryAmount, type InventarioRow } from "@/lib/client/insumos";
+import { equipoAlert, findInsumoOption, findReactivoByRef, formatInventoryAmount, getInsumoOptions, isInsumoCacheLoaded, loadInsumoOptions, normalizeInventoryUnit, resolveFixedInventoryAmount, type InventarioRow } from "@/lib/client/insumos";
 
 export interface InsumoSearchProps {
   tipo: string;
@@ -14,34 +14,52 @@ export interface InsumoSearchProps {
   placeholder?: string;
   cantidadFija?: string | number | null;
   cantidadUnidad?: string | null;
+  /* Explicacion de como se calculo la cantidad (ej. "9 mL × 6 tubos"). */
+  cantidadNota?: string;
   stepEnabled?: boolean;
   showStockBadge?: boolean;
   size?: "sm" | "md";
   className?: string;
 }
 
+const ALERT_TONE = {
+  info: "text-ink-3",
+  warning: "text-warning-text",
+  danger: "text-danger font-medium",
+} as const;
+
 /*
  * Buscador de insumos (reactivos, consumibles o equipos) con lista
- * desplegable y, para reactivos de cantidad fija, un aviso de stock.
+ * desplegable. Para reactivos de cantidad fija muestra el aviso de stock;
+ * para equipos, el aviso de estado o calibracion vencida.
  */
-export function InsumoSearch({ tipo, value, onChange, placeholder = "Buscar insumo", cantidadFija, cantidadUnidad, stepEnabled = true, showStockBadge = false, size = "md", className }: InsumoSearchProps) {
+export function InsumoSearch({ tipo, value, onChange, placeholder = "Buscar insumo", cantidadFija, cantidadUnidad, cantidadNota, stepEnabled = true, showStockBadge = false, size = "md", className }: InsumoSearchProps) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [, setTick] = useState(0);
   const [active, setActive] = useState(0);
   const lastValue = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
+
+  const valueRef = useRef(value);
 
   useEffect(() => {
+    valueRef.current = value;
     if (lastValue.current === value) return;
     lastValue.current = value;
     const option = findInsumoOption(tipo, value);
     setSearch(option?.label || value || "");
   }, [value, tipo]);
 
+  // Si el catálogo llega después de que el registro ya mostró su referencia (un id), se sustituye por el nombre.
   useEffect(() => {
-    void loadInsumoOptions().then(() => setTick((t) => t + 1));
-  }, []);
+    void loadInsumoOptions().then(() => {
+      const option = findInsumoOption(tipo, valueRef.current);
+      if (option) setSearch((current) => (current === String(valueRef.current || "") ? option.label : current));
+      setTick((t) => t + 1);
+    });
+  }, [tipo]);
 
   const options = getInsumoOptions(tipo);
   const q = search.trim().toLowerCase();
@@ -55,13 +73,27 @@ export function InsumoSearch({ tipo, value, onChange, placeholder = "Buscar insu
     onChange(ref, label);
   };
 
-  const badge = () => {
+  const base = "mt-1.5 flex items-start gap-1.5 text-[12px] leading-snug";
+
+  const equipoBadge = () => {
+    if (tipo !== "equipo" || !selected) return null;
+    const alert = equipoAlert(selected);
+    if (!alert) return null;
+    const Icon = alert.level === "info" ? Info : alert.level === "warning" ? Warning : XCircle;
+    return (
+      <p className={cn(base, ALERT_TONE[alert.level])} role={alert.requiresConfirm ? "alert" : undefined}>
+        <Icon size={14} weight={alert.level === "danger" ? "fill" : "regular"} className="mt-0.5 shrink-0" /> {alert.message}
+        {alert.requiresConfirm ? " · se pedirá confirmación al guardar" : ""}
+      </p>
+    );
+  };
+
+  const stockBadge = () => {
     if (!showStockBadge || tipo !== "reactivo" || !cantidadFija || !stepEnabled) return null;
     const ref = String(value || "").trim();
-    const base = "mt-1.5 flex items-start gap-1.5 text-[12px] leading-snug";
     if (!ref) {
       return (
-        <p className={cn(base, "text-[#8d6011]")}>
+        <p className={cn(base, "text-warning-text")}>
           <Warning size={14} className="mt-0.5 shrink-0" /> No se encontró en inventario para descuento automático
         </p>
       );
@@ -69,7 +101,7 @@ export function InsumoSearch({ tipo, value, onChange, placeholder = "Buscar insu
     const item = findReactivoByRef(ref);
     if (!item) {
       return (
-        <p className={cn(base, "text-[#8d6011]")}>
+        <p className={cn(base, "text-warning-text")}>
           <Warning size={14} className="mt-0.5 shrink-0" /> No encontrado en inventario
         </p>
       );
@@ -86,11 +118,13 @@ export function InsumoSearch({ tipo, value, onChange, placeholder = "Buscar insu
       );
     }
     const protocol = resolved.protocolUnit && resolved.protocolUnit !== normalizeInventoryUnit(u) ? ` (${formatInventoryAmount(resolved.protocolAmount)} ${resolved.protocolUnit})` : "";
+    const nota = cantidadNota ? ` · ${cantidadNota}` : "";
     if (Number(stock) >= resolved.amount) {
       return (
-        <p className={cn(base, "text-[#1f6b50]")}>
+        <p className={cn(base, "text-success-text")}>
           <CheckCircle size={14} weight="fill" className="mt-0.5 shrink-0" /> Se descontarán {formatInventoryAmount(resolved.amount)} {u}
-          {protocol} al guardar. Disponible: {formatInventoryAmount(stock)} {u}
+          {protocol}
+          {nota}. Disponible: {formatInventoryAmount(stock)} {u}
         </p>
       );
     }
@@ -98,6 +132,7 @@ export function InsumoSearch({ tipo, value, onChange, placeholder = "Buscar insu
       <p className={cn(base, "font-medium text-danger")}>
         <XCircle size={14} weight="fill" className="mt-0.5 shrink-0" /> Stock insuficiente: {formatInventoryAmount(stock)} {u} disponibles, se requieren {formatInventoryAmount(resolved.amount)} {u}
         {protocol}
+        {nota}
       </p>
     );
   };
@@ -118,6 +153,13 @@ export function InsumoSearch({ tipo, value, onChange, placeholder = "Buscar insu
     }
   };
 
+  const optionAside = (o: (typeof shown)[number]) => {
+    if (tipo === "reactivo") return `${formatInventoryAmount(o.cantidad_actual ?? 0)} ${o.unidad || ""}`;
+    if (tipo === "consumible") return `${formatInventoryAmount(o.piezas ?? 0)} pz`;
+    const alert = equipoAlert(o);
+    return alert ? alert.message : "";
+  };
+
   return (
     <div className={cn("relative", className)}>
       <div className="relative">
@@ -126,8 +168,10 @@ export function InsumoSearch({ tipo, value, onChange, placeholder = "Buscar insu
           type="text"
           role="combobox"
           aria-expanded={open}
+          aria-controls={listId}
           aria-autocomplete="list"
-          className={cn(controlClass, size === "sm" ? "h-8 text-[13px]" : "h-9", "pl-8 pr-8", selected && "border-brand/60 bg-brand-faint/40")}
+          aria-label={placeholder}
+          className={cn(size === "sm" ? controlClassSm : cn(controlClass, "h-9"), "pl-8 pr-8", selected && "border-brand/60 bg-brand-faint/40")}
           placeholder={placeholder}
           autoComplete="off"
           value={search}
@@ -156,29 +200,33 @@ export function InsumoSearch({ tipo, value, onChange, placeholder = "Buscar insu
         ) : null}
       </div>
       {open ? (
-        <div ref={listRef} role="listbox" className="scroll-thin absolute top-[calc(100%+4px)] left-0 z-30 max-h-[220px] w-full min-w-[260px] overflow-y-auto rounded-[8px] border border-line bg-surface p-1 shadow-pop">
+        <div ref={listRef} id={listId} role="listbox" className="scroll-thin absolute top-[calc(100%+4px)] left-0 z-30 max-h-[220px] w-full min-w-[260px] overflow-y-auto rounded-[8px] border border-line bg-surface p-1 shadow-pop">
           {!shown.length ? (
             <div className="px-2.5 py-2 text-[12.5px] text-ink-3">{!isInsumoCacheLoaded() ? "Cargando inventario…" : "Sin resultados"}</div>
           ) : (
-            shown.map((o, index) => (
-              <button
-                key={o.ref}
-                type="button"
-                role="option"
-                aria-selected={index === active}
-                onMouseDown={(event) => event.preventDefault()}
-                onMouseEnter={() => setActive(index)}
-                onClick={() => choose(o.ref, o.label)}
-                className={cn("flex w-full items-center justify-between gap-3 rounded-[6px] px-2.5 py-1.5 text-left text-[13px] text-ink", index === active && "bg-brand-faint")}
-              >
-                <span className="truncate">{o.label}</span>
-                {tipo !== "equipo" ? <span className="tnum shrink-0 text-[11.5px] text-ink-3">{tipo === "reactivo" ? `${formatInventoryAmount(o.cantidad_actual ?? 0)} ${o.unidad || ""}` : `${formatInventoryAmount(o.piezas ?? 0)} pz`}</span> : null}
-              </button>
-            ))
+            shown.map((o, index) => {
+              const aside = optionAside(o);
+              const alert = tipo === "equipo" ? equipoAlert(o) : null;
+              return (
+                <button
+                  key={o.ref}
+                  type="button"
+                  role="option"
+                  aria-selected={index === active}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActive(index)}
+                  onClick={() => choose(o.ref, o.label)}
+                  className={cn("flex w-full items-center justify-between gap-3 rounded-[6px] px-2.5 py-1.5 text-left text-[13px] text-ink", index === active && "bg-brand-faint")}
+                >
+                  <span className="truncate">{o.label}</span>
+                  {aside ? <span className={cn("tnum shrink-0 text-[11.5px]", alert ? ALERT_TONE[alert.level] : "text-ink-3")}>{aside}</span> : null}
+                </button>
+              );
+            })
           )}
         </div>
       ) : null}
-      {badge()}
+      {tipo === "equipo" ? equipoBadge() : stockBadge()}
     </div>
   );
 }
@@ -189,16 +237,19 @@ export const newInventarioRow = (tipo = "consumible", ref = "", cantidad = 1, no
 /* Filas dinamicas de "insumos utilizados" con descuento de inventario. */
 export function InventarioRows({ rows, onChange }: { rows: InventarioRow[]; onChange: (rows: InventarioRow[]) => void }) {
   const update = (key: number, patch: Partial<InventarioRow>) => onChange(rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
-  if (!rows.length) return <p className="rounded-card border border-dashed border-line-strong px-4 py-4 text-center text-[13px] text-ink-3">Sin insumos adicionales. Agrega los que se usaron fuera del protocolo.</p>;
+  if (!rows.length) return <p className="rounded-[10px] border border-dashed border-line-strong px-4 py-4 text-center text-[13px] text-ink-3">Sin insumos adicionales. Agrega los que se usaron fuera del protocolo.</p>;
   return (
     <div className="flex flex-col gap-2">
       {rows.map((row) => (
-        <div key={row.key} className="grid grid-cols-[130px_1fr_110px_36px] items-start gap-2">
+        // En pantallas chicas el buscador ocupa toda la fila y tipo/cantidad/quitar bajan a una segunda línea.
+        <div key={row.key} className="grid grid-cols-[minmax(0,1fr)_96px_36px] items-start gap-2 sm:grid-cols-[130px_minmax(0,1fr)_110px_36px]">
           <select className={cn(controlClass, "h-9 appearance-none")} value={row.tipo} onChange={(event) => update(row.key, { tipo: event.target.value, ref: "", nombre: "" })} aria-label="Tipo de insumo">
             <option value="consumible">Consumible</option>
             <option value="reactivo">Reactivo</option>
           </select>
-          <InsumoSearch key={`${row.key}-${row.tipo}`} tipo={row.tipo} value={row.ref} onChange={(ref, label) => update(row.key, { ref, nombre: label })} />
+          <div className="col-span-3 sm:col-span-1 sm:order-none -order-1">
+            <InsumoSearch key={`${row.key}-${row.tipo}`} tipo={row.tipo} value={row.ref} onChange={(ref, label) => update(row.key, { ref, nombre: label })} />
+          </div>
           <input type="number" min="0.001" step="0.001" className={cn(controlClass, "h-9")} value={row.cantidad} onChange={(event) => update(row.key, { cantidad: Number.parseFloat(event.target.value) || 0 })} aria-label="Cantidad" />
           <IconButton label="Quitar insumo" tone="danger" onClick={() => onChange(rows.filter((r) => r.key !== row.key))}>
             <X size={15} weight="bold" />
@@ -209,5 +260,6 @@ export function InventarioRows({ rows, onChange }: { rows: InventarioRow[]; onCh
   );
 }
 
+/* Filas agregadas a mano; se marcan como manuales para conservarlas al reabrir el registro. */
 export const collectInventarioRows = (rows: InventarioRow[]) =>
-  rows.map((row) => ({ tipo: row.tipo || "consumible", ref: (row.ref || row.nombre || "").trim(), cantidad: row.cantidad || 1 })).filter((row) => row.ref !== "");
+  rows.map((row) => ({ tipo: row.tipo || "consumible", ref: (row.ref || row.nombre || "").trim(), cantidad: row.cantidad || 1, origen: "manual" as const })).filter((row) => row.ref !== "");

@@ -6,6 +6,27 @@ const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export { isSqlite };
 
+/*
+ * Los esquemas se aseguran una sola vez por proceso (el arranque los crea y
+ * confirma en `bootstrap.ts`). Sin esto, cada request repetia el DDL y ademas
+ * confirmaba a mitad del handler, lo que impedia deshacer los cambios de datos
+ * cuando la operacion fallaba despues.
+ */
+const esquemasListos = new Set<string>();
+
+export function schemaReady(key: string): boolean {
+  return esquemasListos.has(key);
+}
+
+export function markSchemaReady(key: string): void {
+  esquemasListos.add(key);
+}
+
+/* El arranque lo llama si falla, para que el siguiente intento repita el DDL. */
+export function resetSchemaMemo(): void {
+  esquemasListos.clear();
+}
+
 function quote(identifier: string): string {
   if (!IDENTIFIER_RE.test(identifier || "")) {
     throw new Error(`Identificador SQL invalido: ${JSON.stringify(identifier)}`);

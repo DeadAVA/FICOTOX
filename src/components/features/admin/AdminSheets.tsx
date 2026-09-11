@@ -4,9 +4,11 @@ import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Eye, EyeSlash } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
+import { AvatarPicker } from "@/components/ui/AvatarPicker";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, Field, FormGrid, Input, Select, Switch, Textarea } from "@/components/ui/Field";
 import { Sheet } from "@/components/ui/Overlay";
+import { HIDDEN_MODULES } from "@/lib/shared/features";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
@@ -23,6 +25,8 @@ type FlagKey = (typeof FLAGS)[number]["key"];
 
 export interface PermissionRow {
   permiso_id: number;
+  /* Clave del módulo (reactivos, muestras, documentos...). */
+  clave: string;
   nombre: string;
   descripcion: string;
   can_read: boolean;
@@ -34,6 +38,7 @@ export interface PermissionRow {
 export const toPermissionRows = (items: ApiRecord[]): PermissionRow[] =>
   items.map((perm) => ({
     permiso_id: Number(perm.permiso_id || perm.id),
+    clave: String(perm.clave || perm.permiso_clave || ""),
     nombre: String(perm.nombre || ""),
     descripcion: String(perm.descripcion || ""),
     can_read: !!perm.can_read,
@@ -154,7 +159,8 @@ export function RoleSheet({ open, role, initialPermissions, onClose }: { open: b
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {rows.map((row) => (
+                {/* Los módulos apagados (ver features.ts) no se muestran; sus permisos guardados viajan intactos al guardar. */}
+                {rows.filter((row) => !HIDDEN_MODULES.has(String(row.clave || ""))).map((row) => (
                   <tr key={row.permiso_id} className="hover:bg-surface-2/40">
                     <td className="px-3 py-2">
                       <div className="font-medium text-ink">{row.nombre}</div>
@@ -191,6 +197,7 @@ export function UserSheet({ open, item, onClose }: { open: boolean; item: ApiRec
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [activo, setActivo] = useState(item ? !!item.activo : true);
+  const [avatar, setAvatar] = useState<string | null>(item?.avatar ? String(item.avatar) : null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editing = !!item?.id;
@@ -211,6 +218,7 @@ export function UserSheet({ open, item, onClose }: { open: boolean; item: ApiRec
       email: email.trim(),
       id_rol: Number(roleId || 0),
       departamento: departamento.trim() || null,
+      ...(avatar ? { avatar } : {}),
       activo,
     };
     if (password) payload.password = password;
@@ -295,6 +303,9 @@ export function UserSheet({ open, item, onClose }: { open: boolean; item: ApiRec
           </Field>
           <Field label="Departamento" htmlFor="u-depto">
             <Input id="u-depto" maxLength={100} value={departamento} onChange={(event) => setDepartamento(event.target.value)} />
+          </Field>
+          <Field label="Avatar" hint={editing ? "La persona también puede cambiarlo desde Mi cuenta." : "Si no eliges uno, se asigna al azar."} className="sm:col-span-2">
+            <AvatarPicker value={avatar} seed={email.trim().toLowerCase() || nombre.toLowerCase()} onChange={setAvatar} size={44} />
           </Field>
           <Field label={editing ? "Nueva contraseña" : "Contraseña"} htmlFor="u-password" required={!editing} hint={editing ? "Déjala vacía para conservar la actual." : "Mínimo 8 caracteres."} className="sm:col-span-2">
             <Input

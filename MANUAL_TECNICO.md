@@ -29,7 +29,7 @@ ficotox/
       globals.css            # Tailwind v4 + tokens del sistema de diseño (@theme)
       providers.tsx          # SessionProvider, TooltipProvider, ConfirmProvider
       login/page.tsx         # acceso con correo y contrasena (Microsoft opcional)
-      (app)/layout.tsx       # guardia de sesion + shell (barra superior)
+      (app)/layout.tsx       # guardia de sesion + shell (barra lateral)
       (app)/page.tsx         # Inicio
       (app)/muestras/**      # listas por etapa y formatos nueva/[id]
       (app)/inventario/**    # reactivos, consumibles, equipos, mantenimiento
@@ -75,7 +75,7 @@ ficotox/
 
 - React 19 con Tailwind CSS 4 (tokens en `src/app/globals.css`, ver `docs/DISENO_UI.md`).
 - Radix UI (`radix-ui`) para dialogos, hojas laterales, menus y tooltips accesibles; `cmdk` para la paleta de comandos; `sonner` para notificaciones.
-- Iconos Phosphor (`@phosphor-icons/react`); tipografias Instrument Sans, Instrument Serif y Geist Mono servidas con `next/font`.
+- Iconos Phosphor (`@phosphor-icons/react`); una sola familia tipografica: la del sistema (SF Pro en Apple) con Inter como respaldo, y Geist Mono de respaldo para la monoespaciada, ambas servidas con `next/font`.
 - SheetJS para lectura de archivos Excel en navegador (`public/vendor/xlsx`).
 - `@azure/msal-browser` para login Microsoft (carga bajo demanda).
 
@@ -285,28 +285,108 @@ GET /api/samples
 GET /api/samples/pending
 
 GET    /api/samples/reception/next-folio
-GET    /api/samples/reception
-GET    /api/samples/reception/<id>
+GET    /api/samples/reception?anuladas=1
+GET    /api/samples/reception/<id>            # incluye procesamientos derivados
 POST   /api/samples/reception
 PUT    /api/samples/reception/<id>
-DELETE /api/samples/reception/<id>
+POST   /api/samples/reception/<id>/anular      # { motivo }
+POST   /api/samples/reception/<id>/restaurar   # { motivo }
+POST   /api/samples/reception/<id>/disposicion # cierra la muestra (7.4.4)
+DELETE /api/samples/reception/<id>             # 405: no se borra, se anula
 
 GET    /api/samples/processing/next-folio
-GET    /api/samples/processing
+GET    /api/samples/processing?anuladas=1
 GET    /api/samples/processing/<id>
-POST   /api/samples/processing
+POST   /api/samples/processing                 # exige recepcion aceptada
 PUT    /api/samples/processing/<id>
-DELETE /api/samples/processing/<id>
+POST   /api/samples/processing/<id>/anular     # repone inventario PROC-*
+POST   /api/samples/processing/<id>/restaurar
+DELETE /api/samples/processing/<id>            # 405
 
-GET    /api/samples/extraction/next-folio
-GET    /api/samples/extraction
+GET    /api/samples/extraction/next-folio?tipo=E-A|E-D
+GET    /api/samples/extraction?tipo=E-A|E-D&search=&anuladas=1
 GET    /api/samples/extraction/<id>
-POST   /api/samples/extraction
+POST   /api/samples/extraction                 # exige procesamiento vigente
 PUT    /api/samples/extraction/<id>
-DELETE /api/samples/extraction/<id>
+POST   /api/samples/extraction/<id>/anular     # repone inventario EXT-*
+POST   /api/samples/extraction/<id>/restaurar
+DELETE /api/samples/extraction/<id>            # 405
+
+GET    /api/samples/analysis/next-folio
+GET    /api/samples/analysis?estado=&anulados=1&search=
+GET    /api/samples/analysis/<id>
+POST   /api/samples/analysis                   # cadena derivada de la extraccion
+PUT    /api/samples/analysis/<id>              # revisado -> exige motivo_cambio; aprobado -> 409
+POST   /api/samples/analysis/<id>/revisar      # aprobaciones:update
+POST   /api/samples/analysis/<id>/aprobar      # persona distinta o permitir_misma_persona+motivo
+POST   /api/samples/analysis/<id>/anular       # 409 si esta en un informe autorizado
+POST   /api/samples/analysis/<id>/restaurar
 ```
 
 Las rutas aceptan tambien barra final (`/api/samples/reception/`), como el backend anterior.
+
+Reglas de estado (`src/lib/server/samples-flow.ts`): `assertEditable` rechaza con 409 la edicion de registros bloqueados (`anulada`/`anulado`, recepciones `rechazada` y `cerrada`, analisis `aprobado`; el valor de "anulado" por tabla esta en `ANULADO_VALUE`); `restaurarRegistro` exige que la etapa de origen siga vigente; `assertOrigin` valida que el registro de origen exista y este vigente (y aceptado, en el caso de la recepcion); `advanceState` solo avanza hacia adelante (`registrada -> aceptada -> en_proceso -> analizada -> informada -> cerrada`); `anularRegistro` exige motivo, bloquea si hay dependientes vigentes, repone el inventario por prefijo de referencia y escribe la bitacora. Los catalogos oficiales (tipos de analisis, metodos, tipos de muestra, requisitos de inspeccion, decisiones de aceptacion, disposiciones, estados) viven en `src/lib/shared/sgc.ts`.
+
+### 7.5.1 `informes`
+
+```text
+src/lib/server/modules/informes.ts
+src/lib/server/informe-pdf.ts
+```
+
+```text
+GET  /api/informes?estado=&anulados=1&search=
+GET  /api/informes/summary
+GET  /api/informes/next-folio
+GET  /api/informes/recepcion/<id>      # cliente, items y analisis aprobados reportables
+GET  /api/informes/<id>
+POST /api/informes                     # borrador (informes:create)
+PUT  /api/informes/<id>                # solo borrador / en_revision
+POST /api/informes/<id>/revisar        # aprobaciones:update; persona distinta de quien elaboro (o permitir_misma_persona + motivo)
+POST /api/informes/<id>/autorizar      # todos los analisis aprobados; persona distinta de quien reviso; congela resultados, genera PDF y marca el original de una enmienda como "sustituido" (PDF regenerado con la leyenda)
+POST /api/informes/<id>/entregar       # solo autorizados
+POST /api/informes/<id>/enmienda       # nueva version (v+1) en borrador, sustituye_a
+POST /api/informes/<id>/anular         # regenera PDF con marca ANULADO
+GET  /api/informes/<id>/pdf            # PDF definitivo o vista previa en borrador
+```
+
+El PDF se genera con `pdfkit` (`informe-pdf.ts`) con el contenido de 7.8.2: identificacion del laboratorio y del informe (folio `IR`, version, pagina x de y), cliente, items ensayados, metodos y fechas, resultados con unidades, limites y conformidad, declaraciones, firmas de elaboro/reviso/autorizo (imagenes embebidas) y las marcas de enmienda o anulacion. Se guarda en `<instance>/informes/` con su `pdf_sha256`.
+
+### 7.5.2 `documentos-sgc`
+
+```text
+GET  /api/documentos-sgc?tipo=&estado=&search=
+GET  /api/documentos-sgc/lista-maestra         # solo vigentes, con revision_vencida
+GET  /api/documentos-sgc/summary
+GET  /api/documentos-sgc/<id>                  # con revisiones de la misma clave
+POST /api/documentos-sgc                       # multipart (archivo) o JSON
+PUT  /api/documentos-sgc/<id>                  # solo borrador / en_revision
+POST /api/documentos-sgc/<id>/enviar-revision
+POST /api/documentos-sgc/<id>/aprobar          # aprobaciones:update; solo en_revision y con archivo (salvo externos); la vigente anterior pasa a obsoleta
+POST /api/documentos-sgc/<id>/nueva-revision   # { cambios }; solo desde una revision vigente u obsoleta
+POST /api/documentos-sgc/<id>/obsoletar        # { motivo }
+POST /api/documentos-sgc/<id>/cancelar         # { motivo }
+GET  /api/documentos-sgc/<id>/archivo          # descarga con Authorization
+DELETE                                         # 405
+```
+
+Los archivos se guardan en `<instance>/documentos_sgc/` con SHA-256. La clave se valida con `DOCUMENT_KEY_RE` (`FX-<area><tipo>-<siglas>`) y de ella se derivan tipo y area (el cuerpo no puede contradecirla). La revision la asigna el servidor: solo el primer registro de una clave puede declarar la revision con la que llega; despues es `MAX + 1` y no puede haber dos revisiones en curso.
+
+### 7.5.3 `audit`
+
+```text
+src/lib/server/audit.ts
+src/lib/server/modules/audit.ts
+```
+
+```text
+GET /api/audit?entidad=&entidad_id=&accion=&usuario=&search=&desde=&hasta=&limit=
+GET /api/audit/<id>
+GET /api/audit/summary
+GET /api/audit/verify          # recorre la cadena de hashes
+```
+
+`registrarAuditoria(s, user, { accion, entidad, entidadId, referencia, motivo, antes, despues, detalle })` calcula el diff entre `antes` y `despues` (omite campos volatiles y sustituye las imagenes de firma por `[firma]`), guarda los dos snapshots y encadena el sello `hash = HMAC-SHA256(SECRET_KEY, contenido + hash_anterior)`. La llave vive fuera de la base: `SECRET_KEY` cuando esta configurada, y si no, una llave aleatoria de 32 bytes que el sistema crea la primera vez en `<instance>/auditoria.key` (permisos 600) para que la proteccion no dependa de recordar configurar el entorno. Asi, quien solo tenga el archivo de la base no puede recalcular la cadena despues de alterarla. **Respalda la llave junto con la base: si cambia o se pierde, la verificacion de lo ya escrito falla.** La tabla `auditoria` tiene triggers que abortan cualquier `UPDATE` o `DELETE` (SQLite `RAISE(ABORT)`, MySQL `SIGNAL`). El historial de un registro (`entidad` + `entidad_id`) lo puede leer quien tenga permiso de lectura del modulo al que pertenece la entidad (`muestras_* -> muestras`, `informes`, `documentos_sgc -> documentos`, `reactivos`, `usuarios`, ...); el log completo, `summary` y `verify` requieren `auditoria:read`. `verify` devuelve `{ ok, total, primer_error, filas_faltantes_al_final, filas_faltantes_intermedias, triggers_ok }`: recalcula la cadena, comprueba que no falten filas al final (`sqlite_sequence` / `AUTO_INCREMENT` contra `MAX(id)`) ni en medio (huecos de id) y que los dos triggers de proteccion sigan presentes; los triggers se reponen en cada escritura si alguien los retiro.
 
 ### 7.6 `documents`
 
@@ -340,7 +420,8 @@ Codigo en `src/components/` y rutas en `src/app/(app)/`. Cada seccion es una rut
 Piezas principales:
 
 - `ui/`: sistema de diseño. `Button`, `Field` (Input, Select, Textarea, Checkbox, Radio, Switch, FormGrid), `Table`, `Overlay` (Sheet lateral, Dialog, `useConfirm`, Dropdown, Tooltip) y `Primitives` (Badge, Card, Stat, Skeleton, EmptyState, ErrorState, StockMeter).
-- `shell/AppShell.tsx`: barra superior con la navegacion principal, menu de usuario, navegacion movil y paleta de comandos (`CommandPalette.tsx`, atajo ⌘K / Ctrl+K).
+- `shell/AccountSheet.tsx`: "Mi cuenta" (datos de la sesion y eleccion de avatar; `PUT /api/auth/me/avatar`). `ui/AvatarArt.tsx` y `ui/AvatarPicker.tsx`: catalogo ilustrado y selector; las claves viven en `lib/shared/avatars.ts` y se guardan en `usuarios.avatar`.
+- `shell/AppShell.tsx`: barra lateral translucida en cuatro grupos (`NAV_GROUPS`), colapsable y con panel movil, boton Buscar y menu de usuario; `CommandPalette.tsx` (⌘K / Ctrl+K) y `HomeSearch.tsx` (buscador del Inicio) comparten el motor `lib/client/search.ts` (`useGlobalSearch`); `SearchHit.tsx` es la fila de resultado comun; `Brand.tsx` dibuja la marca (diatomea).
 - `session/SessionProvider.tsx`: carga `/api/auth/config`, valida el token con `/api/auth/me`, expone `can(modulo, accion)` y `logout`. `RequireModule` muestra un estado "sin acceso" cuando el rol no puede leer el modulo.
 - `features/*`: pantallas por dominio. Los catalogos abren hojas laterales (`*Sheet.tsx`); los formatos de muestra son paginas completas (`ReceptionForm`, `ProcessingForm`, `ExtractionForm`) con `FormLayout` (cabecera fija, indice de secciones).
 - `lib/client/store.ts`: `useResource(claves, loader)` carga datos y se recarga cuando alguien llama `invalidate("reactivos", ...)` tras guardar; sustituye al antiguo `loadedPages`.
@@ -366,7 +447,11 @@ Los endpoints protegidos llaman a `requireUser(request)`, que:
 
 ### 9.2 RBAC
 
-`src/lib/server/rbac.ts` define los permisos por modulo: `dashboard`, `reactivos`, `consumibles`, `equipos`, `muestras`, `movimientos`, `mantenimiento`, `documentos`, `roles`, `usuarios`, con acciones `read`, `create`, `update`, `delete`.
+`src/lib/server/rbac.ts` define los permisos por modulo: `dashboard`, `reactivos`, `consumibles`, `equipos`, `muestras`, `movimientos`, `mantenimiento`, `documentos`, `informes`, `aprobaciones`, `auditoria`, `roles`, `usuarios`, con acciones `read`, `create`, `update`, `delete`.
+
+`aprobaciones` (revisar/aprobar analisis, autorizar informes, aprobar documentos) y `auditoria` (leer la bitacora completa) se asignan por defecto solo a los roles administradores.
+
+`ensureRbacSchema()` corre una vez por proceso. Al arrancar **no amplia lo que un rol ya podia hacer**: un permiso ausente significa "no concedido", no "pendiente de configurar". Solo rellena (a) los roles administradores y (b) los modulos cuya clave aparece por primera vez en la tabla `permisos` durante ese arranque (y solo si no son de uso restringido). Cualquier otro permiso se concede a mano en Administracion > Roles. La accion `delete` significa anular o dar de baja con motivo: ningun endpoint de registros tecnicos o de inventario borra filas (la unica excepcion son los roles sin usuarios, que si se eliminan y quedan en la bitacora como `eliminar`). Un reactivo o consumible dado de baja no se puede **elegir de nuevo** (409), pero un registro que ya lo declaraba se sigue pudiendo reabrir y guardar: `applyStageInventory` recibe los insumos que el registro ya tenia (`insumosDeclarados`) y los repone aunque esten inactivos, para no congelar los registros historicos.
 
 Los endpoints combinan:
 
@@ -383,11 +468,29 @@ El login Microsoft valida el `id_token` con las claves JWKS del tenant (`jose`),
 
 ### 10.1 Tablas principales
 
-`roles`, `permisos`, `rol_permisos`, `usuarios`, `reactivos`, `consumibles`, `equipos`, `mantenimientos`, `movimientos`, `muestras_recepcion`, `muestras_procesamiento`, `muestras_extraccion`, `reportes_mantenimiento`.
+`roles`, `permisos`, `rol_permisos`, `usuarios`, `reactivos`, `consumibles`, `equipos`, `mantenimientos`, `movimientos`, `muestras_recepcion`, `muestras_procesamiento`, `muestras_extraccion`, `muestras_analisis`, `informes`, `documentos_sgc`, `auditoria`, `reportes_mantenimiento`.
+
+Columnas de baja logica y anulacion (`src/lib/server/inventory-baja.ts`, `src/lib/server/samples-flow.ts`): `activo`, `baja_motivo`, `baja_en`, `baja_por` en reactivos, consumibles y equipos; `anulado_en`, `anulado_por`, `motivo_anulacion`, `estado_previo` en las tablas de muestras. `muestras_recepcion` agrega `decision_aceptacion`, `aceptacion_json` (inspeccion, comunicacion al cliente) y `disposicion_json`. Las listas filtran `activo = 1` / `estado <> 'anulada'` salvo `?bajas=1` / `?anuladas=1`.
 
 ### 10.2 Migraciones ligeras
 
 No se usan migraciones versionadas. Cada modulo tiene funciones `ensure*Schema()` que crean tablas si no existen y agregan columnas faltantes con `addColumnIfMissing` (`src/lib/server/schema.ts`), con variantes para SQLite y MySQL.
+
+Excepcion: `muestras_extraccion` cambio su unicidad de `UNIQUE(folio_num)` a `UNIQUE(tipo_registro, folio_num)` (cada formato de extraccion, `E-A` ASP y `E-D` DSP, lleva su propia serie de folios). `ensureSamplesExtraccionSchema()` detecta la restriccion vieja y la migra una sola vez: en SQLite copia el archivo a `instance/backups/ficotox-<fecha>-pre-folio-por-tipo.sqlite3` y reconstruye la tabla dentro de la transaccion; en MySQL reemplaza el indice unico. Si la reconstruccion falla, la transaccion se revierte y la tabla queda intacta.
+
+Columnas agregadas en esta version: `muestras_extraccion.equipos_json` (equipos utilizados con clave y folio de bitacora) y `equipos.clave_bitacora`.
+
+### 10.2.1 Tipos de extraccion
+
+Los tipos, claves y helpers de folio viven en `src/lib/shared/extraction.ts` (compartido entre servidor y cliente). En el cliente, cada formato es un "protocolo" (`src/components/features/samples/extraction/asp.tsx`, `dsp.tsx`) que declara pasos, insumos de cantidad fija, equipos y secciones; `ExtractionForm.tsx` es comun. Para agregar un formato nuevo (PSP, pigmentos...) se amplia la union `ExtractionType`, `EXTRACTION_TYPES` y `normalizeExtractionType` en `extraction.ts`, se registra el protocolo en `ExtractionForm.tsx` y se escribe el protocolo; los route handlers y el esquema no cambian.
+
+`GET /api/samples/extraction?tipo=E-D` filtra por formato; con `search=E-D 12` busca exactamente ese folio de esa serie y con `search=12` por coincidencia en ambas. `GET /api/samples/extraction/next-folio?tipo=E-D` regresa el siguiente folio de esa serie. Al crear, `tipo_registro` se valida (`400` si no es un tipo soportado; si falta se asume `E-A` por compatibilidad); al editar, si falta se conserva el tipo almacenado. `clave_revision` se fuerza al formato del tipo (admite sufijo de revision). `409` si el folio ya existe en esa serie.
+
+Las filas de `uso_inventario_json` generadas por el protocolo llevan `origen: "protocolo"` y `campo`; al reabrir, el formulario las recalcula y solo conserva como manuales las que no vienen del protocolo (las anteriores a este cambio, sin `origen`, se casan por tipo y referencia).
+
+### 10.2.2 Esquemas y transacciones
+
+Cada `ensure*Schema()` se ejecuta **una sola vez por proceso** (registro compartido en `src/lib/server/schema.ts`: `schemaReady` / `markSchemaReady`). El arranque (`bootstrap.ts`) las corre todas y confirma en una transaccion propia; si falla, llama a `resetSchemaMemo()` para repetir el DDL en el siguiente intento. Ninguna de ellas hace `commit` por su cuenta: antes lo hacian a mitad del handler, y eso impedia deshacer los cambios de datos cuando la operacion fallaba despues (por ejemplo, al reponer inventario y abortar la edicion).
 
 ### 10.3 Capa de datos
 
@@ -413,13 +516,17 @@ No se usan migraciones versionadas. Cada modulo tiene funciones `ensure*Schema()
 npm run typecheck      # TypeScript
 npm run lint           # ESLint
 npm run build          # build de produccion
+npm test               # pruebas de API + navegador (ver docs/VALIDACION.md)
+npm run test:api       # solo API
 ```
+
+`npm test` copia `instance/ficotox.sqlite3` a `instance/test/ficotox-test.sqlite3`, agrega el usuario `qa@ficotox.local`, levanta `next dev` en el puerto 3100 sobre esa copia y corre `tests/api-*.mjs` (flujo completo por HTTP) y `tests/ui/*.mjs` (Playwright contra un Chrome local: `CHROME_PATH`). La base real nunca se toca.
 
 Con el servidor levantado:
 
 ```text
 GET http://localhost:3000/api/health      -> {"ok": true, "service": "ficotox-backend"}
-GET http://localhost:3000/api/health/db   -> {"ok": true, "database": "reachable"}
+GET http://localhost:3000/api/health/db   -> {"ok": true, "database": "reachable", "archivo": "ficotox.sqlite3"}
 ```
 
 ## 14. Despliegue
@@ -451,6 +558,20 @@ Recomendaciones:
 
 Ver `docs/backups.md` y `scripts/backup_ficotox.py` (lee `.env` de la raiz y respalda `instance/ficotox.sqlite3` o la base MySQL).
 
+### 15.1 Base de pruebas
+
+`tests/reset-test-db.mjs` copia `instance/fixtures/ficotox-base.sqlite3` (una copia congelada de la base antes de cargar datos de demostracion; las pruebas de API suponen los folios y catalogos de ese estado). Si el fixture no existe usa `instance/ficotox.sqlite3`; `SOURCE_DB=ruta` lo fuerza. La carpeta `instance/fixtures/` no se versiona: al instalar en otra maquina, copiar ahi un respaldo limpio.
+
+### 15.2 Datos de demostracion
+
+`scripts/demo-seed.mjs` llena una instancia **a traves de la API** (todo queda en la bitacora, con usuarios y fechas reales):
+
+```bash
+FICOTOX_EMAIL=admin@cicese.mx FICOTOX_PASSWORD='...' node scripts/demo-seed.mjs   # BASE=http://localhost:3000/api por omision
+```
+
+Crea tres roles y tres personas (analista, coordinacion tecnica, direccion: contrasenas en el script), 19 equipos con clave de bitacora (`FX-TCB-BA1`, `LC1`, `CE1`, `VO1`...), mantenimientos, soluciones preparadas y consumibles del protocolo, documentos del SGC vigentes y nueve recepciones en distintos puntos del flujo (hasta informe entregado y disposicion final; una rechazada, una con desviacion, una anulada). Es idempotente: busca antes de crear. Respaldar la base antes de correrlo sobre una instancia real.
+
 ## 16. Convenciones de desarrollo
 
 - Proteger endpoints con `requireUser` y `requirePermission`.
@@ -466,7 +587,7 @@ Ver `docs/backups.md` y `scripts/backup_ficotox.py` (lee `.env` de la raiz y res
 2. Crear las rutas en `src/app/api/<modulo>/**/route.ts` con `apiRoute(handler)`.
 3. Agregar el permiso en `DEFAULT_PERMISSIONS` (`src/lib/server/rbac.ts`).
 4. Crear la ruta en `src/app/(app)/<modulo>/page.tsx` envuelta en `RequireModule`, con `useResource` para cargar datos y una hoja lateral en `src/components/features/<modulo>/` para el alta y la edicion.
-5. Registrar el destino en `src/lib/client/nav.ts` (barra superior) y, si aplica, en la paleta de comandos (`CommandPalette.tsx`).
+5. Registrar el destino en `src/lib/client/nav.ts` (`NAV_GROUPS`, barra lateral) y, si aplica, en los destinos/acciones de `src/lib/client/search.ts` (busqueda y paleta).
 6. Reutilizar los componentes de `src/components/ui/`; los tokens de color y tipografia viven en `src/app/globals.css`.
 
 ## 18. Solucion de problemas

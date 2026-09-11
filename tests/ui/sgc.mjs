@@ -1,0 +1,386 @@
+/* Ronda SGC (navegador): recepcion con aceptacion, anular/restaurar, analisis revisar/aprobar, informe autorizar+PDF+entrega, documentos SGC, auditoria, baja de inventario. */
+import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
+const require = createRequire(import.meta.url);
+const { chromium } = require("playwright-core");
+
+const BASE = process.env.BASE || "http://localhost:3100";
+const executablePath = process.env.CHROME_PATH || path.join(os.homedir(), "Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing");
+const results = [];
+const check = (name, ok, detail = "") => {
+  results.push({ name, ok });
+  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
+};
+const today = new Date().toISOString().slice(0, 10);
+const stamp = Date.now().toString().slice(-5);
+
+const browser = await chromium.launch({ executablePath, headless: true });
+const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
+page.setDefaultTimeout(60_000);
+const consoleErrors = [];
+page.on("console", (msg) => {
+  if (msg.type() === "error") consoleErrors.push(msg.text());
+});
+page.on("pageerror", (err) => consoleErrors.push(`pageerror: ${err.message}`));
+
+/* Los formatos abren "paso a paso" al capturar; para llenar todo con selectores fijos se muestra el formato completo. */
+const showAll = async () => {
+  // En escritorio el modo se elige en el control segmentado de la guía; en móvil es un botón.
+  const todo = page.getByRole("radio", { name: "Todo" });
+  if (await todo.count()) {
+    if ((await todo.getAttribute("aria-checked")) !== "true") await todo.click();
+    await page.waitForFunction(() => document.querySelector('[role="radio"][aria-checked="true"]')?.textContent?.includes("Todo"));
+    return;
+  }
+  const button = page.getByRole("button", { name: "Mostrar todo" });
+  if (await button.count()) await button.click();
+  await page.getByRole("button", { name: "Paso a paso" }).waitFor();
+};
+
+/* Dibuja un trazo en un lienzo de firma identificado por su aria-label. */
+const sign = async (label) => {
+  const canvas = page.getByLabel(label, { exact: true });
+  await canvas.scrollIntoViewIfNeeded();
+  const box = await canvas.boundingBox();
+  await page.mouse.move(box.x + 20, box.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 140, box.y + 70, { steps: 6 });
+  await page.mouse.up();
+};
+
+const fillPrompt = async (motivo, confirm) => {
+  await page.locator("#prompt-motivo").waitFor();
+  await page.fill("#prompt-motivo", motivo);
+  await page.getByRole("dialog").getByRole("button", { name: confirm, exact: true }).click();
+};
+
+/* Los conmutadores viven dentro del menú "Filtros": se abre, se cambia y se cierra con Escape. */
+const setFilterToggle = async (label, on) => {
+  await page.getByRole("button", { name: /^Filtros/ }).click();
+  const toggle = page.getByRole("switch", { name: label });
+  await toggle.waitFor();
+  if (((await toggle.getAttribute("aria-checked")) === "true") !== on) await toggle.click();
+  await page.keyboard.press("Escape");
+};
+const drawSignature = async (label) => {
+  const canvas = page.locator(`canvas[aria-label="${label}"]`);
+  const box = await canvas.boundingBox();
+  await page.mouse.move(box.x + 30, box.y + 60);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 120, box.y + 90, { steps: 8 });
+  await page.mouse.move(box.x + 220, box.y + 50, { steps: 8 });
+  await page.mouse.up();
+};
+const dialogButton = (name) => page.getByRole("dialog").getByRole("button", { name, exact: true });
+
+let token = "";
+try {
+  await page.goto(`${BASE}/login`);
+  await page.fill("#login-email", "qa@ficotox.local");
+  await page.fill("#login-password", "QaFicotox2026!");
+  await page.click("button[type=submit]");
+  await page.waitForURL((url) => !url.pathname.startsWith("/login"));
+  check("login", true);
+  token = await page.evaluate(() => localStorage.getItem("ficotox_access_token") || "");
+
+  /* ---------- Recepcion con inspeccion + decision ---------- */
+  await page.goto(`${BASE}/muestras/recepcion/nueva`);
+  await page.getByRole("heading", { name: /Nueva recepción/ }).waitFor();
+  await page.waitForFunction(() => (document.querySelector("#r-folio") || {}).value !== "");
+  // Modo paso a paso: solo la primera sección está abierta y "Continuar" abre la siguiente.
+  check("formato nuevo abre paso a paso", (await page.locator("#r-id").isVisible()) === false && (await page.locator("#r-folio").isVisible()) === true);
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await page.locator("#r-id").waitFor({ state: "visible" });
+  check("«Continuar» abre la sección de la muestra", true);
+  await showAll();
+  check("«Todo» despliega el formato completo", await page.locator("#r-obs-insp").isVisible());
+  const folio = await page.inputValue("#r-folio");
+  await page.fill("#r-fecha", today);
+  await page.fill("#r-id", `UI-${stamp}`);
+  await page.selectOption("#r-medio", { index: 1 });
+  // "Recibido por" es un selector del personal autorizado, prellenado con la persona con sesión.
+  const recibido = await page.locator("#r-recibido").inputValue();
+  check("«Recibido por» viene prellenado con la persona con sesión", recibido === "QA Ficotox", recibido);
+  await page.locator("#r-recibido").selectOption("QA Ficotox");
+  await page.fill("#r-solicitante", "Cliente UI Playwright");
+  await page.getByLabel("Ácido domoico (ASP)").check();
+  await page.getByLabel("Cromatografía de líquidos").check();
+  await page.getByLabel("Organismo completo").check();
+  // Solo los grupos C/NC/NA de la inspección (la guía también tiene un radiogroup para el modo de lectura).
+  const groups = page.locator('#sec-inspeccion [role="radiogroup"]');
+  const n = await groups.count();
+  for (let i = 0; i < n; i += 1) await groups.nth(i).getByRole("radio", { name: "C", exact: true }).click();
+  check("inspección visual con 7 requisitos", n >= 7, `radiogroups=${n}`);
+  await page.getByRole("radio", { name: /^Aceptada\s+Cumple/ }).check();
+  await page.fill("#r-acep-fecha", today);
+  await page.locator("#r-acep-resp").selectOption("QA Ficotox");
+  await page.fill("#r-acep-temp", "6 °C");
+  // Sin la información mínima (solicitante y custodio) el formato no se guarda: avisa y abre la sección.
+  await page.getByRole("button", { name: "Registrar recepción" }).click();
+  await page.getByText(/Falta información en/).first().waitFor();
+  check("no deja guardar sin la información mínima", page.url().includes("/muestras/recepcion/nueva"));
+  await page.fill("#r-sol-nombre", "Juan Pérez");
+  await sign("Firma de conformidad del solicitante");
+  await page.getByLabel(/He revisado la información/).check();
+  await page.getByRole("radio", { name: /^Congelador/ }).check();
+  await sign("Firma · Custodio");
+  // La decisión de aceptación es opcional al guardar: cuentan 6 secciones obligatorias.
+  await page.getByText(/6 de 6 secciones completas/).waitFor();
+  check("la guía marca todas las secciones obligatorias completas", true);
+  await page.getByRole("button", { name: "Registrar recepción" }).click();
+  await page.waitForURL((url) => url.pathname === "/muestras/recepcion");
+  await page.getByPlaceholder("Buscar por folio, solicitante o ID interno").fill(`UI-${stamp}`);
+  const row = page.locator("tbody tr").filter({ hasText: `UI-${stamp}` }).first();
+  await row.waitFor();
+  check("recepción aparece con decisión Aceptada", (await row.textContent()).includes("Aceptada"), `folio ${folio}`);
+
+  /* ---------- Anular y restaurar ---------- */
+  await row.getByRole("button", { name: "Acciones" }).click();
+  await page.getByRole("menuitem", { name: /Anular recepción/ }).click();
+  await fillPrompt("Prueba UI: registro duplicado", "Anular");
+  await page.getByText(/anulad/i).first().waitFor();
+  await setFilterToggle("Mostrar anuladas", true);
+  // La lista se recarga sola tras anular: se espera a la fila ya marcada como anulada.
+  const anulada = page.locator("tbody tr").filter({ hasText: `UI-${stamp}` }).filter({ hasText: "Anulada" }).first();
+  await anulada.waitFor();
+  check("recepción anulada visible con 'Mostrar anuladas'", true);
+  await anulada.getByRole("button", { name: "Acciones" }).click();
+  await page.getByRole("menuitem", { name: /Restaurar recepción/ }).click();
+  await fillPrompt("Prueba UI: se anuló por error", "Restaurar");
+  await setFilterToggle("Mostrar anuladas", false);
+  const restaurada = page.locator("tbody tr").filter({ hasText: `UI-${stamp}` }).filter({ hasNotText: "Anulada" }).first();
+  await restaurada.waitFor();
+  check("recepción restaurada vuelve a la lista", true);
+  await restaurada.getByRole("button", { name: "Acciones" }).click();
+  await page.getByRole("menuitem", { name: "Editar" }).click();
+  await page.getByText("Historial del registro").waitFor();
+  await page.getByText(/restauró la recepción/).first().waitFor();
+  check("historial de auditoría en el formulario de recepción", true);
+
+  /* ---------- Analisis: crear, revisar, aprobar ---------- */
+  // Cadena propia (recepcion aceptada -> procesamiento -> extraccion E-A) para no depender de ids previos.
+  const apiPost = async (path, body) => {
+    const r = await fetch(`${BASE}/api${path}`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+    return r.json();
+  };
+  const checklist = ["Se presentan en talla comercial.", "Se presentan sin alteraciones (estado de descomposición, valvas abiertas/rotas, cuerpos eviscerados).", "En el momento de su presentación no han transcurrido más de 24 horas después de haber sido extraídas.", "Se presentan en bolsa o botella de plástico transparente, sin alteraciones, como contenedor primario.", "El contenedor primario es transportado en una hielera con blue ice/hielo suficiente para mantener la temperatura entre 4 y 10 °C.", "Se presentan en cantidad o volumen suficiente para el(los) análisis solicitados.", "Se presenta con algún tipo de fijador (en caso positivo especificar el tipo)."].map((requisito, i) => ({ requisito, estado: i === 6 ? "NA" : "C", observacion: null }));
+  const recUi = await apiPost("/samples/reception", { fecha_recepcion: today, hora_recepcion: "09:00", recibido_por: "QA Ficotox", medio_recepcion: "directa", solicitante: "Productor Bahía Falsa S.A.", muestra_unica: true, id_interno: `UI-A-${stamp}`, fecha_muestra: today, analisis: { tipos: ["acido_domoico"], metodos: ["cromatografia_liquidos"], tipos_muestra: ["organismo_completo"] }, decision_aceptacion: "aceptada", inspeccion: { checklist, observaciones_generales: null }, aceptacion: { fecha: today, responsable: "QA Ficotox" }, datos_solicitante: { nombre_entrega: "Juan Pérez" }, datos_custodio: { nombre_cargo_firma: "QA Ficotox", lugar_resguardo: "congelador" } });
+  const procUi = await apiPost("/samples/processing", { recepcion_id: recUi.id, muestra_tipo: "unica", id_interno: `UI-A-${stamp}`, fecha_procesamiento: today, tipo_organismo: ["bivalvos"], nombre_quien_proceso: "QA Ficotox" });
+  const extUi = await apiPost("/samples/extraction", { tipo_registro: "E-A", procesamiento_id: procUi.id, tipo_molienda: "fresca", id_interno: `UI-A-${stamp}`, fecha_extraccion: today });
+  check("cadena de prueba creada por API", !!recUi.id && !!procUi.id && !!extUi.id, `rec=${recUi.id} proc=${procUi.id} ext=${extUi.id}`);
+  const extId = String(extUi.id);
+  await page.goto(`${BASE}/muestras/analisis/nuevo?extraccion=${extId}`);
+  await page.getByRole("heading", { name: /Nuevo análisis/ }).waitFor();
+  await showAll();
+  await page.waitForFunction(() => (document.querySelector("#a-folio") || {}).value !== "");
+  const folioA = await page.inputValue("#a-folio");
+  await page.waitForFunction((id) => (document.querySelector("#a-ext") || {}).value === id, extId);
+  const asp = await page.getByLabel("Ácido domoico (ASP)").isChecked();
+  check("tipo ASP sugerido desde la extracción E-A", asp);
+  await page.selectOption("#a-metodo", "hplc_uv_vis");
+  await page.fill("#a-fecha", today);
+  // Equipo obligatorio para trazabilidad.
+  const equipoBox = page.getByPlaceholder(/Cromatógrafo, microscopio/);
+  await equipoBox.click();
+  await equipoBox.fill("Centr");
+  await page.getByRole("option", { name: /Centr/ }).first().click();
+  await page.getByRole("button", { name: "Agregar muestra" }).click();
+  await page.locator('input[aria-label^="ID de la muestra"]').first().fill("D26-101");
+  const resultInputs = page.locator('input[aria-label^="Resultado de "]');
+  const nres = await resultInputs.count();
+  check("fila de resultado agregada a mano", nres >= 1, `filas=${nres}`);
+  await resultInputs.first().fill("12.5");
+  const cumple = await page.locator('select[aria-label^="Conformidad de "]').first().inputValue();
+  check("conformidad sugerida contra el límite (12.5 < 20 => cumple)", cumple === "cumple", `cumple=${cumple}`);
+  await page.getByRole("button", { name: "Registrar análisis" }).click();
+  await page.waitForURL((url) => url.pathname === "/muestras/analisis");
+  const rowA = page.locator("tbody tr").filter({ hasText: new RegExp(`A\\s*${folioA.padStart(7, "0")}`) }).first();
+  await rowA.waitFor();
+  check("análisis en la lista con estado Registrado", (await rowA.textContent()).includes("Registrado"), `folio A ${folioA}`);
+  await rowA.click();
+  await page.getByRole("button", { name: "Marcar revisado" }).click();
+  await dialogButton("Marcar revisado").click();
+  await page.waitForURL((url) => url.pathname === "/muestras/analisis");
+  const rowA2 = page.locator("tbody tr").filter({ hasText: new RegExp(`A\\s*${folioA.padStart(7, "0")}`) }).first();
+  await rowA2.waitFor();
+  check("análisis revisado", (await rowA2.textContent()).includes("Revisado"));
+  await rowA2.click();
+  await page.getByRole("button", { name: "Aprobar", exact: true }).click();
+  await dialogButton("Aprobar").click();
+  await page.waitForURL((url) => url.pathname === "/muestras/analisis");
+  const rowA3 = page.locator("tbody tr").filter({ hasText: new RegExp(`A\\s*${folioA.padStart(7, "0")}`) }).first();
+  await rowA3.waitFor();
+  check("análisis aprobado por la misma persona (regla de dos personas apagada)", (await rowA3.textContent()).includes("Aprobado"));
+  await rowA3.click();
+  // En solo lectura no hay botón de guardar y el formato abre completo.
+  await page.getByRole("button", { name: "Volver" }).waitFor();
+  await page.locator("#a-metodo").waitFor();
+  const metodoDisabled = (await page.locator("#a-metodo").isDisabled()) && (await page.getByRole("button", { name: "Guardar cambios" }).count()) === 0;
+  check("análisis aprobado es solo lectura (controles desactivados)", metodoDisabled);
+
+  /* ---------- Informe: crear, revisar, autorizar, PDF, entregar ---------- */
+  await page.goto(`${BASE}/informes/nuevo?recepcion=${recUi.id}`);
+  await page.getByRole("heading", { name: /Nuevo informe/ }).waitFor();
+  await showAll();
+  const checks = page.locator('#sec-analisis input[type="checkbox"]');
+  await checks.first().waitFor();
+  const nchecks = await checks.count();
+  for (let i = 0; i < nchecks; i += 1) if (!(await checks.nth(i).isChecked())) await checks.nth(i).check();
+  check("análisis aprobados disponibles para el informe", nchecks >= 1, `n=${nchecks}`);
+  await page.getByRole("button", { name: "Crear borrador" }).click();
+  await page.waitForURL((url) => /^\/informes\/\d+$/.test(url.pathname));
+  const informeId = page.url().split("/").pop();
+  check("informe creado en borrador", true, `id=${informeId}`);
+  await page.getByRole("button", { name: "Marcar revisado" }).click();
+  check("el diálogo de firma no pide cargo (sale del rol)", (await page.locator("#sign-cargo").count()) === 0);
+  await dialogButton("Marcar revisado").click();
+  await page.getByText("En revisión").first().waitFor();
+  check("informe en revisión", true);
+  await page.getByRole("button", { name: "Autorizar", exact: true }).click();
+  await drawSignature("Firma: Autorizar informe");
+  await dialogButton("Autorizar").click();
+  await page.getByText("Autorizado").first().waitFor();
+  check("informe autorizado", true);
+  const pdf = await page.evaluate(async ([id, tk]) => {
+    const r = await fetch(`/api/informes/${id}/pdf`, { headers: { Authorization: `Bearer ${tk}` } });
+    return { status: r.status, type: r.headers.get("content-type"), size: (await r.arrayBuffer()).byteLength };
+  }, [informeId, token]);
+  check("PDF del informe descargable", pdf.status === 200 && String(pdf.type).includes("pdf") && pdf.size > 2000, JSON.stringify(pdf));
+  // Un <fieldset disabled> desactiva a sus descendientes sin poner el atributo en cada uno: se consulta :disabled.
+  await page.waitForFunction(() => !!document.querySelector("#i-cli")?.matches(":disabled"));
+  check("informe autorizado es solo lectura (cliente desactivado)", true);
+  await page.getByRole("button", { name: "Registrar entrega" }).click();
+  await page.fill("#e-fecha", today);
+  await page.selectOption("#e-medio", { index: 1 });
+  await page.fill("#e-quien", "Juan Pérez");
+  await dialogButton("Registrar entrega").click();
+  await page.getByText("Entregado").first().waitFor();
+  check("informe entregado", true);
+
+  /* ---------- Documentos SGC (módulo apagado: la ruta no existe y no aparece en el menú) ---------- */
+  await page.goto(`${BASE}/documentos`);
+  await page.getByText(/Esta página no existe/).waitFor();
+  check("documentos apagado: la ruta responde 'no existe'", true);
+  await page.goto(`${BASE}/auditoria`);
+  await page.getByText("Quién hizo qué, cuándo y por qué").waitFor();
+  check("documentos apagado: no aparece en el menú Calidad", (await page.locator("nav a", { hasText: /^Documentos$/ }).count()) === 0);
+
+  /* ---------- Auditoria ---------- */
+  await page.goto(`${BASE}/auditoria`);
+  await page.getByText("Quién hizo qué, cuándo y por qué").waitFor();
+  const timeline = page.locator("tbody tr");
+  await timeline.first().waitFor();
+  await page.getByRole("button", { name: "Verificar integridad" }).click();
+  await page.getByText(/Íntegra ·/).waitFor();
+  check("bitácora: verificación de integridad OK", true);
+  // Cada entrada es una frase en español (actor + verbo), sin JSON ni nombres de columna.
+  const firstText = (await timeline.first().textContent()) || "";
+  check("bitácora: entradas en lenguaje llano", /(inició sesión|creó|editó|anuló|restauró|aprobó|autorizó|marcó como revisado|dio de baja|reactivó|registró la entrega|descargó|cambió|acceso fallido|repuso|importó|emitió)/i.test(firstText) && !firstText.includes("_json") && !firstText.includes("{"), firstText.slice(0, 80));
+  await timeline.filter({ hasText: /\d+ cambios?$/ }).first().click();
+  await page.getByText(/Sello/).first().waitFor();
+  check("bitácora: detalle con cambios antes → después y sello", true);
+  await page.getByRole("button", { name: /^Filtros/ }).click();
+  await page.getByRole("radiogroup", { name: "Acción" }).getByRole("radio", { name: "Anuló", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await timeline.filter({ hasText: /Anuló/ }).first().waitFor();
+  check("bitácora: filtro por acción", true);
+
+  /* ---------- Inventario: baja logica + reactivar ---------- */
+  await page.goto(`${BASE}/inventario/reactivos`);
+  await page.getByPlaceholder("Buscar por nombre, lote, CAS o catálogo").fill("2-Propanol");
+  const rrow = page.locator("tbody tr").filter({ hasText: "2-Propanol" }).first();
+  await rrow.waitFor();
+  const before = await page.locator("tbody tr").filter({ hasText: "2-Propanol" }).count();
+  await rrow.getByRole("button", { name: "Acciones" }).click();
+  await page.getByRole("menuitem", { name: /Dar de baja/ }).click();
+  await fillPrompt("Prueba UI: frasco roto", "Dar de baja");
+  await page.getByText(/baja/i).first().waitFor();
+  await page.waitForFunction((n) => [...document.querySelectorAll("tbody tr")].filter((tr) => tr.textContent.includes("2-Propanol")).length === n - 1, before);
+  check("reactivo dado de baja desaparece de la lista", true, `antes=${before}`);
+  await setFilterToggle("Mostrar bajas", true);
+  const brow = page.locator("tbody tr").filter({ hasText: "2-Propanol" }).filter({ hasText: "Baja" }).first();
+  await brow.waitFor();
+  check("reactivo en baja se distingue con etiqueta 'Baja'", true);
+  await brow.getByRole("button", { name: "Acciones" }).click();
+  await page.getByRole("menuitem", { name: /Reactivar reactivo/ }).click();
+  await fillPrompt("Prueba UI: se repuso el frasco", "Reactivar");
+  await setFilterToggle("Mostrar bajas", false);
+  await page.waitForFunction((n) => [...document.querySelectorAll("tbody tr")].filter((tr) => tr.textContent.includes("2-Propanol")).length === n, before);
+  check("reactivo reactivado vuelve a la lista", true);
+
+  /* ---------- Inicio: flujo en curso, avisos y buscador ---------- */
+  await page.goto(`${BASE}/`);
+  await page.getByRole("link", { name: "Informes" }).first().waitFor();
+  check("navegación principal incluye Informes", true);
+  await page.getByRole("heading", { name: "En curso" }).waitFor();
+  const flowCards = page.locator("li.group\\/card");
+  await flowCards.first().waitFor();
+  check("Inicio: lista de muestras en curso con etapas", (await flowCards.count()) >= 1, `tarjetas=${await flowCards.count()}`);
+  const nextStep = flowCards.first().getByRole("link", { name: /Registrar|Revisar|Aprobar|Crear|Autorizar/ });
+  check("Inicio: cada tarjeta ofrece el siguiente paso", (await nextStep.count()) >= 1, await nextStep.first().textContent());
+  await page.getByRole("heading", { name: "Avisos" }).waitFor();
+  const avisoRows = page.locator("#avisos a");
+  check("Inicio: avisos con cuenta y enlace", (await avisoRows.count()) >= 1, `avisos=${await avisoRows.count()}`);
+  await avisoRows.first().hover();
+  const hoverLink = page.getByRole("link", { name: /Ver los|Abrir la lista/ });
+  await hoverLink.waitFor();
+  check("Inicio: al pasar el cursor por un aviso se ve el detalle", (await hoverLink.count()) === 1 && (await page.locator("[data-radix-popper-content-wrapper] a").count()) >= 2);
+  await page.mouse.move(700, 40);
+  check("Inicio: sin fila 'Nuevo' (las acciones viven en el buscador)", !(await page.getByText("Nuevo:", { exact: true }).count()));
+  const search = page.locator('input[aria-label="Buscar en FICOTOX"]');
+  await search.click();
+  await page.getByRole("radio", { name: "Acciones" }).waitFor();
+  await page.getByText("Nueva recepción", { exact: true }).first().waitFor();
+  check("buscador: al enfocar ofrece acciones generales y no las específicas", (await page.getByText("Nueva extracción DSP", { exact: true }).count()) === 0);
+  await search.fill("por revisar");
+  await page.getByText("Informes por revisar o autorizar", { exact: true }).waitFor();
+  check("buscador: vistas por estado («por revisar»)", (await page.getByText("Análisis por revisar o aprobar", { exact: true }).count()) === 1);
+  await search.fill("ayuda");
+  await page.getByText("Cómo usar la plataforma", { exact: true }).waitFor();
+  check("buscador: temas de ayuda", true);
+  await search.fill("nueva extracción");
+  await page.getByText("Nueva extracción DSP", { exact: true }).waitFor();
+  check("buscador: acciones específicas (ASP/DSP) al escribir", (await page.getByText("Nueva extracción ASP", { exact: true }).count()) === 1);
+  /* Folio corto: "IR 1" debe abrir IR 0000001 como primer resultado y sin ruido de acciones ("ir" está en "abrir"). */
+  await search.fill("IR 1");
+  await page.locator("[cmdk-item][data-selected=true]").filter({ hasText: /IR\s*0000001/ }).waitFor();
+  check("buscador: folio corto «IR 1» selecciona IR 0000001 primero", (await page.locator("[cmdk-item]").filter({ hasText: /Nueva|Abrir/ }).count()) === 0);
+  await search.fill("R 1");
+  await page.locator("[cmdk-item][data-selected=true]").filter({ hasText: /R\s*0000001/ }).waitFor();
+  check("buscador: «R 1» encuentra la recepción R 0000001", true);
+  await page.keyboard.press("Enter");
+  await page.waitForURL((url) => /^\/muestras\/recepcion\/\d+$/.test(url.pathname));
+  check("buscador: Enter abre el registro", true);
+  await page.goto(`${BASE}/`);
+  await search.click();
+  await page.getByText("Recientes", { exact: true }).waitFor();
+  check("buscador: lo abierto aparece en Recientes", (await page.locator("[cmdk-group-heading]").filter({ hasText: "Recientes" }).count()) === 1);
+  await search.fill("");
+  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: "Ayuda" }).first().click();
+  await page.waitForURL((url) => url.pathname === "/ayuda");
+  await page.getByRole("heading", { name: "Cómo se usa FICOTOX" }).waitFor();
+  check("página de ayuda accesible desde la barra lateral", true);
+  await page.goto(`${BASE}/`);
+  await page.getByRole("link", { name: "Informes" }).first().waitFor();
+  await page.getByRole("button", { name: "Desplegar Calidad" }).click();
+  await page.getByRole("link", { name: "Auditoría" }).first().waitFor();
+  check("barra lateral: Calidad se despliega e incluye Auditoría", true);
+  await page.getByRole("button", { name: "Menú de usuario" }).click();
+  await page.getByRole("menuitem", { name: "Cerrar sesión" }).waitFor();
+  check("menú de usuario permite cerrar sesión", true);
+  await page.keyboard.press("Escape");
+
+  const realErrors = consoleErrors.filter((e) => !/favicon|hydrat|Download the React DevTools|status of 409/i.test(e));
+  check("sin errores de consola", realErrors.length === 0, realErrors.slice(0, 3).join(" | "));
+} catch (err) {
+  console.error("ERROR", err);
+  await page.screenshot({ path: path.join(path.dirname(new URL(import.meta.url).pathname), "fail.png"), fullPage: true });
+  results.push({ name: "excepción", ok: false });
+} finally {
+  await browser.close();
+}
+const ok = results.filter((r) => r.ok).length;
+console.log(`\n${ok}/${results.length} pruebas OK`);
+process.exit(ok === results.length ? 0 : 1);

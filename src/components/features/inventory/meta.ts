@@ -12,6 +12,7 @@ export const MANTENIMIENTO_ESTADOS: Array<{ value: string; label: string; tone: 
   { value: "en_proceso", label: "En proceso", tone: "warning" },
   { value: "completado", label: "Completado", tone: "success" },
   { value: "vencido", label: "Vencido", tone: "danger" },
+  { value: "cancelado", label: "Cancelado", tone: "neutral" },
 ];
 
 export const MANTENIMIENTO_TIPOS: Array<{ value: string; label: string; tone: Tone }> = [

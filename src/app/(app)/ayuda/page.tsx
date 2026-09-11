@@ -1,0 +1,335 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState, type ReactNode } from "react";
+import { ArrowRight, ArrowsClockwise, BookOpenText, Cube, FileText, Flask, Keyboard, MagnifyingGlass, Prohibit, SealCheck, TestTube, WarningCircle } from "@phosphor-icons/react";
+import { PageBody } from "@/components/shell/AppShell";
+import { useSession } from "@/components/session/SessionProvider";
+import { cn } from "@/components/ui/cn";
+import { Kbd } from "@/components/ui/Primitives";
+import { HELP_TOPICS } from "@/lib/client/search";
+
+/*
+ * Ayuda: el manual de uso resumido, dentro de la plataforma. Una columna con
+ * el índice (sigue el scroll) y secciones cortas con pasos concretos. Los
+ * anclas coinciden con HELP_TOPICS, así el buscador abre la sección exacta.
+ */
+
+const SECTIONS: Array<{ anchor: string; title: string; icon: ReactNode }> = [
+  { anchor: "empezar", title: "Cómo usar la plataforma", icon: <BookOpenText size={16} /> },
+  { anchor: "buscar", title: "Buscar", icon: <MagnifyingGlass size={16} /> },
+  { anchor: "muestras", title: "Flujo de una muestra", icon: <TestTube size={16} /> },
+  { anchor: "extraccion", title: "Extracciones ASP y DSP", icon: <Flask size={16} /> },
+  { anchor: "analisis", title: "Análisis y firmas", icon: <SealCheck size={16} /> },
+  { anchor: "informes", title: "Informes", icon: <FileText size={16} /> },
+  { anchor: "inventario", title: "Inventario y avisos", icon: <Cube size={16} /> },
+  { anchor: "calidad", title: "Auditoría", icon: <ArrowsClockwise size={16} /> },
+  { anchor: "anular", title: "Corregir un registro", icon: <Prohibit size={16} /> },
+  { anchor: "atajos", title: "Atajos", icon: <Keyboard size={16} /> },
+];
+
+/* Al llegar con #ancla (desde el buscador o un enlace) la página se pinta después de la navegación: hay que desplazarse a mano. */
+function useHashScroll(): void {
+  useEffect(() => {
+    const jump = () => {
+      const id = window.location.hash.slice(1);
+      if (!id) return;
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ block: "start", behavior: "smooth" });
+    };
+    const timer = window.setTimeout(jump, 50);
+    window.addEventListener("hashchange", jump);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("hashchange", jump);
+    };
+  }, []);
+}
+
+function useActiveSection(): string {
+  const [active, setActive] = useState(SECTIONS[0].anchor);
+  useEffect(() => {
+    const targets = SECTIONS.map((s) => document.getElementById(s.anchor)).filter((el): el is HTMLElement => !!el);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActive(visible[0].target.id);
+      },
+      { rootMargin: "-20% 0px -65% 0px", threshold: 0 },
+    );
+    targets.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
+  return active;
+}
+
+function Section({ anchor, title, lead, children }: { anchor: string; title: string; lead?: string; children: ReactNode }) {
+  return (
+    <section id={anchor} className="scroll-mt-24 flex flex-col gap-4 rounded-card bg-surface p-6 shadow-card sm:p-7">
+      <header className="flex flex-col gap-1">
+        <h2 className="title-2 text-ink">{title}</h2>
+        {lead ? <p className="max-w-[62ch] text-[14px] leading-relaxed text-ink-3">{lead}</p> : null}
+      </header>
+      <div className="flex max-w-[68ch] flex-col gap-3 text-[14px] leading-relaxed text-ink-2 [&_b]:font-semibold [&_b]:text-ink [&_kbd]:align-middle">{children}</div>
+    </section>
+  );
+}
+
+function Steps({ items }: { items: ReactNode[] }) {
+  return (
+    <ol className="flex flex-col gap-2">
+      {items.map((item, index) => (
+        <li key={index} className="flex gap-3">
+          <span className="tnum mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[12px] font-semibold text-brand-strong">{index + 1}</span>
+          <span className="min-w-0">{item}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function Tip({ tone = "info", children }: { tone?: "info" | "warn"; children: ReactNode }) {
+  return (
+    <p className={cn("flex gap-2.5 rounded-[10px] px-3.5 py-3 text-[13.5px]", tone === "warn" ? "bg-warning-soft text-warning-text" : "bg-brand-faint text-brand-strong")}>
+      <WarningCircle size={17} className="mt-0.5 shrink-0" />
+      <span>{children}</span>
+    </p>
+  );
+}
+
+function Go({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link href={href} className="inline-flex items-center gap-1 font-medium text-brand hover:text-brand-strong">
+      {children} <ArrowRight size={12} weight="bold" />
+    </Link>
+  );
+}
+
+export default function AyudaPage() {
+  const { can } = useSession();
+  const active = useActiveSection();
+  useHashScroll();
+  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
+  const mod = isMac ? "⌘" : "Ctrl";
+
+  return (
+    <PageBody className="gap-6">
+      <header className="flex flex-col gap-1">
+        <p className="eyebrow text-brand-strong">Ayuda</p>
+        <h1 className="display text-[30px] text-ink sm:text-[34px]">Cómo se usa FICOTOX</h1>
+        <p className="max-w-[62ch] text-[14.5px] text-ink-3">Lo esencial de cada parte del sistema en pasos cortos. Si buscas algo concreto, escríbelo en el buscador: los temas de esta guía también aparecen ahí.</p>
+      </header>
+
+      <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <nav aria-label="Índice" className="lg:sticky lg:top-6 lg:self-start">
+          <ol className="scroll-thin flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
+            {SECTIONS.map((section) => {
+              const current = section.anchor === active;
+              return (
+                <li key={section.anchor} className="shrink-0">
+                  <a href={`#${section.anchor}`} aria-current={current ? "location" : undefined} className={cn("press flex h-9 items-center gap-2.5 whitespace-nowrap rounded-[9px] px-2.5 text-[13.5px] transition-colors", current ? "bg-brand-soft font-medium text-brand-strong" : "text-ink-2 hover:bg-surface-3/80 hover:text-ink")}>
+                    <span className={cn("shrink-0", current ? "text-brand" : "text-ink-4")}>{section.icon}</span>
+                    {section.title}
+                  </a>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+
+        <div className="flex min-w-0 flex-col gap-5">
+          <Section anchor="empezar" title="Cómo usar la plataforma" lead="FICOTOX lleva el registro del laboratorio: las muestras desde que llegan hasta que se informa el resultado, y el inventario que se usa en el camino. Todo lo que se hace queda en una bitácora.">
+            <Steps
+              items={[
+                <>
+                  <b>Empieza por el buscador del Inicio.</b> Escribe un folio, un reactivo, un equipo o lo que quieras hacer («nueva recepción», «informes por revisar») y te lleva ahí. Desde cualquier pantalla: <Kbd>{mod}</Kbd> <Kbd>K</Kbd>.
+                </>,
+                <>
+                  <b>El Inicio te dice qué toca.</b> «En curso» muestra cada muestra con su etapa y un botón con el siguiente paso; «Avisos» lo que conviene atender (stock bajo, calibraciones, firmas pendientes). Pasa el cursor para ver el detalle.
+                </>,
+                <>
+                  <b>Cada formato se llena paso a paso.</b> La guía de la izquierda marca en verde las secciones completas; no se puede guardar sin la información mínima. Con «Todo» ves el formato completo.
+                </>,
+                <>
+                  <b>Nada se borra.</b> Si algo se capturó mal, se anula con motivo (y se puede restaurar). Así el expediente siempre cuenta la historia completa.
+                </>,
+              ]}
+            />
+            <p>
+              Lo que ves depende de tu rol: si una sección no aparece en la barra lateral, tu cuenta no tiene ese permiso. Pídeselo a quien administra los usuarios.
+            </p>
+          </Section>
+
+          <Section anchor="buscar" title="Buscar" lead="Un solo buscador encuentra registros, crea formatos nuevos y abre listas ya filtradas.">
+            <ul className="flex flex-col gap-2">
+              <li>
+                <b>Folios:</b> «R 3», «E-D 1», «A 0000002», «IR 4». Da igual si escribes espacios o guiones.
+              </li>
+              <li>
+                <b>Registros por su contenido:</b> el solicitante de una recepción, el ID interno de una muestra, el nombre o lote de un reactivo, la marca de un equipo, el técnico de un mantenimiento.
+              </li>
+              <li>
+                <b>Acciones:</b> «nueva» lista todo lo que puedes crear; «nueva extracción ASP» abre directo ese formato.
+              </li>
+              <li>
+                <b>Vistas por estado:</b> «stock bajo», «por revisar», «calibración», «mantenimientos vencidos», «entregados».
+              </li>
+              <li>
+                <b>Ayuda:</b> «cómo anular», «atajos» abren la sección de esta guía.
+              </li>
+            </ul>
+            <p>
+              Con las fichas <b>Todo · Muestras · Informes · Inventario · Acciones</b> acotas los resultados (o pulsa <Kbd>Tab</Kbd>). Sin escribir nada, el buscador ofrece lo último que abriste, lo que puedes crear y a dónde ir.
+            </p>
+          </Section>
+
+          <Section anchor="muestras" title="Flujo de una muestra" lead="Cinco etapas, cada una con su folio. La siguiente solo se puede registrar cuando la anterior está lista.">
+            <Steps
+              items={[
+                <>
+                  <b>Recepción (R).</b> Quién entrega, qué muestra o lote, análisis solicitado, inspección visual (7 requisitos) y la <b>decisión de aceptación</b>. Sin decisión, o con la muestra rechazada, no se puede seguir. {can("muestras", "create") ? <Go href="/muestras/recepcion/nueva">Nueva recepción</Go> : null}
+                </>,
+                <>
+                  <b>Procesamiento (P).</b> Lavado, desconche y molienda; equipo usado en cada paso y peso de la molienda. Descuenta las bolsas del inventario.
+                </>,
+                <>
+                  <b>Extracción (E-A o E-D).</b> Un formato por toxina; pesos por tubo, equipos con folio de bitácora e insumos que se descuentan por tubo.
+                </>,
+                <>
+                  <b>Análisis (A).</b> Resultados por muestra, controles de calidad, equipo y condiciones. Después se <b>revisa</b> y se <b>aprueba</b>.
+                </>,
+                <>
+                  <b>Informe (IR).</b> Se elabora con los análisis aprobados, se revisa, se <b>autoriza</b> (genera el PDF definitivo) y se <b>entrega</b>. Al final se registra la <b>disposición final</b> de los remanentes en la recepción y la muestra queda cerrada.
+                </>,
+              ]}
+            />
+            <p>
+              Los estados avanzan solos: la recepción pasa a <b>En proceso</b> al procesarla, a <b>Analizada</b> al aprobar el análisis, a <b>Informada</b> al autorizar el informe y a <b>Cerrada</b> con la disposición final. Desde la fila de una recepción, procesamiento o extracción puedes saltar a la etapa siguiente con el folio ya vinculado.
+            </p>
+          </Section>
+
+          <Section anchor="extraccion" title="Extracciones ASP y DSP" lead="Cada formato sigue su protocolo y lleva su propia serie de folios: E-A (ácido domoico) y E-D (toxinas lipofílicas).">
+            <ul className="flex flex-col gap-2">
+              <li>
+                <b>Se llena solo lo que se puede.</b> Al elegir el procesamiento se cargan las muestras y el blanco en la tabla de pesos; los equipos que solo existen una vez en el catálogo (y con calibración vigente) se eligen solos; el folio de bitácora sugiere el siguiente al último usado; el folio de preparación de una solución sale de su lote.
+              </li>
+              <li>
+                <b>Lo que sí hay que escribir:</b> pesos, folio de verificación de la balanza (viene de la bitácora física), y los pasos opcionales (limpieza SAX en ASP, hidrólisis en DSP).
+              </li>
+              <li>
+                <b>Insumos por tubo.</b> Muestras y blanco, cada uno con réplica: el aviso bajo cada campo dice cuánto se descontará («9 mL × 4 tubos»).
+              </li>
+              <li>
+                <b>Equipos con alerta.</b> Si un equipo está en mantenimiento o con calibración vencida, se avisa y se pide confirmación; no se bloquea.
+              </li>
+            </ul>
+            <Tip>Las personas (quién extrajo, quién supervisó) se eligen de la lista del personal autorizado; el cargo sale de su rol, no se captura.</Tip>
+          </Section>
+
+          <Section anchor="analisis" title="Análisis, revisión y aprobación" lead="El análisis captura lo medido en el extracto y pasa por dos firmas antes de poder informarse.">
+            <Steps
+              items={[
+                <>
+                  Elige tipo y método: el sistema sugiere método, referencia e instrumento según la toxina, y las muestras vienen de la extracción.
+                </>,
+                <>
+                  Captura resultado, unidad, límites e incertidumbre por muestra; la <b>conformidad</b> se sugiere comparando con el límite regulatorio (ASP 20 µg/g, DSP 160 µg/kg).
+                </>,
+                <>
+                  Registra los controles de calidad (blanco, material de referencia, duplicado) y presiona <b>Registrar análisis</b>.
+                </>,
+                <>
+                  <b>Marcar revisado</b> y luego <b>Aprobar</b> (permiso Aprobaciones). Cualquier persona con ese permiso puede hacerlo, aunque haya capturado el registro. Un análisis aprobado ya no se edita: si está mal, se anula y se captura otro.
+                </>,
+              ]}
+            />
+          </Section>
+
+          <Section anchor="informes" title="Informes de resultados" lead="El informe (folio IR) es lo que recibe el cliente. Lo genera el sistema en PDF con firma y huella digital.">
+            <Steps
+              items={[
+                <>
+                  <b>Crear:</b> elige la recepción; se cargan cliente, ítems ensayados y los análisis aprobados. Revisa las declaraciones (alcance, regla de decisión, desviaciones) y crea el borrador. {can("informes", "create") ? <Go href="/informes/nuevo">Nuevo informe</Go> : null}
+                </>,
+                <>
+                  <b>Marcar revisado</b> y <b>Autorizar</b> con firma: los resultados quedan congelados y se genera el PDF definitivo con su huella SHA-256.
+                </>,
+                <>
+                  <b>Registrar entrega:</b> fecha, medio y a quién se entregó.
+                </>,
+                <>
+                  <b>Enmienda:</b> si hay que corregir un informe ya autorizado, se crea la versión siguiente (v2, v3…) y la anterior queda como «sustituida», con su PDF marcado sin validez.
+                </>,
+              ]}
+            />
+          </Section>
+
+          <Section anchor="inventario" title="Inventario y avisos" lead="Reactivos, consumibles y equipos con sus existencias, caducidades, calibraciones y mantenimientos. Los formatos descuentan solos lo que usan.">
+            <ul className="flex flex-col gap-2">
+              <li>
+                <b>Existencias.</b> Cada reactivo y consumible muestra un medidor: cuánto queda frente a su capacidad y el mínimo. «Stock bajo» es por debajo del mínimo (o del 20 % si no hay mínimo); en consumibles, 5 piezas o menos. <b>Reponer</b> registra una entrada.
+              </li>
+              <li>
+                <b>Equipos y mantenimiento.</b> Programar un mantenimiento pone el equipo <b>En mantenimiento</b>; al completarlo vuelve a <b>Operativo</b> y, si fue calibración, actualiza la próxima fecha. Una calibración vencida se marca en el equipo y en los avisos.
+              </li>
+              <li>
+                <b>Movimientos.</b> Cada entrada y salida queda con motivo y referencia («Extracción E-A folio 1»). Al anular un registro, lo que descontó se repone.
+              </li>
+              <li>
+                <b>Avisos del Inicio.</b> Mantenimientos vencidos, equipos con alerta de calibración, stock bajo, análisis e informes esperando firma. Al abrirlos, la lista llega ya filtrada con la misma cuenta.
+              </li>
+            </ul>
+          </Section>
+
+          <Section anchor="calidad" title="Auditoría y trazabilidad" lead="Todo lo que se hace queda registrado: quién, qué, cuándo y por qué.">
+            <p>
+              Cada formato tiene al final un <b>Historial</b> con frases sencillas («Axel aprobó el análisis A 0000004») y el botón «Ver cambios» para comparar valor anterior y nuevo. En <b>Calidad › Auditoría</b> se ve lo mismo para todo el sistema, con filtros por persona, acción y fecha. La bitácora está sellada: si alguien altera una entrada, la cadena se rompe y el sistema lo detecta.
+            </p>
+          </Section>
+
+          <Section anchor="anular" title="Corregir un registro" lead="Los registros técnicos no se borran; se anulan con motivo y, si hace falta, se restauran.">
+            <ul className="flex flex-col gap-2">
+              <li>
+                <b>Anular:</b> en el formato, «Más acciones › Anular» y escribe el motivo (mínimo 5 caracteres). El registro queda visible con «Mostrar anuladas» y el inventario que descontó se repone.
+              </li>
+              <li>
+                <b>Restaurar:</b> desde el registro anulado, con motivo. Solo si la etapa anterior sigue vigente.
+              </li>
+              <li>
+                <b>No se puede anular</b> una etapa que ya tiene etapas posteriores (una recepción con procesamiento): primero se anulan esas.
+              </li>
+              <li>
+                <b>Análisis aprobado o informe autorizado:</b> el análisis se anula y se captura otro; el informe se corrige con una <b>enmienda</b>.
+              </li>
+            </ul>
+            <Tip tone="warn">Un registro anulado, cerrado, aprobado o autorizado se abre en solo lectura. Si el botón de guardar no aparece, esa es la razón.</Tip>
+          </Section>
+
+          <Section anchor="atajos" title="Atajos de teclado">
+            <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[max-content_1fr]">
+              <dt className="flex items-center gap-1">
+                <Kbd>{mod}</Kbd> <Kbd>K</Kbd>
+              </dt>
+              <dd>Abrir el buscador desde cualquier pantalla.</dd>
+              <dt className="flex items-center gap-1">
+                <Kbd>↑</Kbd> <Kbd>↓</Kbd> <Kbd>↵</Kbd>
+              </dt>
+              <dd>Moverse por los resultados y abrir.</dd>
+              <dt className="flex items-center gap-1">
+                <Kbd>Tab</Kbd>
+              </dt>
+              <dd>Con los resultados abiertos, cambia el ámbito del buscador (Todo, Muestras, Informes, Inventario, Acciones). <Kbd>Shift</Kbd> <Kbd>Tab</Kbd> sale del buscador.</dd>
+              <dt className="flex items-center gap-1">
+                <Kbd>Esc</Kbd>
+              </dt>
+              <dd>Cerrar el buscador, un panel o un diálogo.</dd>
+            </dl>
+            <p className="text-[13px] text-ink-3">
+              Temas de esta guía en el buscador: {HELP_TOPICS.map((t) => t.label.toLowerCase()).slice(1, 5).join(", ")}…
+            </p>
+          </Section>
+        </div>
+      </div>
+    </PageBody>
+  );
+}

@@ -6,6 +6,11 @@ instance/*.sqlite3
 instance/*.sqlite
 instance/*.db
 instance/maintenance_reports/
+instance/informes/
+instance/documentos_sgc/
+instance/test/
+instance/fixtures/
+tests/ui/fail.png
 
 # Node / Next.js
 node_modules/
@@ -29,3 +34,7 @@ yarn-error.log*
 # Python (scripts de respaldo)
 __pycache__/
 *.pyc
+
+# Respaldos automaticos previos a migraciones de esquema
+instance/backups/
+instance/auditoria.key

@@ -98,8 +98,11 @@ Cada modulo esta en `src/lib/server/modules/` y sus rutas en `src/app/api/<modul
 - `dashboard`: metricas y resumenes.
 - `inventory`: reactivos, equipos, mantenimientos, movimientos y resumen de inventario.
 - `consumables`: consumibles e importacion.
-- `samples/`: recepcion, procesamiento y extraccion de muestras.
-- `documents`: documentos y reportes de mantenimiento en PDF.
+- `samples/`: recepcion (con aceptacion y disposicion final), procesamiento, extraccion y analisis de muestras; anulacion con motivo en lugar de borrado.
+- `informes`: informes de resultados (borrador -> revision -> autorizacion -> entrega, enmiendas por version) con PDF generado por el servidor.
+- `documentos-sgc`: control de documentos del SGC (revisiones, lista maestra, obsoletos).
+- `audit`: bitacora de auditoria de solo lectura con cadena de hashes.
+- `documents`: reportes de mantenimiento en PDF.
 - `traceability`: consultas de trazabilidad y eventos recientes.
 - `health`: `/api/health` y `/api/health/db`.
 
@@ -109,6 +112,11 @@ Cada modulo esta en `src/lib/server/modules/` y sus rutas en `src/app/api/<modul
 - `src/lib/server/rbac.ts`: permisos por modulo/accion y validacion (`requirePermission`).
 - `src/lib/server/schema.ts`: helpers de migracion ligera.
 - `src/lib/server/inventory-usage.ts`: descuento de inventario y registro de movimientos.
+- `src/lib/server/inventory-baja.ts`: baja logica y reactivacion de items de inventario.
+- `src/lib/server/samples-flow.ts`: reglas de estado, anulacion y restauracion de los registros de muestras.
+- `src/lib/server/audit.ts`: registro de auditoria (diff, snapshots, hash encadenado) y verificacion.
+- `src/lib/server/informe-pdf.ts`: render del informe de resultados con `pdfkit`.
+- `src/lib/shared/sgc.ts`: catalogos oficiales, estados y etiquetas compartidos entre servidor y cliente.
 - `src/lib/server/users.ts`: esquema de usuarios locales.
 - `src/lib/server/db.ts`: sesiones SQLite (`better-sqlite3`) y MySQL (`mysql2`) con parametros `:nombre`.
 
@@ -117,7 +125,7 @@ Cada modulo esta en `src/lib/server/modules/` y sus rutas en `src/app/api/<modul
 Interfaz React con TypeScript y Tailwind CSS en `src/components/` y `src/app/(app)/` (ver `docs/DISENO_UI.md`):
 - `app/login/page.tsx`: acceso con correo y contrasena (Microsoft opcional).
 - `app/(app)/layout.tsx`: guardia de sesion y shell con navegacion superior.
-- `components/shell/`: barra superior, menu de usuario, navegacion movil y paleta de comandos (⌘K / Ctrl+K).
+- `components/shell/`: barra lateral por grupos, menu de usuario, panel movil, buscador del Inicio y paleta de comandos (⌘K / Ctrl+K), ambos sobre el mismo motor de busqueda.
 - `components/session/`: sesion, permisos (`can(modulo, accion)`) y `RequireModule`.
 - `components/ui/`: sistema de diseño (botones, campos, tablas, hojas laterales, dialogos, badges, estados vacios y de carga).
 - `components/features/`: pantallas por dominio; los catalogos se editan en hojas laterales y los formatos de muestra son paginas completas con indice de secciones.
@@ -185,17 +193,24 @@ Soporta importacion masiva por Excel/CSV para reactivos y consumibles.
 ### 8.2 Muestras
 
 Fases:
-- Recepcion
-- Procesamiento
-- Extraccion
+- Recepcion: catalogos del formato FX-TCF-GMR, inspeccion visual de 7 requisitos, decision de aceptacion (aceptada / con desviacion / rechazada) con comunicacion al cliente, y disposicion final que cierra la muestra.
+- Procesamiento (solo de recepciones aceptadas).
+- Extraccion: dos formatos, ASP (`E-A`, FX-TCF-GME-A) y DSP (`E-D`, FX-TCF-GME-D), cada uno con su serie de folios. PSP, pigmentos y sedimentos quedan pendientes de recibir sus formatos aprobados.
+- Analisis (folio `A`): resultados por muestra con limites y conformidad, controles de calidad, revision y aprobacion por personas distintas.
+- Informe de resultados (folio `IR`, versionado): se autoriza solo con analisis aprobados, congela resultados, genera PDF y registra la entrega; las correcciones son enmiendas.
+
+Estados de la recepcion: `registrada -> aceptada -> en_proceso -> analizada -> informada -> cerrada` (o `rechazada` / `anulada`). Ningun registro se borra: se anula con motivo y puede restaurarse; todo queda en la bitacora de auditoria.
 
 Al guardar procesamiento/extraccion, el servidor puede:
-- Descontar insumos en inventario.
+- Descontar insumos en inventario (en extraccion, multiplicados por el numero de tubos: muestras, replicas y blanco).
 - Registrar movimientos de salida.
+- Guardar los equipos utilizados con su clave y folio de bitacora (`equipos_json`). Si un equipo no esta apto segun el catalogo, la interfaz avisa y pide confirmacion.
 
-## 9. Documentos y trazabilidad
+## 9. Documentos, auditoria y trazabilidad
 
-- `documents`: resumen documental, reportes de mantenimiento en PDF y descarga de archivos.
+- `documentos-sgc`: documentos controlados del SGC con clave `FX-<area><tipo>-<siglas>`, revisiones, aprobacion, lista maestra y obsolescencia (ISO/IEC 17025 8.3).
+- `audit`: bitacora inmutable (`auditoria`) con usuario, accion, entidad, motivo, valores anteriores y nuevos y hash encadenado; triggers impiden `UPDATE`/`DELETE`; `/api/audit/verify` comprueba la cadena.
+- `documents`: reportes de mantenimiento en PDF y descarga de archivos.
 - `traceability`: flujo y eventos recientes para auditoria operativa.
 
 ## 10. Respaldo y recuperacion
@@ -240,7 +255,8 @@ Uso recomendado:
 1. Convertir cada seccion en una ruta propia de Next.js (hoy toda la interfaz vive en `/`).
 2. Definir estrategia de migraciones versionadas para ambientes productivos.
 3. Estandarizar empaquetado/release con checklist de validacion.
-4. Agregar pruebas automatizadas minimas por modulo critico.
+4. Ampliar las pruebas automatizadas (`npm test`, ver `docs/VALIDACION.md`) a mas casos limite.
+5. Confirmar con la coordinacion tecnica los limites regulatorios precargados (marcados "por confirmar") y las claves de los formatos de analisis e informe.
 
 ## 15. Guia rapida de arranque
 

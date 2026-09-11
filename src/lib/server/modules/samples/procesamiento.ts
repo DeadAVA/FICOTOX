@@ -1,14 +1,23 @@
 import { requireUser, userIdFromClaims } from "../../auth";
-import { isIntegrityError, isSqlite, type Row, type Session } from "../../db";
+import { registrarAuditoria, snapshotRow } from "../../audit";
+import { isSqlite, type Row, type Session } from "../../db";
 import { intParam, json, readJson, type RouteContext } from "../../http";
-import { consumeConsumible, consumeReactivo, restoreInventoryUsage } from "../../inventory-usage";
+import { restoreInventoryUsage } from "../../inventory-usage";
 import { requirePermission } from "../../rbac";
-import { addColumnIfMissing } from "../../schema";
+import { addColumnIfMissing, markSchemaReady, schemaReady } from "../../schema";
+import { advanceState, anularRegistro, applyStageInventory, assertEditable, assertOrigin, deletionNotAllowed, ensureAnulacionColumns, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarRegistro } from "../../samples-flow";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
 
-/* Portado de modules/samples/procesamiento.py del backend Flask original. */
+/*
+ * Portado de modules/samples/procesamiento.py del backend Flask original.
+ * Agregados: reglas de flujo (solo desde recepciones aceptadas y vigentes),
+ * anulacion con motivo, auditoria y avance automatico del estado de la recepcion.
+ */
+
+const TABLE = "muestras_procesamiento";
 
 export async function ensureSamplesProcesamientoSchema(s: Session): Promise<void> {
+  if (schemaReady("muestras_procesamiento")) return;
   await s.execute(
     isSqlite()
       ? `
@@ -88,13 +97,13 @@ export async function ensureSamplesProcesamientoSchema(s: Session): Promise<void
   await addColumnIfMissing(s, "muestras_procesamiento", "firma_quien_proceso", "LONGTEXT AFTER `nombre_quien_superviso`");
   await addColumnIfMissing(s, "muestras_procesamiento", "firma_quien_superviso", "LONGTEXT AFTER `firma_quien_proceso`");
   await addColumnIfMissing(s, "muestras_procesamiento", "uso_inventario_json", "TEXT DEFAULT NULL");
-  await s.commit();
+  /* "Otro" del formato: tipo de organismo y parte del organismo escritos a mano. */
+  await addColumnIfMissing(s, "muestras_procesamiento", "tipo_organismo_otro", "VARCHAR(180) DEFAULT NULL");
+  await addColumnIfMissing(s, "muestras_procesamiento", "parte_organismo_otro", "VARCHAR(180) DEFAULT NULL");
+  await ensureAnulacionColumns(s, TABLE);
+  markSchemaReady("muestras_procesamiento");
 }
 
-async function nextFolioNum(s: Session): Promise<number> {
-  const row = await s.queryOne<{ next_folio: number }>("SELECT COALESCE(MAX(folio_num), 0) + 1 AS next_folio FROM muestras_procesamiento");
-  return Number.parseInt(String(row?.next_folio ?? 1), 10) || 1;
-}
 
 type ProcessingData = ReturnType<typeof normalizePayload>;
 
@@ -114,6 +123,8 @@ function normalizePayload(raw: Record<string, unknown>) {
     lote_seleccion_json: jsonText(payload.lote_seleccion || []),
     tipo_organismo_json: jsonText(payload.tipo_organismo || []),
     parte_organismo_json: jsonText(payload.parte_organismo || []),
+    tipo_organismo_otro: strippedOrNull(payload.tipo_organismo_otro, 180),
+    parte_organismo_otro: strippedOrNull(payload.parte_organismo_otro, 180),
     bivalvos_steps_json: jsonText(payload.bivalvos_steps || []),
     sardinas_steps_json: jsonText(payload.sardinas_steps || []),
     otro_procesamiento: strippedOrNull(payload.otro_procesamiento),
@@ -128,30 +139,10 @@ function normalizePayload(raw: Record<string, unknown>) {
   };
 }
 
-async function applyInventoryUsage(s: Session, processingId: number, data: ProcessingData, userId: number | null): Promise<void> {
-  const insumos = safeJsonLoad<unknown[]>(data.uso_inventario_json, []);
-  if (!Array.isArray(insumos)) return;
-  for (let idx = 0; idx < insumos.length; idx += 1) {
-    const insumo = insumos[idx];
-    if (!insumo || typeof insumo !== "object" || Array.isArray(insumo)) continue;
-    const item = insumo as Record<string, unknown>;
-    const tipo = String(item.tipo || "").trim().toLowerCase();
-    const ref = item.ref || item.nombre || "";
-    const cantidad = item.cantidad || 1;
-    if (!ref) continue;
-    const referenciaMov = `PROC-${processingId}-INS-${idx}`;
-    const options = { userId, motivo: `Procesamiento de muestra folio ${data.folio_num}`, referencia: referenciaMov };
-    if (tipo === "reactivo") {
-      await consumeReactivo(s, ref, cantidad, options);
-    } else if (tipo === "consumible") {
-      await consumeConsumible(s, ref, cantidad, options);
-    }
-  }
-}
 
-async function replaceInventoryUsage(s: Session, processingId: number, data: ProcessingData, userId: number | null): Promise<void> {
+async function replaceInventoryUsage(s: Session, processingId: number, data: ProcessingData, userId: number | null, declaradosAntes: Map<string, number>): Promise<void> {
   await restoreInventoryUsage(s, `PROC-${processingId}-INS-`);
-  await applyInventoryUsage(s, processingId, data, userId);
+  await applyStageInventory(s, "PROC", processingId, data.uso_inventario_json, `Procesamiento de muestra folio ${data.folio_num}`, userId, declaradosAntes);
 }
 
 function serializeRow(row: Row): Row {
@@ -173,16 +164,12 @@ function serializeRow(row: Row): Row {
   return item;
 }
 
-function isFolioConflict(error: unknown): boolean {
-  const message = String((error as { message?: unknown })?.message || "");
-  return message.includes("uq_muestras_procesamiento_folio_num") || (isIntegrityError(error) && message.includes("folio_num"));
-}
 
 export async function getNextFolio({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "muestras", "read");
   await ensureSamplesProcesamientoSchema(s);
-  return json({ next_folio: await nextFolioNum(s) });
+  return json({ next_folio: await nextFolioNum(s, TABLE) });
 }
 
 export async function listProcessingSamples({ request, s }: RouteContext): Promise<Response> {
@@ -191,22 +178,32 @@ export async function listProcessingSamples({ request, s }: RouteContext): Promi
   await ensureSamplesProcesamientoSchema(s);
 
   const search = searchParam(request, "search");
+  const includeAnuladas = searchParam(request, "anuladas") === "1";
   const rows = await s.query(
     `
     SELECT p.id, p.folio_num, p.tipo_registro, p.fecha_procesamiento,
-           p.hora_procesamiento, p.folio_recepcion_num, p.id_interno,
-           p.muestra_tipo, p.estado, p.nombre_quien_proceso, p.creado_en
+           p.hora_procesamiento, p.recepcion_id, p.folio_recepcion_num, p.id_interno,
+           p.muestra_tipo, p.tipo_organismo_json, p.estado, p.motivo_anulacion, p.anulado_en,
+           p.nombre_quien_proceso, p.creado_en
     FROM muestras_procesamiento p
-    WHERE :search = ''
+    WHERE (:incluir_anuladas = 1 OR p.estado <> 'anulada')
+      AND (:search = ''
        OR p.id_interno LIKE :search_like
        OR CAST(p.folio_num AS CHAR) LIKE :search_like
-       OR CAST(COALESCE(p.folio_recepcion_num, 0) AS CHAR) LIKE :search_like
+       OR CAST(COALESCE(p.folio_recepcion_num, 0) AS CHAR) LIKE :search_like)
     ORDER BY p.folio_num DESC
     LIMIT 400
     `,
-    { search, search_like: `%${search}%` },
+    { search, search_like: `%${search}%`, incluir_anuladas: includeAnuladas ? 1 : 0 },
   );
-  return json({ items: rows, total: rows.length });
+  return json({
+    items: rows.map((row) => {
+      const item: Row = { ...row, tipo_organismo: safeJsonLoad(row.tipo_organismo_json, []) };
+      delete item.tipo_organismo_json;
+      return item;
+    }),
+    total: rows.length,
+  });
 }
 
 export async function getProcessingSample({ request, s, params }: RouteContext): Promise<Response> {
@@ -246,8 +243,11 @@ export async function createProcessingSample({ request, s }: RouteContext): Prom
 
   const data = normalizePayload(await readJson(request));
   if (!data.folio_num) {
-    data.folio_num = await nextFolioNum(s);
+    data.folio_num = await nextFolioNum(s, TABLE);
   }
+  // Solo se procesa una muestra recibida, aceptada y vigente.
+  await assertOrigin(s, "muestras_recepcion", data.recepcion_id, { requireAccepted: true });
+  if (data.estado === "anulada") data.estado = "registrada";
   const userId = userIdFromClaims(user);
 
   try {
@@ -259,6 +259,7 @@ export async function createProcessingSample({ request, s }: RouteContext): Prom
         folio_recepcion_num, muestra_tipo, id_interno,
         lote_seleccion_json,
         tipo_organismo_json, parte_organismo_json,
+        tipo_organismo_otro, parte_organismo_otro,
         bivalvos_steps_json, sardinas_steps_json,
         otro_procesamiento, resguardo_json,
         observaciones_generales, nombre_quien_proceso,
@@ -271,6 +272,7 @@ export async function createProcessingSample({ request, s }: RouteContext): Prom
         :folio_recepcion_num, :muestra_tipo, :id_interno,
         :lote_seleccion_json,
         :tipo_organismo_json, :parte_organismo_json,
+        :tipo_organismo_otro, :parte_organismo_otro,
         :bivalvos_steps_json, :sardinas_steps_json,
         :otro_procesamiento, :resguardo_json,
         :observaciones_generales, :nombre_quien_proceso,
@@ -281,9 +283,13 @@ export async function createProcessingSample({ request, s }: RouteContext): Prom
       `,
       { ...data, creado_por: userId, actualizado_por: userId },
     );
-    await applyInventoryUsage(s, result.lastrowid as number, data, userId);
+    const id = result.lastrowid as number;
+    await applyStageInventory(s, "PROC", id, data.uso_inventario_json, `Procesamiento de muestra folio ${data.folio_num}`, userId);
+    await advanceState(s, "muestras_recepcion", data.recepcion_id, "en_proceso");
+    const despues = await snapshotRow(s, TABLE, id);
+    await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues });
     await s.commit();
-    return json({ message: "Procesamiento creado", id: result.lastrowid }, 201);
+    return json({ message: "Procesamiento creado", id }, 201);
   } catch (error) {
     await s.rollback();
     if (isFolioConflict(error)) {
@@ -299,10 +305,17 @@ export async function updateProcessingSample({ request, s, params }: RouteContex
   await requirePermission(s, user, "muestras", "update");
   await ensureSamplesProcesamientoSchema(s);
 
+  const antes = await snapshotRow(s, TABLE, processingId);
+  assertEditable(antes, TABLE);
   const data = normalizePayload(await readJson(request));
   if (!data.folio_num) {
     return json({ message: "El folio de procesamiento es obligatorio" }, 400);
   }
+  if (data.recepcion_id !== toIntOrNull(antes?.recepcion_id)) {
+    await assertOrigin(s, "muestras_recepcion", data.recepcion_id, { requireAccepted: true });
+  }
+  // El estado lo maneja el flujo: no se anula ni se retrocede desde el formato.
+  if (data.estado === "anulada" || ["en_proceso", "completada"].includes(String(antes?.estado || ""))) data.estado = String(antes?.estado || "registrada");
   const userId = userIdFromClaims(user);
 
   try {
@@ -322,6 +335,8 @@ export async function updateProcessingSample({ request, s, params }: RouteContex
         lote_seleccion_json = :lote_seleccion_json,
         tipo_organismo_json = :tipo_organismo_json,
         parte_organismo_json = :parte_organismo_json,
+        tipo_organismo_otro = :tipo_organismo_otro,
+        parte_organismo_otro = :parte_organismo_otro,
         bivalvos_steps_json = :bivalvos_steps_json,
         sardinas_steps_json = :sardinas_steps_json,
         otro_procesamiento = :otro_procesamiento,
@@ -342,7 +357,10 @@ export async function updateProcessingSample({ request, s, params }: RouteContex
       await s.rollback();
       return json({ message: "Registro no encontrado" }, 404);
     }
-    await replaceInventoryUsage(s, processingId, data, userId);
+    await replaceInventoryUsage(s, processingId, data, userId, insumosDeclarados(antes?.uso_inventario_json));
+    await advanceState(s, "muestras_recepcion", data.recepcion_id, "en_proceso");
+    const despues = await snapshotRow(s, TABLE, processingId);
+    await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: processingId, referencia: folioLabel(TABLE, despues), antes, despues });
     await s.commit();
     return json({ message: "Procesamiento actualizado" });
   } catch (error) {
@@ -354,16 +372,36 @@ export async function updateProcessingSample({ request, s, params }: RouteContex
   }
 }
 
-export async function deleteProcessingSample({ request, s, params }: RouteContext): Promise<Response> {
+/* Los registros tecnicos no se eliminan; se anulan con motivo. */
+export async function deleteProcessingSample({ request, s }: RouteContext): Promise<Response> {
+  const user = await requireUser(request);
+  await requirePermission(s, user, "muestras", "delete");
+  return deletionNotAllowed();
+}
+
+export async function anularProcessingSample({ request, s, params }: RouteContext): Promise<Response> {
   const processingId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "muestras", "delete");
   await ensureSamplesProcesamientoSchema(s);
-
-  const result = await s.execute("DELETE FROM muestras_procesamiento WHERE id = :id", { id: processingId });
+  const motivo = await readMotivo(request);
+  const row = await anularRegistro(s, user, TABLE, processingId, motivo, {
+    movimientosPrefix: `PROC-${processingId}-INS-`,
+    bloqueaSi: async () => {
+      const activas = Number((await s.scalar("SELECT COUNT(*) FROM muestras_extraccion WHERE procesamiento_id = :id AND estado <> 'anulada'", { id: processingId })) || 0);
+      return activas ? `El procesamiento tiene ${activas} extraccion(es) vigente(s); anulalas primero` : null;
+    },
+  });
   await s.commit();
-  if (result.rowcount === 0) {
-    return json({ message: "Registro no encontrado" }, 404);
-  }
-  return json({ message: "Procesamiento eliminado" });
+  return json({ message: "Procesamiento anulado; el inventario descontado fue repuesto", item: serializeRow(row) });
+}
+
+export async function restaurarProcessingSample({ request, s, params }: RouteContext): Promise<Response> {
+  const processingId = intParam(params.id);
+  const user = await requireUser(request);
+  await requirePermission(s, user, "muestras", "delete");
+  await ensureSamplesProcesamientoSchema(s);
+  const row = await restaurarRegistro(s, user, TABLE, processingId, await readMotivo(request));
+  await s.commit();
+  return json({ message: "Procesamiento restaurado. El inventario no se vuelve a descontar: revisa los insumos y guarda de nuevo si aplica", item: serializeRow(row) });
 }

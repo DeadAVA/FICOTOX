@@ -14,11 +14,26 @@ export const getReactivoExpiry = (item: ApiRecord): unknown => item.caducidad ||
 
 export const getReactivoLocation = (item: ApiRecord): string => [item.localizacion || item.ubicacion, item.sub_localizacion].filter(Boolean).join(" / ") || "-";
 
+/*
+ * Stock bajo, con la misma regla que el contador del servidor (`inventorySummary`):
+ * vacío; por debajo del mínimo si hay mínimo; o ≤ 20 % del máximo si no lo hay.
+ */
+export const isReactivoLow = (item: ApiRecord): boolean => {
+  const { current, max } = getReactivoStockInfo(item);
+  const min = parseNumberOrNull(item.stock_minimo);
+  if (current === null) return false;
+  if (current <= 0) return true;
+  if (min !== null && min > 0) return current <= min;
+  return !!max && current / max <= 0.2;
+};
+
 export const getReactivoStockInfo = (item: ApiRecord): { current: number | null; max: number | null; unit: string } => {
+  // `cantidad_actual` es la columna canónica (la que descuentan los formatos y edita la hoja);
+  // el resto son columnas heredadas de las hojas de Excel.
   const fields: Array<[string, string]> = [
+    ["cantidad_actual", item.unidad || ""],
     ["restante_190126", "L"],
     ["amount_in_stock", item.unidad || ""],
-    ["cantidad_actual", item.unidad || ""],
     ["total_litros_2025", "L"],
     ["capacidad_litros", "L"],
     ["capacidad_kilos", "kg"],
@@ -50,4 +65,11 @@ export const getReactivoStockText = (item: ApiRecord): string => {
   if (hasValue(item.volumen)) return `${fmt(item.volumen)} volumen`;
   if (hasValue(item.piezas)) return `${fmt(item.piezas)} piezas`;
   return "-";
+};
+
+/* Todo lo que necesita el medidor de un reactivo, con la regla de "bajo" compartida. */
+export const getReactivoStockState = (item: ApiRecord) => {
+  const { current, max, unit } = getReactivoStockInfo(item);
+  const min = parseNumberOrNull(item.stock_minimo);
+  return { current, max, min: min && min > 0 ? min : null, unit, low: isReactivoLow(item), empty: current !== null && current <= 0 };
 };

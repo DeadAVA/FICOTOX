@@ -82,3 +82,26 @@ export const escapeHtml = (value: unknown): string =>
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+
+/* Fecha local de hoy como YYYY-MM-DD (sin el corrimiento de zona horaria de `new Date("YYYY-MM-DD")`). */
+export const todayIso = (): string => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/*
+ * Tono de una fecha límite (caducidad, calibración): "danger" si ya pasó
+ * (estrictamente antes de hoy, igual que el servidor), "warning" si vence en
+ * los próximos `days` días. Compara cadenas YYYY-MM-DD para no depender de la zona horaria.
+ */
+export const deadlineTone = (value: unknown, days = 30): "danger" | "warning" | null => {
+  if (!value) return null;
+  const date = String(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const today = todayIso();
+  if (date < today) return "danger";
+  const limit = new Date();
+  limit.setDate(limit.getDate() + days);
+  const limitIso = `${limit.getFullYear()}-${String(limit.getMonth() + 1).padStart(2, "0")}-${String(limit.getDate()).padStart(2, "0")}`;
+  return date <= limitIso ? "warning" : null;
+};

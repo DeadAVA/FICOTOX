@@ -1,5 +1,7 @@
 import { createRemoteJWKSet, jwtVerify, errors as joseErrors, type JWTPayload } from "jose";
+import { isAvatarKey } from "../../shared/avatars";
 import { createAccessToken, requireUser } from "../auth";
+import { registrarAuditoria } from "../audit";
 import { getConfig } from "../config";
 import { isOperationalError, type Row, type Session } from "../db";
 import { HttpError, json, readJson, type RouteContext } from "../http";
@@ -15,7 +17,7 @@ function domainAllowed(email: string): boolean {
 }
 
 const USER_QUERY = `
-  SELECT u.id, u.id_rol AS role_id, u.nombre, u.email, u.activo, u.password_hash, r.nombre AS rol
+  SELECT u.id, u.id_rol AS role_id, u.nombre, u.email, u.activo, u.password_hash, u.avatar, r.nombre AS rol
   FROM usuarios u
   INNER JOIN roles r ON r.id = u.id_rol
   WHERE LOWER(u.email) = LOWER(:email)
@@ -53,6 +55,7 @@ async function issueSession(s: Session, row: Row): Promise<Response> {
       nombre: row.nombre,
       email: row.email,
       rol: row.rol,
+      avatar: row.avatar || null,
     },
     permissions,
   });
@@ -120,6 +123,8 @@ export async function loginWithMicrosoft({ request, s }: RouteContext): Promise<
 
   const email = emailFromClaims(claims);
   if (!domainAllowed(email)) {
+    await registrarAuditoria(s, null, { accion: "login_fallido", entidad: "sesion", referencia: email.slice(0, 160), detalle: { proveedor: "microsoft", motivo: "dominio no permitido" } });
+    await s.commit();
     return json({ message: `Solo se permiten cuentas @${config.MICROSOFT_ALLOWED_DOMAIN}` }, 403);
   }
 
@@ -135,6 +140,8 @@ export async function loginWithMicrosoft({ request, s }: RouteContext): Promise<
   }
 
   if (!row) {
+    await registrarAuditoria(s, null, { accion: "login_fallido", entidad: "sesion", referencia: email.slice(0, 160), detalle: { proveedor: "microsoft", existe_usuario: false } });
+    await s.commit();
     return json({ message: "Tu cuenta pertenece a CICESE, pero todavia no esta dada de alta en FICOTOX." }, 403);
   }
 
@@ -157,6 +164,7 @@ export async function loginWithMicrosoft({ request, s }: RouteContext): Promise<
       user_id: row.id,
     },
   );
+  await registrarAuditoria(s, { sub: String(row.id), nombre: name, email }, { accion: "login", entidad: "sesion", entidadId: row.id as number, referencia: email.slice(0, 160), detalle: { proveedor: "microsoft" } });
   await s.commit();
   row = await getUserByEmail(s, email);
   return issueSession(s, row as Row);
@@ -190,16 +198,69 @@ export async function loginWithEmail({ request, s }: RouteContext): Promise<Resp
 
   // Mismo mensaje si el correo no existe o la contrasena falla: no revelar cuentas.
   if (!row || !verifyPassword(password, row.password_hash as string | null)) {
+    // Los intentos fallidos quedan en la bitacora (ISO/IEC 17025 7.11.1).
+    await registrarAuditoria(s, null, { accion: "login_fallido", entidad: "sesion", referencia: email.slice(0, 160), detalle: { existe_usuario: !!row } });
+    await s.commit();
     return json({ message: "Correo o contraseña incorrectos" }, 401);
   }
+  await registrarAuditoria(s, { sub: String(row.id), nombre: String(row.nombre || ""), email: String(row.email || "") }, { accion: "login", entidad: "sesion", entidadId: row.id as number, referencia: email.slice(0, 160) });
   return issueSession(s, row);
 }
 
 export async function me({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await ensureRbacSchema(s);
+  await ensureUsuariosSchema(s);
   const permissions = await getPermissionsForUser(s, user);
-  return json({ user, permissions });
+  // El avatar y el nombre se leen de la base (no del token) para reflejar cambios sin volver a entrar.
+  const row = await s.queryOne<{ nombre: string; avatar: string | null }>("SELECT nombre, avatar FROM usuarios WHERE id = :id", { id: Number(user.sub) });
+  return json({ user: { ...user, id: Number(user.sub), nombre: row?.nombre ?? user.nombre, avatar: row?.avatar ?? null }, permissions });
+}
+
+/*
+ * Personal activo con lo que puede hacer, para los selectores de "quién" de los
+ * formatos (cualquier usuario autenticado puede verlo; no expone correos ni claves).
+ */
+export async function personal({ request, s }: RouteContext): Promise<Response> {
+  await requireUser(request);
+  await ensureRbacSchema(s);
+  await ensureUsuariosSchema(s);
+  const rows = await s.query<Row>("SELECT u.id, u.nombre, u.id_rol, r.nombre AS rol FROM usuarios u LEFT JOIN roles r ON r.id = u.id_rol WHERE COALESCE(u.activo, 1) = 1 ORDER BY u.nombre");
+  const cache = new Map<number, Awaited<ReturnType<typeof getRolePermissionsMap>>>();
+  const items = [];
+  for (const row of rows) {
+    const roleId = row.id_rol === null || row.id_rol === undefined ? null : Number(row.id_rol);
+    if (roleId !== null && !cache.has(roleId)) cache.set(roleId, await getRolePermissionsMap(s, roleId));
+    const perms = roleId !== null ? cache.get(roleId) || {} : {};
+    items.push({
+      id: Number(row.id),
+      nombre: String(row.nombre || ""),
+      rol: row.rol ? String(row.rol) : null,
+      puede: {
+        muestras: !!(perms.muestras?.create || perms.muestras?.update),
+        aprobaciones: !!perms.aprobaciones?.update,
+        informes: !!(perms.informes?.create || perms.informes?.update),
+        inventario: !!(perms.reactivos?.update || perms.consumibles?.update || perms.equipos?.update),
+      },
+    });
+  }
+  return json({ items });
+}
+
+/* La persona elige su avatar del catalogo (o vuelve al de omision con null). Queda en la bitacora. */
+export async function updateMyAvatar({ request, s }: RouteContext): Promise<Response> {
+  const user = await requireUser(request);
+  await ensureUsuariosSchema(s);
+  const payload = await readJson(request);
+  const avatar = payload.avatar === null || payload.avatar === "" ? null : payload.avatar;
+  if (avatar !== null && !isAvatarKey(avatar)) return json({ message: "Avatar no reconocido" }, 400);
+  const id = Number(user.sub);
+  const antes = await s.queryOne<{ avatar: string | null }>("SELECT avatar FROM usuarios WHERE id = :id", { id });
+  if (!antes) return json({ message: "Usuario no encontrado" }, 404);
+  await s.execute("UPDATE usuarios SET avatar = :avatar WHERE id = :id", { avatar, id });
+  await registrarAuditoria(s, user, { accion: "editar", entidad: "usuarios", entidadId: id, referencia: String(user.email || ""), detalle: { avatar: { antes: antes.avatar || null, despues: avatar } } });
+  await s.commit();
+  return json({ message: "Avatar actualizado", avatar });
 }
 
 export { HttpError };

@@ -2,28 +2,25 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { DotsThree, LockKey, PencilSimple, Plus, ShieldCheck, Trash } from "@phosphor-icons/react";
+import { LockKey, PencilSimple, Plus, ShieldCheck, Trash } from "@phosphor-icons/react";
 import { RoleSheet, toPermissionRows, type PermissionRow } from "@/components/features/admin/AdminSheets";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Dropdown, Tooltip, useConfirm } from "@/components/ui/Overlay";
-import { LinkTabs, PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
-import { Badge, EmptyState, ErrorState, Stat, TableSkeleton } from "@/components/ui/Primitives";
-import { CellPrimary, RowActions, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
+import { Button } from "@/components/ui/Button";
+import { ActionMenu, Tooltip, useConfirm, type MenuItem } from "@/components/ui/Overlay";
+import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
+import { Badge, EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
+import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
 import { fmt, normalizeText } from "@/lib/client/format";
-import { ADMIN_NAV } from "@/lib/client/nav";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 
 export default function RolesPage() {
-  const { can } = useSession();
   return (
     <PageBody>
-      <PageHeader title="Administración" description="Cuentas de acceso y permisos del sistema." />
-      <LinkTabs items={ADMIN_NAV.filter((item) => item.modules.some((m) => can(m))).map((item) => ({ href: item.href, label: item.label }))} />
+      <PageHeader title="Roles" description="Permisos por módulo. Un permiso ausente significa no concedido." />
       <RequireModule modules="roles">
         <RolesContent />
       </RequireModule>
@@ -84,14 +81,19 @@ function RolesContent() {
   const canUpdate = can("roles", "update");
   const canDelete = can("roles", "delete");
 
+  const menuFor = (role: ApiRecord): MenuItem[] => {
+    const list: MenuItem[] = [];
+    if (canUpdate) list.push({ label: "Editar", description: "Nombre, descripción y permisos por módulo", icon: <PencilSimple size={16} weight="duotone" />, tone: "brand", onSelect: () => editRole(Number(role.id)) });
+    if (canDelete && !role.es_sistemico) list.push({ label: "Eliminar rol", description: Number(role.total_usuarios || 0) > 0 ? "Solo si no tiene usuarios asignados" : "Queda en la bitácora", icon: <Trash size={16} weight="duotone" />, tone: "danger", disabled: Number(role.total_usuarios || 0) > 0, separatorBefore: list.length > 0, onSelect: () => deleteRole(role) });
+    return list;
+  };
+
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Roles" value={fmt(roles.length)} />
-        <Stat label="Activos" value={fmt(roles.filter((r) => !!r.activo).length)} tone="success" />
-        <Stat label="Del sistema" value={fmt(roles.filter((r) => !!r.es_sistemico).length)} hint="No se pueden eliminar" />
-        <Stat label="Usuarios asignados" value={fmt(roles.reduce((acc, r) => acc + Number(r.total_usuarios || 0), 0))} />
-      </div>
+      <p className="tnum -mt-2 text-[12.5px] text-ink-3">
+        <span className="font-medium text-ink">{fmt(roles.length)}</span> roles · <span className="font-medium text-ink">{fmt(roles.filter((r) => !!r.activo).length)}</span> activos · <span className="font-medium text-ink">{fmt(roles.filter((r) => !!r.es_sistemico).length)}</span> del sistema ·{" "}
+        <span className="font-medium text-ink">{fmt(roles.reduce((acc, r) => acc + Number(r.total_usuarios || 0), 0))}</span> usuarios asignados
+      </p>
 
       <Toolbar
         end={
@@ -120,7 +122,7 @@ function RolesContent() {
                 <Th align="right">Usuarios</Th>
                 <Th>Estado</Th>
                 <Th>Tipo</Th>
-                <Th align="right" />
+                <Th align="right" sticky />
               </tr>
             </THead>
             <TBody>
@@ -145,25 +147,8 @@ function RolesContent() {
                     </Badge>
                   </Td>
                   <Td muted>{role.es_sistemico ? "Del sistema" : "Personalizado"}</Td>
-                  <Td align="right">
-                    <RowActions>
-                      {canUpdate ? (
-                        <IconButton label="Editar" onClick={() => editRole(Number(role.id))}>
-                          <PencilSimple size={16} />
-                        </IconButton>
-                      ) : null}
-                      {canDelete && !role.es_sistemico ? (
-                        <Dropdown
-                          label="Más acciones"
-                          trigger={
-                            <IconButton label="Más acciones">
-                              <DotsThree size={18} weight="bold" />
-                            </IconButton>
-                          }
-                          items={[{ label: "Eliminar rol", icon: <Trash size={16} />, tone: "danger", onSelect: () => deleteRole(role) }]}
-                        />
-                      ) : null}
-                    </RowActions>
+                  <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
+                    <ActionMenu items={menuFor(role)} header={String(role.nombre || "")} />
                   </Td>
                 </Tr>
               ))}

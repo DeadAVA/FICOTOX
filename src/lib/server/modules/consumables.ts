@@ -1,14 +1,17 @@
 import { requireUser, userIdFromClaims } from "../auth";
+import { registrarAuditoria, snapshotRow } from "../audit";
 import { type Session } from "../db";
 import { intParam, json, readJson, type RouteContext } from "../http";
+import { darDeBaja, ensureBajaColumns, reactivarItem } from "../inventory-baja";
 import { ensureMovimientosSchema } from "../inventory-usage";
 import { requirePermission } from "../rbac";
-import { addColumnIfMissing } from "../schema";
-import { toIntOrNull, utcTimestampReference } from "./helpers";
+import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
+import { searchParam, toIntOrNull, utcTimestampReference } from "./helpers";
 
 /* Portado de modules/inventory/consumables.py del backend Flask original. */
 
 export async function ensureConsumiblesSchema(s: Session): Promise<void> {
+  if (schemaReady("consumibles")) return;
   await s.execute(
     `
     CREATE TABLE IF NOT EXISTS consumibles (
@@ -29,6 +32,7 @@ export async function ensureConsumiblesSchema(s: Session): Promise<void> {
     `,
   );
   await addColumnIfMissing(s, "consumibles", "stock_maximo", "INTEGER DEFAULT NULL");
+  await ensureBajaColumns(s, "consumibles");
   await s.execute(
     `
     UPDATE consumibles
@@ -36,7 +40,7 @@ export async function ensureConsumiblesSchema(s: Session): Promise<void> {
     WHERE stock_maximo IS NULL AND piezas IS NOT NULL AND piezas > 0
     `,
   );
-  await s.commit();
+  markSchemaReady("consumibles");
 }
 
 interface ConsumablePayload {
@@ -49,6 +53,7 @@ interface ConsumablePayload {
   contenedor: unknown;
   piezas: number | null;
   cantidad_por_pieza: number | null;
+  stock_maximo: number | null;
 }
 
 function orNull(value: unknown): unknown {
@@ -67,6 +72,8 @@ function normalizePayload(raw: Record<string, unknown> | null | undefined): Cons
     contenedor: orNull(data.contenedor),
     piezas: toIntOrNull(data.piezas),
     cantidad_por_pieza: toIntOrNull(data.cantidad_por_pieza),
+    /* Stock de referencia para el medidor; si no se captura, las piezas iniciales. */
+    stock_maximo: toIntOrNull(data.stock_maximo),
   };
 }
 
@@ -201,7 +208,7 @@ function parseCsvRecords(text: string, delimiter: string): Record<string, string
 const SELECT_COLUMNS = `
   SELECT id, producto, marca, proveedor, catalogo_parte_cas,
          fecha_ingreso, tamano_capacidad, contenedor, piezas,
-         cantidad_por_pieza, stock_maximo, creado_por, creado_en
+         cantidad_por_pieza, stock_maximo, activo, baja_motivo, baja_en, creado_por, creado_en
   FROM consumibles
 `;
 
@@ -213,10 +220,11 @@ export async function getConsumables({ request, s }: RouteContext): Promise<Resp
   const search = new URL(request.url).searchParams.get("search") ?? "";
   const rows = await s.query(
     `${SELECT_COLUMNS}
-    WHERE producto LIKE :search OR marca LIKE :search
+    WHERE (:incluir_bajas = 1 OR COALESCE(activo, 1) = 1)
+      AND (producto LIKE :search OR marca LIKE :search)
     ORDER BY producto ASC
     `,
-    { search: `%${search}%` },
+    { search: `%${search}%`, incluir_bajas: searchParam(request, "bajas") === "1" ? 1 : 0 },
   );
   return json({ items: rows, total: rows.length });
 }
@@ -234,10 +242,11 @@ export async function createConsumable({ request, s }: RouteContext): Promise<Re
   const result = await s.execute(
     `
     INSERT INTO consumibles (producto, marca, proveedor, catalogo_parte_cas, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza, stock_maximo, creado_por)
-    VALUES (:producto, :marca, :proveedor, :catalogo_parte_cas, :fecha_ingreso, :tamano_capacidad, :contenedor, :piezas, :cantidad_por_pieza, :piezas, :creado_por)
+    VALUES (:producto, :marca, :proveedor, :catalogo_parte_cas, :fecha_ingreso, :tamano_capacidad, :contenedor, :piezas, :cantidad_por_pieza, COALESCE(:stock_maximo, :piezas), :creado_por)
     `,
     { ...data, creado_por: userIdFromClaims(user) },
   );
+  await registrarAuditoria(s, user, { accion: "crear", entidad: "consumibles", entidadId: result.lastrowid, referencia: String(data.producto), despues: await snapshotRow(s, "consumibles", result.lastrowid) });
   await s.commit();
   return json({ message: "Consumible creado", id: result.lastrowid }, 201);
 }
@@ -266,20 +275,24 @@ export async function updateConsumable({ request, s, params }: RouteContext): Pr
     return json({ message: "El campo 'producto' es obligatorio" }, 400);
   }
 
+  const antes = await snapshotRow(s, "consumibles", consumableId);
   const result = await s.execute(
     `
     UPDATE consumibles
     SET producto = :producto, marca = :marca, proveedor = :proveedor, catalogo_parte_cas = :catalogo_parte_cas,
         fecha_ingreso = :fecha_ingreso, tamano_capacidad = :tamano_capacidad, contenedor = :contenedor,
-        piezas = :piezas, cantidad_por_pieza = :cantidad_por_pieza
+        piezas = :piezas, cantidad_por_pieza = :cantidad_por_pieza,
+        stock_maximo = COALESCE(:stock_maximo, stock_maximo, :piezas)
     WHERE id = :id
     `,
     { ...data, id: consumableId },
   );
-  await s.commit();
   if (result.rowcount === 0) {
+    await s.rollback();
     return json({ message: "Consumible no encontrado" }, 404);
   }
+  await registrarAuditoria(s, user, { accion: "editar", entidad: "consumibles", entidadId: consumableId, referencia: String(data.producto), antes, despues: await snapshotRow(s, "consumibles", consumableId) });
+  await s.commit();
   return json({ message: "Consumible actualizado" });
 }
 
@@ -302,12 +315,12 @@ export async function refillConsumable({ request, s, params }: RouteContext): Pr
   const result = await s.execute(
     `
     UPDATE consumibles
-    SET piezas = COALESCE(piezas, 0) + :cantidad,
-        stock_maximo = CASE
+    SET stock_maximo = CASE
             WHEN stock_maximo IS NULL OR stock_maximo < COALESCE(piezas, 0) + :cantidad
             THEN COALESCE(piezas, 0) + :cantidad
             ELSE stock_maximo
-        END
+        END,
+        piezas = COALESCE(piezas, 0) + :cantidad
     WHERE id = :id
     `,
     { id: consumableId, cantidad: amount },
@@ -330,22 +343,27 @@ export async function refillConsumable({ request, s, params }: RouteContext): Pr
       id_usuario: userId,
     },
   );
+  const despues = await snapshotRow(s, "consumibles", consumableId);
+  await registrarAuditoria(s, user, { accion: "reponer", entidad: "consumibles", entidadId: consumableId, referencia: String(despues?.producto || consumableId), motivo, despues, detalle: { cantidad: amount } });
   await s.commit();
   return json({ message: "Stock de consumible rellenado" });
 }
 
+/* Baja logica: conserva movimientos y registros que citan al consumible. */
 export async function deleteConsumable({ request, s, params }: RouteContext): Promise<Response> {
   const consumableId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "consumibles", "delete");
   await ensureConsumiblesSchema(s);
+  return darDeBaja(s, user, "consumibles", consumableId, await readJson(request), "Consumible");
+}
 
-  const result = await s.execute("DELETE FROM consumibles WHERE id = :id", { id: consumableId });
-  await s.commit();
-  if (result.rowcount === 0) {
-    return json({ message: "Consumible no encontrado" }, 404);
-  }
-  return json({ message: "Consumible eliminado" });
+export async function reactivarConsumable({ request, s, params }: RouteContext): Promise<Response> {
+  const consumableId = intParam(params.id);
+  const user = await requireUser(request);
+  await requirePermission(s, user, "consumibles", "delete");
+  await ensureConsumiblesSchema(s);
+  return reactivarItem(s, user, "consumibles", consumableId, await readJson(request), "Consumible");
 }
 
 const IMPORT_INSERT = `
@@ -398,6 +416,7 @@ export async function importConsumables({ request, s }: RouteContext): Promise<R
     }
   }
 
+  await registrarAuditoria(s, user, { accion: "importar", entidad: "consumibles", referencia: "importacion Excel/CSV", detalle: { insertados: inserted } });
   await s.commit();
   return json({ message: "Importacion completada", insertados: inserted });
 }

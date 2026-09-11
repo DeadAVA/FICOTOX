@@ -36,6 +36,7 @@ export function EquipoSheet({ open, item, onClose }: { open: boolean; item: ApiR
     responsable: item?.id_responsable ? String(item.id_responsable) : "",
     calibracion: toDateOnly(item?.fecha_prox_calibracion),
     estado: String(item?.estado || "operativo"),
+    claveBitacora: String(item?.clave_bitacora || ""),
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +54,7 @@ export function EquipoSheet({ open, item, onClose }: { open: boolean; item: ApiR
       id_responsable: Number(form.responsable || 0) || null,
       fecha_prox_calibracion: form.calibracion || null,
       estado: form.estado || "operativo",
+      clave_bitacora: form.claveBitacora.trim() || null,
     };
     if (!payload.nombre) {
       setError("El nombre del equipo es obligatorio");
@@ -132,13 +134,18 @@ export function EquipoSheet({ open, item, onClose }: { open: boolean; item: ApiR
           <Field label="Estado" htmlFor="e-estado" required>
             <Select id="e-estado" value={form.estado} onChange={set("estado")}>
               {EQUIPO_ESTADOS.map((estado) => (
-                <option key={estado.value} value={estado.value}>
+                // "En mantenimiento" lo pone y lo quita Mantenimiento; a mano solo los demás.
+                <option key={estado.value} value={estado.value} disabled={estado.value === "mantenimiento" && form.estado !== "mantenimiento"}>
                   {estado.label}
+                  {estado.value === "mantenimiento" ? " (lo define Mantenimiento)" : ""}
                 </option>
               ))}
             </Select>
           </Field>
         </FormGrid>
+        <Field label="Clave de bitácora" htmlFor="e-bitacora" hint="Bitácora de uso del equipo (FX-TCB-…). Se copia a los formatos de extracción para anotar el folio.">
+          <Input id="e-bitacora" maxLength={60} value={form.claveBitacora} onChange={set("claveBitacora")} mono placeholder="FX-TCB-BA1-27/1" />
+        </Field>
       </form>
     </Sheet>
   );
@@ -157,6 +164,7 @@ export function MantenimientoSheet({ open, item, onClose }: { open: boolean; ite
     responsable: item?.id_responsable ? String(item.id_responsable) : "",
     estado: String(item?.estado || "programado"),
     observaciones: String(item?.observaciones || ""),
+    proximaCalibracion: "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -182,6 +190,7 @@ export function MantenimientoSheet({ open, item, onClose }: { open: boolean; ite
       id_responsable: Number(form.responsable || 0) || null,
       estado: form.estado || "programado",
       observaciones: form.observaciones.trim() || null,
+      proxima_calibracion: form.tipo === "calibracion" && form.estado === "completado" ? form.proximaCalibracion || null : null,
     };
     if (!payload.id_equipo) {
       setError("Selecciona un equipo");
@@ -189,6 +198,10 @@ export function MantenimientoSheet({ open, item, onClose }: { open: boolean; ite
     }
     if (!payload.fecha_programada) {
       setError("La fecha programada es obligatoria");
+      return;
+    }
+    if (payload.estado === "completado" && !payload.fecha_realizado) {
+      setError("Indica la fecha en que se realizó para marcarlo como completado");
       return;
     }
     if (!can("mantenimiento", editing ? "update" : "create")) {
@@ -265,9 +278,14 @@ export function MantenimientoSheet({ open, item, onClose }: { open: boolean; ite
           <Field label="Fecha programada" htmlFor="m-fecha" required>
             <Input id="m-fecha" type="date" value={form.fechaProgramada} onChange={set("fechaProgramada")} invalid={!!error && !form.fechaProgramada} />
           </Field>
-          <Field label="Fecha realizado" htmlFor="m-realizado">
-            <Input id="m-realizado" type="date" value={form.fechaRealizado} onChange={set("fechaRealizado")} />
+          <Field label="Fecha realizado" htmlFor="m-realizado" required={form.estado === "completado"}>
+            <Input id="m-realizado" type="date" value={form.fechaRealizado} onChange={set("fechaRealizado")} invalid={!!error && form.estado === "completado" && !form.fechaRealizado} />
           </Field>
+          {form.tipo === "calibracion" && form.estado === "completado" ? (
+            <Field label="Próxima calibración" htmlFor="m-proxima" hint="Se anota en la ficha del equipo." className="sm:col-span-2">
+              <Input id="m-proxima" type="date" value={form.proximaCalibracion} onChange={set("proximaCalibracion")} />
+            </Field>
+          ) : null}
           <Field label="Técnico o proveedor" htmlFor="m-tecnico">
             <Input id="m-tecnico" maxLength={150} value={form.tecnico} onChange={set("tecnico")} />
           </Field>
@@ -285,6 +303,9 @@ export function MantenimientoSheet({ open, item, onClose }: { open: boolean; ite
         <Field label="Observaciones" htmlFor="m-obs">
           <Textarea id="m-obs" rows={3} value={form.observaciones} onChange={set("observaciones")} />
         </Field>
+        <p className="rounded-[10px] bg-surface-2 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-ink-2 ring-1 ring-line">
+          Mientras el mantenimiento esté <span className="font-medium">programado, en proceso o vencido</span>, el equipo se muestra “En mantenimiento” en la pestaña Equipos (con el detalle del pendiente debajo). Al marcarlo <span className="font-medium">completado</span> desaparece de Mantenimiento y el equipo vuelve a “Operativo”.
+        </p>
       </form>
     </Sheet>
   );

@@ -1,4 +1,6 @@
+import { HttpError } from "./http";
 import { isSqlite, type Session } from "./db";
+import { markSchemaReady, schemaReady } from "./schema";
 import { ensureConsumiblesSchema } from "./modules/consumables";
 import { ensureReactivosSchema } from "./modules/inventory";
 
@@ -7,6 +9,7 @@ import { ensureReactivosSchema } from "./modules/inventory";
 const SUPPORTED_INVENTORY_TABLES = new Set(["reactivos", "consumibles"]);
 
 export async function ensureMovimientosSchema(s: Session): Promise<void> {
+  if (schemaReady("movimientos")) return;
   await s.execute(
     isSqlite()
       ? `
@@ -37,6 +40,7 @@ export async function ensureMovimientosSchema(s: Session): Promise<void> {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
       `,
   );
+  markSchemaReady("movimientos");
 }
 
 function toPositiveFloat(value: unknown): number | null {
@@ -80,6 +84,18 @@ async function resolveItemId(s: Session, tableName: string, value: unknown): Pro
       `;
   const row = await s.queryOne<{ id: number }>(query, { value: text });
   return row ? Number(row.id) : null;
+}
+
+/*
+ * Un insumo dado de baja no se puede elegir de nuevo, pero un registro antiguo que
+ * ya lo declaraba se sigue pudiendo reabrir y guardar (si no, un reactivo retirado
+ * dejaria congelados los registros historicos que lo usaron).
+ */
+async function assertActive(s: Session, tableName: string, itemId: number): Promise<void> {
+  const row = await s.queryOne<{ activo: unknown; nombre: string | null }>(`SELECT COALESCE(activo, 1) AS activo, ${tableName === "reactivos" ? "COALESCE(nombre, producto)" : "producto"} AS nombre FROM ${tableName} WHERE id = :id`, { id: itemId });
+  if (row && Number(row.activo) === 0) {
+    throw new HttpError(409, { message: `${tableName === "reactivos" ? "El reactivo" : "El consumible"} "${row.nombre || itemId}" esta dado de baja; reactivalo en inventario o elige otro` });
+  }
 }
 
 async function movementExists(s: Session, reference: string): Promise<boolean> {
@@ -146,6 +162,8 @@ interface ConsumeOptions {
   userId: number | null;
   motivo: string;
   referencia: string;
+  /* El insumo ya estaba declarado en el registro: se permite aunque este dado de baja. */
+  permitirInactivo?: boolean;
 }
 
 /*
@@ -161,6 +179,7 @@ export async function consumeReactivo(s: Session, referenceValue: unknown, canti
   const itemId = await resolveItemId(s, "reactivos", referenceValue);
   const amount = toPositiveFloat(cantidad);
   if (!itemId || !amount || (await movementExists(s, options.referencia))) return false;
+  if (!options.permitirInactivo) await assertActive(s, "reactivos", itemId);
 
   await s.execute(
     `
@@ -184,6 +203,7 @@ export async function consumeConsumible(s: Session, referenceValue: unknown, can
   const itemId = await resolveItemId(s, "consumibles", referenceValue);
   const amount = toPositiveFloat(cantidad);
   if (!itemId || !amount || (await movementExists(s, options.referencia))) return false;
+  if (!options.permitirInactivo) await assertActive(s, "consumibles", itemId);
 
   await s.execute(
     `

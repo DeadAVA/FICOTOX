@@ -8,9 +8,12 @@ import { ensureSamplesRecepcionSchema } from "./recepcion";
 
 /* Portado de modules/samples/endpoints.py del backend Flask original. */
 
-// SQLite usa printf; MySQL no lo tiene, se usa LPAD para el mismo formato de folio.
-function folioExpression(prefix: string): string {
-  return isSqlite() ? `'${prefix}' || printf('%07d', folio_num)` : `CONCAT('${prefix}', LPAD(folio_num, 7, '0'))`;
+// Folio legible "R-0000012" / "E-D-0000003": el prefijo sale de tipo_registro
+// (las extracciones tienen varios tipos). SQLite usa printf; MySQL, LPAD.
+function folioExpression(fallbackPrefix: string): string {
+  return isSqlite()
+    ? `COALESCE(NULLIF(tipo_registro, ''), '${fallbackPrefix}') || '-' || printf('%07d', folio_num)`
+    : `CONCAT(COALESCE(NULLIF(tipo_registro, ''), '${fallbackPrefix}'), '-', LPAD(folio_num, 7, '0'))`;
 }
 
 async function ensureAll(ctx: RouteContext): Promise<void> {
@@ -57,17 +60,17 @@ export async function listSamples(ctx: RouteContext): Promise<Response> {
     `
     SELECT id, codigo, cliente, tipo, prioridad, estado, fecha_ingreso, analista
     FROM (
-      SELECT id, ${folioExpression("R-")} AS codigo, solicitante AS cliente,
+      SELECT id, ${folioExpression("R")} AS codigo, solicitante AS cliente,
              'Recepcion' AS tipo, '-' AS prioridad, estado, fecha_recepcion AS fecha_ingreso,
              NULL AS analista
       FROM muestras_recepcion
       UNION ALL
-      SELECT id, ${folioExpression("P-")} AS codigo, id_interno AS cliente,
+      SELECT id, ${folioExpression("P")} AS codigo, id_interno AS cliente,
              'Procesamiento' AS tipo, '-' AS prioridad, estado, fecha_procesamiento AS fecha_ingreso,
              nombre_quien_proceso AS analista
       FROM muestras_procesamiento
       UNION ALL
-      SELECT id, ${folioExpression("E-A-")} AS codigo, id_interno AS cliente,
+      SELECT id, ${folioExpression("E-A")} AS codigo, id_interno AS cliente,
              'Extraccion' AS tipo, '-' AS prioridad, estado, fecha_extraccion AS fecha_ingreso,
              nombre_quien_extrajo AS analista
       FROM muestras_extraccion
@@ -88,15 +91,15 @@ export async function listPendingSamples(ctx: RouteContext): Promise<Response> {
     `
     SELECT id, codigo, cliente, tipo, prioridad, estado, fecha_ingreso
     FROM (
-      SELECT id, ${folioExpression("R-")} AS codigo, solicitante AS cliente,
+      SELECT id, ${folioExpression("R")} AS codigo, solicitante AS cliente,
              'Recepcion' AS tipo, '-' AS prioridad, estado, fecha_recepcion AS fecha_ingreso
       FROM muestras_recepcion
       UNION ALL
-      SELECT id, ${folioExpression("P-")} AS codigo, id_interno AS cliente,
+      SELECT id, ${folioExpression("P")} AS codigo, id_interno AS cliente,
              'Procesamiento' AS tipo, '-' AS prioridad, estado, fecha_procesamiento AS fecha_ingreso
       FROM muestras_procesamiento
       UNION ALL
-      SELECT id, ${folioExpression("E-A-")} AS codigo, id_interno AS cliente,
+      SELECT id, ${folioExpression("E-A")} AS codigo, id_interno AS cliente,
              'Extraccion' AS tipo, '-' AS prioridad, estado, fecha_extraccion AS fecha_ingreso
       FROM muestras_extraccion
     ) m

@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Eye, EyeSlash, WindowsLogo } from "@phosphor-icons/react";
-import { BrandLockup } from "@/components/shell/Brand";
+import { BrandMark } from "@/components/shell/Brand";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
@@ -11,8 +11,9 @@ import { loginWithMicrosoft } from "@/lib/client/msal";
 import { firstAllowedRoute } from "@/lib/client/nav";
 
 /*
- * Acceso. Panel izquierdo: el bloom (floracion algal) como unico momento
- * visual de gran escala del producto. Derecha: formulario sobrio.
+ * Acceso. Blanco, una sola columna y sin tarjeta: la marca animada, el nombre
+ * del sistema y los dos campos. El fondo lleva dos luces océano casi
+ * imperceptibles a la deriva; los elementos entran escalonados.
  */
 
 export default function LoginPage() {
@@ -58,110 +59,82 @@ export default function LoginPage() {
 
   const manualEnabled = authConfig.manualLoginEnabled !== false;
   const microsoftEnabled = !!authConfig.microsoft?.enabled;
+  const fieldClass = "h-12 rounded-[12px] border-line bg-white text-[15px] shadow-[0_1px_2px_rgba(16,32,43,0.04)] hover:border-line-strong focus:bg-white";
 
   return (
-    <main className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
-      <section className="relative hidden overflow-hidden bg-deep text-white lg:flex lg:flex-col lg:justify-between lg:p-12" aria-hidden="true">
-        <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_10%_0%,#0E4A55_0%,#07202B_55%,#04141b_100%)]" />
-        <div className="bloom-field" />
-        <div className="grain" />
-        <div className="relative">
-          <BrandLockup inverted />
-        </div>
-        <div className="relative max-w-xl">
-          <h1 className="display text-[54px] leading-[1.02] text-white xl:text-[64px]">
-            El registro del laboratorio,
-            <br />
-            <em className="text-brand-bright">de la muestra al resultado.</em>
-          </h1>
-          <p className="mt-6 max-w-md text-[16px] leading-relaxed text-white/70">
-            Recepción, procesamiento, extracción e inventario con trazabilidad completa para el análisis de ficotoxinas marinas.
-          </p>
-        </div>
-        <div className="relative flex items-center gap-3 text-[13px] text-white/55">
-          <span>LN-FICOTOX</span>
-          <span className="h-1 w-1 rounded-full bg-white/30" />
-          <span>CICESE · Ensenada, B.C.</span>
-        </div>
-      </section>
+    <main className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-[#fbfbfd] px-6 py-12 text-ink">
+      <div className="light-field" aria-hidden="true" />
 
-      <section className="flex items-center justify-center px-6 py-10 sm:px-10">
-        <div className="w-full max-w-[400px] animate-rise-in">
-          <div className="mb-10 lg:hidden">
-            <BrandLockup />
+      <section className="stagger relative flex w-full max-w-[380px] flex-col items-center" aria-labelledby="login-title">
+        <BrandMark size={88} animated className="drop-shadow-[0_18px_30px_rgba(10,84,104,0.22)]" />
+
+        <h1 id="login-title" className="mt-7 text-[30px] font-bold tracking-[-0.035em] text-ink">
+          FICOTOX
+        </h1>
+        <p className="mt-1.5 text-center text-[15px] text-ink-2">Sistema Integrado de Gestión de Laboratorio</p>
+        <p className="eyebrow mt-3 text-ink-3">LN-FICOTOX · CICESE</p>
+
+        {manualEnabled ? (
+          <form onSubmit={handleSubmit} className="mt-10 flex w-full flex-col gap-4" noValidate>
+            <Field label="Correo institucional" htmlFor="login-email">
+              <Input id="login-email" type="email" autoComplete="email" inputMode="email" placeholder="nombre@cicese.mx" value={email} onChange={(event) => setEmail(event.target.value)} required autoFocus className={fieldClass} />
+            </Field>
+            <Field label="Contraseña" htmlFor="login-password">
+              <Input
+                id="login-password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                className={fieldClass}
+                trailing={
+                  <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"} className="press rounded-full p-1.5 text-ink-3 hover:bg-surface-3 hover:text-ink">
+                    {showPassword ? <EyeSlash size={17} /> : <Eye size={17} />}
+                  </button>
+                }
+              />
+            </Field>
+            {error ? (
+              <p role="alert" className="rounded-[10px] bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
+                {error}
+              </p>
+            ) : null}
+            <Button type="submit" size="lg" block loading={submitting} iconRight={<ArrowRight size={16} weight="bold" />} className="mt-2 h-12 rounded-[12px] text-[15px] shadow-[0_8px_20px_-8px_rgba(15,122,149,0.55)]">
+              Entrar
+            </Button>
+          </form>
+        ) : null}
+
+        {microsoftEnabled ? (
+          <div className={`w-full ${manualEnabled ? "mt-5" : "mt-10"}`}>
+            {manualEnabled ? (
+              <div className="mb-5 flex items-center gap-3 text-[12px] text-ink-4">
+                <span className="h-px flex-1 bg-line" />
+                o
+                <span className="h-px flex-1 bg-line" />
+              </div>
+            ) : null}
+            <Button type="button" variant="secondary" size="lg" block loading={msBusy} onClick={handleMicrosoft} icon={<WindowsLogo size={18} weight="fill" />} className="h-12 rounded-[12px] border border-line bg-white shadow-none hover:bg-surface-2">
+              Continuar con Microsoft
+            </Button>
+            {!manualEnabled && error ? (
+              <p role="alert" className="mt-4 rounded-[10px] bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
+                {error}
+              </p>
+            ) : null}
           </div>
-          <h2 className="text-[26px] font-semibold tracking-tight text-ink">Iniciar sesión</h2>
-          <p className="mt-1.5 text-[14px] text-ink-3">Usa tu correo institucional para entrar al sistema.</p>
+        ) : null}
 
-          {manualEnabled ? (
-            <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-5" noValidate>
-              <Field label="Correo electrónico" htmlFor="login-email" required>
-                <Input
-                  id="login-email"
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  placeholder="nombre@cicese.mx"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  required
-                  autoFocus
-                  className="h-11"
-                />
-              </Field>
-              <Field label="Contraseña" htmlFor="login-password" required>
-                <Input
-                  id="login-password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  placeholder="Tu contraseña"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  required
-                  className="h-11"
-                  trailing={
-                    <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"} className="rounded-full p-1 text-ink-3 hover:bg-surface-2 hover:text-ink">
-                      {showPassword ? <EyeSlash size={16} /> : <Eye size={16} />}
-                    </button>
-                  }
-                />
-              </Field>
-              {error ? (
-                <p role="alert" className="rounded-control border border-danger/30 bg-danger-soft px-3 py-2 text-[13px] text-[#a33731]">
-                  {error}
-                </p>
-              ) : null}
-              <Button type="submit" size="lg" block loading={submitting} iconRight={<ArrowRight size={16} weight="bold" />}>
-                Entrar
-              </Button>
-            </form>
-          ) : null}
-
-          {microsoftEnabled ? (
-            <div className={manualEnabled ? "mt-6" : "mt-8"}>
-              {manualEnabled ? (
-                <div className="mb-6 flex items-center gap-3 text-[12px] text-ink-4">
-                  <span className="h-px flex-1 bg-line" />
-                  o
-                  <span className="h-px flex-1 bg-line" />
-                </div>
-              ) : null}
-              <Button type="button" variant="secondary" size="lg" block loading={msBusy} onClick={handleMicrosoft} icon={<WindowsLogo size={18} weight="fill" />}>
-                Continuar con Microsoft
-              </Button>
-              {!manualEnabled && error ? (
-                <p role="alert" className="mt-4 rounded-control border border-danger/30 bg-danger-soft px-3 py-2 text-[13px] text-[#a33731]">
-                  {error}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {!manualEnabled && !microsoftEnabled ? <p className="mt-8 text-[13.5px] text-ink-3">El acceso está desactivado. Contacta al administrador del sistema.</p> : null}
-
-          <p className="mt-10 text-[12.5px] text-ink-4">¿Sin acceso? Solicítalo a la coordinación del laboratorio.</p>
-        </div>
+        {!manualEnabled && !microsoftEnabled ? <p className="mt-10 text-center text-[13.5px] text-ink-3">El acceso está desactivado. Contacta a la administración del sistema.</p> : null}
       </section>
+
+      <footer className="absolute bottom-6 left-0 right-0 px-6 text-center text-[12px] leading-relaxed text-ink-4">
+        Laboratorio Nacional de Análisis, Monitoreo e Investigación sobre Ficotoxinas
+        <br />
+        Centro de Investigación Científica y de Educación Superior de Ensenada, B.C.
+      </footer>
     </main>
   );
 }

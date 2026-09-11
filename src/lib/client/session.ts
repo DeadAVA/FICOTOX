@@ -28,12 +28,10 @@ export const getStoredUser = (): SessionUser | null => {
   }
 };
 
+/* Nombre de la persona con sesión, tal como se guarda en los formatos (solo el nombre; el rol y el correo quedan en la bitácora). */
 export const formatActiveUserSignature = (): string => {
   const user = getStoredUser() || {};
-  const name = String(user.nombre || "").trim();
-  const role = String(user.rol || "").trim();
-  const email = String(user.email || "").trim();
-  return [name || email || "Usuario activo", role, email && name ? email : ""].filter(Boolean).join(" - ");
+  return String(user.nombre || user.email || "").trim();
 };
 
 export const setSession = (token: string, user: SessionUser): void => {

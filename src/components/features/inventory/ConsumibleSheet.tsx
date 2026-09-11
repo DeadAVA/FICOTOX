@@ -27,6 +27,7 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
     contenedor: String(item?.contenedor || ""),
     piezas: item?.piezas === null || item?.piezas === undefined ? "" : String(item.piezas),
     cantidadPieza: item?.cantidad_por_pieza === null || item?.cantidad_por_pieza === undefined ? "" : String(item.cantidad_por_pieza),
+    stockMaximo: item?.stock_maximo === null || item?.stock_maximo === undefined ? "" : String(item.stock_maximo),
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
       tamano_capacidad: form.tamano.trim() || null,
       contenedor: form.contenedor.trim() || null,
       piezas: parseIntOrNull(form.piezas),
+      stock_maximo: parseIntOrNull(form.stockMaximo),
       cantidad_por_pieza: parseIntOrNull(form.cantidadPieza),
     };
     if (!payload.producto) {
@@ -114,8 +116,11 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
           <Field label="Contenedor" htmlFor="c-contenedor">
             <Input id="c-contenedor" maxLength={100} value={form.contenedor} onChange={set("contenedor")} />
           </Field>
-          <Field label="Piezas" htmlFor="c-piezas">
+          <Field label="Piezas en existencia" htmlFor="c-piezas">
             <Input id="c-piezas" type="number" min="0" inputMode="numeric" value={form.piezas} onChange={set("piezas")} />
+          </Field>
+          <Field label="Stock de referencia (máximo)" htmlFor="c-maximo" hint="Con cuántas piezas se considera lleno; el medidor se calcula contra este valor. Si se deja vacío, se toman las piezas capturadas.">
+            <Input id="c-maximo" type="number" min="0" inputMode="numeric" value={form.stockMaximo} onChange={set("stockMaximo")} />
           </Field>
           <Field label="Cantidad por pieza" htmlFor="c-cantidad">
             <Input id="c-cantidad" type="number" min="0" inputMode="numeric" value={form.cantidadPieza} onChange={set("cantidadPieza")} />
@@ -240,7 +245,7 @@ export function ImportConsumiblesSheet({ open, onClose }: { open: boolean; onClo
           </div>
         ) : null}
 
-        {message ? <p className={message.error ? "text-[13px] text-danger" : "text-[13px] text-[#1f6b50]"}>{message.text}</p> : null}
+        {message ? <p className={message.error ? "text-[13px] text-danger" : "text-[13px] text-success-text"}>{message.text}</p> : null}
 
         {rows.length ? (
           <TableShell footer={`${validCount} filas válidas · ${rows.length - validCount} descartables`}>

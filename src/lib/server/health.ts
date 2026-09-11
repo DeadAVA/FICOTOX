@@ -1,3 +1,5 @@
+import path from "node:path";
+import { getConfig } from "./config";
 import { isOperationalError } from "./db";
 import { json, type RouteContext } from "./http";
 
@@ -10,7 +12,10 @@ export async function healthCheck(): Promise<Response> {
 export async function healthDbCheck({ s }: RouteContext): Promise<Response> {
   try {
     await s.query("SELECT 1");
-    return json({ ok: true, database: "reachable" });
+    // El nombre del archivo (no la ruta) permite a las pruebas confirmar que no
+    // estan apuntando a la base real antes de escribir nada.
+    const sqlitePath = getConfig().SQLITE_PATH;
+    return json({ ok: true, database: "reachable", archivo: sqlitePath ? path.basename(sqlitePath) : "mysql" });
   } catch (error) {
     if (isOperationalError(error)) {
       return json(

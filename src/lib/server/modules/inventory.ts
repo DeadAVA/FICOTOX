@@ -1,9 +1,11 @@
 import { requireUser, userIdFromClaims } from "../auth";
+import { registrarAuditoria, snapshotRow } from "../audit";
 import { isIntegrityError, isSqlite, type Row, type Session } from "../db";
+import { darDeBaja, ensureBajaColumns, itemRef, reactivarItem } from "../inventory-baja";
 import { intParam, json, readJson, type RouteContext } from "../http";
 import { ensureMovimientosSchema } from "../inventory-usage";
 import { requirePermission } from "../rbac";
-import { addColumnIfMissing } from "../schema";
+import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
 import { ensureConsumiblesSchema } from "./consumables";
 import { firstTruthy, isTruthy, searchParam, toFloatOrNull, toIntOrNull, toStrOrNull, utcTimestampReference } from "./helpers";
 
@@ -346,6 +348,7 @@ async function findExistingReactivoId(s: Session, data: Record<string, unknown>)
 }
 
 export async function ensureReactivosSchema(s: Session): Promise<void> {
+  if (schemaReady("reactivos")) return;
   await s.execute(
     isSqlite()
       ? `
@@ -437,6 +440,10 @@ export async function ensureReactivosSchema(s: Session): Promise<void> {
     ["creado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP"],
     ["actualizado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"],
     ["stock_maximo", "DECIMAL(12,4) DEFAULT NULL"],
+    ["activo", "TINYINT(1) NOT NULL DEFAULT 1"],
+    ["baja_motivo", "TEXT"],
+    ["baja_en", "VARCHAR(40) DEFAULT NULL"],
+    ["baja_por", "INT DEFAULT NULL"],
   ];
   for (const [columnName, columnDefinition] of columnDefinitions) {
     await addColumnIfMissing(s, "reactivos", columnName, columnDefinition);
@@ -467,7 +474,7 @@ export async function ensureReactivosSchema(s: Session): Promise<void> {
       ) IS NOT NULL
     `,
   );
-  await s.commit();
+  markSchemaReady("reactivos");
 }
 
 function strip(value: unknown): string {
@@ -513,8 +520,12 @@ export function normalizeReactivoPayload(raw: Record<string, unknown> | null | u
   if (restante === null) restante = restante190126;
   if (restante190126 === null) restante190126 = restante;
   const volumen = toFloatOrNull(payload.volumen);
+  // Si la hoja manda la cantidad explícita (sección Existencias), esa manda sobre las columnas heredadas.
+  const cantidadExplicita = toFloatOrNull(payload.cantidad_actual);
   const cantidadActual =
-    restante190126 !== null
+    cantidadExplicita !== null
+      ? cantidadExplicita
+      : restante190126 !== null
       ? restante190126
       : amount !== null
         ? amount
@@ -561,15 +572,9 @@ export function normalizeReactivoPayload(raw: Record<string, unknown> | null | u
     ubicacion,
     fecha_vencimiento: fechaVencimiento,
     stock_minimo: firstTruthy(toFloatOrNull(payload.stock_minimo), 0),
-    stock_maximo: firstTruthy(
-      toFloatOrNull(payload.stock_maximo),
-      capacidadLitros,
-      capacidadKilos,
-      cantidadTotal,
-      totalLitros2025,
-      amount,
-      cantidadActual,
-    ),
+    // Sin capacidad capturada, el máximo es la cantidad actual explícita (lo que promete la hoja);
+    // las capacidades heredadas del Excel solo aplican a registros importados.
+    stock_maximo: firstTruthy(toFloatOrNull(payload.stock_maximo), cantidadExplicita, capacidadLitros, capacidadKilos, cantidadTotal, totalLitros2025, amount, cantidadActual),
     capacidad,
     unidad_capacidad: unidadCapacidad,
     capacidad_litros: capacidadLitros,
@@ -605,26 +610,36 @@ export async function inventorySummary({ request, s }: RouteContext): Promise<Re
   await ensureConsumiblesSchema(s);
   await ensureEquiposSchema(s);
 
+  // Las mismas reglas que usan las listas (ver `isReactivoLow` en el cliente y el filtro
+  // "Con alerta de calibración"): así el aviso del Inicio siempre coincide con lo que se ve al abrirlo.
+  const today = isSqlite() ? "date('now')" : "CURDATE()";
   const summary = await s.queryOne(
     `
     SELECT
-      (SELECT COUNT(*) FROM reactivos) AS total_reactivos,
-      (SELECT COUNT(*) FROM consumibles) AS total_consumibles,
-      (SELECT COUNT(*) FROM equipos) AS total_equipos,
+      (SELECT COUNT(*) FROM reactivos WHERE COALESCE(activo, 1) = 1) AS total_reactivos,
+      (SELECT COUNT(*) FROM consumibles WHERE COALESCE(activo, 1) = 1) AS total_consumibles,
+      (SELECT COUNT(*) FROM equipos WHERE COALESCE(activo, 1) = 1) AS total_equipos,
       (
         SELECT COUNT(*)
         FROM reactivos
-        WHERE cantidad_actual <= stock_minimo
+        WHERE COALESCE(activo, 1) = 1
+          AND cantidad_actual IS NOT NULL
+          AND (
+            cantidad_actual <= 0
+            OR (COALESCE(stock_minimo, 0) > 0 AND cantidad_actual <= stock_minimo)
+            OR (COALESCE(stock_minimo, 0) <= 0 AND COALESCE(stock_maximo, 0) > 0 AND cantidad_actual <= stock_maximo * 0.2)
+          )
       ) AS reactivos_stock_bajo,
       (
         SELECT COUNT(*)
         FROM consumibles
-        WHERE piezas <= 5
+        WHERE COALESCE(activo, 1) = 1 AND COALESCE(piezas, 0) <= 5
       ) AS consumibles_stock_bajo,
       (
         SELECT COUNT(*)
         FROM equipos
-        WHERE estado = 'calibracion_pendiente'
+        WHERE COALESCE(activo, 1) = 1
+          AND (estado IN ('calibracion_pendiente', 'fuera_servicio') OR (fecha_prox_calibracion IS NOT NULL AND fecha_prox_calibracion < ${today}))
       ) AS equipos_calibracion_pendiente
     `,
   );
@@ -652,20 +667,22 @@ export async function listReactivos({ request, s }: RouteContext): Promise<Respo
            expiration_date, cas_number, bottle_tag_color, date_opened,
            formula, id_interno, physical_state, estado_fisico, presentacion,
            tipo_sustancia, numero_cas, categoria, cantidad_actual,
-           unidad, ubicacion, fecha_vencimiento, stock_minimo, stock_maximo
+           unidad, ubicacion, fecha_vencimiento, stock_minimo, stock_maximo,
+           activo, baja_motivo, baja_en
     FROM reactivos
-    WHERE :search = ''
+    WHERE (:incluir_bajas = 1 OR COALESCE(activo, 1) = 1)
+      AND (:search = ''
        OR nombre LIKE :search_like
        OR producto LIKE :search_like
        OR item_name LIKE :search_like
        OR nombre_crm LIKE :search_like
        OR tipo_reactivo LIKE :search_like
        OR id_interno LIKE :search_like
-       OR catalogo_parte_cas_lote LIKE :search_like
+       OR catalogo_parte_cas_lote LIKE :search_like)
     ORDER BY COALESCE(nombre, producto, item_name, nombre_crm) ASC
     LIMIT 500
     `,
-    { search, search_like: `%${search}%` },
+    { search, search_like: `%${search}%`, incluir_bajas: searchParam(request, "bajas") === "1" ? 1 : 0 },
   );
   return json({ items: rows, total: rows.length });
 }
@@ -694,9 +711,13 @@ export async function createReactivo({ request, s }: RouteContext): Promise<Resp
   }
 
   const result = await s.execute(`INSERT INTO reactivos (${REACTIVO_INSERT_COLUMNS}) VALUES (${REACTIVO_INSERT_VALUES})`, data);
+  const id = result.lastrowid as number;
+  await registrarAuditoria(s, user, { accion: "crear", entidad: "reactivos", entidadId: id, referencia: reactivoRef(data), despues: await snapshotRow(s, "reactivos", id) });
   await s.commit();
-  return json({ message: "Reactivo creado", id: result.lastrowid }, 201);
+  return json({ message: "Reactivo creado", id }, 201);
 }
+
+const reactivoRef = (row: Record<string, unknown> | null | undefined): string => itemRef("reactivos", row);
 
 export async function updateReactivo({ request, s, params }: RouteContext): Promise<Response> {
   const reactivoId = intParam(params.id);
@@ -704,16 +725,31 @@ export async function updateReactivo({ request, s, params }: RouteContext): Prom
   await requirePermission(s, user, "reactivos", "update");
   await ensureReactivosSchema(s);
 
-  const data = normalizeReactivoPayload(await readJson(request));
+  const antes = await snapshotRow(s, "reactivos", reactivoId);
+  if (!antes) {
+    return json({ message: "Reactivo no encontrado" }, 404);
+  }
+  // Solo se sobrescribe lo que la hoja manda: las columnas heredadas (Excel) que no aparecen en
+  // esa categoría se conservan en vez de quedar en null.
+  const incoming = await readJson(request);
+  const merged: Record<string, unknown> = { ...antes };
+  for (const [key, value] of Object.entries(incoming || {})) if (value !== undefined) merged[key] = value;
+  // Si la categoría nombra al producto con otra columna (item_name, nombre_crm), el nombre viejo no debe ganar.
+  if (incoming?.producto === undefined && (incoming?.item_name !== undefined || incoming?.nombre_crm !== undefined)) {
+    delete merged.producto;
+    delete merged.nombre;
+  }
+  const data = normalizeReactivoPayload(merged);
   if (!data.tipo_reactivo || !data.nombre) {
     return json({ message: "Tipo de reactivo y producto son obligatorios" }, 400);
   }
-
   const result = await s.execute(`UPDATE reactivos SET ${REACTIVO_UPDATE_ASSIGNMENTS} WHERE id = :id`, { ...data, id: reactivoId });
-  await s.commit();
   if (result.rowcount === 0) {
+    await s.rollback();
     return json({ message: "Reactivo no encontrado" }, 404);
   }
+  await registrarAuditoria(s, user, { accion: "editar", entidad: "reactivos", entidadId: reactivoId, referencia: reactivoRef(data), antes, despues: await snapshotRow(s, "reactivos", reactivoId) });
+  await s.commit();
   return json({ message: "Reactivo actualizado" });
 }
 
@@ -735,29 +771,15 @@ export async function refillReactivo({ request, s, params }: RouteContext): Prom
     return json({ message: "Reactivo no encontrado" }, 404);
   }
 
+  // `cantidad_actual` es la existencia canónica; las columnas heredadas solo se acompañan
+  // cuando ya la reflejaban (mismo valor), para no inventar existencias en piezas o volumen.
   const updates = ["cantidad_actual = COALESCE(cantidad_actual, 0) + :cantidad"];
-  let visibleCurrent: unknown = row.cantidad_actual;
-  if (row.restante_190126 !== null && row.restante_190126 !== undefined) {
-    updates.push("restante_190126 = COALESCE(restante_190126, 0) + :cantidad", "restante = COALESCE(restante, 0) + :cantidad");
-    visibleCurrent = row.restante_190126;
-  } else if (row.amount_in_stock !== null && row.amount_in_stock !== undefined) {
-    updates.push("amount_in_stock = COALESCE(amount_in_stock, 0) + :cantidad");
-    visibleCurrent = row.amount_in_stock;
-  } else if (row.total_litros_2025 !== null && row.total_litros_2025 !== undefined) {
-    updates.push("total_litros_2025 = COALESCE(total_litros_2025, 0) + :cantidad", "cantidad_total = COALESCE(cantidad_total, 0) + :cantidad");
-    visibleCurrent = row.total_litros_2025;
-  } else if (row.piezas !== null && row.piezas !== undefined) {
-    updates.push("piezas = COALESCE(piezas, 0) + :cantidad");
-    visibleCurrent = row.piezas;
-  } else if (row.volumen !== null && row.volumen !== undefined) {
-    updates.push("volumen = COALESCE(volumen, 0) + :cantidad");
-    visibleCurrent = row.volumen;
-  } else {
-    updates.push("amount_in_stock = COALESCE(amount_in_stock, 0) + :cantidad");
-    visibleCurrent = 0;
+  const current = toFloatOrNull(row.cantidad_actual) || 0;
+  for (const legacy of ["restante_190126", "amount_in_stock"]) {
+    const value = toFloatOrNull(row[legacy]);
+    if (value !== null && Math.abs(value - current) < 1e-9) updates.push(`${legacy} = COALESCE(${legacy}, 0) + :cantidad`);
   }
-
-  const currentAfter = (toFloatOrNull(visibleCurrent) || 0) + amount;
+  const currentAfter = current + amount;
   updates.push(
     `
     stock_maximo = CASE
@@ -787,6 +809,7 @@ export async function refillReactivo({ request, s, params }: RouteContext): Prom
       id_usuario: userIdFromClaims(user),
     },
   );
+  await registrarAuditoria(s, user, { accion: "reponer", entidad: "reactivos", entidadId: reactivoId, referencia: reactivoRef(row), motivo, antes: row, despues: await snapshotRow(s, "reactivos", reactivoId), detalle: { cantidad: amount } });
   await s.commit();
   return json({ message: "Stock de reactivo rellenado" });
 }
@@ -897,22 +920,26 @@ export async function importReactivos({ request, s }: RouteContext): Promise<Res
     summary.hojas_procesadas.push(processedSheet);
   }
 
+  await registrarAuditoria(s, user, { accion: "importar", entidad: "reactivos", referencia: "importacion Excel", detalle: { insertados: summary.reactivos_insertados, actualizados: summary.reactivos_actualizados, ignorados: summary.filas_ignoradas, errores: summary.errores.length, hojas: summary.hojas_procesadas.map((h) => h.hoja) } });
   await s.commit();
   return json({ message: "Importación de reactivos completada", summary });
 }
 
+/* Baja logica: el reactivo deja de ofrecerse pero sus movimientos y registros siguen apuntando a el. */
 export async function deleteReactivo({ request, s, params }: RouteContext): Promise<Response> {
   const reactivoId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "reactivos", "delete");
   await ensureReactivosSchema(s);
+  return darDeBaja(s, user, "reactivos", reactivoId, await readJson(request), "Reactivo");
+}
 
-  const result = await s.execute("DELETE FROM reactivos WHERE id = :id", { id: reactivoId });
-  await s.commit();
-  if (result.rowcount === 0) {
-    return json({ message: "Reactivo no encontrado" }, 404);
-  }
-  return json({ message: "Reactivo eliminado" });
+export async function reactivarReactivo({ request, s, params }: RouteContext): Promise<Response> {
+  const reactivoId = intParam(params.id);
+  const user = await requireUser(request);
+  await requirePermission(s, user, "reactivos", "delete");
+  await ensureReactivosSchema(s);
+  return reactivarItem(s, user, "reactivos", reactivoId, await readJson(request), "Reactivo");
 }
 
 // ---------------------------------------------------------------------------
@@ -920,6 +947,7 @@ export async function deleteReactivo({ request, s, params }: RouteContext): Prom
 // ---------------------------------------------------------------------------
 
 export async function ensureEquiposSchema(s: Session): Promise<void> {
+  if (schemaReady("equipos")) return;
   await s.execute(
     isSqlite()
       ? `
@@ -963,13 +991,19 @@ export async function ensureEquiposSchema(s: Session): Promise<void> {
     ["fecha_prox_calibracion", "DATE DEFAULT NULL"],
     ["estado", "ENUM('operativo','mantenimiento','fuera_servicio','calibracion_pendiente') NOT NULL DEFAULT 'operativo'"],
     ["creado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP"],
+    // Clave de la bitacora de uso del equipo (FX-TCB-<equipo>-<num>/<rev>), se copia a los formatos de extraccion.
+    ["clave_bitacora", "VARCHAR(60) DEFAULT NULL"],
   ] as Array<[string, string]>) {
     await addColumnIfMissing(s, "equipos", columnName, columnDefinition);
   }
-  await s.commit();
+  await ensureBajaColumns(s, "equipos");
+  // Último folio anotado en la bitácora del equipo: los formatos sugieren el siguiente.
+  await addColumnIfMissing(s, "equipos", "ultimo_folio_bitacora", "VARCHAR(60) DEFAULT NULL");
+  markSchemaReady("equipos");
 }
 
 export async function ensureMantenimientosSchema(s: Session): Promise<void> {
+  if (schemaReady("mantenimientos")) return;
   await ensureEquiposSchema(s);
   await s.execute(
     isSqlite()
@@ -995,7 +1029,7 @@ export async function ensureMantenimientosSchema(s: Session): Promise<void> {
           fecha_programada DATE NOT NULL,
           fecha_realizado DATE DEFAULT NULL,
           tecnico_proveedor VARCHAR(150) DEFAULT NULL,
-          estado ENUM('programado','en_proceso','completado','vencido') DEFAULT 'programado',
+          estado ENUM('programado','en_proceso','completado','vencido','cancelado') DEFAULT 'programado',
           observaciones TEXT,
           id_responsable INT DEFAULT NULL,
           creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1008,12 +1042,16 @@ export async function ensureMantenimientosSchema(s: Session): Promise<void> {
   for (const [columnName, columnDefinition] of [
     ["fecha_realizado", "DATE DEFAULT NULL"],
     ["tecnico_proveedor", "VARCHAR(150) DEFAULT NULL"],
-    ["estado", "ENUM('programado','en_proceso','completado','vencido') DEFAULT 'programado'"],
+    ["estado", "ENUM('programado','en_proceso','completado','vencido','cancelado') DEFAULT 'programado'"],
     ["observaciones", "TEXT"],
     ["id_responsable", "INT DEFAULT NULL"],
     ["creado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP"],
   ] as Array<[string, string]>) {
     await addColumnIfMissing(s, "mantenimientos", columnName, columnDefinition);
+  }
+  if (!isSqlite()) {
+    // Los mantenimientos se cancelan (no se borran): el ENUM debe admitir el estado.
+    await s.execute("ALTER TABLE mantenimientos MODIFY estado ENUM('programado','en_proceso','completado','vencido','cancelado') DEFAULT 'programado'");
   }
   await s.execute(
     isSqlite()
@@ -1048,7 +1086,7 @@ export async function ensureMantenimientosSchema(s: Session): Promise<void> {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
       `,
   );
-  await s.commit();
+  markSchemaReady("mantenimientos");
 }
 
 function normalizeEquipoPayload(raw: Record<string, unknown>) {
@@ -1062,6 +1100,7 @@ function normalizeEquipoPayload(raw: Record<string, unknown>) {
     id_responsable: toIntOrNull(payload.id_responsable),
     fecha_prox_calibracion: firstTruthy(payload.fecha_prox_calibracion, null),
     estado: firstTruthy(payload.estado, "operativo"),
+    clave_bitacora: toStrOrNull(payload.clave_bitacora, 60),
   };
 }
 
@@ -1079,12 +1118,20 @@ function normalizeMantenimientoPayload(raw: Record<string, unknown>) {
   };
 }
 
+/* Incluye el siguiente mantenimiento pendiente (tipo, fecha y estado) para explicar el estado del equipo. */
 const EQUIPO_SELECT = `
   SELECT e.id, e.nombre, e.marca, e.modelo, e.numero_serie, e.ubicacion,
          e.id_responsable, u.nombre AS responsable,
-         e.fecha_prox_calibracion, e.estado, e.creado_en
+         e.fecha_prox_calibracion, e.estado, e.clave_bitacora, e.activo, e.baja_motivo, e.baja_en, e.creado_en, e.ultimo_folio_bitacora,
+         mp.tipo AS mantenimiento_tipo, mp.fecha_programada AS mantenimiento_fecha, mp.estado AS mantenimiento_estado,
+         (SELECT COUNT(*) FROM mantenimientos mx WHERE mx.id_equipo = e.id AND mx.estado IN ('programado', 'en_proceso', 'vencido')) AS mantenimientos_pendientes
   FROM equipos e
   LEFT JOIN usuarios u ON u.id = e.id_responsable
+  LEFT JOIN mantenimientos mp ON mp.id = (
+    SELECT m1.id FROM mantenimientos m1
+    WHERE m1.id_equipo = e.id AND m1.estado IN ('programado', 'en_proceso', 'vencido')
+    ORDER BY m1.fecha_programada ASC, m1.id ASC LIMIT 1
+  )
 `;
 
 export async function listEquipos({ request, s }: RouteContext): Promise<Response> {
@@ -1096,7 +1143,8 @@ export async function listEquipos({ request, s }: RouteContext): Promise<Respons
   const estado = searchParam(request, "estado");
   const rows = await s.query(
     `${EQUIPO_SELECT}
-    WHERE (:search = ''
+    WHERE (:incluir_bajas = 1 OR COALESCE(e.activo, 1) = 1)
+      AND (:search = ''
            OR e.nombre LIKE :search_like
            OR e.marca LIKE :search_like
            OR e.modelo LIKE :search_like
@@ -1106,7 +1154,7 @@ export async function listEquipos({ request, s }: RouteContext): Promise<Respons
     ORDER BY e.nombre ASC
     LIMIT 500
     `,
-    { search, search_like: `%${search}%`, estado },
+    { search, search_like: `%${search}%`, estado, incluir_bajas: searchParam(request, "bajas") === "1" ? 1 : 0 },
   );
   return json({ items: rows, total: rows.length });
 }
@@ -1140,16 +1188,17 @@ export async function createEquipo({ request, s }: RouteContext): Promise<Respon
       `
       INSERT INTO equipos (
         nombre, marca, modelo, numero_serie, ubicacion,
-        id_responsable, fecha_prox_calibracion, estado
+        id_responsable, fecha_prox_calibracion, estado, clave_bitacora
       )
       VALUES (
         :nombre, :marca, :modelo, :numero_serie, :ubicacion,
-        :id_responsable, :fecha_prox_calibracion, :estado
+        :id_responsable, :fecha_prox_calibracion, :estado, :clave_bitacora
       )
       `,
       { ...data },
     );
     insertedId = result.lastrowid;
+    await registrarAuditoria(s, user, { accion: "crear", entidad: "equipos", entidadId: insertedId, referencia: String(data.nombre), despues: await snapshotRow(s, "equipos", insertedId) });
     await s.commit();
   } catch (error) {
     if (isIntegrityError(error)) {
@@ -1173,6 +1222,7 @@ export async function updateEquipo({ request, s, params }: RouteContext): Promis
   }
 
   let rowcount: number;
+  const antes = await snapshotRow(s, "equipos", equipoId);
   try {
     const result = await s.execute(
       `
@@ -1184,12 +1234,18 @@ export async function updateEquipo({ request, s, params }: RouteContext): Promis
           ubicacion = :ubicacion,
           id_responsable = :id_responsable,
           fecha_prox_calibracion = :fecha_prox_calibracion,
-          estado = :estado
+          estado = :estado,
+          clave_bitacora = :clave_bitacora
       WHERE id = :id
       `,
       { ...data, id: equipoId },
     );
     rowcount = result.rowcount;
+    if (rowcount > 0) {
+      // El estado manual no puede contradecir a Mantenimiento: si hay uno pendiente, queda "en mantenimiento".
+      await syncEquipoEstado(s, equipoId);
+      await registrarAuditoria(s, user, { accion: "editar", entidad: "equipos", entidadId: equipoId, referencia: String(data.nombre), antes, despues: await snapshotRow(s, "equipos", equipoId) });
+    }
     await s.commit();
   } catch (error) {
     if (isIntegrityError(error)) {
@@ -1205,29 +1261,21 @@ export async function updateEquipo({ request, s, params }: RouteContext): Promis
   return json({ message: "Equipo actualizado" });
 }
 
+/* Baja logica del equipo: conserva mantenimientos, bitacoras y registros que lo citan. */
 export async function deleteEquipo({ request, s, params }: RouteContext): Promise<Response> {
   const equipoId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "equipos", "delete");
   await ensureEquiposSchema(s);
+  return darDeBaja(s, user, "equipos", equipoId, await readJson(request), "Equipo");
+}
 
-  let rowcount: number;
-  try {
-    const result = await s.execute("DELETE FROM equipos WHERE id = :id", { id: equipoId });
-    rowcount = result.rowcount;
-    await s.commit();
-  } catch (error) {
-    if (isIntegrityError(error)) {
-      await s.rollback();
-      return json({ message: "No se puede eliminar porque tiene mantenimientos o registros relacionados" }, 409);
-    }
-    throw error;
-  }
-
-  if (rowcount === 0) {
-    return json({ message: "Equipo no encontrado" }, 404);
-  }
-  return json({ message: "Equipo eliminado" });
+export async function reactivarEquipo({ request, s, params }: RouteContext): Promise<Response> {
+  const equipoId = intParam(params.id);
+  const user = await requireUser(request);
+  await requirePermission(s, user, "equipos", "delete");
+  await ensureEquiposSchema(s);
+  return reactivarItem(s, user, "equipos", equipoId, await readJson(request), "Equipo");
 }
 
 export async function listConsumiblesInventory({ request, s }: RouteContext): Promise<Response> {
@@ -1355,17 +1403,52 @@ export async function getMantenimiento({ request, s, params }: RouteContext): Pr
   return json({ item: row });
 }
 
+/*
+ * El estado del equipo sigue a sus mantenimientos: con cualquiera pendiente
+ * (programado, en proceso o vencido) el equipo está "en mantenimiento"; cuando
+ * no queda ninguno vuelve a "operativo". "Fuera de servicio" es manual y no se
+ * toca; "calibración pendiente" solo se conserva si lo puso una persona y no
+ * hay mantenimiento pendiente que lo sustituya. Al completar una calibración se
+ * puede fijar la próxima fecha.
+ */
+async function syncEquipoEstado(s: Session, equipoId: number, proximaCalibracion?: string | null, calibracionCompletada = false): Promise<void> {
+  const equipo = await s.queryOne<{ estado: string }>("SELECT estado FROM equipos WHERE id = :id", { id: equipoId });
+  if (!equipo) return;
+  const pendientes = await s.scalar("SELECT COUNT(*) FROM mantenimientos WHERE id_equipo = :id AND estado IN ('programado', 'en_proceso', 'vencido')", { id: equipoId });
+  const updates: string[] = [];
+  const params: Record<string, unknown> = { id: equipoId };
+  if (proximaCalibracion) {
+    updates.push("fecha_prox_calibracion = :proxima");
+    params.proxima = proximaCalibracion;
+  }
+  if (equipo.estado !== "fuera_servicio") {
+    // Una calibración completada también levanta la "calibración pendiente" puesta a mano.
+    const libera = equipo.estado === "mantenimiento" || (calibracionCompletada && equipo.estado === "calibracion_pendiente");
+    const nuevo = Number(pendientes || 0) > 0 ? "mantenimiento" : libera ? "operativo" : equipo.estado;
+    if (nuevo !== equipo.estado) {
+      updates.push("estado = :estado");
+      params.estado = nuevo;
+    }
+  }
+  if (updates.length) await s.execute(`UPDATE equipos SET ${updates.join(", ")} WHERE id = :id`, params);
+}
+
 export async function createMantenimiento({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "mantenimiento", "create");
   await ensureMantenimientosSchema(s);
 
-  const data = normalizeMantenimientoPayload(await readJson(request));
+  const payload = await readJson(request);
+  const data = normalizeMantenimientoPayload(payload);
+  const proximaCalibracion = data.estado === "completado" && data.tipo === "calibracion" ? toStrOrNull(payload.proxima_calibracion, 10) : null;
   if (!data.id_equipo) {
     return json({ message: "Selecciona un equipo" }, 400);
   }
   if (!data.fecha_programada) {
     return json({ message: "La fecha programada es obligatoria" }, 400);
+  }
+  if (data.estado === "completado" && !data.fecha_realizado) {
+    return json({ message: "Indica la fecha en que se realizó para marcarlo como completado" }, 400);
   }
 
   const result = await s.execute(
@@ -1381,6 +1464,8 @@ export async function createMantenimiento({ request, s }: RouteContext): Promise
     `,
     { ...data },
   );
+  await registrarAuditoria(s, user, { accion: "crear", entidad: "mantenimientos", entidadId: result.lastrowid, referencia: `mantenimiento ${data.tipo} equipo ${data.id_equipo}`, despues: await snapshotRow(s, "mantenimientos", result.lastrowid) });
+  await syncEquipoEstado(s, Number(data.id_equipo), proximaCalibracion, data.estado === "completado" && data.tipo === "calibracion");
   await s.commit();
   return json({ message: "Mantenimiento programado", id: result.lastrowid }, 201);
 }
@@ -1391,14 +1476,20 @@ export async function updateMantenimiento({ request, s, params }: RouteContext):
   await requirePermission(s, user, "mantenimiento", "update");
   await ensureMantenimientosSchema(s);
 
-  const data = normalizeMantenimientoPayload(await readJson(request));
+  const payload = await readJson(request);
+  const data = normalizeMantenimientoPayload(payload);
+  const proximaCalibracion = data.estado === "completado" && data.tipo === "calibracion" ? toStrOrNull(payload.proxima_calibracion, 10) : null;
   if (!data.id_equipo) {
     return json({ message: "Selecciona un equipo" }, 400);
   }
   if (!data.fecha_programada) {
     return json({ message: "La fecha programada es obligatoria" }, 400);
   }
+  if (data.estado === "completado" && !data.fecha_realizado) {
+    return json({ message: "Indica la fecha en que se realizó para marcarlo como completado" }, 400);
+  }
 
+  const antesMantenimiento = await snapshotRow(s, "mantenimientos", mantenimientoId);
   const result = await s.execute(
     `
     UPDATE mantenimientos
@@ -1414,10 +1505,16 @@ export async function updateMantenimiento({ request, s, params }: RouteContext):
     `,
     { ...data, id: mantenimientoId },
   );
-  await s.commit();
   if (result.rowcount === 0) {
+    await s.rollback();
     return json({ message: "Mantenimiento no encontrado" }, 404);
   }
+  await registrarAuditoria(s, user, { accion: "editar", entidad: "mantenimientos", entidadId: mantenimientoId, referencia: `mantenimiento ${data.tipo} equipo ${data.id_equipo}`, antes: antesMantenimiento, despues: await snapshotRow(s, "mantenimientos", mantenimientoId) });
+  // Si el mantenimiento se movió de equipo, el anterior también se recalcula.
+  const equipoAnterior = Number(antesMantenimiento?.id_equipo || 0);
+  if (equipoAnterior && equipoAnterior !== Number(data.id_equipo)) await syncEquipoEstado(s, equipoAnterior);
+  await syncEquipoEstado(s, Number(data.id_equipo), proximaCalibracion, data.estado === "completado" && data.tipo === "calibracion");
+  await s.commit();
   return json({ message: "Mantenimiento actualizado" });
 }
 
@@ -1429,7 +1526,18 @@ export async function deleteMantenimiento({ request, s, params }: RouteContext):
 
   let rowcount: number;
   try {
-    const result = await s.execute("DELETE FROM mantenimientos WHERE id = :id", { id: mantenimientoId });
+    // Los mantenimientos son registros del historial del equipo: se cancelan con motivo, no se borran.
+    const payload = await readJson(request);
+    const motivo = String(payload.motivo || "").trim();
+    if (motivo.length < 5) return json({ message: "Indica el motivo de la cancelacion (al menos 5 caracteres)" }, 400);
+    const antes = await snapshotRow(s, "mantenimientos", mantenimientoId);
+    // `||` es concatenacion en SQLite pero OR logico en MySQL: se usa CONCAT en ese motor.
+    const observaciones = isSqlite() ? "TRIM(COALESCE(observaciones, '') || :nota)" : "TRIM(CONCAT(COALESCE(observaciones, ''), :nota))";
+    const result = await s.execute(`UPDATE mantenimientos SET estado = 'cancelado', observaciones = ${observaciones} WHERE id = :id AND estado <> 'cancelado'`, { id: mantenimientoId, nota: `\n[Cancelado: ${motivo}]` });
+    if (result.rowcount > 0) {
+      await registrarAuditoria(s, user, { accion: "anular", entidad: "mantenimientos", entidadId: mantenimientoId, referencia: `mantenimiento ${antes?.tipo || ""} equipo ${antes?.id_equipo || ""}`, motivo, antes, despues: await snapshotRow(s, "mantenimientos", mantenimientoId) });
+      if (antes?.id_equipo) await syncEquipoEstado(s, Number(antes.id_equipo));
+    }
     rowcount = result.rowcount;
     await s.commit();
   } catch (error) {
@@ -1443,5 +1551,26 @@ export async function deleteMantenimiento({ request, s, params }: RouteContext):
   if (rowcount === 0) {
     return json({ message: "Mantenimiento no encontrado" }, 404);
   }
-  return json({ message: "Mantenimiento eliminado" });
+  return json({ message: "Mantenimiento cancelado" });
+}
+
+/*
+ * Guarda el último folio de bitácora anotado para cada equipo (extracción,
+ * análisis) para que el siguiente formato lo sugiera. Solo avanza: nunca
+ * pisa un folio mayor ya registrado si ambos son numéricos.
+ */
+export async function recordBitacoraFolios(s: Session, entries: Array<{ equipoId: unknown; folio: unknown }>): Promise<void> {
+  const seen = new Set<number>();
+  for (const entry of entries) {
+    const id = toIntOrNull(entry.equipoId);
+    const folio = toStrOrNull(entry.folio, 60);
+    if (!id || !folio || seen.has(id)) continue;
+    seen.add(id);
+    await ensureEquiposSchema(s);
+    const row = await s.queryOne<{ ultimo_folio_bitacora: string | null }>("SELECT ultimo_folio_bitacora FROM equipos WHERE id = :id", { id });
+    if (!row) continue;
+    const previo = row.ultimo_folio_bitacora ? String(row.ultimo_folio_bitacora) : "";
+    if (/^\d+$/.test(previo) && /^\d+$/.test(folio) && Number(folio) < Number(previo)) continue;
+    await s.execute("UPDATE equipos SET ultimo_folio_bitacora = :folio WHERE id = :id", { id, folio });
+  }
 }

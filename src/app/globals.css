@@ -2,106 +2,144 @@
 
 /*
  * Sistema de diseño FICOTOX (ver docs/DISENO_UI.md).
- * Tokens en @theme: generan utilidades (bg-brand, text-ink-2, rounded-card...).
+ *
+ * Una sola familia tipográfica (la del sistema: SF Pro en Apple, Inter como
+ * respaldo), un solo acento "océano" y superficies translúcidas para la
+ * estructura. Los tokens en @theme generan utilidades (bg-brand, text-ink-2,
+ * rounded-card...).
  */
 @theme {
-  --color-canvas: #f3f6f8;
+  /* Lienzo y superficies (grises fríos, sin negro puro) */
+  --color-canvas: #f2f4f7;
   --color-surface: #ffffff;
-  --color-surface-2: #ebf0f3;
-  --color-surface-3: #e1e8ed;
-  --color-line: #dce4ea;
-  --color-line-strong: #c3cfd8;
+  --color-surface-2: #f5f7f9;
+  --color-surface-3: #e9edf1;
+  --color-line: #e3e8ed;
+  --color-line-strong: #cdd5dd;
 
-  --color-ink: #0b1f2a;
-  --color-ink-2: #3a5060;
-  --color-ink-3: #6b8090;
-  --color-ink-4: #9aabb7;
+  /* Texto */
+  --color-ink: #10202b;
+  --color-ink-2: #3b4d5a;
+  --color-ink-3: #5b6b78;
+  --color-ink-4: #7d8b96;
 
-  --color-brand: #0e7c82;
-  --color-brand-strong: #0a5f66;
-  --color-brand-soft: #ddf1f2;
-  --color-brand-faint: #eef8f8;
-  --color-brand-bright: #3fc7c4;
+  /* Acento océano (único) */
+  --color-brand: #0f7a95;
+  --color-brand-strong: #0b5f75;
+  --color-brand-soft: #dcedf3;
+  --color-brand-faint: #eef6f9;
+  --color-brand-bright: #34a7c4;
 
-  --color-bloom: #e0684b;
-  --color-bloom-soft: #fbe7e1;
-  --color-success: #2e8b6a;
-  --color-success-soft: #e1f2ea;
-  --color-warning: #c98a1b;
-  --color-warning-soft: #fbf0d9;
-  --color-danger: #c9463d;
-  --color-danger-soft: #f9e3e1;
+  /* Semánticos discretos */
+  --color-success: #2f8a5b;
+  --color-success-soft: #e2f3e9;
+  --color-warning: #b9791a;
+  --color-warning-soft: #fbf0d8;
+  --color-danger: #c8433b;
+  --color-danger-soft: #f9e4e2;
+  /* Texto sobre fondos -soft (contraste AA) */
+  --color-success-text: #1f6b45;
+  --color-warning-text: #8a5a10;
+  --color-danger-text: #a3342d;
+  /* "bloom" queda como alias de salida/descuento (naranja tenue) */
+  --color-bloom: #d0672f;
+  --color-bloom-soft: #fbe9dd;
 
-  --color-deep: #07202b;
-  --color-deep-2: #0e4a55;
+  /* Fondos profundos (login, tooltips) */
+  --color-deep: #081a24;
+  --color-deep-2: #0c3a4a;
 
-  --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", var(--font-inter), "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, var(--font-geist-mono), Consolas, monospace;
 
-  --radius-control: 6px;
-  --radius-card: 10px;
-  --radius-panel: 14px;
-  --radius-hero: 20px;
+  --radius-control: 8px;
+  --radius-card: 14px;
+  --radius-panel: 18px;
+  --radius-hero: 24px;
 
-  --shadow-card: 0 1px 2px rgba(11, 31, 42, 0.05), 0 6px 20px -10px rgba(11, 31, 42, 0.12);
-  --shadow-panel: 0 2px 6px rgba(11, 31, 42, 0.06), 0 24px 60px -24px rgba(11, 31, 42, 0.25);
-  --shadow-pop: 0 1px 2px rgba(11, 31, 42, 0.06), 0 12px 32px -12px rgba(11, 31, 42, 0.22);
-  --shadow-focus: 0 0 0 3px rgba(14, 124, 130, 0.22);
+  --shadow-card: 0 0 0 1px rgba(16, 32, 43, 0.04), 0 1px 2px rgba(16, 32, 43, 0.04);
+  --shadow-raised: 0 0 0 1px rgba(16, 32, 43, 0.05), 0 2px 6px rgba(16, 32, 43, 0.05), 0 12px 32px -16px rgba(16, 32, 43, 0.18);
+  --shadow-panel: 0 0 0 1px rgba(16, 32, 43, 0.06), 0 8px 24px -8px rgba(16, 32, 43, 0.18), 0 32px 80px -24px rgba(16, 32, 43, 0.35);
+  --shadow-pop: 0 0 0 1px rgba(16, 32, 43, 0.06), 0 6px 16px -6px rgba(16, 32, 43, 0.16), 0 16px 40px -16px rgba(16, 32, 43, 0.25);
+  --shadow-focus: 0 0 0 4px rgba(15, 122, 149, 0.22);
 
+  /* Curvas: salida tipo resorte (sin rebote) y su espejo para cerrar */
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring-in: cubic-bezier(0.64, 0, 0.78, 0);
   --ease-fluid: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
-  --animate-fade-in: fade-in 220ms var(--ease-fluid) both;
-  --animate-rise-in: rise-in 260ms var(--ease-fluid) both;
-  --animate-bloom: bloom 26s ease-in-out infinite alternate;
-  --animate-bloom-2: bloom-2 32s ease-in-out infinite alternate;
-  --animate-fade-out: fade-out 160ms var(--ease-fluid) both;
-  --animate-sheet-in: sheet-in 320ms var(--ease-out-expo) both;
-  --animate-sheet-out: sheet-out 200ms var(--ease-fluid) both;
-  --animate-pop-in: pop-in 220ms var(--ease-out-expo) both;
-  --animate-pop-out: pop-out 140ms var(--ease-fluid) both;
-  --animate-menu-in: menu-in 160ms var(--ease-out-expo) both;
+  --animate-fade-in: fade-in 200ms var(--ease-spring) both;
+  --animate-fade-out: fade-out 160ms var(--ease-spring-in) both;
+  --animate-rise-in: rise-in 360ms var(--ease-spring) both;
+  --animate-sheet-in: sheet-in 380ms var(--ease-spring) both;
+  --animate-sheet-out: sheet-out 220ms var(--ease-spring-in) both;
+  --animate-sheet-in-left: sheet-in-left 380ms var(--ease-spring) both;
+  --animate-sheet-out-left: sheet-out-left 220ms var(--ease-spring-in) both;
+  --animate-pop-in: pop-in 260ms var(--ease-spring) both;
+  --animate-pop-out: pop-out 160ms var(--ease-spring-in) both;
+  --animate-menu-in: menu-in 180ms var(--ease-spring) both;
+  --animate-materialize: materialize 300ms var(--ease-spring) both;
+  --animate-dematerialize: dematerialize 180ms var(--ease-spring-in) both;
+  --animate-drift: drift 40s ease-in-out infinite alternate;
+  --animate-drift-2: drift-2 52s ease-in-out infinite alternate;
 
   @keyframes fade-in {
     from { opacity: 0; }
     to { opacity: 1; }
   }
-  @keyframes rise-in {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes bloom {
-    from { transform: translate3d(-6%, -4%, 0) scale(1); }
-    to { transform: translate3d(8%, 10%, 0) scale(1.18); }
-  }
   @keyframes fade-out {
     from { opacity: 1; }
     to { opacity: 0; }
   }
+  @keyframes rise-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
   @keyframes sheet-in {
-    from { opacity: 0; transform: translateX(24px); }
-    to { opacity: 1; transform: translateX(0); }
+    from { opacity: 0; transform: translateX(28px) scale(0.985); }
+    to { opacity: 1; transform: translateX(0) scale(1); }
   }
   @keyframes sheet-out {
+    from { opacity: 1; transform: translateX(0) scale(1); }
+    to { opacity: 0; transform: translateX(28px) scale(0.985); }
+  }
+  @keyframes sheet-in-left {
+    from { opacity: 0; transform: translateX(-28px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes sheet-out-left {
     from { opacity: 1; transform: translateX(0); }
-    to { opacity: 0; transform: translateX(24px); }
+    to { opacity: 0; transform: translateX(-28px); }
   }
   @keyframes pop-in {
-    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    from { opacity: 0; transform: translateY(10px) scale(0.97); }
     to { opacity: 1; transform: translateY(0) scale(1); }
   }
   @keyframes pop-out {
     from { opacity: 1; transform: translateY(0) scale(1); }
-    to { opacity: 0; transform: translateY(6px) scale(0.985); }
+    to { opacity: 0; transform: translateY(8px) scale(0.98); }
   }
   @keyframes menu-in {
-    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    from { opacity: 0; transform: translateY(-4px) scale(0.97); }
     to { opacity: 1; transform: translateY(0) scale(1); }
   }
-  @keyframes bloom-2 {
-    from { transform: translate3d(10%, 12%, 0) scale(1.1); }
-    to { transform: translate3d(-8%, -6%, 0) scale(0.92); }
+  /* Los materiales "llegan": escala y opacidad a la vez (solo propiedades compositables). */
+  @keyframes materialize {
+    from { opacity: 0; transform: scale(0.96) translateY(-6px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  @keyframes dematerialize {
+    from { opacity: 1; transform: scale(1) translateY(0); }
+    to { opacity: 0; transform: scale(0.97) translateY(-4px); }
+  }
+  @keyframes drift {
+    from { transform: translate3d(-4%, -3%, 0) scale(1); }
+    to { transform: translate3d(6%, 8%, 0) scale(1.15); }
+  }
+  @keyframes drift-2 {
+    from { transform: translate3d(8%, 10%, 0) scale(1.08); }
+    to { transform: translate3d(-6%, -5%, 0) scale(0.94); }
   }
 }
 
@@ -111,25 +149,30 @@
   }
 
   html {
+    /* Sin rebote elástico al llegar al borde: la página no deja ver "hueco" por encima o debajo del contenido. */
+    overscroll-behavior: none;
+    background: var(--color-canvas);
     -webkit-text-size-adjust: 100%;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
     margin: 0;
+    overscroll-behavior: none;
     background: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
     font-size: 14px;
     line-height: 1.5;
-    font-feature-settings: "ss01", "cv11";
+    font-feature-settings: "cv11", "ss01";
   }
 
   h1, h2, h3, h4 {
     margin: 0;
     font-weight: 600;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.012em;
     text-wrap: balance;
   }
 
@@ -177,16 +220,45 @@
   }
 
   .checkbox-mark:checked {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
     background-position: center;
     background-repeat: no-repeat;
   }
 
+  /* Títulos grandes: tracking negativo y leading apretado, misma familia. */
   .display {
-    font-family: var(--font-serif);
-    font-weight: 400;
-    letter-spacing: -0.02em;
+    font-weight: 700;
+    letter-spacing: -0.03em;
     line-height: 1.05;
+  }
+  .title-1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+  }
+  .title-2 {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+  .title-3 {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    line-height: 1.3;
+  }
+  .caption {
+    font-size: 12px;
+    letter-spacing: 0.005em;
+    line-height: 1.35;
+  }
+  .eyebrow {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
   .code {
@@ -195,59 +267,188 @@
     letter-spacing: -0.01em;
   }
 
+  /* Formato en solo lectura: los controles desactivados se leen como texto, sin el aspecto de "prohibido". */
+  .form-readonly input:disabled,
+  .form-readonly select:disabled,
+  .form-readonly textarea:disabled {
+    cursor: default;
+    color: var(--color-ink);
+    background-color: var(--color-surface-2);
+    border-color: transparent;
+    opacity: 1;
+  }
+  .form-readonly input[type="checkbox"]:disabled,
+  .form-readonly input[type="radio"]:disabled {
+    background-color: var(--color-surface);
+    border-color: var(--color-line-strong);
+  }
+  .form-readonly input[type="checkbox"]:disabled:checked {
+    background-color: var(--color-brand);
+    border-color: var(--color-brand);
+  }
+  .form-readonly input[type="radio"]:disabled:checked {
+    border-color: var(--color-brand);
+  }
+  .form-readonly button:disabled {
+    opacity: 0.55;
+  }
+
+  /* Campos sobre un panel gris: fondo blanco para que se distingan del panel. */
+  .on-panel :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+    background-color: var(--color-surface);
+  }
+
   .scroll-thin {
     scrollbar-width: thin;
     scrollbar-color: var(--color-line-strong) transparent;
   }
 
+  /* Respuesta al presionar: instantánea, con curva de resorte al soltar. */
   .press {
-    transition: transform 120ms var(--ease-fluid), background-color 160ms var(--ease-fluid), border-color 160ms var(--ease-fluid), color 160ms var(--ease-fluid), box-shadow 160ms var(--ease-fluid);
+    transition: transform 160ms var(--ease-spring), background-color 160ms var(--ease-spring), border-color 160ms var(--ease-spring), color 160ms var(--ease-spring), box-shadow 160ms var(--ease-spring), opacity 160ms var(--ease-spring);
   }
   .press:active:not(:disabled) {
-    transform: scale(0.98);
+    transform: scale(0.97);
+    transition-duration: 60ms;
+  }
+
+  /* Materiales translúcidos: estructura (más denso) y flotante (más ligero). */
+  .material {
+    background: rgba(255, 255, 255, 0.72);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+  }
+  .material-thick {
+    background: rgba(245, 247, 249, 0.82);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    backdrop-filter: blur(28px) saturate(160%);
+  }
+  .material-dark {
+    background: rgba(16, 32, 43, 0.82);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    backdrop-filter: blur(24px) saturate(160%);
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .material, .material-thick {
+      background: var(--color-surface);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+    .material-dark {
+      background: var(--color-ink);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+
+  /* Borde superior claro: la luz cae sobre el material. */
+  .edge-light {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), var(--shadow-card);
+  }
+
+  /* Borde de scroll: en lugar de una línea dura, un degradado donde el contenido pasa por debajo. */
+  .scroll-edge-b {
+    position: relative;
+  }
+  .scroll-edge-b::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -14px;
+    height: 14px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgba(242, 244, 247, 0.9), rgba(242, 244, 247, 0));
   }
 
   .fade-edge-b {
     mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent);
   }
 
-  /* Fondo del panel de acceso: bloom lento en teal y coral. */
-  .bloom-field {
-    position: absolute;
-    inset: -20%;
-    pointer-events: none;
-    filter: blur(60px);
-    opacity: 0.9;
+  /* Entrada escalonada de listas: cada hijo llega 30 ms después del anterior. */
+  .stagger > * {
+    animation: rise-in 420ms var(--ease-spring) both;
   }
-  .bloom-field::before,
-  .bloom-field::after {
-    content: "";
-    position: absolute;
-    border-radius: 9999px;
-  }
-  .bloom-field::before {
-    width: 58%;
-    height: 58%;
-    left: 8%;
-    top: 12%;
-    background: radial-gradient(circle at 40% 40%, rgba(63, 199, 196, 0.55), rgba(14, 124, 130, 0.2) 60%, transparent 72%);
-    animation: var(--animate-bloom);
-  }
-  .bloom-field::after {
-    width: 46%;
-    height: 46%;
-    right: 6%;
-    bottom: 10%;
-    background: radial-gradient(circle at 60% 60%, rgba(224, 104, 75, 0.45), rgba(224, 104, 75, 0.12) 60%, transparent 72%);
-    animation: var(--animate-bloom-2);
-  }
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 30ms; }
+  .stagger > *:nth-child(3) { animation-delay: 60ms; }
+  .stagger > *:nth-child(4) { animation-delay: 90ms; }
+  .stagger > *:nth-child(5) { animation-delay: 120ms; }
+  .stagger > *:nth-child(6) { animation-delay: 150ms; }
+  .stagger > *:nth-child(7) { animation-delay: 180ms; }
+  .stagger > *:nth-child(8) { animation-delay: 210ms; }
+  .stagger > *:nth-child(n + 9) { animation-delay: 240ms; }
 
   .grain {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    opacity: 0.08;
+    opacity: 0.07;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     mix-blend-mode: soft-light;
+  }
+
+  /* Marca animada (acceso): la célula gira despacio, las hijas flotan y el mar avanza. */
+  .brand-animated .brand-cell {
+    animation: brand-spin 48s linear infinite;
+  }
+  .brand-animated .brand-daughters {
+    animation: brand-float 6s ease-in-out infinite alternate;
+  }
+  .brand-animated .brand-sea {
+    animation: brand-sea 7s linear infinite;
+  }
+  @keyframes brand-spin {
+    to { transform: rotate(360deg); }
+  }
+  @keyframes brand-float {
+    from { transform: translate(0, 0); }
+    to { transform: translate(-1.2px, 1.6px); }
+  }
+  @keyframes brand-sea {
+    from { transform: translateX(0); }
+    to { transform: translateX(36px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .brand-animated .brand-cell, .brand-animated .brand-daughters, .brand-animated .brand-sea {
+      animation: none;
+    }
+  }
+
+  /* Fondo del acceso en tonos blancos: dos luces océano muy tenues a la deriva. */
+  .light-field {
+    position: absolute;
+    inset: -30%;
+    pointer-events: none;
+    filter: blur(80px);
+    will-change: transform;
+  }
+  .light-field::before,
+  .light-field::after {
+    content: "";
+    position: absolute;
+    border-radius: 9999px;
+    will-change: transform;
+  }
+  .light-field::before {
+    width: 55%;
+    height: 55%;
+    left: 10%;
+    top: 5%;
+    background: radial-gradient(circle at 40% 40%, rgba(46, 164, 194, 0.16), rgba(46, 164, 194, 0.04) 55%, transparent 70%);
+    animation: var(--animate-drift);
+  }
+  .light-field::after {
+    width: 50%;
+    height: 50%;
+    right: 5%;
+    bottom: 5%;
+    background: radial-gradient(circle at 60% 60%, rgba(10, 84, 104, 0.12), rgba(10, 84, 104, 0.03) 55%, transparent 70%);
+    animation: var(--animate-drift-2);
+  }
+
+  /* Lista agrupada tipo ajustes: filas separadas por líneas internas, sin bordes por fila. */
+  .inset-group > * + * {
+    border-top: 1px solid var(--color-line);
   }
 }

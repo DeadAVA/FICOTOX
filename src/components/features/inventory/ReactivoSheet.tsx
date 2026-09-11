@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { FileXls } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
+import { ChoiceCard } from "@/components/features/samples/FormLayout";
 import { Field, FormGrid, FormSection, Input, Select, Textarea } from "@/components/ui/Field";
 import { Sheet } from "@/components/ui/Overlay";
 import { Badge, EmptyState } from "@/components/ui/Primitives";
@@ -38,6 +39,18 @@ export function ReactivoSheet({ open, item, onClose }: { open: boolean; item: Ap
     for (const fieldKey of config?.fields || []) {
       const meta = REACTIVO_FIELD_META[fieldKey] || { label: fieldKey };
       payload[meta.target || fieldKey] = values[fieldKey] || null;
+    }
+    // Existencias (comunes a todas las categorías): lo que mueve el medidor y los avisos de stock bajo.
+    for (const key of ["cantidad_actual", "unidad", "stock_maximo", "stock_minimo"]) payload[key] = values[key] || null;
+    if (values.cantidad_actual === "" || values.cantidad_actual === undefined) {
+      setError("Captura la cantidad actual en existencia");
+      document.getElementById("reactivo-cantidad_actual")?.focus();
+      return;
+    }
+    if (!values.unidad) {
+      setError("Elige la unidad de la existencia");
+      document.getElementById("reactivo-unidad")?.focus();
+      return;
     }
     const productName = payload.producto || payload.item_name || payload.nombre_crm;
     if (!tipo || !productName) {
@@ -119,25 +132,45 @@ export function ReactivoSheet({ open, item, onClose }: { open: boolean; item: Ap
       }
     >
       <form id="reactivo-form" ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-7" noValidate>
-        <FormSection title="Categoría" description={config ? config.hint : "Elige la familia para cargar solo los campos que aplican."}>
-          <Field label="Tipo de reactivo" htmlFor="reactivo-tipo" required>
-            <Select id="reactivo-tipo" required value={tipo} onChange={(event) => setTipo(event.target.value)} autoFocus={!editing}>
-              <option value="">Seleccionar categoría</option>
-              {REACTIVO_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
+        <FormSection title="1. Categoría" description={config ? config.hint : "Elige la familia del reactivo: cada una tiene su propio formato de captura."}>
+          <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de reactivo">
+            {REACTIVO_TYPES.map((type) => (
+              <ChoiceCard key={type.value} type="radio" name="reactivo-tipo" checked={tipo === type.value} onChange={() => setTipo(type.value)} label={type.label} />
+            ))}
+          </div>
         </FormSection>
         {config ? (
-          <FormSection title="Datos del formato">
+          <FormSection title="2. Datos del reactivo" description="Los campos marcados con * son obligatorios para esta categoría.">
             <FormGrid cols={2}>{config.fields.map(renderField)}</FormGrid>
           </FormSection>
         ) : (
-          <EmptyState compact title="Sin categoría" description="Elige el tipo de reactivo para mostrar su formato de captura." />
+          <EmptyState compact title="Elige una categoría" description="Al elegirla aparecen solo los campos que aplican." />
         )}
+        {config ? (
+          <FormSection title="3. Existencias" description="Cantidad real en el laboratorio, la capacidad de referencia y el mínimo a partir del cual se avisa “stock bajo”. Los formatos descuentan de aquí.">
+            <FormGrid cols={2}>
+              <Field label="Cantidad actual" htmlFor="reactivo-cantidad_actual" required>
+                <Input id="reactivo-cantidad_actual" type="number" min="0" step="0.001" inputMode="decimal" value={values.cantidad_actual ?? ""} onChange={(event) => setValues((prev) => ({ ...prev, cantidad_actual: event.target.value }))} />
+              </Field>
+              <Field label="Unidad" htmlFor="reactivo-unidad" required>
+                <Select id="reactivo-unidad" value={values.unidad || ""} onChange={(event) => setValues((prev) => ({ ...prev, unidad: event.target.value }))}>
+                  <option value="">Seleccionar</option>
+                  {["L", "mL", "kg", "g", "piezas"].map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Capacidad / stock de referencia" htmlFor="reactivo-stock_maximo" hint="Cantidad con la que se considera lleno (p. ej. 8 L = dos garrafones). Si se deja vacío, se toma la cantidad actual.">
+                <Input id="reactivo-stock_maximo" type="number" min="0" step="0.001" inputMode="decimal" value={values.stock_maximo ?? ""} onChange={(event) => setValues((prev) => ({ ...prev, stock_maximo: event.target.value }))} />
+              </Field>
+              <Field label="Stock mínimo" htmlFor="reactivo-stock_minimo" hint="Al llegar a esta cantidad aparece el aviso de stock bajo. Sin mínimo, se avisa al 20 % de la capacidad.">
+                <Input id="reactivo-stock_minimo" type="number" min="0" step="0.001" inputMode="decimal" value={values.stock_minimo ?? ""} onChange={(event) => setValues((prev) => ({ ...prev, stock_minimo: event.target.value }))} />
+              </Field>
+            </FormGrid>
+          </FormSection>
+        ) : null}
       </form>
     </Sheet>
   );
@@ -229,7 +262,7 @@ export function ImportReactivosSheet({ open, onClose }: { open: boolean; onClose
           </label>
         </Field>
 
-        {message ? <p className={message.error ? "text-[13px] text-danger" : "text-[13px] text-[#1f6b50]"}>{message.text}</p> : null}
+        {message ? <p className={message.error ? "text-[13px] text-danger" : "text-[13px] text-success-text"}>{message.text}</p> : null}
 
         {sheets.length ? (
           <TableShell>

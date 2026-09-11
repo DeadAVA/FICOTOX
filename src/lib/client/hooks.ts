@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /* Valor con retardo: evita una peticion por cada tecla en las busquedas. */
 export function useDebouncedValue<T>(value: T, delay = 250): T {
@@ -38,6 +38,28 @@ export function useInitialParam(name: string): string {
   const params = useSearchParams();
   const [initial] = useState(() => params.get(name) || "");
   return initial;
+}
+
+/*
+ * Avisa cuando un parametro de la URL cambia despues del primer render (por
+ * ejemplo, elegir otro resultado en la busqueda estando ya en la lista). El
+ * valor inicial lo toma `useInitialParam`; aqui solo se reacciona a cambios.
+ */
+export function useParamChange(name: string, onChange: (value: string) => void): void {
+  const params = useSearchParams();
+  const value = params.get(name) || "";
+  const first = useRef(true);
+  const handler = useRef(onChange);
+  useEffect(() => {
+    handler.current = onChange;
+  });
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    handler.current(value);
+  }, [value]);
 }
 
 export function useOpenState<T = null>() {

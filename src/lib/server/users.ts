@@ -1,10 +1,12 @@
 import { isSqlite, type Session } from "./db";
 import { ensureRbacSchema, toBit } from "./rbac";
-import { addColumnIfMissing } from "./schema";
+import { isAvatarKey } from "../shared/avatars";
+import { addColumnIfMissing, markSchemaReady, schemaReady } from "./schema";
 
 /* Portado de utils/users.py del backend Flask original. */
 
 export async function ensureUsuariosSchema(s: Session): Promise<void> {
+  if (schemaReady("usuarios")) return;
   /*
    * Pseudocodigo:
    * 1. Asegurar primero RBAC porque usuarios depende de roles.
@@ -63,10 +65,12 @@ export async function ensureUsuariosSchema(s: Session): Promise<void> {
     ["creado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP"],
     ["ultimo_acceso", "TIMESTAMP NULL DEFAULT NULL"],
     ["password_hash", "VARCHAR(255) DEFAULT NULL"],
+    /* Avatar elegido por la persona (clave del catalogo compartido); NULL = se deriva del correo. */
+    ["avatar", "VARCHAR(40) DEFAULT NULL"],
   ] as Array<[string, string]>) {
     await addColumnIfMissing(s, "usuarios", columnName, columnDefinition);
   }
-  await s.commit();
+  markSchemaReady("usuarios");
 }
 
 export interface UserPayload {
@@ -75,6 +79,8 @@ export interface UserPayload {
   id_rol: number;
   departamento: string | null;
   activo: number;
+  /* undefined = no cambiar; null = volver al avatar por omision. */
+  avatar?: string | null;
 }
 
 export function normalizeUserPayload(payload: Record<string, unknown>): UserPayload {
@@ -89,5 +95,6 @@ export function normalizeUserPayload(payload: Record<string, unknown>): UserPayl
     id_rol: Number.parseInt(String(payload.id_rol || 0), 10) || 0,
     departamento: String(payload.departamento || "").trim().slice(0, 100) || null,
     activo: toBit(payload.activo === undefined ? true : payload.activo),
+    avatar: payload.avatar === undefined ? undefined : isAvatarKey(payload.avatar) ? payload.avatar : null,
   };
 }

@@ -16,18 +16,22 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   block?: boolean;
 }
 
+/*
+ * Botones: respuesta al presionar (scale) y un solo acento. El secundario es
+ * una superficie blanca con sombra fina, no un borde gris.
+ */
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-brand text-white hover:bg-brand-strong shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] disabled:bg-ink-4",
-  secondary: "bg-surface text-ink border border-line-strong hover:border-ink-3 hover:bg-surface-2 disabled:text-ink-4 disabled:border-line",
-  soft: "bg-brand-soft text-brand-strong hover:bg-[#cfe9ea] disabled:bg-surface-2 disabled:text-ink-4",
-  ghost: "bg-transparent text-ink-2 hover:bg-surface-2 hover:text-ink disabled:text-ink-4",
-  danger: "bg-danger text-white hover:bg-[#b23a32] disabled:bg-ink-4",
+  primary: "bg-brand text-white hover:bg-brand-strong shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_1px_2px_rgba(11,95,117,0.25)] disabled:bg-ink-4 disabled:shadow-none",
+  secondary: "bg-surface text-ink shadow-card hover:bg-surface-2 disabled:text-ink-4",
+  soft: "bg-brand-soft text-brand-strong hover:bg-[#cfe5ec] disabled:bg-surface-2 disabled:text-ink-4",
+  ghost: "bg-transparent text-ink-2 hover:bg-surface-3/70 hover:text-ink disabled:text-ink-4",
+  danger: "bg-danger text-white hover:bg-[#b03931] disabled:bg-ink-4",
 };
 
 const SIZES: Record<ButtonSize, string> = {
-  sm: "h-8 px-3 text-[13px] gap-1.5 rounded-control",
-  md: "h-9 px-3.5 text-sm gap-2 rounded-control",
-  lg: "h-11 px-5 text-[15px] gap-2 rounded-[8px]",
+  sm: "h-8 px-3 text-[13px] gap-1.5 rounded-[8px]",
+  md: "h-9 px-3.5 text-[13.5px] gap-2 rounded-[9px]",
+  lg: "h-11 px-5 text-[15px] gap-2 rounded-[11px]",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
@@ -73,7 +77,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       aria-label={label}
       title={label}
       className={cn(
-        "press inline-flex items-center justify-center rounded-control border border-transparent text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-ink-4 disabled:hover:bg-transparent",
+        "press inline-flex items-center justify-center rounded-[8px] text-ink-2 hover:bg-surface-3/80 hover:text-ink disabled:cursor-not-allowed disabled:text-ink-4 disabled:hover:bg-transparent",
         size === "sm" ? "h-7 w-7" : "h-8 w-8",
         tone === "danger" && "hover:bg-danger-soft hover:text-danger",
         className,

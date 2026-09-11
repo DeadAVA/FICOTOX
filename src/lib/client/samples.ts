@@ -1,5 +1,6 @@
 import { SAMPLE_ANALYSIS_LABELS, SAMPLE_MATRIX_LABELS } from "./constants";
 import type { ApiRecord } from "./types";
+import { SAMPLE_STATES, SAMPLE_TERMINAL_STATES } from "../shared/sgc";
 
 /* Helpers de muestras identicos a los de el app.js de la interfaz original. */
 
@@ -25,17 +26,11 @@ export const normalizeSampleStatus = (status: unknown): string => String(status 
 
 export const sampleStatusLabel = (status: unknown): string => {
   const normalized = normalizeSampleStatus(status);
-  const labels: Record<string, string> = {
-    registrada: "Registrada",
-    procesamiento: "En proceso",
-    extraccion: "Extracción",
-    en_proceso: "En proceso",
-    completada: "Completada",
-    finalizada: "Finalizada",
-    cancelada: "Cancelada",
-  };
-  return labels[normalized] || String(status || "Registrada");
+  return SAMPLE_STATES[normalized]?.label || String(status || "Registrada");
 };
+
+/* Un registro anulado, rechazado o cerrado ya no se edita. */
+export const isSampleReadOnly = (status: unknown): boolean => SAMPLE_TERMINAL_STATES.has(normalizeSampleStatus(status));
 
 export const getSampleAnalysisSummary = (item: ApiRecord): string => {
   const analysis = item.analisis || {};

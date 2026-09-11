@@ -53,9 +53,9 @@ export const sendJsonAuth = async (method: string, url: string, token: string, b
   return data;
 };
 
-export const sendFormAuth = async (url: string, token: string, formData: FormData): Promise<ApiRecord> => {
+export const sendFormAuth = async (url: string, token: string, formData: FormData, method: string = "POST"): Promise<ApiRecord> => {
   const response = await fetch(url, {
-    method: "POST",
+    method,
     headers: {
       Authorization: `Bearer ${token}`,
     },

@@ -5,8 +5,9 @@ import { ArrowsLeftRight } from "@phosphor-icons/react";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
-import { PageHeader, SearchInput, SegmentedTabs, Toolbar } from "@/components/ui/PageHeader";
-import { Badge, EmptyState, ErrorState, Stat, TableSkeleton } from "@/components/ui/Primitives";
+import { FilterChips, FilterMenu, type FilterGroup } from "@/components/ui/FilterMenu";
+import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
+import { Badge, EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { fmt, fmtDate, normalizeText } from "@/lib/client/format";
@@ -50,34 +51,37 @@ function MovimientosContent() {
   }, [resource.data, origin, search]);
 
   const summary = resource.data?.summary || {};
+  const groups: FilterGroup[] = [
+    {
+      key: "origen",
+      label: "Origen",
+      value: origin,
+      defaultValue: "todos",
+      onChange: (v) => setOrigin(v as Origin),
+      options: [
+        { value: "todos", label: "Todos", count: resource.data ? Number(summary.total || 0) : null },
+        { value: "reactivos", label: "Reactivos", count: resource.data ? Number(summary.reactivos || 0) : null },
+        { value: "consumibles", label: "Consumibles", count: resource.data ? Number(summary.consumibles || 0) : null },
+      ],
+    },
+  ];
 
   return (
     <PageBody>
       <PageHeader title="Movimientos" description="Entradas y salidas de reactivos y consumibles, incluidas las generadas al procesar muestras." />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-        <Stat label="Total" value={fmt(summary.total || 0)} />
-        <Stat label="Hoy" value={fmt(summary.hoy || 0)} tone="brand" />
-        <Stat label="Esta semana" value={fmt(summary.semana || 0)} />
-        <Stat label="Este mes" value={fmt(summary.mes || 0)} />
-        <Stat label="Reactivos" value={fmt(summary.reactivos || 0)} />
-        <Stat label="Consumibles" value={fmt(summary.consumibles || 0)} />
-      </div>
-
       <Toolbar
         end={
-          <SegmentedTabs
-            value={origin}
-            onChange={setOrigin}
-            options={[
-              { value: "todos", label: "Todos" },
-              { value: "reactivos", label: "Reactivos" },
-              { value: "consumibles", label: "Consumibles" },
-            ]}
-          />
+          resource.data ? (
+            <p className="tnum text-[12.5px] text-ink-3">
+              Hoy <span className="font-medium text-ink">{fmt(summary.hoy || 0)}</span> · Esta semana <span className="font-medium text-ink">{fmt(summary.semana || 0)}</span> · Este mes <span className="font-medium text-ink">{fmt(summary.mes || 0)}</span>
+            </p>
+          ) : null
         }
       >
-        <SearchInput value={search} onChange={setSearch} placeholder="Buscar por insumo, referencia o motivo" className="w-full md:w-[380px]" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Buscar por insumo, referencia o motivo" className="w-full md:w-[340px]" />
+        <FilterMenu groups={groups} />
+        <FilterChips groups={groups} />
       </Toolbar>
 
       <TableShell footer={resource.data ? `${fmt(rows.length)} movimientos` : undefined}>
@@ -111,7 +115,7 @@ function MovimientosContent() {
                     <Td className="max-w-[280px]">
                       <CellPrimary title={insumoName(item)} subtitle={item.item_codigo || undefined} />
                     </Td>
-                    <Td mono className="max-w-[220px] truncate">
+                    <Td mono className="max-w-[160px] truncate">
                       {item.referencia || "-"}
                     </Td>
                     <Td>
@@ -123,7 +127,7 @@ function MovimientosContent() {
                     <Td align="right" className="font-medium">
                       {fmt(item.cantidad)}
                     </Td>
-                    <Td muted className="max-w-[260px] truncate">
+                    <Td muted className="max-w-[200px] truncate">
                       {item.motivo || "-"}
                     </Td>
                   </Tr>

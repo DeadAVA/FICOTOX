@@ -2,30 +2,27 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { DotsThree, PencilSimple, Plus, Trash, Users } from "@phosphor-icons/react";
+import { PencilSimple, Plus, Trash, Users } from "@phosphor-icons/react";
 import { UserSheet } from "@/components/features/admin/AdminSheets";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Select } from "@/components/ui/Field";
-import { Dropdown, useConfirm } from "@/components/ui/Overlay";
-import { LinkTabs, PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
-import { Avatar, Badge, EmptyState, ErrorState, Stat, TableSkeleton } from "@/components/ui/Primitives";
-import { RowActions, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
+import { Button } from "@/components/ui/Button";
+import { FilterChips, FilterMenu, type FilterGroup } from "@/components/ui/FilterMenu";
+import { ActionMenu, usePrompt, type MenuItem } from "@/components/ui/Overlay";
+import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
+import { Avatar, Badge, EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
+import { Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
 import { fmt, fmtDate, normalizeText } from "@/lib/client/format";
 import { useOpenState } from "@/lib/client/hooks";
-import { ADMIN_NAV } from "@/lib/client/nav";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 
 export default function UsuariosPage() {
-  const { can } = useSession();
   return (
     <PageBody>
-      <PageHeader title="Administración" description="Cuentas de acceso y permisos del sistema." />
-      <LinkTabs items={ADMIN_NAV.filter((item) => item.modules.some((m) => can(m))).map((item) => ({ href: item.href, label: item.label }))} />
+      <PageHeader title="Usuarios" description="Cuentas de acceso al sistema. Las cuentas no se eliminan: se dan de baja con motivo." />
       <RequireModule modules="usuarios">
         <UsuariosContent />
       </RequireModule>
@@ -35,7 +32,7 @@ export default function UsuariosPage() {
 
 function UsuariosContent() {
   const { token, can, user: me } = useSession();
-  const confirm = useConfirm();
+  const prompt = usePrompt();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const modal = useOpenState<ApiRecord>();
@@ -65,15 +62,16 @@ function UsuariosContent() {
     }
   };
 
+  // Las cuentas no se eliminan: se dan de baja (inactivas) con motivo y su historial se conserva.
   const deleteUser = async (item: ApiRecord) => {
-    const ok = await confirm({ title: "Eliminar usuario", description: `Se eliminará la cuenta de ${item.email}. Si solo quieres bloquear el acceso, márcala como inactiva.`, confirmLabel: "Eliminar", tone: "danger" });
-    if (!ok) return;
+    const motivo = await prompt({ title: `Dar de baja a ${item.email}`, description: "La cuenta queda inactiva y no puede entrar; los registros y la bitácora que la citan se conservan.", confirmLabel: "Dar de baja", tone: "danger" });
+    if (!motivo) return;
     try {
-      await sendJsonAuth("DELETE", `${API_BASE_URL}/admin/usuarios/${item.id}`, token);
-      toast.success("Usuario eliminado");
+      await sendJsonAuth("DELETE", `${API_BASE_URL}/admin/usuarios/${item.id}`, token, { motivo });
+      toast.success("Usuario dado de baja");
       invalidate("usuarios", "roles");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo eliminar");
+      toast.error(err instanceof Error ? err.message : "No se pudo dar de baja");
     }
   };
 
@@ -82,14 +80,30 @@ function UsuariosContent() {
   const canUpdate = can("usuarios", "update");
   const canDelete = can("usuarios", "delete");
 
+  const groups: FilterGroup[] = [
+    {
+      key: "rol",
+      label: "Rol",
+      value: roleFilter,
+      defaultValue: "",
+      onChange: setRoleFilter,
+      options: [{ value: "", label: "Todos los roles" }, ...roles.map((role) => ({ value: role, label: role, count: (items || []).filter((u) => u.rol === role).length }))],
+    },
+  ];
+
+  const menuFor = (item: ApiRecord): MenuItem[] => {
+    const list: MenuItem[] = [];
+    if (canUpdate) list.push({ label: "Editar", description: "Nombre, rol, departamento, contraseña o avatar", icon: <PencilSimple size={16} weight="duotone" />, tone: "brand", onSelect: () => editUser(Number(item.id)) });
+    if (canDelete && me?.id !== item.id) list.push({ label: "Dar de baja…", description: "La cuenta queda inactiva; su historial se conserva", icon: <Trash size={16} weight="duotone" />, tone: "danger", disabled: !item.activo, separatorBefore: list.length > 0, onSelect: () => deleteUser(item) });
+    return list;
+  };
+
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Usuarios" value={fmt(list.length)} />
-        <Stat label="Activos" value={fmt(list.filter((item) => !!item.activo).length)} tone="success" />
-        <Stat label="Inactivos" value={fmt(list.filter((item) => !item.activo).length)} />
-        <Stat label="Sin contraseña" value={fmt(list.filter((item) => !item.tiene_password).length)} tone={list.some((item) => !item.tiene_password) ? "warning" : "neutral"} hint="No pueden entrar con acceso local" />
-      </div>
+      <p className="tnum -mt-2 text-[12.5px] text-ink-3">
+        <span className="font-medium text-ink">{fmt(list.length)}</span> cuentas · <span className="font-medium text-ink">{fmt(list.filter((item) => !!item.activo).length)}</span> activas · <span className="font-medium text-ink">{fmt(list.filter((item) => !item.activo).length)}</span> inactivas ·{" "}
+        <span className={list.some((item) => !item.tiene_password) ? "font-medium text-warning-text" : "font-medium text-ink"}>{fmt(list.filter((item) => !item.tiene_password).length)}</span> sin contraseña local
+      </p>
 
       <Toolbar
         end={
@@ -100,17 +114,9 @@ function UsuariosContent() {
           ) : null
         }
       >
-        <SearchInput value={search} onChange={setSearch} placeholder="Buscar por nombre o correo" className="w-full md:w-[320px]" />
-        <div className="w-full md:w-[220px]">
-          <Select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} aria-label="Filtrar por rol">
-            <option value="">Todos los roles</option>
-            {roles.map((role) => (
-              <option key={role} value={role}>
-                {role}
-              </option>
-            ))}
-          </Select>
-        </div>
+        <SearchInput value={search} onChange={setSearch} placeholder="Buscar por nombre o correo" className="w-full md:w-[340px]" />
+        <FilterMenu groups={groups} />
+        <FilterChips groups={groups} />
       </Toolbar>
 
       <TableShell footer={items ? `${fmt(rows.length)} usuarios` : undefined}>
@@ -129,7 +135,7 @@ function UsuariosContent() {
                 <Th>Departamento</Th>
                 <Th>Último acceso</Th>
                 <Th>Estado</Th>
-                <Th align="right" />
+                <Th align="right" sticky />
               </tr>
             </THead>
             <TBody>
@@ -137,7 +143,7 @@ function UsuariosContent() {
                 <Tr key={item.id}>
                   <Td>
                     <div className="flex items-center gap-3">
-                      <Avatar name={item.nombre} email={item.email} />
+                      <Avatar name={item.nombre} email={item.email} avatar={item.avatar} />
                       <div className="flex min-w-0 flex-col">
                         <span className="truncate font-medium text-ink">
                           {item.nombre || "Sin nombre"}
@@ -160,25 +166,8 @@ function UsuariosContent() {
                       {!item.tiene_password ? <Badge tone="warning">Sin contraseña</Badge> : null}
                     </div>
                   </Td>
-                  <Td align="right">
-                    <RowActions>
-                      {canUpdate ? (
-                        <IconButton label="Editar" onClick={() => editUser(Number(item.id))}>
-                          <PencilSimple size={16} />
-                        </IconButton>
-                      ) : null}
-                      {canDelete && me?.id !== item.id ? (
-                        <Dropdown
-                          label="Más acciones"
-                          trigger={
-                            <IconButton label="Más acciones">
-                              <DotsThree size={18} weight="bold" />
-                            </IconButton>
-                          }
-                          items={[{ label: "Eliminar usuario", icon: <Trash size={16} />, tone: "danger", onSelect: () => deleteUser(item) }]}
-                        />
-                      ) : null}
-                    </RowActions>
+                  <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
+                    <ActionMenu items={menuFor(item)} header={String(item.email || "")} />
                   </Td>
                 </Tr>
               ))}

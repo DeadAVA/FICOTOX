@@ -1,12 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="FICOTOX">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0dcaf0" />
-      <stop offset="100%" stop-color="#198754" />
-    </linearGradient>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2ea4c2"/><stop offset="100%" stop-color="#0a5468"/></linearGradient>
+    <linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fff" stop-opacity="0.22"/><stop offset="55%" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <clipPath id="c"><rect width="64" height="64" rx="18"/></clipPath>
   </defs>
-  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#g)"/>
-  <path d="M20 18h24v6H20zM22 24h20v22H22z" fill="#ffffff"/>
-  <path d="M32 29v10M27 34h10" stroke="#0b1f2a" stroke-width="3" stroke-linecap="round"/>
-  <path d="M48 16c-4 5-4 9 0 12 4-3 4-7 0-12z" fill="#ffffff"/>
+  <rect width="64" height="64" rx="18" fill="url(#g)"/>
+  <rect width="64" height="64" rx="18" fill="url(#h)"/>
+  <g clip-path="url(#c)">
+    <!-- diatomea céntrica: valva, estrías marginales, areolas y núcleo -->
+    <circle cx="29" cy="26" r="14" fill="#fff" fill-opacity="0.12" stroke="#fff" stroke-width="3"/>
+    <g stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.9"><line x1="38.20" y1="26.00" x2="41.20" y2="26.00"/><line x1="35.51" y1="32.51" x2="37.63" y2="34.63"/><line x1="29.00" y1="35.20" x2="29.00" y2="38.20"/><line x1="22.49" y1="32.51" x2="20.37" y2="34.63"/><line x1="19.80" y1="26.00" x2="16.80" y2="26.00"/><line x1="22.49" y1="19.49" x2="20.37" y2="17.37"/><line x1="29.00" y1="16.80" x2="29.00" y2="13.80"/><line x1="35.51" y1="19.49" x2="37.63" y2="17.37"/></g>
+    <circle cx="29" cy="26" r="5.6" fill="none" stroke="#fff" stroke-width="1.8" stroke-dasharray="2.2 2.4" opacity="0.9"/>
+    <circle cx="29" cy="26" r="2" fill="#fff"/>
+    <!-- floración: células hijas -->
+    <circle cx="50" cy="14" r="5" fill="none" stroke="#fff" stroke-width="2.4" opacity="0.9"/><circle cx="50" cy="14" r="1.4" fill="#fff" opacity="0.9"/>
+    <circle cx="53.5" cy="27.5" r="3.2" fill="none" stroke="#fff" stroke-width="2" opacity="0.7"/>
+    <!-- mar -->
+    <path d="M4 50c6-6 12-6 18 0s12 6 18 0 12-6 18 0 6 3 8 3" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+    <path d="M4 58c6-6 12-6 18 0s12 6 18 0 12-6 18 0 6 3 8 3" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" opacity="0.5"/>
+  </g>
 </svg>

@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { markSchemaReady, schemaReady } from "../schema";
 import fs from "node:fs";
 import path from "node:path";
 import { requireUser } from "../auth";
+import { registrarAuditoria } from "../audit";
 import { getConfig } from "../config";
 import { isSqlite, type Session } from "../db";
 import { json, type RouteContext } from "../http";
@@ -16,6 +18,7 @@ function reportsUploadDir(): string {
 }
 
 export async function ensureReportesMantenimientoSchema(s: Session): Promise<void> {
+  if (schemaReady("reportes_mantenimiento")) return;
   await s.execute(
     isSqlite()
       ? `
@@ -49,7 +52,7 @@ export async function ensureReportesMantenimientoSchema(s: Session): Promise<voi
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
       `,
   );
-  await s.commit();
+  markSchemaReady("reportes_mantenimiento");
 }
 
 async function nextReportCode(s: Session, mantenimientoId: number): Promise<string> {
@@ -170,6 +173,7 @@ export async function createMaintenanceReport({ request, s }: RouteContext): Pro
       archivo_url: archivoUrl,
     },
   );
+  await registrarAuditoria(s, user, { accion: "crear", entidad: "reportes_mantenimiento", entidadId: result.lastrowid, referencia: codigo, detalle: { id_mantenimiento: mantenimientoId, archivo: storedName } });
   await s.commit();
   return json({ message: "Reporte PDF registrado", id: result.lastrowid, archivo_url: archivoUrl }, 201);
 }

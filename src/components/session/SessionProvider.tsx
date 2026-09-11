@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useRouter } from "next/navigation";
 import { API_BASE_URL, getJsonAuth, postJson } from "@/lib/client/api";
 import { logoutMicrosoft } from "@/lib/client/msal";
+import { resetSearchIndex } from "@/lib/client/search-index";
 import { clearSession, getStoredPermissions, getStoredToken, setSession, setStoredPermissions } from "@/lib/client/session";
 import type { ApiRecord, AuthConfig, ModuleAction, PermissionsMap, SessionUser } from "@/lib/client/types";
 
@@ -51,6 +52,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const leave = useCallback(() => {
     clearSession();
+    resetSearchIndex();
     setToken("");
     setUser(null);
     setPermissions({});

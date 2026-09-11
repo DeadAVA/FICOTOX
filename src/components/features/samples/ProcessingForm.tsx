@@ -6,32 +6,40 @@ import { toast } from "sonner";
 import { FloppyDisk, Plus } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
+import { cn } from "@/components/ui/cn";
 import { Checkbox, Field, FormGrid, Input, Select, Textarea } from "@/components/ui/Field";
 import { EmptyState } from "@/components/ui/Primitives";
+import { RecordHistory } from "@/components/features/audit/RecordHistory";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { fmtDate, isoDate, parseFloatOrNull, parseIntOrNull } from "@/lib/client/format";
-import { filterManualInventario, findInsumoByAutoQuery, findInsumoOption, loadInsumoOptions, resolveFixedInventoryAmount, type InventarioRow } from "@/lib/client/insumos";
-import { formatProcessingFolio, sampleStatusLabel } from "@/lib/client/samples";
+import { filterManualInventario, findInsumoByAutoQuery, findInsumoOption, findUniqueOperativeEquipo, loadInsumoOptions, resolveFixedInventoryAmount, type InventarioRow } from "@/lib/client/insumos";
+import { formatProcessingFolio, isSampleReadOnly, sampleStatusLabel } from "@/lib/client/samples";
 import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
-import { ChoiceCard, ChoiceGrid, FormCard, FormPage, PersonCard, StepRow } from "./FormLayout";
+import { Callout, ChoiceCard, ChoiceGrid, FormCard, FormPage, FormTable, PersonCard, StepRow, formTd, formTh, missingMessage, missingSections, openFormSection, type FormSectionDef } from "./FormLayout";
 import { InsumoSearch, InventarioRows, collectInventarioRows, newInventarioRow } from "./InsumoSearch";
 
 /* Formato de procesamiento de muestras (FX-TCF-GMP) como pagina completa. */
 
+/*
+ * Pasos tal como los lista el formato FX-TCF-GMP. El segundo elemento es el
+ * texto que se guarda (los registros existentes dependen de el); el tercero,
+ * el que se muestra.
+ */
 const BIVALVOS_STEPS: Array<[string, string, string]> = [
-  ["procBiv1", "Seleccionar organismos de mayor talla (~30)", "Seleccionar organismos de mayor talla (~30)"],
+  ["procBiv1", "Seleccionar organismos de mayor talla (~30)", "Seleccionar los organismos de mayor talla (~10 organismos)"],
   ["procBiv2", "Lavar exterior con agua corriente", "Lavar el exterior con agua corriente"],
   ["procBiv3", "Abrir valvas", "Abrir las valvas"],
   ["procBiv4", "Lavar interior con agua corriente", "Lavar el interior con agua corriente"],
   ["procBiv5", "Desconchar", "Desconchar"],
   ["procBiv6", "Drenar 5 min", "Drenar 5 min"],
   ["procBiv7", "Moler 1-2 min 100-150g", "Moler 1 a 2 min (100 a 150 g)"],
+  ["procBiv9", "Pesar molienda obtenida", "Pesar la molienda obtenida"],
   ["procBiv8", "Reservar molienda en bolsa hermetica", "Reservar molienda en bolsa hermética con etiqueta interna y externa"],
 ];
 const SARDINAS_STEPS: Array<[string, string, string]> = [
-  ["procSar1", "Seleccionar aprox. 10 organismos", "Seleccionar aprox. 10 organismos (molienda de hasta 150 g)"],
+  ["procSar1", "Seleccionar aprox. 10 organismos", "Seleccionar aprox. 10 organismos (para obtener una molienda de hasta 150 g)"],
   ["procSar2", "Partir organismos por la mitad", "Partir o trozar los organismos por la mitad"],
   ["procSar3", "Moler 1-2 min 100-150g", "Moler 1 a 2 min (100 a 150 g)"],
   ["procSar4", "Pesar molienda obtenida", "Pesar la molienda obtenida"],
@@ -74,8 +82,11 @@ interface ProcessingForm {
   partes: string[];
   otroParteText: string;
   steps: Record<string, boolean>;
+  biv6Equipo: string;
   biv7Equipo: string;
   biv7Peso: string;
+  biv9Equipo: string;
+  biv9Peso: string;
   biv8Equipo: string;
   biv8Peso: string;
   biv8BolsaRef: string;
@@ -88,10 +99,8 @@ interface ProcessingForm {
   resguardo: Record<string, boolean>;
   observaciones: string;
   quienProceso: string;
-  quienProcesoCargo: string;
   firmaProceso: string;
   quienSuperviso: string;
-  quienSupervisoCargo: string;
   firmaSuperviso: string;
   inventarioRows: InventarioRow[];
 }
@@ -114,8 +123,11 @@ const defaultForm = (): ProcessingForm => ({
   partes: [],
   otroParteText: "",
   steps: {},
+  biv6Equipo: "",
   biv7Equipo: "",
   biv7Peso: "",
+  biv9Equipo: "",
+  biv9Peso: "",
   biv8Equipo: "",
   biv8Peso: "",
   biv8BolsaRef: "",
@@ -128,14 +140,13 @@ const defaultForm = (): ProcessingForm => ({
   resguardo: {},
   observaciones: "",
   quienProceso: formatActiveUserSignature(),
-  quienProcesoCargo: "",
   firmaProceso: "",
   quienSuperviso: "",
-  quienSupervisoCargo: "",
   firmaSuperviso: "",
   inventarioRows: [],
 });
 
+/* Prellena la bolsa del protocolo y el equipo operativo único de cada paso (cronómetro, licuadora, balanza). Solo llena huecos. */
 const autoResolve = (current: ProcessingForm): ProcessingForm => {
   const next = { ...current };
   for (const key of ["biv8BolsaRef", "sar5BolsaRef"] as const) {
@@ -144,6 +155,19 @@ const autoResolve = (current: ProcessingForm): ProcessingForm => {
       const match = findInsumoByAutoQuery("consumible", "bolsa hermetica");
       if (match) next[key] = match.ref;
     }
+  }
+  const EQUIPOS: Array<[keyof ProcessingForm, string]> = [
+    ["biv6Equipo", "Cronómetro"],
+    ["biv7Equipo", "Licuadora"],
+    ["biv9Equipo", "Balanza"],
+    ["biv8Equipo", "Balanza"],
+    ["sar3Equipo", "Licuadora"],
+    ["sar4Equipo", "Balanza"],
+  ];
+  for (const [key, query] of EQUIPOS) {
+    if (String(current[key] || "").trim()) continue;
+    const match = findUniqueOperativeEquipo(query);
+    if (match) (next as Record<string, unknown>)[key] = match.ref;
   }
   return next;
 };
@@ -171,8 +195,12 @@ const formFromItem = (item: ApiRecord): ProcessingForm => {
   BIVALVOS_STEPS.forEach(([id, value]) => (steps[id] = bivalvos.includes(value)));
   SARDINAS_STEPS.forEach(([id, value]) => (steps[id] = sardinas.includes(value)));
   const stepObj = (arr: unknown, name: string): ApiRecord | null => ((Array.isArray(arr) ? arr : []).find((s) => typeof s === "object" && s && s.step === name) as ApiRecord) || null;
+  const biv6 = stepObj(item.bivalvos_steps, "Drenar 5 min");
   const biv7 = stepObj(item.bivalvos_steps, "Moler 1-2 min 100-150g");
   const biv8 = stepObj(item.bivalvos_steps, "Reservar molienda en bolsa hermetica");
+  // Registros anteriores guardaban balanza y peso en "Reservar"; ahora viven en el paso "Pesar".
+  const biv9 = stepObj(item.bivalvos_steps, "Pesar molienda obtenida") || (biv8 && (biv8.peso !== null && biv8.peso !== undefined) ? biv8 : null);
+  if (biv9 && !steps.procBiv9 && bivalvos.includes("Reservar molienda en bolsa hermetica")) steps.procBiv9 = true;
   const sar3 = stepObj(item.sardinas_steps, "Moler 1-2 min 100-150g");
   const sar4 = stepObj(item.sardinas_steps, "Pesar molienda obtenida");
   const res = item.resguardo || {};
@@ -189,8 +217,13 @@ const formFromItem = (item: ApiRecord): ProcessingForm => {
     muestraTipo: item.muestra_tipo === "lote" ? "lote" : "unica",
     idInterno: item.id_interno || "",
     organismo: Array.isArray(item.tipo_organismo) ? item.tipo_organismo[0] || "" : "",
+    otroOrganismoText: item.tipo_organismo_otro || "",
     partes: Array.isArray(item.parte_organismo) ? item.parte_organismo : [],
+    otroParteText: item.parte_organismo_otro || "",
     steps,
+    biv6Equipo: biv6?.equipo_id ? String(biv6.equipo_id) : "",
+    biv9Equipo: biv9?.equipo_id ? String(biv9.equipo_id) : "",
+    biv9Peso: biv9?.peso ?? "",
     biv7Equipo: biv7?.equipo_id ? String(biv7.equipo_id) : "",
     biv8Equipo: biv8?.equipo_id ? String(biv8.equipo_id) : "",
     sar3Equipo: sar3?.equipo_id ? String(sar3.equipo_id) : "",
@@ -209,13 +242,13 @@ const formFromItem = (item: ApiRecord): ProcessingForm => {
   };
 };
 
-const SECTIONS = [
+const SECTIONS: FormSectionDef[] = [
   { id: "sec-datos", label: "Datos generales" },
   { id: "sec-muestra", label: "Muestra" },
   { id: "sec-organismo", label: "Organismo" },
   { id: "sec-proceso", label: "Procesamiento" },
   { id: "sec-resguardo", label: "Resguardo" },
-  { id: "sec-insumos", label: "Insumos" },
+  { id: "sec-insumos", label: "Insumos adicionales", optional: true },
   { id: "sec-personal", label: "Personal" },
 ];
 
@@ -229,7 +262,20 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
   const [error, setError] = useState<string | null>(null);
   const detailCache = useRef(new Map<number, ApiRecord>());
   const editing = !!item?.id;
+  const readOnly = editing && isSampleReadOnly(item?.estado);
   const patch = (changes: Partial<ProcessingForm>) => setForm((prev) => ({ ...prev, ...changes }));
+  const stepKeys = form.organismo === "bivalvos" ? BIVALVOS_STEPS.map(([k]) => k) : form.organismo === "sardinas" ? SARDINAS_STEPS.map(([k]) => k) : [];
+  const completeness: Record<string, boolean> = {
+    "sec-datos": !!form.folio && !!form.fecha,
+    "sec-muestra": !!form.receptionId && (form.muestraTipo === "lote" ? !!form.loteRows?.some((r) => r.checked) : !!form.idInterno.trim()),
+    "sec-organismo": !!form.organismo && (form.organismo !== "otro" || !!form.otroOrganismoText.trim()) && form.partes.length > 0,
+    "sec-proceso": form.organismo === "otro" ? !!form.otroProcesamiento.trim() : stepKeys.length > 0 && stepKeys.some((k) => form.steps[k]),
+    "sec-resguardo": Object.values(form.resguardo).some(Boolean),
+    "sec-personal": !!form.quienProceso.trim() && !!form.quienSuperviso.trim(),
+  };
+  // Opcional: verde solo cuando hay insumos con referencia; si no, queda sin evaluar.
+  const optionalDone: Record<string, boolean | undefined> = { "sec-insumos": form.inventarioRows.some((row) => (row.ref || row.nombre || "").trim()) ? true : undefined };
+  const sections: FormSectionDef[] = [...SECTIONS, ...(editing ? [{ id: "sec-historial", label: "Historial", optional: true }] : [])].map((section) => ({ ...section, complete: readOnly ? undefined : section.optional ? optionalDone[section.id] : completeness[section.id] }));
 
   const receptionDetail = async (id: number): Promise<ApiRecord | null> => {
     const cached = detailCache.current.get(id);
@@ -349,7 +395,9 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
       lote_seleccion: lote,
       tipo_organismo: current.organismo ? [current.organismo] : [],
       parte_organismo: PARTES.map(([v]) => v).filter((v) => current.partes.includes(v)),
-      bivalvos_steps: stepObjects(BIVALVOS_STEPS, { procBiv7: { equipo: current.biv7Equipo, peso: current.biv7Peso }, procBiv8: { equipo: current.biv8Equipo, peso: current.biv8Peso } }),
+      tipo_organismo_otro: current.organismo === "otro" ? current.otroOrganismoText.trim() || null : null,
+      parte_organismo_otro: current.partes.includes("otro") ? current.otroParteText.trim() || null : null,
+      bivalvos_steps: stepObjects(BIVALVOS_STEPS, { procBiv6: { equipo: current.biv6Equipo, peso: "" }, procBiv7: { equipo: current.biv7Equipo, peso: current.biv7Peso }, procBiv9: { equipo: current.biv9Equipo, peso: current.biv9Peso }, procBiv8: { equipo: current.biv8Equipo, peso: current.biv8Peso } }),
       sardinas_steps: stepObjects(SARDINAS_STEPS, { procSar3: { equipo: current.sar3Equipo, peso: current.sar3Peso }, procSar4: { equipo: current.sar4Equipo, peso: current.sar4Peso } }),
       otro_procesamiento: current.organismo === "otro" ? current.otroProcesamiento.trim() || null : null,
       resguardo: Object.fromEntries(RESGUARDO.map(([key]) => [key, !!current.resguardo[key]])),
@@ -366,12 +414,14 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
   const fail = (message: string, section: string) => {
     setError(message);
     toast.error(message);
-    document.getElementById(section)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    openFormSection(section);
   };
 
   const handleSave = async () => {
     await loadInsumoOptions();
     const current = autoResolve(form);
+    const missing = missingSections(sections);
+    if (missing.length) return fail(missingMessage(missing), missing[0].id);
     setForm(current);
     const payload = buildPayload(current);
     if (!payload.folio_num) return fail("El folio de procesamiento es obligatorio", "sec-datos");
@@ -392,7 +442,9 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
       invalidate("muestras", "movimientos", "consumibles", "reactivos", "dashboard");
       router.push("/muestras/procesamiento");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo guardar el procesamiento");
+      const message = err instanceof Error ? err.message : "No se pudo guardar el procesamiento";
+      setError(message);
+      toast.error(message);
       setSubmitting(false);
     }
   };
@@ -417,19 +469,35 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
       code="FX-TCF-GMP"
       title={editing ? `Procesamiento ${formatProcessingFolio(item!)}` : "Nuevo procesamiento"}
       status={sampleStatusLabel(form.estado)}
-      sections={SECTIONS}
+      statusTone={readOnly ? "danger" : "brand"}
+      sections={sections}
       error={error}
+      readOnly={readOnly}
+      after={
+        editing ? (
+          <FormCard id="sec-historial" title="Historial del registro" description="Bitácora de auditoría: quién creó, editó, anuló o restauró este procesamiento y qué cambió.">
+            <RecordHistory entidad="muestras_procesamiento" entidadId={item?.id as number | undefined} />
+          </FormCard>
+        ) : null
+      }
       actions={
         <>
           <Button variant="secondary" onClick={() => router.push("/muestras/procesamiento")}>
-            Cancelar
+            {readOnly ? "Volver" : "Cancelar"}
           </Button>
-          <Button onClick={handleSave} loading={submitting} icon={<FloppyDisk size={16} />}>
-            {editing ? "Guardar cambios" : "Registrar procesamiento"}
-          </Button>
+          {!readOnly ? (
+            <Button onClick={handleSave} loading={submitting} icon={<FloppyDisk size={16} />}>
+              {editing ? "Guardar cambios" : "Registrar procesamiento"}
+            </Button>
+          ) : null}
         </>
       }
     >
+      {readOnly && item?.motivo_anulacion ? (
+        <Callout tone="danger" title="Registro anulado">
+          Motivo: {String(item.motivo_anulacion)}
+        </Callout>
+      ) : null}
       <FormCard id="sec-datos" title="Datos generales" description="Folio, fecha y recepción de origen.">
         <FormGrid cols={4}>
           <Field label="Folio P" htmlFor="p-folio" required>
@@ -462,7 +530,7 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
       </FormCard>
 
       <FormCard id="sec-muestra" title="Muestra" description={form.muestraTipoDisabled ? "El tipo lo define la recepción vinculada." : "Muestra única o lote."}>
-        <ChoiceGrid className="mb-5 lg:grid-cols-2">
+        <ChoiceGrid cols={2} className="mb-5">
           <ChoiceCard type="radio" name="p-tipo" checked={!isLote} disabled={form.muestraTipoDisabled} onChange={() => patch({ muestraTipo: "unica" })} label="Muestra única" description="Un ID interno." />
           <ChoiceCard type="radio" name="p-tipo" checked={isLote} disabled={form.muestraTipoDisabled} onChange={() => patch({ muestraTipo: "lote", idInterno: joinIds(form.loteRows) })} label="Lote" description="Selecciona qué muestras se procesan." />
         </ChoiceGrid>
@@ -475,22 +543,21 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
         ) : !form.loteRows.length ? (
           <EmptyState compact title="Sin muestras de lote" description="La recepción vinculada no contiene muestras de lote." />
         ) : (
-          <div className="overflow-hidden rounded-card border border-line">
-            <table className="w-full text-[13px]">
-              <thead className="bg-surface-2/70 text-[12px] text-ink-3">
+          <FormTable minWidth={640}>
+            <thead>
                 <tr>
-                  <th className="h-9 w-16 px-2 text-center font-medium">Trabajar</th>
-                  <th className="h-9 px-3 text-left font-medium">ID interno</th>
-                  <th className="h-9 px-3 text-left font-medium">Organismo</th>
-                  <th className="h-9 px-3 text-left font-medium">Cantidad</th>
-                  <th className="h-9 px-3 text-left font-medium">Sitio</th>
-                  <th className="h-9 px-3 text-left font-medium">Fecha</th>
+                  <th className={cn(formTh, "w-16 text-center")}>Trabajar</th>
+                  <th className={formTh}>ID interno</th>
+                  <th className={formTh}>Organismo</th>
+                  <th className={formTh}>Cantidad</th>
+                  <th className={formTh}>Sitio</th>
+                  <th className={formTh}>Fecha</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-line">
+              <tbody>
                 {form.loteRows.map((row, index) => (
                   <tr key={`${row.item.id_interno}-${index}`} className={row.checked ? "" : "text-ink-3"}>
-                    <td className="px-2 py-2 text-center">
+                    <td className={cn(formTd, "text-center")}>
                       <Checkbox
                         className="inline-flex"
                         aria-label="Trabajar"
@@ -501,16 +568,15 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
                         }}
                       />
                     </td>
-                    <td className="code px-3 py-2 font-medium">{String(row.item.id_interno || "").trim() || `Muestra ${index + 1}`}</td>
-                    <td className="px-3 py-2">{row.item.nombre_organismo || "-"}</td>
-                    <td className="px-3 py-2">{row.item.cantidad_volumen || "-"}</td>
-                    <td className="px-3 py-2">{row.item.sitio_muestreo || "-"}</td>
-                    <td className="px-3 py-2">{fmtDate(row.item.fecha_muestra)}</td>
+                    <td className={cn(formTd, "code")}>{String(row.item.id_interno || "").trim() || `Muestra ${index + 1}`}</td>
+                    <td className={formTd}>{row.item.nombre_organismo || "-"}</td>
+                    <td className={formTd}>{row.item.cantidad_volumen || "-"}</td>
+                    <td className={formTd}>{row.item.sitio_muestreo || "-"}</td>
+                    <td className={formTd}>{fmtDate(row.item.fecha_muestra)}</td>
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </FormTable>
         )}
       </FormCard>
 
@@ -544,19 +610,15 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
           <div className="flex flex-col">
             {BIVALVOS_STEPS.map(([id, , label], index) => (
               <StepRow key={id} number={index + 1} label={label} checked={!!form.steps[id]} onCheckedChange={(checked) => setStep(id, checked)}>
-                {id === "procBiv7" && form.steps[id] ? (
+                {id === "procBiv6" && form.steps[id] ? equipoSelect(form.biv6Equipo, (v) => patch({ biv6Equipo: v }), "Cronómetro (CR)") : null}
+                {id === "procBiv7" && form.steps[id] ? equipoSelect(form.biv7Equipo, (v) => patch({ biv7Equipo: v }), "Licuadora (LC)") : null}
+                {id === "procBiv9" && form.steps[id] ? (
                   <>
-                    {equipoSelect(form.biv7Equipo, (v) => patch({ biv7Equipo: v }), "Licuadora")}
-                    {pesoInput(form.biv7Peso, (v) => patch({ biv7Peso: v }), "Peso (g), 100 a 150")}
+                    {equipoSelect(form.biv9Equipo, (v) => patch({ biv9Equipo: v }), "Balanza (BA)")}
+                    {pesoInput(form.biv9Peso, (v) => patch({ biv9Peso: v }), "Peso de la molienda (g)")}
                   </>
                 ) : null}
-                {id === "procBiv8" && form.steps[id] ? (
-                  <>
-                    <InsumoSearch tipo="consumible" value={form.biv8BolsaRef} onChange={(ref) => patch({ biv8BolsaRef: ref })} placeholder="Bolsa hermética (se descuenta 1 pieza)" />
-                    {equipoSelect(form.biv8Equipo, (v) => patch({ biv8Equipo: v }), "Balanza")}
-                    {pesoInput(form.biv8Peso, (v) => patch({ biv8Peso: v }), "Peso de la molienda (g)")}
-                  </>
-                ) : null}
+                {id === "procBiv8" && form.steps[id] ? <InsumoSearch tipo="consumible" value={form.biv8BolsaRef} onChange={(ref) => patch({ biv8BolsaRef: ref })} placeholder="Bolsa hermética (se descuenta 1 pieza)" /> : null}
               </StepRow>
             ))}
           </div>
@@ -564,15 +626,10 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
           <div className="flex flex-col">
             {SARDINAS_STEPS.map(([id, , label], index) => (
               <StepRow key={id} number={index + 1} label={label} checked={!!form.steps[id]} onCheckedChange={(checked) => setStep(id, checked)}>
-                {id === "procSar3" && form.steps[id] ? (
-                  <>
-                    {equipoSelect(form.sar3Equipo, (v) => patch({ sar3Equipo: v }), "Licuadora")}
-                    {pesoInput(form.sar3Peso, (v) => patch({ sar3Peso: v }), "Peso (g), 100 a 150")}
-                  </>
-                ) : null}
+                {id === "procSar3" && form.steps[id] ? equipoSelect(form.sar3Equipo, (v) => patch({ sar3Equipo: v }), "Licuadora (LC)") : null}
                 {id === "procSar4" && form.steps[id] ? (
                   <>
-                    {equipoSelect(form.sar4Equipo, (v) => patch({ sar4Equipo: v }), "Balanza")}
+                    {equipoSelect(form.sar4Equipo, (v) => patch({ sar4Equipo: v }), "Balanza (BA)")}
                     {pesoInput(form.sar4Peso, (v) => patch({ sar4Peso: v }), "Peso de la molienda (g)")}
                   </>
                 ) : null}
@@ -614,11 +671,12 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
       </FormCard>
 
       <FormCard id="sec-personal" title="Personal responsable" description="Quién procesó y quién supervisó.">
-        <div className="grid gap-5 lg:grid-cols-2">
-          <PersonCard title="Quien procesó" name={form.quienProceso} onName={(v) => patch({ quienProceso: v })} cargo={form.quienProcesoCargo} onCargo={(v) => patch({ quienProcesoCargo: v })} signature={form.firmaProceso} onSignature={(v) => patch({ firmaProceso: v })} />
-          <PersonCard title="Quien supervisó" name={form.quienSuperviso} onName={(v) => patch({ quienSuperviso: v })} cargo={form.quienSupervisoCargo} onCargo={(v) => patch({ quienSupervisoCargo: v })} signature={form.firmaSuperviso} onSignature={(v) => patch({ firmaSuperviso: v })} />
+        <div className="flex flex-col gap-3">
+          {/* El formato oficial pide nombre y firma; el cargo no se guarda en este registro. */}
+          <PersonCard title="Quien procesó" name={form.quienProceso} onName={(v) => patch({ quienProceso: v })} signature={form.firmaProceso} onSignature={(v) => patch({ firmaProceso: v })} />
+          <PersonCard title="Quien supervisó" requires="aprobaciones" name={form.quienSuperviso} onName={(v) => patch({ quienSuperviso: v })} signature={form.firmaSuperviso} onSignature={(v) => patch({ firmaSuperviso: v })} />
         </div>
-        <p className="mt-4 rounded-card border border-line bg-surface-2/50 px-4 py-3 text-[12.5px] text-ink-2">Recuerda registrar el uso de cada equipo en su bitácora correspondiente.</p>
+        <Callout tone="info" className="mt-4">Recuerda registrar el uso de cada equipo en su bitácora correspondiente.</Callout>
       </FormCard>
     </FormPage>
   );
