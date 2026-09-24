@@ -33,7 +33,7 @@ for (let i = 0; i < 60; i += 1) {
   await new Promise((r) => setTimeout(r, 1000));
 }
 
-// ---------- Sesiones (dos usuarios: QA admin y Melisa? solo QA tiene password; creamos otro) ----------
+// ---------- Sesiones (QA, con el rol de prueba que tiene todos los permisos, y una revisora creada por API con ese mismo rol) ----------
 {
   const bad = await api("POST", "/auth/login", { email: "qa@ficotox.local", password: "incorrecta-123" });
   check("login fallido -> 401", bad.status === 401, `status ${bad.status}`);
@@ -41,7 +41,7 @@ for (let i = 0; i < 60; i += 1) {
   token = r.data?.token || "";
   check("login QA", r.status === 200 && !!token && r.data?.permissions?.auditoria?.read === true && r.data?.permissions?.aprobaciones?.update === true, `perm auditoria=${JSON.stringify(r.data?.permissions?.auditoria)} aprobaciones=${JSON.stringify(r.data?.permissions?.aprobaciones)}`);
   // Segundo usuario (revisor independiente) creado por API
-  const u = await api("POST", "/admin/usuarios", { nombre: "Revisora QA", email: "revisora@cicese.mx", activo: true, id_rol: 1, departamento: "Calidad", password: "RevisoraQA2026!" });
+  const u = await api("POST", "/admin/usuarios", { nombre: "Revisora QA", email: "revisora@cicese.mx", activo: true, id_rol: r.data?.user?.role_id, departamento: "Calidad", password: "RevisoraQA2026!" });
   check("crear usuario revisora", u.status === 201, `status ${u.status} ${JSON.stringify(u.data)}`);
   const r2 = await api("POST", "/auth/login", { email: "revisora@cicese.mx", password: "RevisoraQA2026!" });
   token2 = r2.data?.token || "";

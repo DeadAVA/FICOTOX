@@ -1,0 +1,65 @@
+{
+  "_comentario": "Copia este archivo como scripts/seed-usuarios.local.json (ignorado por git) y escribe una contraseña de al menos 8 caracteres para cada persona.",
+  "usuarios": [
+    {
+      "rol": "Administrador técnico del sistema",
+      "nombre": "Jorge Ramírez Soto",
+      "email": "jorge.ramirez@ficotox.local",
+      "password": "CAMBIAR"
+    },
+    {
+      "rol": "Responsable General",
+      "nombre": "Patricia Luna Herrera",
+      "email": "patricia.luna@ficotox.local",
+      "password": "CAMBIAR"
+    },
+    {
+      "rol": "Coordinador/a de Mejora Continua",
+      "nombre": "Ana Sofía Torres Vega",
+      "email": "ana.torres@ficotox.local",
+      "password": "CAMBIAR"
+    },
+    {
+      "rol": "Coordinador/a del Área Técnica",
+      "nombre": "Ricardo Medina Flores",
+      "email": "ricardo.medina@ficotox.local",
+      "password": "CAMBIAR"
+    },
+    {
+      "rol": "Coordinador/a de Investigación y Desarrollo",
+      "nombre": "Gabriela Ortiz Campos",
+      "email": "gabriela.ortiz@ficotox.local",
+      "password": "CAMBIAR"
+    },
+    {
+      "rol": "Técnico Analista",
+      "nombre": "Luis Fernando Castro Ruiz",
+      "email": "luis.castro@ficotox.local",
+      "password": "CAMBIAR"
+    },
+    {
+      "rol": "Técnico Auxiliar",
+      "nombre": "Mariana Delgado Peña",
+      "email": "mariana.delgado@ficotox.local",
+      "password": "CAMBIAR"
+    },
+    {
+      "rol": "Administrador/a Auxiliar",
+      "nombre": "Carmen Aguilar Rosas",
+      "email": "carmen.aguilar@ficotox.local",
+      "password": "CAMBIAR"
+    },
+    {
+      "rol": "Auditor Interno",
+      "nombre": "Héctor Navarro Ibarra",
+      "email": "hector.navarro@ficotox.local",
+      "password": "CAMBIAR"
+    },
+    {
+      "rol": "Estudiante / personal en formación",
+      "nombre": "Diego Salinas Mora",
+      "email": "diego.salinas@ficotox.local",
+      "password": "CAMBIAR"
+    }
+  ]
+}

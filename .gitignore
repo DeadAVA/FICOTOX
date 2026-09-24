@@ -10,6 +10,7 @@ instance/informes/
 instance/documentos_sgc/
 instance/test/
 instance/fixtures/
+instance/test-fixture/
 tests/ui/fail.png
 
 # Node / Next.js
@@ -38,3 +39,6 @@ __pycache__/
 # Respaldos automaticos previos a migraciones de esquema
 instance/backups/
 instance/auditoria.key
+
+# Contrasenas de los usuarios iniciales (scripts/seed-roles-usuarios.mjs)
+scripts/seed-usuarios.local.json

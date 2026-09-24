@@ -19,6 +19,10 @@ import { addColumnIfMissing, markSchemaReady, schemaReady } from "./schema";
  *   cadena tras alterarla. Si la llave cambia o se pierde, la verificacion de lo
  *   ya escrito falla: hay que respaldarla junto con la base.
  * - Las imagenes de firma no se copian al detalle (solo se marca que cambio).
+ * - scripts/seed-roles-usuarios.mjs replica registrarAuditoria/sellar (no puede
+ *   importar este modulo desde Node). Si cambia el registro sellado (campos,
+ *   stableJson, VOLATILE, llave), hay que cambiar tambien ese script;
+ *   tests/api-roles.mjs lo detecta (verifica la cadena de la base de prueba).
  */
 
 export type AuditAction =

@@ -11,25 +11,39 @@ anulaciones, documentos SGC, bajas de inventario y bitacora.
 npm test               # API + navegador
 npm run test:api       # solo API (no requiere Chrome)
 npm run test:reset-db  # solo regenera la base de prueba
+npm run test:fixture   # rehace la base congelada (base vacia + roles de la Fase 0)
+npm test -- --rebuild-fixture   # la rehace y corre todo
 ```
 
 `tests/run.mjs`:
 
 1. Comprueba que el puerto 3100 este libre. Si algo lo ocupa, **no corre nada**:
    ese proceso podria estar sirviendo la base real.
-2. Copia `instance/ficotox.sqlite3` a `instance/test/ficotox-test.sqlite3` y agrega el
-   usuario `qa@ficotox.local` / `QaFicotox2026!` (rol 1). La carpeta `instance/test/`
-   (base, PDFs de informes y archivos de documentos generados por las pruebas) se
-   borra y regenera en cada corrida.
+2. Si no existe `instance/fixtures/ficotox-base.sqlite3` la genera
+   (`tests/build-fixture.mjs`: base vacia creada por el arranque en el puerto 3101 +
+   `scripts/seed-roles-usuarios.mjs` con contrasenas aleatorias). La copia a
+   `instance/test/ficotox-test.sqlite3` y, **solo en la copia**, crea el rol
+   "QA pruebas automatizadas" (todos los permisos) y el usuario `qa@ficotox.local` /
+   `QaFicotox2026!`, y asigna contrasenas aleatorias a los 10 usuarios del catalogo
+   (`instance/test/credenciales-roles.json`). La carpeta `instance/test/` (base, PDFs
+   de informes y archivos de documentos generados por las pruebas) se borra y
+   regenera en cada corrida. Nunca se usa la base real como origen.
 3. Levanta `next dev -p 3100` con `SQLITE_PATH` apuntando a la copia y **verifica
    contra `/api/health/db` que el servidor este usando esa copia** (`archivo`);
    si no coincide, aborta sin escribir nada. Con esas dos comprobaciones, la base
    real no se toca.
-4. Corre las suites (reiniciando el servidor antes de `api-permisos.mjs`) y lo apaga.
+4. Corre `api-roles.mjs` sobre la base recien copiada y luego `tests/datos-apoyo.mjs`,
+   que crea por API los datos que las demas suites esperan (equipo Centrifuga con
+   calibracion vencida, reactivos Metanol HPLC, Acido acetico y 2-Propanol, un
+   consumible y la cadena R 1 → P 1 → E-A 1 con la muestra D45-2); los ids quedan en
+   `instance/test/datos-apoyo.json` para las pruebas de navegador.
+5. Corre las suites (reiniciando el servidor antes de `api-permisos.mjs` y
+   `api-roles.mjs --tras-reinicio`) y lo apaga.
 
-Variables: `TEST_PORT` (3100), `SOURCE_DB`, `TEST_DB`, `CHROME_PATH` (ruta a un
-Chrome/Chromium para Playwright; si no existe, las pruebas de navegador se omiten
-con aviso). `playwright-core` es dependencia de desarrollo y no descarga
+Variables: `TEST_PORT` (3100), `TEST_FIXTURE_PORT` (3101), `SOURCE_DB`, `TEST_DB`,
+`CHROME_PATH` (ruta a un Chrome/Chromium para Playwright; por omision se usa el
+`chromium-*` mas reciente de `~/Library/Caches/ms-playwright`; si no hay, las
+pruebas de navegador se omiten con aviso). `playwright-core` es dependencia de desarrollo y no descarga
 navegadores: use uno instalado o `npx playwright install chromium` en otra
 carpeta y apunte `CHROME_PATH` a el.
 
@@ -37,8 +51,10 @@ carpeta y apunte `CHROME_PATH` a el.
 
 | Archivo | Tipo | Que cubre |
 | --- | --- | --- |
+| `tests/api-roles.mjs` | HTTP | Fase 0: los 10 roles existen con exactamente los permisos de la especificacion (tabla escrita en la prueba, independiente del catalogo), no existe "Super Admin", solo "Administrador tecnico del sistema" es sistemico; cada usuario inicia sesion, recibe sus permisos exactos, 200 en lo que puede leer y 403 en lo demas (y 403 al crear un equipo para los roles que leen todo); no se puede dejar el sistema sin administrador (409 y rollback); las 20 altas del reinicio estan en la bitacora y la cadena esta integra. Con `--tras-reinicio` repite las comprobaciones de catalogo y 200/403 despues de reiniciar el servidor. |
 | `tests/api-dsp.mjs` | HTTP | Series de folio por tipo de extraccion (E-A / E-D), descuento de inventario por tubo, equipos con bitacora, reposicion al editar, compatibilidad con registros ASP anteriores. |
 | `tests/api-sgc.mjs` | HTTP | Recepcion con inspeccion y decision de aceptacion (NC, desviacion, comunicacion al cliente), transiciones de estado, anulacion y restauracion con reposicion de inventario, bloqueo por dependientes, analisis con revision y aprobacion por personas distintas, informe (revisar, autorizar, PDF con SHA-256, entrega, enmienda v2, anulacion), disposicion final que cierra la muestra, documentos SGC (revisiones, lista maestra, obsoletos), bajas logicas de reactivos/consumibles/equipos/usuarios, `DELETE` -> 405, bitacora e integridad de la cadena de hashes. |
+| `tests/ui/roles.mjs` | Navegador | Cada uno de los 10 usuarios del catalogo inicia sesion y la barra lateral muestra exactamente los destinos de sus modulos (Documentos nunca, esta apagado), sin errores de consola. |
 | `tests/ui/dsp.mjs` | Navegador | Formato DSP desde un procesamiento, avisos de equipo, tabla de pesos, guardado y reapertura. |
 | `tests/api-permisos.mjs` | HTTP | Se ejecuta **tras reiniciar el servidor**, con la base que dejo `api-sgc.mjs`: comprueba que el arranque no amplia los permisos de un rol limitado (el rol "Analista QA" sigue con solo `muestras` y sigue recibiendo 403 en inventario, roles, usuarios, informes, documentos y la bitacora completa). |
 | `tests/ui/sgc.mjs` | Navegador | Recepcion completa con inspeccion y aceptacion, anular/restaurar desde la lista, historial en el formato, analisis (registrar, revisar, aprobar con excepcion, solo lectura), informe (borrador, revision, autorizacion con firma, PDF, entrega), documento SGC (alta con archivo, revision, aprobacion, lista maestra, detalle), bitacora (verificacion, expansion de cambios, filtros), baja y reactivacion de un reactivo, navegacion, y ausencia de errores de consola. |

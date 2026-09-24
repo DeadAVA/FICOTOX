@@ -1,33 +1,44 @@
 /*
  * Corredor de pruebas: regenera la base de prueba, levanta `next dev` en el
- * puerto 3100 apuntando a ella, corre las pruebas de API y (si hay un Chrome
- * de Playwright disponible) las de navegador, y apaga el servidor.
+ * puerto 3100 apuntando a ella, crea los datos de apoyo, corre las pruebas de
+ * API y (si hay un Chrome de Playwright disponible) las de navegador, y apaga
+ * el servidor.
  *
- *   npm test              # API + navegador
- *   npm test -- --api     # solo API
+ *   npm test                         # API + navegador
+ *   npm test -- --api                # solo API
+ *   npm test -- --rebuild-fixture    # regenera antes la base congelada (npm run test:fixture)
  *   CHROME_PATH=/ruta/a/chrome npm test
  *
  * Antes de escribir nada comprueba dos cosas: que el puerto este libre (para no
  * atacar un servidor ajeno que ya lo ocupe) y que el servidor levantado este
- * usando la copia de prueba y no `instance/ficotox.sqlite3`.
+ * usando la copia de prueba y no `instance/ficotox.sqlite3`. El rol y el
+ * usuario QA solo existen en la copia de prueba (reset-test-db.mjs).
  */
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resetTestDb } from "./reset-test-db.mjs";
+import { buildFixture } from "./build-fixture.mjs";
+import { CREDENCIALES, FIXTURE, resetTestDb } from "./reset-test-db.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 const PORT = Number(process.env.TEST_PORT || 3100);
 const onlyApi = process.argv.includes("--api");
-const chrome = process.env.CHROME_PATH || path.join(os.homedir(), "Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing");
+/* Chrome de Playwright: CHROME_PATH o la version mas reciente instalada en la cache de Playwright (macOS). */
+const chromeDePlaywright = () => {
+  const cache = path.join(os.homedir(), "Library/Caches/ms-playwright");
+  const versiones = existsSync(cache) ? readdirSync(cache).filter((d) => /^chromium-\d+$/.test(d)).sort((a, b) => Number(b.split("-")[1]) - Number(a.split("-")[1])) : [];
+  const candidatos = versiones.map((d) => path.join(cache, d, "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"));
+  return candidatos.find((ruta) => existsSync(ruta)) || candidatos[0] || path.join(cache, "chromium/chrome");
+};
+const chrome = process.env.CHROME_PATH || chromeDePlaywright();
 
-const run = (file, extraEnv = {}) =>
+const run = (file, extraEnv = {}, args = []) =>
   new Promise((resolve) => {
-    const child = spawn(process.execPath, [file], { cwd: root, stdio: "inherit", env: { ...process.env, ...extraEnv } });
+    const child = spawn(process.execPath, [file, ...args], { cwd: root, stdio: "inherit", env: { ...process.env, ...extraEnv } });
     child.on("exit", (code) => resolve(code ?? 1));
   });
 
@@ -63,6 +74,10 @@ if (!(await puertoLibre())) {
   process.exit(1);
 }
 
+if (process.argv.includes("--rebuild-fixture") || (!process.env.SOURCE_DB && !existsSync(FIXTURE))) {
+  console.log("Generando la base congelada de prueba (base vacia + roles de la Fase 0)...");
+  await buildFixture();
+}
 const testDb = resetTestDb();
 const esperado = path.basename(testDb);
 console.log(`Base de prueba: ${testDb}`);
@@ -91,26 +106,36 @@ const arrancarServidor = async () => {
 let failed = 0;
 try {
   await arrancarServidor();
-  const api = { BASE: `http://localhost:${PORT}/api`, TEST_DB_PATH: testDb, BETTER_SQLITE3: path.join(root, "node_modules/better-sqlite3") };
+  const datosApoyo = path.join(path.dirname(testDb), "datos-apoyo.json");
+  const api = { BASE: `http://localhost:${PORT}/api`, TEST_DB_PATH: testDb, BETTER_SQLITE3: path.join(root, "node_modules/better-sqlite3"), CREDENCIALES_ROLES: CREDENCIALES, DATOS_APOYO_FILE: datosApoyo };
+
+  // Catalogo de roles sobre la base recien reiniciada, antes de que otras suites agreguen roles.
+  console.log("\n=== api-roles.mjs");
+  failed += (await run(path.join(here, "api-roles.mjs"), api)) ? 1 : 0;
+
+  console.log("\n=== datos-apoyo.mjs");
+  if (await run(path.join(here, "datos-apoyo.mjs"), api)) throw new Error("No se pudieron crear los datos de apoyo de las pruebas");
+
   for (const file of ["api-dsp.mjs", "api-sgc.mjs"]) {
     console.log(`\n=== ${file}`);
     failed += (await run(path.join(here, file), api)) ? 1 : 0;
   }
 
   // Reinicio: los permisos de un rol no deben crecer solos al arrancar de nuevo.
-  console.log("\n=== api-permisos.mjs (tras reiniciar el servidor)");
+  console.log("\n=== api-permisos.mjs y api-roles.mjs --tras-reinicio (tras reiniciar el servidor)");
   stop();
   await new Promise((r) => setTimeout(r, 1500));
   await arrancarServidor();
   failed += (await run(path.join(here, "api-permisos.mjs"), api)) ? 1 : 0;
+  failed += (await run(path.join(here, "api-roles.mjs"), api, ["--tras-reinicio"])) ? 1 : 0;
 
   if (!onlyApi) {
     if (!existsSync(chrome)) {
       console.log(`\n(navegador omitido: no se encontro Chrome en ${chrome}; define CHROME_PATH)`);
     } else {
-      for (const file of ["dsp.mjs", "sgc.mjs"]) {
+      for (const file of ["roles.mjs", "dsp.mjs", "sgc.mjs"]) {
         console.log(`\n=== ui/${file}`);
-        failed += (await run(path.join(here, "ui", file), { BASE: `http://localhost:${PORT}`, CHROME_PATH: chrome })) ? 1 : 0;
+        failed += (await run(path.join(here, "ui", file), { BASE: `http://localhost:${PORT}`, CHROME_PATH: chrome, CREDENCIALES_ROLES: CREDENCIALES, DATOS_APOYO_FILE: datosApoyo })) ? 1 : 0;
       }
     }
   }

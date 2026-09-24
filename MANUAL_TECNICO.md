@@ -223,6 +223,10 @@ PUT    /api/admin/usuarios/<id>
 DELETE /api/admin/usuarios/<id>
 ```
 
+- **Siempre queda un administrador**: un cambio de usuario (desactivar, cambiar de rol, dar de baja) o de rol (quitar permisos) que deje en cero a los usuarios activos con `usuarios:update` y `roles:update` responde **409** y no se aplica (`countActiveAdministrators` / `assertAdministratorRemains` en `rbac.ts`).
+- Un rol con `es_sistemico = 1` ("Administrador técnico del sistema") no se elimina (403).
+- El correo de un usuario nuevo (o un correo que cambia) debe ser del dominio `MICROSOFT_ALLOWED_DOMAIN`; una cuenta existente que conserva su correo se puede editar aunque sea de otro dominio (p. ej. las cuentas locales `@ficotox.local` del reinicio).
+
 ### 7.3 `dashboard`
 
 ```text
@@ -449,9 +453,28 @@ Los endpoints protegidos llaman a `requireUser(request)`, que:
 
 `src/lib/server/rbac.ts` define los permisos por modulo: `dashboard`, `reactivos`, `consumibles`, `equipos`, `muestras`, `movimientos`, `mantenimiento`, `documentos`, `informes`, `aprobaciones`, `auditoria`, `roles`, `usuarios`, con acciones `read`, `create`, `update`, `delete`.
 
-`aprobaciones` (revisar/aprobar analisis, autorizar informes, aprobar documentos) y `auditoria` (leer la bitacora completa) se asignan por defecto solo a los roles administradores.
+`ensureRbacSchema()` corre una vez por proceso y **solo** asegura las tablas y el catalogo de modulos (`permisos`). **No crea roles** (ya no existe "Super Admin") **ni concede permisos**: un permiso ausente significa "no concedido", tambien para un modulo nuevo. Los roles y sus permisos se dan de alta con `scripts/seed-roles-usuarios.mjs` (seccion 15.3) o en Administracion > Roles. El modelo sigue siendo un rol por usuario y `read/create/update/delete` por modulo (la Fase 1 lo cambiara).
 
-`ensureRbacSchema()` corre una vez por proceso. Al arrancar **no amplia lo que un rol ya podia hacer**: un permiso ausente significa "no concedido", no "pendiente de configurar". Solo rellena (a) los roles administradores y (b) los modulos cuya clave aparece por primera vez en la tabla `permisos` durante ese arranque (y solo si no son de uso restringido). Cualquier otro permiso se concede a mano en Administracion > Roles. La accion `delete` significa anular o dar de baja con motivo: ningun endpoint de registros tecnicos o de inventario borra filas (la unica excepcion son los roles sin usuarios, que si se eliminan y quedan en la bitacora como `eliminar`). Un reactivo o consumible dado de baja no se puede **elegir de nuevo** (409), pero un registro que ya lo declaraba se sigue pudiendo reabrir y guardar: `applyStageInventory` recibe los insumos que el registro ya tenia (`insumosDeclarados`) y los repone aunque esten inactivos, para no congelar los registros historicos.
+#### 9.2.1 Catalogo provisional de roles (Fase 0)
+
+Definido en `scripts/roles-catalogo.json` (especificacion "Roles y permisos FICOTOX", FX-MO-2-1). R=read, C=create, U=update, D=delete; un modulo que no aparece queda sin permiso.
+
+| Rol | Permisos |
+| --- | --- |
+| Administrador técnico del sistema (sistemico, no se elimina) | dashboard R; usuarios RCUD; roles RCUD; auditoria R |
+| Responsable General | R en todos; informes RU; aprobaciones RU |
+| Coordinador/a de Mejora Continua | R en todos; documentos RCUD |
+| Coordinador/a del Área Técnica | dashboard R; muestras RCUD; informes RCU; aprobaciones RU; reactivos, consumibles, equipos, mantenimiento, movimientos RCUD; documentos R |
+| Coordinador/a de Investigación y Desarrollo | dashboard R; muestras RCU; equipos R; reactivos RCU; consumibles RCU; movimientos R; documentos R |
+| Técnico Analista | dashboard R; muestras RCU; informes RC; reactivos RC; consumibles RC; equipos R; movimientos RC; documentos R |
+| Técnico Auxiliar | dashboard R; muestras RCU; reactivos RC; consumibles RC; movimientos RC; documentos R |
+| Administrador/a Auxiliar | dashboard R; muestras R; equipos RCU; mantenimiento RCU; reactivos RCU; consumibles RCU; movimientos RCU |
+| Auditor Interno | R en todos los modulos; nada mas |
+| Estudiante / personal en formación | dashboard R; muestras RC; documentos R |
+
+`documentos` sigue apagado en la interfaz (`FEATURES.documentos = false`): el permiso existe pero el menu no lo muestra. `aprobaciones` (revisar/aprobar analisis, autorizar informes, aprobar documentos) no tiene pantalla propia: habilita esos botones dentro de Muestras e Informes.
+
+La accion `delete` significa anular o dar de baja con motivo: ningun endpoint de registros tecnicos o de inventario borra filas (la unica excepcion son los roles sin usuarios, que si se eliminan y quedan en la bitacora como `eliminar`). Un reactivo o consumible dado de baja no se puede **elegir de nuevo** (409), pero un registro que ya lo declaraba se sigue pudiendo reabrir y guardar: `applyStageInventory` recibe los insumos que el registro ya tenia (`insumosDeclarados`) y los repone aunque esten inactivos, para no congelar los registros historicos.
 
 Los endpoints combinan:
 
@@ -520,7 +543,7 @@ npm test               # pruebas de API + navegador (ver docs/VALIDACION.md)
 npm run test:api       # solo API
 ```
 
-`npm test` copia `instance/ficotox.sqlite3` a `instance/test/ficotox-test.sqlite3`, agrega el usuario `qa@ficotox.local`, levanta `next dev` en el puerto 3100 sobre esa copia y corre `tests/api-*.mjs` (flujo completo por HTTP) y `tests/ui/*.mjs` (Playwright contra un Chrome local: `CHROME_PATH`). La base real nunca se toca.
+`npm test` copia la base congelada `instance/fixtures/ficotox-base.sqlite3` (base vacia + roles y usuarios de la Fase 0) a `instance/test/ficotox-test.sqlite3`, crea **solo en esa copia** el rol "QA pruebas automatizadas" (todos los permisos) y el usuario `qa@ficotox.local`, levanta `next dev` en el puerto 3100 sobre la copia, crea los datos de apoyo (`tests/datos-apoyo.mjs`) y corre `tests/api-*.mjs` (flujo completo por HTTP) y `tests/ui/*.mjs` (Playwright contra el Chrome de Playwright mas reciente o `CHROME_PATH`). La base real nunca se toca. Detalle en `docs/VALIDACION.md`.
 
 Con el servidor levantado:
 
@@ -560,7 +583,7 @@ Ver `docs/backups.md` y `scripts/backup_ficotox.py` (lee `.env` de la raiz y res
 
 ### 15.1 Base de pruebas
 
-`tests/reset-test-db.mjs` copia `instance/fixtures/ficotox-base.sqlite3` (una copia congelada de la base antes de cargar datos de demostracion; las pruebas de API suponen los folios y catalogos de ese estado). Si el fixture no existe usa `instance/ficotox.sqlite3`; `SOURCE_DB=ruta` lo fuerza. La carpeta `instance/fixtures/` no se versiona: al instalar en otra maquina, copiar ahi un respaldo limpio.
+`instance/fixtures/ficotox-base.sqlite3` es una base vacia (creada por el arranque) con los 10 roles y usuarios de la Fase 0. Se genera con `npm run test:fixture` (`tests/build-fixture.mjs`: levanta `next dev` en el puerto 3101 sobre una base nueva, corre el script de roles con contrasenas aleatorias y copia el resultado); `npm test` la genera sola si no existe y `npm test -- --rebuild-fixture` la rehace. `tests/reset-test-db.mjs` la copia a `instance/test/`, agrega el rol y el usuario de QA y asigna contrasenas aleatorias a los usuarios del catalogo (`instance/test/credenciales-roles.json`, que usan `tests/api-roles.mjs` y `tests/ui/roles.mjs`). Ya no hay respaldo automatico a la base real: si falta el fixture, se genera. `SOURCE_DB=ruta` fuerza otra base de origen. La carpeta `instance/fixtures/` no se versiona.
 
 ### 15.2 Datos de demostracion
 
@@ -570,7 +593,43 @@ Ver `docs/backups.md` y `scripts/backup_ficotox.py` (lee `.env` de la raiz y res
 FICOTOX_EMAIL=admin@cicese.mx FICOTOX_PASSWORD='...' node scripts/demo-seed.mjs   # BASE=http://localhost:3000/api por omision
 ```
 
-Crea tres roles y tres personas (analista, coordinacion tecnica, direccion: contrasenas en el script), 19 equipos con clave de bitacora (`FX-TCB-BA1`, `LC1`, `CE1`, `VO1`...), mantenimientos, soluciones preparadas y consumibles del protocolo, documentos del SGC vigentes y nueve recepciones en distintos puntos del flujo (hasta informe entregado y disposicion final; una rechazada, una con desviacion, una anulada). Es idempotente: busca antes de crear. Respaldar la base antes de correrlo sobre una instancia real.
+Requiere una cuenta con permiso de alta en usuarios, roles, inventario, muestras, informes y documentos (tras el reinicio de la Fase 0 ningun rol del catalogo los tiene todos: crear antes un rol temporal o darlos a mano). Crea tres roles y tres personas (analista, coordinacion tecnica, direccion: contrasenas en el script), 19 equipos con clave de bitacora (`FX-TCB-BA1`, `LC1`, `CE1`, `VO1`...), mantenimientos, soluciones preparadas y consumibles del protocolo, documentos del SGC vigentes y nueve recepciones en distintos puntos del flujo (hasta informe entregado y disposicion final; una rechazada, una con desviacion, una anulada). Es idempotente: busca antes de crear. Respaldar la base antes de correrlo sobre una instancia real.
+
+### 15.3 Reinicio limpio y alta de roles (Fase 0)
+
+Procedimiento aplicado el 2026-09-24 (rama `fase-0-reinicio`); repetible en otra instalacion SQLite:
+
+1. **Detener el servidor** (`lsof -iTCP:3000 -iTCP:5000 -sTCP:LISTEN`; en macOS el puerto 5000 lo ocupa AirPlay/ControlCenter, no FICOTOX).
+2. **Respaldar** en `instance/backups/pre-reinicio-<AAAAMMDD-HHMM>/`: la base con `sqlite3 instance/ficotox.sqlite3 ".backup '<dir>/ficotox.sqlite3'"`, `instance/auditoria.key` si existe, `instance/informes/`, `instance/maintenance_reports/` e `instance/documentos_sgc/`. Si la llave del sello es `SECRET_KEY` (no hay `auditoria.key`), **no cambiarla**: la bitacora anterior solo se puede verificar con ella.
+3. **Verificar** la copia: `PRAGMA integrity_check` = `ok`, mismo `COUNT(*)` de `auditoria` (y del resto de tablas) y mismo ultimo `hash` que el original; PDFs identicos (`diff -r`). Dejar la evidencia en `LEEME.txt` dentro del respaldo.
+4. **Mover** (no borrar) los originales fuera de `instance/`, a `backups/pre-reinicio-<AAAAMMDD-HHMM>/instance-original/` (carpeta ignorada por git). La bitacora anterior se conserva solo en el respaldo; la nueva inicia su propia cadena.
+5. **Crear el esquema**: arrancar FICOTOX (`npm run dev`), abrir `http://localhost:3000/api/health/db` y detenerlo. El arranque ya no crea ningun rol.
+6. **Alta de roles y usuarios**: copiar `scripts/seed-usuarios.example.json` a `scripts/seed-usuarios.local.json` (ignorado por git), escribir las contrasenas (minimo 8 caracteres) y correr, con el servidor detenido:
+
+   ```bash
+   npm run seed:roles            # node scripts/seed-roles-usuarios.mjs [--usuarios archivo.json] [--db base.sqlite3]
+   ```
+
+   Crea los 10 roles de `scripts/roles-catalogo.json` con sus permisos exactos y un usuario local por rol, con `hashPassword()` de `src/lib/server/password.ts` (requiere Node 22.18+ o 24). Es idempotente: un rol o usuario existente no se duplica ni se modifica. Cada alta queda en la bitacora (actor `sistema`, motivo `Reinicio Fase 0`) sellada igual que en el servidor, y al final recalcula la cadena completa. Solo SQLite (en MySQL, alta desde Administracion).
+7. **Comprobar**: iniciar sesion con cada usuario, revisar el menu y pulsar **Verificar integridad** en Auditoria.
+
+**MySQL/MariaDB.** El script solo aplica a SQLite y el arranque ya no crea ningun rol, asi que en una instalacion MySQL nueva nadie puede entrar a Administracion hasta crear a mano el primer administrador (despues de que el arranque cree el esquema):
+
+```sql
+INSERT INTO roles (nombre, descripcion, es_sistemico, activo)
+VALUES ('Administrador técnico del sistema', 'Administra cuentas, roles y permisos; consulta la bitácora.', 1, 1);
+SET @rol = LAST_INSERT_ID();
+INSERT INTO rol_permisos (id_rol, id_permiso, can_read, can_create, can_update, can_delete)
+SELECT @rol, id, 1, IF(clave IN ('usuarios','roles'), 1, 0), IF(clave IN ('usuarios','roles'), 1, 0), IF(clave IN ('usuarios','roles'), 1, 0)
+FROM permisos WHERE clave IN ('dashboard','usuarios','roles','auditoria');
+-- hash: node -e 'import("./src/lib/server/password.ts").then(m=>console.log(m.hashPassword(process.argv[1])))' 'contraseña'
+INSERT INTO usuarios (nombre, email, activo, id_rol, auth_provider, password_hash)
+VALUES ('Nombre Apellido', 'correo@cicese.mx', 1, @rol, 'local', '<hash scrypt$...>');
+```
+
+Esas dos altas no quedan en la bitacora (se hicieron fuera de la aplicacion); anotarlas en el registro de la instalacion. El resto de los roles de `scripts/roles-catalogo.json` se da de alta desde Administracion > Roles, con bitacora. Soporte MySQL en el script: pendiente (Fase 1).
+
+Las cuentas del catalogo son locales (`@ficotox.local`); no pueden entrar con Microsoft. Para dar de alta personal real, usar correos `@cicese.mx` desde Administracion > Usuarios.
 
 ## 16. Convenciones de desarrollo
 
@@ -612,7 +671,8 @@ Crea tres roles y tres personas (analista, coordinacion tecnica, direccion: cont
 
 ### Un usuario no ve un modulo
 
-- Revisar permisos del rol en la pantalla **Roles**.
+- Revisar permisos del rol en la pantalla **Roles**. Un permiso ausente es "no concedido": el arranque no rellena permisos.
+- `documentos` esta apagado por `FEATURES.documentos`; aunque el rol tenga el permiso, no aparece en el menu.
 
 ## 19. Comandos utiles
 
@@ -622,6 +682,9 @@ npm run build
 npm run start:standalone
 npm run typecheck
 npm run lint
+npm test                 # regenera la base de prueba si falta (--rebuild-fixture para forzarlo)
+npm run test:fixture     # rehace instance/fixtures/ficotox-base.sqlite3
+npm run seed:roles       # alta idempotente de roles y usuarios (scripts/seed-usuarios.local.json)
 ```
 
 Buscar rutas:

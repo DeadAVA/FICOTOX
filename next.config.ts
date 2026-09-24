@@ -17,9 +17,9 @@ const nextConfig: NextConfig = {
   },
   // Sin marca de Next en las respuestas.
   poweredByHeader: false,
-  // El trazado de archivos no debe copiar bases de datos ni codigo legado al standalone.
+  // El trazado de archivos no debe copiar bases de datos, respaldos ni codigo legado al standalone.
   outputFileTracingExcludes: {
-    "*": ["./instance/**", "./docs/**", "./scripts/**", "./src/**"],
+    "*": ["./instance/**", "./backups/**", "./docs/**", "./scripts/**", "./src/**"],
   },
   // Raiz explicita para Turbopack (evita que tome lockfiles fuera del repo).
   turbopack: { root: __dirname },

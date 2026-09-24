@@ -2,9 +2,9 @@
  * Se ejecuta DESPUES de reiniciar el servidor de pruebas, con la base que dejo
  * `api-sgc.mjs` (incluye el rol "Analista QA", con permiso solo sobre muestras).
  *
- * Comprueba que el relleno de permisos del arranque (`ensureRbacSchema`) no
- * amplia por su cuenta lo que un rol puede hacer: un permiso ausente significa
- * "no concedido", no "pendiente de configurar".
+ * Comprueba que el arranque (`ensureRbacSchema`, que ya no rellena permisos)
+ * no amplia por su cuenta lo que un rol puede hacer: un permiso ausente
+ * significa "no concedido", no "pendiente de configurar".
  */
 const BASE = process.env.BASE || "http://localhost:3100/api";
 const results = [];

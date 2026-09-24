@@ -22,7 +22,7 @@ Trabajo en curso dentro del proyecto **PVVC 2026** (Axel es quien desarrolla).
 
 | Qué | Dónde |
 | --- | --- |
-| **Repo actual (en el que se trabaja)** | `/Users/axeldiaz/Desktop/cicese/inventory/FICOTOX` |
+| **Repo actual (en el que se trabaja)** | `/Users/axeldiaz/Desktop/dev/cicese/inventory/FICOTOX` |
 | **Versión original en Flask** (referencia de lógica portada) | `/Users/axeldiaz/Desktop/cicese/inventory_test/FICOTOX` (carpetas `backend/`, `frontend/`, `docs/`) |
 | **Recursos oficiales del laboratorio** | `/Users/axeldiaz/Downloads/ficotox` |
 | Página visual "Radiografía de FICOTOX" (diagnóstico inicial) | https://claude.ai/code/artifact/7e556e70-d2cb-429c-999e-2c4c523448b2 |
@@ -53,7 +53,9 @@ reales del laboratorio; **la implementación debe ser fiel a ellos**):
 - **RBAC** por módulo/acción: `requirePermission(s, user, "modulo", "accion")`.
   Módulos: `dashboard, reactivos, consumibles, equipos, muestras, movimientos,
   mantenimiento, documentos, informes, aprobaciones, auditoria, roles, usuarios`.
-  Acciones: `read, create, update, delete`.
+  Acciones: `read, create, update, delete`. Un rol por usuario (Fase 0; la Fase 1
+  cambiará el modelo de permisos y permitirá varios roles por usuario).
+  Catálogo provisional de 10 roles en `scripts/roles-catalogo.json` (sección 4 bis).
 - Todos los handlers pasan por `apiRoute` (`src/lib/server/http.ts`), que abre una
   sesión de base, hace `commit` al final o `rollback` si algo falla.
 - Esquemas: funciones `ensure*Schema()` (creación idempotente de tablas y
@@ -133,8 +135,13 @@ Son decisiones explícitas del usuario o correcciones de auditoría ya validadas
    vuelve a encender. El **cargo** de quien firma sale de `user.rol`; no se
    captura a mano (los `SignDialog` de análisis e informes usan `withCargo={false}`).
 6. **Permisos**: un permiso ausente en un rol significa "no concedido".
-   `ensureRbacSchema` solo rellena roles administradores o módulos cuya clave
-   aparece por primera vez; **nunca amplía lo que un rol ya tenía**.
+   `ensureRbacSchema` **no crea roles ni rellena permisos** (Fase 0: se quitó el
+   rol "Super Admin" y el relleno por nombre de rol / `es_sistemico` / módulo
+   nuevo). Solo asegura las tablas y el catálogo de módulos.
+11. **Siempre queda un administrador**: un cambio de usuario o de rol que deje en
+    cero a los usuarios activos con `usuarios:update` y `roles:update` responde
+    409 (`assertAdministratorRemains`, `rbac.ts`). "Administrador técnico del
+    sistema" es `es_sistemico` (no se elimina).
 7. **Insumos dados de baja**: no se pueden elegir en un registro nuevo (409), pero
    un registro que ya los declaraba se sigue editando y repone **hasta la
    cantidad que ya tenía**.
@@ -156,7 +163,11 @@ Son decisiones explícitas del usuario o correcciones de auditoría ya validadas
   `anularRegistro`, `restaurarRegistro`, `nextFolioNum`, `isFolioConflict`,
   `applyStageInventory`, `insumosDeclarados`.
 - `src/lib/server/audit.ts` — bitácora, sello HMAC, triggers, `verifyAuditChain`.
-- `src/lib/server/rbac.ts` — permisos y back-fill controlado.
+- `src/lib/server/rbac.ts` — permisos, catálogo de módulos y guarda de administradores
+  (`countActiveAdministrators`, `assertAdministratorRemains`).
+- `scripts/roles-catalogo.json` + `scripts/seed-roles-usuarios.mjs` — catálogo de roles
+  de la Fase 0 y alta idempotente de roles y usuarios (contraseñas en
+  `scripts/seed-usuarios.local.json`, ignorado por git; plantilla `.example.json`).
 - `src/lib/server/inventory-usage.ts` — descuento y reposición de inventario.
 - `src/lib/server/inventory-baja.ts` — bajas lógicas.
 - `src/lib/server/informe-pdf.ts` — render del informe (7.8.2).
@@ -197,32 +208,38 @@ npm run test:reset-db # solo regenerar la base de prueba
 ```
 
 - **NUNCA tocar `instance/ficotox.sqlite3` (base real).** `npm test` copia
-  `instance/fixtures/ficotox-base.sqlite3` (copia congelada de la base **antes**
-  de los datos de demostración; si no existe usa la real) a
-  `instance/test/ficotox-test.sqlite3`, agrega el usuario QA y levanta
-  `next dev -p 3100` sobre la copia; aborta si el puerto está ocupado o si el
-  servidor no está usando la copia.
-- Usuario de prueba: **`qa@ficotox.local` / `QaFicotox2026!`**. Los usuarios que se
-  creen por API deben tener correo **`@cicese.mx`**.
-- Suites: `tests/api-dsp.mjs` (30), `tests/api-sgc.mjs` (105),
-  `tests/api-permisos.mjs` (9, corre **tras reiniciar** el servidor),
-  `tests/ui/dsp.mjs` (19), `tests/ui/sgc.mjs` (35),
+  `instance/fixtures/ficotox-base.sqlite3` (base vacía + los 10 roles y usuarios
+  de la Fase 0; se genera con `npm run test:fixture` y `npm test` la crea si
+  falta) a `instance/test/ficotox-test.sqlite3`; **solo en la copia** crea el rol
+  "QA pruebas automatizadas" (todos los permisos) y el usuario QA, y da
+  contraseñas aleatorias a los usuarios del catálogo
+  (`instance/test/credenciales-roles.json`). Levanta `next dev -p 3100` sobre la
+  copia (aborta si el puerto está ocupado o si el servidor no usa la copia) y crea
+  por API los datos de apoyo (`tests/datos-apoyo.mjs`: Centrifuga, Metanol,
+  Ácido acético, 2-Propanol, cadena R1 → P1 → E-A 1).
+- Usuario de prueba: **`qa@ficotox.local` / `QaFicotox2026!`** (solo existe en la
+  base de prueba). Los usuarios que se creen por API deben tener correo **`@cicese.mx`**.
+- Suites: `tests/api-roles.mjs` (67; catálogo de roles, 200/403 por usuario,
+  guarda de administradores, bitácora del reinicio), `tests/api-dsp.mjs` (30),
+  `tests/api-sgc.mjs` (120), tras reiniciar el servidor `tests/api-permisos.mjs` (9)
+  y `tests/api-roles.mjs --tras-reinicio` (58), `tests/ui/roles.mjs` (30; menú de
+  cada rol), `tests/ui/dsp.mjs` (19), `tests/ui/sgc.mjs` (55),
   `tests/api-integridad.mjs` (7, corre **al final** porque rompe la bitácora).
-- Navegador: `playwright-core` + Chrome de Playwright en
-  `~/Library/Caches/ms-playwright/chromium-1234/...` (override con `CHROME_PATH`).
+- Navegador: `playwright-core` + el Chrome de Playwright más reciente en
+  `~/Library/Caches/ms-playwright/chromium-*/...` (override con `CHROME_PATH`).
 - **Baseline de lint**: 12 problemas en `ConsumibleSheet.tsx`, `ReactivoSheet.tsx`,
   `AppShell.tsx` y `administracion/roles/page.tsx`. Cualquier otro es un hallazgo.
 
-## 8. Estado actual (2026-09-10)
+## 8. Estado (historial hasta 2026-09-11; la Fase 0 está en 8 bis)
 
-- Rama `main`, último commit `83468fd` ("Migrar a Next.js, rediseñar la interfaz y
-  añadir contraseña local"). **Hay ~88 archivos nuevos/modificados SIN commitear**
-  (todo el trabajo ISO descrito arriba). El usuario aún no ha pedido commit.
-- `typecheck` limpio · `lint` en el baseline exacto · `build` OK ·
-  `npm test`: **208/208 comprobaciones, todas las suites pasan** (ui/sgc 38).
+- El trabajo ISO y el rediseño descritos abajo están en `main`, commit `dd35bf7`
+  ("Muestras, informes, inventario y bitácora: flujo ISO 17025 completo con nuevo
+  Inicio"). La Fase 0 vive en la rama `fase-0-reinicio` (sin merge a `main`).
+- En ese momento: `typecheck` limpio · `lint` en el baseline exacto · `build` OK ·
+  `npm test`: 208/208 comprobaciones. Tras la Fase 0: 395/395 (ver sección 7).
 - El trabajo pasó por **tres rondas de revisión con un agente independiente**
   (29 hallazgos, todos corregidos) hasta obtener `VEREDICTO: APROBADO`.
-- **Rediseño UI/UX "estilo Apple" (2026-09-10)**, también sin commitear: una sola
+- **Rediseño UI/UX "estilo Apple" (2026-09-10)**: una sola
   tipografía (sistema/Inter), marca nueva (diatomea), **barra lateral** en cuatro
   grupos (`NAV_GROUPS`), búsqueda compartida entre el Inicio y ⌘K
   (`src/lib/client/search.ts`), Inicio con buscador + "En curso" + "Avisos"
@@ -277,6 +294,25 @@ npm run test:reset-db # solo regenerar la base de prueba
   `scripts/demo-seed.mjs` (respaldo previo en `instance/backups/ficotox-antes-demo-*`).
   Usuarios demo: ana.ramirez@, daniela.cortes@, ernesto.gomez@cicese.mx (contraseñas
   en el script). Cadena de auditoría íntegra tras la carga.
+
+## 8 bis. Fase 0 — reinicio limpio y catálogo de roles (2026-09-24, rama `fase-0-reinicio`)
+
+- La base anterior (53 entradas de bitácora, 4 recepciones, 4 informes...) está
+  respaldada y verificada en `instance/backups/pre-reinicio-20260924-1350/` (con
+  `LEEME.txt`) y los originales se movieron a
+  `backups/pre-reinicio-20260924-1350/instance-original/`. La llave del sello es
+  `SECRET_KEY` del `.env` (no se cambió; sin ella no se verifica esa bitácora).
+- La base actual es nueva: sin muestras, informes, inventario, movimientos,
+  mantenimientos ni documentos. Tiene los 10 roles del catálogo y un usuario
+  local por rol (`@ficotox.local`; contraseñas en `scripts/seed-usuarios.local.json`,
+  fuera de git). Su bitácora empieza con esas 20 altas (actor `sistema`, motivo
+  `Reinicio Fase 0`).
+- Procedimiento completo en `MANUAL_TECNICO.md` §15.3.
+- Los datos de demostración (`scripts/demo-seed.mjs`) no se volvieron a cargar.
+- Pendientes para la Fase 1: el script de roles solo soporta SQLite (en MySQL el
+  primer administrador se crea con SQL, `MANUAL_TECNICO.md` §15.3); el script
+  replica el sellado de `audit.ts` (no importable desde Node) — se podría mover
+  `stableJson`/`sellar` a un módulo `.mjs` compartido.
 
 ## 9. Pendientes conocidos
 

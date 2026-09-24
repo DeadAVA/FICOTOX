@@ -171,8 +171,11 @@ Se usan funciones `ensure*Schema()` en cada request para:
 
 ### 7.2 Autorizacion
 
-RBAC por modulo y accion:
+RBAC por modulo y accion (un rol por usuario):
 - Acciones tipicas: `read`, `create`, `update`, `delete`.
+- El arranque no crea roles ni concede permisos; un permiso ausente es "no concedido".
+- Catalogo provisional de 10 roles (Fase 0) en `scripts/roles-catalogo.json`, dado de alta con `scripts/seed-roles-usuarios.mjs`; tabla completa en `MANUAL_TECNICO.md` §9.2.1.
+- Siempre debe quedar un usuario activo con `usuarios:update` y `roles:update` (409 si un cambio lo impide).
 - Validacion en cada endpoint:
   - `await requireUser(request)`
   - `await requirePermission(s, user, "modulo", "accion")`

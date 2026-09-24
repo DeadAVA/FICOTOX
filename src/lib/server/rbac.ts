@@ -21,9 +21,6 @@ export const DEFAULT_PERMISSIONS: Array<[string, string, string]> = [
   ["usuarios", "Usuarios", "Administracion de usuarios"],
 ];
 
-/* Permisos que solo los roles con perfil de administracion reciben por defecto al aparecer un modulo nuevo. */
-const ADMIN_ONLY_DEFAULTS = new Set(["aprobaciones", "auditoria"]);
-
 export type PermissionFlags = { read: boolean; create: boolean; update: boolean; delete: boolean };
 export type PermissionsMap = Record<string, PermissionFlags>;
 
@@ -32,9 +29,9 @@ export function toBit(value: unknown): number {
 }
 
 /*
- * Crea tablas, permisos base y completa los pares rol/permiso que falten. Se
- * ejecuta una vez por proceso: correrlo en cada request (y hacer commit a
- * mitad del handler) era costoso e innecesario.
+ * Crea las tablas de RBAC y el catalogo de modulos. No crea roles ni rellena
+ * pares rol/permiso (Fase 0: el catalogo de roles vive en
+ * scripts/roles-catalogo.json). Se ejecuta una vez por proceso y no hace commit.
  */
 export async function ensureRbacSchema(s: Session): Promise<void> {
   if (schemaReady("rbac")) return;
@@ -117,20 +114,12 @@ export async function ensureRbacSchema(s: Session): Promise<void> {
       `,
   );
 
-  for (const [nombre, descripcion, esSistemico] of [["Super Admin", "Acceso total al sistema", 1]] as Array<[string, string, number]>) {
-    const existing = await s.scalar("SELECT id FROM roles WHERE LOWER(nombre) = LOWER(:nombre) LIMIT 1", { nombre });
-    if (!existing) {
-      await s.execute(
-        "INSERT INTO roles (nombre, descripcion, es_sistemico, activo) VALUES (:nombre, :descripcion, :es_sistemico, 1)",
-        { nombre, descripcion, es_sistemico: esSistemico },
-      );
-    }
-  }
-
-  // Claves que ya existian antes de este arranque: si un rol no las tiene, es porque
-  // alguien decidio no darselas. Solo se rellenan las que se agregan en esta version.
-  const clavesPrevias = new Set((await s.query<{ clave: string }>("SELECT clave FROM permisos")).map((row) => String(row.clave)));
-
+  /*
+   * El arranque solo asegura el catalogo de modulos (tabla `permisos`). No crea
+   * roles ni concede permisos: los roles y sus permisos se dan de alta con
+   * scripts/seed-roles-usuarios.mjs o desde Administracion > Roles. Un permiso
+   * ausente significa "no concedido", tambien para los modulos nuevos.
+   */
   for (const [clave, nombre, descripcion] of DEFAULT_PERMISSIONS) {
     if (isSqlite()) {
       await s.execute(
@@ -153,52 +142,6 @@ export async function ensureRbacSchema(s: Session): Promise<void> {
           descripcion = VALUES(descripcion)
         `,
         { clave, nombre, descripcion },
-      );
-    }
-  }
-
-  const permissionRows = await s.query<{ id: number; clave: string }>("SELECT id, clave FROM permisos WHERE activo = 1");
-
-  const roles = await s.query<{ id: number; nombre: string; es_sistemico: number }>("SELECT id, nombre, es_sistemico FROM roles");
-
-  for (const role of roles) {
-    const assigned = await s.query<{ id_permiso: number }>("SELECT id_permiso FROM rol_permisos WHERE id_rol = :role_id", { role_id: role.id });
-    const assignedIds = new Set(assigned.map((row) => Number(row.id_permiso)));
-
-    const roleName = String(role.nombre || "").trim().toLowerCase();
-    const isAdminLike = ["superadmin", "super admin", "admin", "administrador", "direccion", "coordinadora tecnica", "coordinador tecnico", "coordinadora de mejora continua"].includes(roleName) || !!role.es_sistemico;
-
-    for (const permission of permissionRows) {
-      const permissionId = permission.id;
-      if (assignedIds.has(permissionId)) continue;
-      const adminOnly = ADMIN_ONLY_DEFAULTS.has(permission.clave);
-      const esModuloNuevo = !clavesPrevias.has(permission.clave);
-      /*
-       * Un permiso que falta NO significa "todavia no se ha configurado": puede
-       * significar que se le quito a proposito. Por eso solo se rellenan:
-       *   - los roles administradores (necesitan acceso completo por definicion), y
-       *   - los modulos que aparecen por primera vez en esta version, y solo si no
-       *     son de uso restringido (aprobaciones, auditoria).
-       * Cualquier otro permiso se concede a mano desde Administracion > Roles.
-       */
-      if (!isAdminLike && !(esModuloNuevo && !adminOnly)) continue;
-      await s.execute(
-        `
-        INSERT INTO rol_permisos (
-          id_rol, id_permiso, can_read, can_create, can_update, can_delete
-        )
-        VALUES (
-          :id_rol, :id_permiso, :can_read, :can_create, :can_update, :can_delete
-        )
-        `,
-        {
-          id_rol: role.id,
-          id_permiso: permissionId,
-          can_read: toBit(!adminOnly || isAdminLike),
-          can_create: toBit(isAdminLike),
-          can_update: toBit(isAdminLike),
-          can_delete: toBit(isAdminLike),
-        },
       );
     }
   }
@@ -270,4 +213,41 @@ export async function requirePermission(s: Session, user: CurrentUser | null, mo
     });
   }
   return permissionsMap;
+}
+
+/*
+ * Administradores efectivos: usuarios activos cuyo rol puede editar usuarios y
+ * roles (usuarios:update y roles:update). Si nadie los tiene, nadie puede
+ * volver a conceder permisos desde la aplicacion.
+ */
+export async function countActiveAdministrators(s: Session): Promise<number> {
+  const total = await s.scalar(
+    `
+    SELECT COUNT(*)
+    FROM usuarios u
+    WHERE COALESCE(u.activo, 1) = 1
+      AND EXISTS (
+        SELECT 1 FROM rol_permisos rp INNER JOIN permisos p ON p.id = rp.id_permiso
+        WHERE rp.id_rol = u.id_rol AND p.clave = 'usuarios' AND p.activo = 1 AND rp.can_update = 1
+      )
+      AND EXISTS (
+        SELECT 1 FROM rol_permisos rp INNER JOIN permisos p ON p.id = rp.id_permiso
+        WHERE rp.id_rol = u.id_rol AND p.clave = 'roles' AND p.activo = 1 AND rp.can_update = 1
+      )
+    `,
+  );
+  return Number(total || 0);
+}
+
+/*
+ * Se llama antes del commit de un cambio sobre usuarios o roles, con la cuenta
+ * tomada antes del cambio. Si habia administradores y el cambio los deja en
+ * cero, se rechaza (apiRoute hace rollback).
+ */
+export async function assertAdministratorRemains(s: Session, before: number): Promise<void> {
+  if (before > 0 && (await countActiveAdministrators(s)) === 0) {
+    throw new HttpError(409, {
+      message: "El cambio dejaria el sistema sin ningun usuario activo que pueda administrar usuarios y roles (usuarios y roles con permiso de edicion)",
+    });
+  }
 }

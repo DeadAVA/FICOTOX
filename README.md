@@ -66,6 +66,18 @@ Variables de entorno relevantes: `SECRET_KEY`, `JWT_SECRET`, `JWT_EXPIRES_HOURS`
 
 La base SQLite vive en `instance/ficotox.sqlite3` (se crea sola si no existe) y los PDF de reportes en `instance/maintenance_reports/`.
 
+### Roles y usuarios iniciales
+
+El arranque ya no crea ningún rol ni concede permisos. Los 10 roles provisionales (catálogo en `scripts/roles-catalogo.json`) y un usuario local por rol se dan de alta con:
+
+```bash
+cp scripts/seed-usuarios.example.json scripts/seed-usuarios.local.json   # ignorado por git: escribir aquí las contraseñas
+npm run dev            # solo la primera vez en una base nueva: abrir /api/health/db para crear el esquema y detenerlo
+npm run seed:roles     # node scripts/seed-roles-usuarios.mjs (idempotente; solo SQLite; servidor detenido)
+```
+
+Cada alta queda en la bitácora de auditoría. Detalle y procedimiento de reinicio en `MANUAL_TECNICO.md` §9.2.1 y §15.3.
+
 ## Documentación
 
 - [`MANUAL_USUARIO.md`](./MANUAL_USUARIO.md) — guía de uso para operadores del sistema.

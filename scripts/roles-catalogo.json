@@ -1,0 +1,174 @@
+{
+  "_comentario": "Catalogo provisional de roles de la Fase 0 (especificacion 'Roles y permisos FICOTOX', FX-MO-2-1). R=read C=create U=update D=delete; un modulo ausente = sin permiso. Lo usa scripts/seed-roles-usuarios.mjs.",
+  "modulos": [
+    "dashboard",
+    "reactivos",
+    "consumibles",
+    "equipos",
+    "mantenimiento",
+    "movimientos",
+    "muestras",
+    "informes",
+    "aprobaciones",
+    "documentos",
+    "auditoria",
+    "roles",
+    "usuarios"
+  ],
+  "roles": [
+    {
+      "nombre": "Administrador técnico del sistema",
+      "descripcion": "Administra cuentas, roles y permisos; consulta la bitácora. Rol de sistema (no se elimina).",
+      "es_sistemico": true,
+      "permisos": {
+        "dashboard": "R",
+        "usuarios": "RCUD",
+        "roles": "RCUD",
+        "auditoria": "R"
+      }
+    },
+    {
+      "nombre": "Responsable General",
+      "descripcion": "Consulta todo el sistema; revisa y autoriza informes y resultados.",
+      "es_sistemico": false,
+      "permisos": {
+        "dashboard": "R",
+        "reactivos": "R",
+        "consumibles": "R",
+        "equipos": "R",
+        "mantenimiento": "R",
+        "movimientos": "R",
+        "muestras": "R",
+        "informes": "RU",
+        "aprobaciones": "RU",
+        "documentos": "R",
+        "auditoria": "R",
+        "roles": "R",
+        "usuarios": "R"
+      }
+    },
+    {
+      "nombre": "Coordinador/a de Mejora Continua",
+      "descripcion": "Consulta todo el sistema; gestiona los documentos controlados del SGC.",
+      "es_sistemico": false,
+      "permisos": {
+        "dashboard": "R",
+        "reactivos": "R",
+        "consumibles": "R",
+        "equipos": "R",
+        "mantenimiento": "R",
+        "movimientos": "R",
+        "muestras": "R",
+        "informes": "R",
+        "aprobaciones": "R",
+        "documentos": "RCUD",
+        "auditoria": "R",
+        "roles": "R",
+        "usuarios": "R"
+      }
+    },
+    {
+      "nombre": "Coordinador/a del Área Técnica",
+      "descripcion": "Coordina muestras, informes, aprobaciones e inventario del área técnica.",
+      "es_sistemico": false,
+      "permisos": {
+        "dashboard": "R",
+        "muestras": "RCUD",
+        "informes": "RCU",
+        "aprobaciones": "RU",
+        "reactivos": "RCUD",
+        "consumibles": "RCUD",
+        "equipos": "RCUD",
+        "mantenimiento": "RCUD",
+        "movimientos": "RCUD",
+        "documentos": "R"
+      }
+    },
+    {
+      "nombre": "Coordinador/a de Investigación y Desarrollo",
+      "descripcion": "Registra muestras y gestiona reactivos y consumibles de investigación.",
+      "es_sistemico": false,
+      "permisos": {
+        "dashboard": "R",
+        "muestras": "RCU",
+        "equipos": "R",
+        "reactivos": "RCU",
+        "consumibles": "RCU",
+        "movimientos": "R",
+        "documentos": "R"
+      }
+    },
+    {
+      "nombre": "Técnico Analista",
+      "descripcion": "Captura muestras y análisis, elabora informes y registra uso de insumos.",
+      "es_sistemico": false,
+      "permisos": {
+        "dashboard": "R",
+        "muestras": "RCU",
+        "informes": "RC",
+        "reactivos": "RC",
+        "consumibles": "RC",
+        "equipos": "R",
+        "movimientos": "RC",
+        "documentos": "R"
+      }
+    },
+    {
+      "nombre": "Técnico Auxiliar",
+      "descripcion": "Apoya la captura de muestras y el registro de insumos.",
+      "es_sistemico": false,
+      "permisos": {
+        "dashboard": "R",
+        "muestras": "RCU",
+        "reactivos": "RC",
+        "consumibles": "RC",
+        "movimientos": "RC",
+        "documentos": "R"
+      }
+    },
+    {
+      "nombre": "Administrador/a Auxiliar",
+      "descripcion": "Gestiona equipos, mantenimiento e inventario; consulta muestras.",
+      "es_sistemico": false,
+      "permisos": {
+        "dashboard": "R",
+        "muestras": "R",
+        "equipos": "RCU",
+        "mantenimiento": "RCU",
+        "reactivos": "RCU",
+        "consumibles": "RCU",
+        "movimientos": "RCU"
+      }
+    },
+    {
+      "nombre": "Auditor Interno",
+      "descripcion": "Solo consulta: lectura de todos los módulos, sin cambios.",
+      "es_sistemico": false,
+      "permisos": {
+        "dashboard": "R",
+        "reactivos": "R",
+        "consumibles": "R",
+        "equipos": "R",
+        "mantenimiento": "R",
+        "movimientos": "R",
+        "muestras": "R",
+        "informes": "R",
+        "aprobaciones": "R",
+        "documentos": "R",
+        "auditoria": "R",
+        "roles": "R",
+        "usuarios": "R"
+      }
+    },
+    {
+      "nombre": "Estudiante / personal en formación",
+      "descripcion": "Registra muestras bajo supervisión y consulta documentos.",
+      "es_sistemico": false,
+      "permisos": {
+        "dashboard": "R",
+        "muestras": "RC",
+        "documentos": "R"
+      }
+    }
+  ]
+}

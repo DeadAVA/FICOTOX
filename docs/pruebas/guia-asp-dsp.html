@@ -136,7 +136,8 @@
     <h1>Recorrido de prueba: un ASP y un DSP de principio a fin</h1>
     <p class="lede">Dos casos reales para capturar a mano y ver cómo se enlaza todo: recepción → procesamiento → extracción → análisis → informe → cierre. Cada paso dice dónde estás en la app, qué escribir en cada sección, quién debe hacerlo y qué debería pasar al guardar. Marca cada paso al terminarlo; el avance se guarda en este navegador.</p>
     <div class="prereq">
-      <div><b>Cuentas</b>Captura como <span class="mono">axel@cicese.mx</span> (Super Admin). Para revisar y aprobar entra como <span class="mono">ficotox108@cicese.mx</span> (Melisa, Coordinador): así cumples la regla de dos personas. Los campos de "quién" son listas del personal autorizado (con "Otra persona…" para nombres externos), ya prellenados con quien tiene la sesión.</div>
+      <div><b>Nota (Fase 0, 2026-09-24)</b>La base se reinició: ya no están las cuentas ni el inventario de demostración que describe esta guía. Da de alta antes el inventario (o carga <span class="mono">scripts/demo-seed.mjs</span>) y usa las cuentas del catálogo de roles.</div>
+      <div><b>Cuentas</b>Captura como <span class="mono">luis.castro@ficotox.local</span> (Técnico Analista). Para revisar y aprobar entra como <span class="mono">ricardo.medina@ficotox.local</span> (Coordinador/a del Área Técnica, con permiso de aprobaciones). Los campos de "quién" son listas del personal autorizado (con "Otra persona…" para nombres externos), ya prellenados con quien tiene la sesión.</div>
       <div><b>Inventario que usarás</b>Solo lo que está en buen estado: Metanol HPLC, Metanol:agua 50:50, Agua desionizada, NaOH 2.5 M, HCl 2.5 M, los dos CRM, viales, filtros, tubos y bolsas. Equipos BA1, LC1, CE1, VO1, DI1, HO1, CR2, MP1, TB1, TM1, PR1, CL1, CL2.</div>
       <div><b>Lo que no debes usar</b>Cronómetro <span class="mono">CR1</span> y micropipeta <span class="mono">MP2</span> (en mantenimiento por calibración), cartucho Bond Elut SAX (4 piezas), ácido acético (vence en 6 días), agua destilada e hidróxido de amonio (vacíos). Si los eliges, el sistema avisa: ésa es la prueba del punto final.</div>
     </div>
@@ -163,21 +164,21 @@
                 <h2>Recepción de la muestra</h2>
                 <div class="where"><span class="crumb">Muestras</span>›<span class="crumb">Recepción</span>›<span class="crumb">Nueva recepción</span><span>Formato FX-TCF-GMR</span></div>
               </div>
-              <span class="role">Axel</span>
+              <span class="role">Luis</span>
             </header>
             <div class="content">
               <p class="intro">Una cooperativa entrega almejas para análisis de ácido domoico. El formato abre <b>paso a paso</b>: llena una sección, pulsa <span class="kbd">Continuar</span> y sigue. Si prefieres verlo entero, usa <span class="kbd">Todo</span> en la guía de la izquierda.</p>
               <div class="scroll"><table class="fields">
-                <tr><th>Datos de la recepción</th><td>Folio: <b>el sugerido</b> · Fecha: <b>hoy</b> · Hora: <b>09:15</b> · Medio: <b>Entrega directa</b> · Recibido por: <b>Axel</b> · Solicitante: <b>Cooperativa Pesquera Bahía Falsa S.C. de R.L.</b></td></tr>
+                <tr><th>Datos de la recepción</th><td>Folio: <b>el sugerido</b> · Fecha: <b>hoy</b> · Hora: <b>09:15</b> · Medio: <b>Entrega directa</b> · Recibido por: <b>Luis</b> · Solicitante: <b>Cooperativa Pesquera Bahía Falsa S.C. de R.L.</b></td></tr>
                 <tr><th>Datos de la muestra</th><td><b>Muestra única</b> · ID interno: <code>D26-201</code> · Fecha de la muestra: <b>ayer</b> · Especificaciones: <i>Almeja pismo, 24 organismos, talla comercial</i></td></tr>
                 <tr><th>Análisis solicitado</th><td>Tipo: ☑ <b>Ácido domoico (ASP)</b> · Método: ☑ <b>Cromatografía de líquidos</b> · Tipo de muestra: ☑ <b>Organismo completo</b></td></tr>
                 <tr><th>Inspección visual</th><td>Los seis primeros requisitos en <span class="pill ok">C</span>; el de fijador en <span class="pill">NA</span> (viene sin fijador). Observa cómo la sección se marca completa en la guía.</td></tr>
-                <tr><th>Decisión de aceptación</th><td><b>Aceptada</b> · Fecha: hoy · Responsable: <b>Axel</b> · Temperatura de llegada: <b>6 °C</b></td></tr>
+                <tr><th>Decisión de aceptación</th><td><b>Aceptada</b> · Fecha: hoy · Responsable: <b>Luis</b> · Temperatura de llegada: <b>6 °C</b></td></tr>
                 <tr><th>Datos del solicitante</th><td>Nombre de quien entrega: <b>Juan Manuel Peralta</b> · Firma: dibuja un trazo · ☑ conformidad</td></tr>
-                <tr><th>Custodio y resguardo</th><td>Custodio: <b>Axel</b> / Cargo: <b>Responsable técnico</b> · Firma · Lugar: <b>Refrigerador</b> → detalle <code>RE1</code></td></tr>
+                <tr><th>Custodio y resguardo</th><td>Custodio: <b>Luis</b> / Cargo: <b>Responsable técnico</b> · Firma · Lugar: <b>Refrigerador</b> → detalle <code>RE1</code></td></tr>
               </table></div>
               <div class="result"><span>Pulsa <span class="kbd">Registrar recepción</span></span><span class="arrow">→</span><span class="pill">R 0000001</span><span class="pill ok">Aceptada</span><span class="pill">Estado: Registrada</span></div>
-              <div class="note observe"><b>Qué observar</b><ul><li>En la lista, la fila muestra el folio, el chip <b>ASP</b> y "Aceptada".</li><li>Abre la fila: al pie está el <b>Historial</b> con la frase "Axel creó la recepción R 0000001".</li><li>Prueba a guardar sin decidir la aceptación: no te deja procesar después (menú ⋯ sin "Procesar").</li></ul></div>
+              <div class="note observe"><b>Qué observar</b><ul><li>En la lista, la fila muestra el folio, el chip <b>ASP</b> y "Aceptada".</li><li>Abre la fila: al pie está el <b>Historial</b> con la frase "Luis creó la recepción R 0000001".</li><li>Prueba a guardar sin decidir la aceptación: no te deja procesar después (menú ⋯ sin "Procesar").</li></ul></div>
             </div>
             <div class="done-row"><label><input type="checkbox" data-done="asp-1"> Paso terminado</label><span class="folio">anota aquí tu folio: R ________</span></div>
           </article>
@@ -189,7 +190,7 @@
                 <h2>Procesamiento de la almeja</h2>
                 <div class="where"><span class="crumb">Recepción</span>›<span class="crumb">fila R 0000001</span>›<span class="crumb">⋯ Procesar</span><span>Formato FX-TCF-GMP</span></div>
               </div>
-              <span class="role">Axel</span>
+              <span class="role">Luis</span>
             </header>
             <div class="content">
               <p class="intro">Al entrar desde el menú de la fila, la recepción ya viene vinculada y el ID interno se copia solo.</p>
@@ -200,7 +201,7 @@
                 <tr><th>Procesamiento</th><td>Marca los 9 pasos de bivalvos. En <i>Drenar 5 min</i> → equipo <b>Cronómetro CR2</b>. En <i>Moler 1–2 min</i> → <b>Licuadora LC1</b>, peso <b>120 g</b>. En <i>Pesar molienda</i> → <b>Balanza BA1</b>, peso <b>118.4 g</b>. En <i>Reservar molienda</i> → bolsa: <b>Bolsa hermética 18 × 20 cm</b>.</td></tr>
                 <tr><th>Resguardo</th><td>☑ <b>Entregado para extracción</b></td></tr>
                 <tr><th>Insumos adicionales</th><td>Ninguno</td></tr>
-                <tr><th>Personal</th><td>Quien procesó: <b>Axel</b> · Quien supervisó: <b>Melisa</b> · firmas</td></tr>
+                <tr><th>Personal</th><td>Quien procesó: <b>Luis</b> · Quien supervisó: <b>Ricardo</b> · firmas</td></tr>
               </table></div>
               <div class="result"><span><span class="kbd">Registrar procesamiento</span></span><span class="arrow">→</span><span class="pill">P 0000001</span></div>
               <div class="note observe"><b>Qué observar</b><ul><li><b>Inventario › Movimientos</b>: una salida de 1 bolsa hermética con referencia P 0000001.</li><li>En Recepción, R 0000001 pasa a <b>En proceso</b>.</li><li>Elige a propósito el cronómetro <code>CR1</code> en un paso: aparece el aviso "en mantenimiento" y pide confirmar. Cámbialo a CR2 antes de guardar.</li></ul></div>
@@ -215,7 +216,7 @@
                 <h2>Extracción ASP</h2>
                 <div class="where"><span class="crumb">Procesamiento</span>›<span class="crumb">fila P 0000001</span>›<span class="crumb">⋯ Extraer</span>›<span class="crumb">Registrar extracción ASP</span><span>Formato FX-TCF-GME-A</span></div>
               </div>
-              <span class="role">Axel</span>
+              <span class="role">Luis</span>
             </header>
             <div class="content">
               <p class="intro">Aquí el sistema calcula los reactivos por tubo (muestra + réplica + blanco = 3 tubos) y los descuenta al guardar.</p>
@@ -228,7 +229,7 @@
                 <tr><th>Limpieza del extracto</th><td><b>No requirió limpieza</b> (así no tocas el cartucho SAX ni el ácido acético)</td></tr>
                 <tr><th>Resguardo</th><td>Extracto: ☑ <b>Entregado a FX-106</b> · Molienda restante: ☑ <b>Congelador CO1</b></td></tr>
                 <tr><th>Equipos utilizados</th><td>Aparecen solos y, en registros nuevos, los pasos ya traen el equipo operativo único que corresponde (BA1, PR1, HO1, CR2, CE1). Anota los folios de bitácora: BA1 → <code>120</code>, PR1 → <code>127</code>, HO1 → <code>134</code>, CR2 → <code>141</code>, CE1 → <code>148</code>. A partir de la siguiente extracción el sistema sugiere el folio que sigue (121, 128…) y el lote de la solución preparada aparece como folio de preparación.</td></tr>
-                <tr><th>Personal</th><td>Extrajo: <b>Axel</b> (prellenado) · Supervisó: elige <b>Melisa</b> en la lista (solo aparece personal con permiso de aprobación) · firmas. "Quien realizó la limpieza" solo aparece si marcaste que sí hubo limpieza.</td></tr>
+                <tr><th>Personal</th><td>Extrajo: <b>Luis Fernando Castro Ruiz</b> (prellenado) · Supervisó: elige <b>Ricardo Medina Flores</b> en la lista (solo aparece personal con permiso de aprobación) · firmas. "Quien realizó la limpieza" solo aparece si marcaste que sí hubo limpieza.</td></tr>
               </table></div>
               <div class="result"><span><span class="kbd">Registrar extracción ASP</span></span><span class="arrow">→</span><span class="pill">E-A 0000001</span></div>
               <div class="note observe"><b>Qué observar</b><ul><li>Movimientos: −0.048 L de metanol:agua, −3 filtros, −3 viales, todos con referencia E-A 0000001.</li><li>Reactivos: el medidor de Metanol:agua baja de 1.4 L a 1.352 L.</li><li>Anula esta extracción desde ⋯ (motivo: "prueba de reposición") y mira cómo el inventario <b>se repone</b>; luego restáurala con otro motivo. Todo queda en Auditoría.</li></ul></div>
@@ -243,7 +244,7 @@
                 <h2>Análisis por HPLC-UV</h2>
                 <div class="where"><span class="crumb">Extracción</span>›<span class="crumb">fila E-A 0000001</span>›<span class="crumb">⋯ Analizar</span></div>
               </div>
-              <span class="role">Axel</span>
+              <span class="role">Luis</span>
             </header>
             <div class="content">
               <div class="scroll"><table class="fields">
@@ -253,7 +254,7 @@
                 <tr><th>Resultados por muestra</th><td><code>D26-201</code>: resultado <b>8.6</b>, unidad µg/g, límite <b>20</b> → conformidad se sugiere <span class="pill ok">Cumple</span>. Pulsa <span class="kbd">Agregar muestra</span> para la réplica <code>D26-201_R1</code>: <b>8.9</b>.</td></tr>
                 <tr><th>Controles de calidad</th><td>Blanco: resultado <i>&lt; LD</i>, criterio <b>Aceptable</b> · Material de referencia: busca <b>CRM ácido domoico</b>, lote <code>20220128</code>, esperado <b>100</b>, obtenido <b>97.8</b>, <b>Aceptable</b> · Duplicado: <code>D26-201</code>, diferencia <b>3.4 %</b>, <b>Aceptable</b></td></tr>
                 <tr><th>Insumos utilizados</th><td>Reactivo <b>Acetonitrilo grado HPLC</b>, cantidad <b>0.2</b> (fase móvil). Verás el aviso de que vence pronto: se permite.</td></tr>
-                <tr><th>Analista</th><td><b>Axel</b> · firma</td></tr>
+                <tr><th>Analista</th><td><b>Luis</b> · firma</td></tr>
               </table></div>
               <div class="result"><span><span class="kbd">Registrar análisis</span></span><span class="arrow">→</span><span class="pill">A 0000001</span><span class="pill">Registrado</span></div>
               <div class="note observe"><b>Qué observar</b><ul><li>La línea de avance arriba del formato: <b>Registrado → Revisado → Aprobado</b>.</li><li>Escribe 25 en un resultado: la conformidad cambia sola a <span class="pill bad">No cumple</span>. Déjalo en 8.6.</li></ul></div>
@@ -268,14 +269,14 @@
                 <h2>Revisión y aprobación (dos personas)</h2>
                 <div class="where"><span class="crumb">Análisis</span>›<span class="crumb">A 0000001</span></div>
               </div>
-              <span class="role melisa">Melisa → Axel</span>
+              <span class="role melisa">Ricardo → Patricia</span>
             </header>
             <div class="content">
               <div class="scroll"><table class="fields">
-                <tr><th>1 · Como Melisa</th><td>Cierra sesión, entra con <span class="mono">ficotox108@cicese.mx</span>. Abre A 0000001 → <span class="kbd">Marcar revisado</span> → observaciones: <i>Controles dentro de criterio; curva r² = 0.9992</i> → estado <b>Revisado</b>.</td></tr>
-                <tr><th>2 · Como Axel</th><td>Vuelve a entrar como Axel → <span class="kbd">Aprobar</span> → estado <b>Aprobado</b>. El formato queda en solo lectura.</td></tr>
+                <tr><th>1 · Como Ricardo</th><td>Cierra sesión, entra con <span class="mono">ricardo.medina@ficotox.local</span>. Abre A 0000001 → <span class="kbd">Marcar revisado</span> → observaciones: <i>Controles dentro de criterio; curva r² = 0.9992</i> → estado <b>Revisado</b>.</td></tr>
+                <tr><th>2 · Como Patricia</th><td>Entra con <span class="mono">patricia.luna@ficotox.local</span> (Responsable General, con permiso de aprobaciones) → <span class="kbd">Aprobar</span> → estado <b>Aprobado</b>. El formato queda en solo lectura.</td></tr>
               </table></div>
-              <div class="note block"><b>Lo que el sistema impide</b><ul><li>Si la misma persona intenta revisar y aprobar, pide un <b>motivo</b> y lo registra como excepción (visible en el historial como "la misma persona hizo dos pasos…").</li><li>Un análisis aprobado ya no se edita: el menú ⋯ solo ofrece Abrir y Anular.</li></ul></div>
+              <div class="note block"><b>Lo que el sistema impide</b><ul><li>Luis (Técnico Analista) no ve los botones de revisar ni aprobar: su rol no tiene el permiso de aprobaciones. La regla de dos personas está apagada, así que quien revisa también podría aprobar; cada paso queda en la bitácora con nombre y fecha.</li><li>Un análisis aprobado ya no se edita: el menú ⋯ solo ofrece Abrir y Anular.</li></ul></div>
             </div>
             <div class="done-row"><label><input type="checkbox" data-done="asp-5"> Paso terminado</label><span class="folio">estado: Aprobado</span></div>
           </article>
@@ -287,15 +288,15 @@
                 <h2>Informe de resultados</h2>
                 <div class="where"><span class="crumb">Informes</span>›<span class="crumb">Nuevo informe</span><span>Formato FX-TCF-IR</span></div>
               </div>
-              <span class="role">Axel → Melisa → Axel</span>
+              <span class="role">Luis → Ricardo → Patricia</span>
             </header>
             <div class="content">
               <div class="scroll"><table class="fields">
                 <tr><th>Recepción y cliente</th><td>Recepción <b>R 0000001</b> (carga cliente e ítems) · Contacto: <b>Juan Manuel Peralta</b> · Dirección: <b>Ejido Chapala, San Quintín, B.C.</b></td></tr>
                 <tr><th>Análisis incluidos</th><td>☑ <b>A 0000001</b> (solo aparecen los aprobados)</td></tr>
                 <tr><th>Declaraciones</th><td>Alcance y regla de decisión ya vienen. Opiniones: <i>Resultado por debajo del límite regulatorio.</i></td></tr>
-                <tr><th>Elaboró</th><td><b>Axel</b> / Analista · firma</td></tr>
-                <tr><th>Flujo</th><td><span class="kbd">Crear borrador</span> → como <b>Melisa</b>: <span class="kbd">Marcar revisado</span> → como <b>Axel</b>: <span class="kbd">Autorizar</span> (firma) → se genera el <b>PDF</b> (⋯ › Ver PDF) → <span class="kbd">Registrar entrega</span>: hoy, medio <b>Correo electrónico</b>, a <b>Juan Manuel Peralta</b></td></tr>
+                <tr><th>Elaboró</th><td><b>Luis</b> / Analista · firma</td></tr>
+                <tr><th>Flujo</th><td><span class="kbd">Crear borrador</span> → como <b>Ricardo</b>: <span class="kbd">Marcar revisado</span> → como <b>Patricia</b>: <span class="kbd">Autorizar</span> (firma) → se genera el <b>PDF</b> (⋯ › Ver PDF) → como <b>Patricia</b>: <span class="kbd">Registrar entrega</span>: hoy, medio <b>Correo electrónico</b>, a <b>Juan Manuel Peralta</b></td></tr>
               </table></div>
               <div class="result"><span class="pill">IR 0000001 v1</span><span class="arrow">→</span><span class="pill">Borrador</span><span class="arrow">→</span><span class="pill warn">En revisión</span><span class="arrow">→</span><span class="pill ok">Autorizado</span><span class="arrow">→</span><span class="pill">Entregado</span></div>
               <div class="note observe"><b>Qué observar</b><ul><li>Al autorizar, la recepción R 0000001 pasa a <b>Informada</b> y el PDF lleva SHA-256.</li><li>Abre el PDF: cliente, ítems, resultados, declaraciones y firmas.</li><li>Intenta editar el informe autorizado: solo puedes emitir una <b>enmienda</b> (nueva versión con motivo).</li></ul></div>
@@ -310,11 +311,11 @@
                 <h2>Disposición final y cierre</h2>
                 <div class="where"><span class="crumb">Recepción</span>›<span class="crumb">R 0000001</span>›<span class="crumb">sección Disposición final</span></div>
               </div>
-              <span class="role">Axel</span>
+              <span class="role">Luis</span>
             </header>
             <div class="content">
               <div class="scroll"><table class="fields">
-                <tr><th>Disposición final</th><td>Tipo: <b>Residuo peligroso biológico-infeccioso (RPBI)</b> · Fecha: hoy · Responsable: <b>Axel</b> · Remanentes: <i>118 g de molienda y 3 extractos</i> · firma</td></tr>
+                <tr><th>Disposición final</th><td>Tipo: <b>Residuo peligroso biológico-infeccioso (RPBI)</b> · Fecha: hoy · Responsable: <b>Luis</b> · Remanentes: <i>118 g de molienda y 3 extractos</i> · firma</td></tr>
               </table></div>
               <div class="result"><span><span class="kbd">Registrar disposición y cerrar la muestra</span></span><span class="arrow">→</span><span class="pill">Cerrada</span></div>
               <div class="note observe"><b>Qué observar</b><ul><li><b>Calidad › Auditoría</b>: toda la cadena leída en frases, con el motivo de la anulación de prueba y los cambios antes → después.</li><li><b>Inicio</b>: los contadores "En curso" ya no cuentan esta muestra.</li></ul></div>
@@ -336,17 +337,17 @@
                 <h2>Recepción de un lote de mejillón</h2>
                 <div class="where"><span class="crumb">Muestras</span>›<span class="crumb">Recepción</span>›<span class="crumb">Nueva recepción</span></div>
               </div>
-              <span class="role">Axel</span>
+              <span class="role">Luis</span>
             </header>
             <div class="content">
               <p class="intro">Ahora llegan dos muestras por paquetería. Aquí pruebas el <b>lote</b>: cada muestra es una tarjeta con sus propios datos.</p>
               <div class="scroll"><table class="fields">
-                <tr><th>Datos de la recepción</th><td>Fecha: hoy · <b>09:40</b> · Medio: <b>Paquetería</b> · Recibido por: <b>Axel</b> · Solicitante: <b>Granja Marina Ensenada S.A. de C.V.</b></td></tr>
+                <tr><th>Datos de la recepción</th><td>Fecha: hoy · <b>09:40</b> · Medio: <b>Paquetería</b> · Recibido por: <b>Luis</b> · Solicitante: <b>Granja Marina Ensenada S.A. de C.V.</b></td></tr>
                 <tr><th>Datos de la muestra</th><td><b>Lote</b> → <span class="kbd">Agregar muestra</span> hasta tener dos: <code>M26-301</code> (Mejillón <i>Mytilus galloprovincialis</i>, 1.2 kg, Bahía Todos Santos zona A, fecha ayer) y <code>M26-302</code> (ídem, 1.1 kg, zona B). Ambas con ☑ Trabajar.</td></tr>
                 <tr><th>Análisis solicitado</th><td>☑ <b>Toxinas lipofílicas (DSP)</b> · Método ☑ <b>Cromatografía de líquidos</b> · Tipo de muestra ☑ <b>Organismo completo</b></td></tr>
                 <tr><th>Inspección</th><td>Seis en <span class="pill ok">C</span>, fijador <span class="pill">NA</span></td></tr>
-                <tr><th>Decisión</th><td><b>Aceptada</b> · hoy · Axel · <b>5 °C</b></td></tr>
-                <tr><th>Solicitante y custodio</th><td>Entrega: <b>Laura Medina</b> · firma · ☑ conformidad · Custodio: <b>Axel</b> · Lugar: <b>Congelador</b> → <code>CO1</code></td></tr>
+                <tr><th>Decisión</th><td><b>Aceptada</b> · hoy · Luis · <b>5 °C</b></td></tr>
+                <tr><th>Solicitante y custodio</th><td>Entrega: <b>Laura Medina</b> · firma · ☑ conformidad · Custodio: <b>Luis</b> · Lugar: <b>Congelador</b> → <code>CO1</code></td></tr>
               </table></div>
               <div class="result"><span><span class="kbd">Registrar recepción</span></span><span class="arrow">→</span><span class="pill">R 0000002</span><span class="pill">Lote · 2 muestras</span></div>
               <div class="note tip"><b>Variante para probar</b>Marca un requisito en <span class="pill bad">NC</span>: la opción "Aceptada" se bloquea y solo puedes elegir "Aceptada con desviación" (pide comunicación al cliente) o "Rechazada". Vuelve a C antes de guardar.</div>
@@ -361,14 +362,14 @@
                 <h2>Procesamiento del lote</h2>
                 <div class="where"><span class="crumb">Recepción</span>›<span class="crumb">fila R 0000002</span>›<span class="crumb">⋯ Procesar</span></div>
               </div>
-              <span class="role">Axel</span>
+              <span class="role">Luis</span>
             </header>
             <div class="content">
               <div class="scroll"><table class="fields">
                 <tr><th>Muestra</th><td><b>Lote</b>: marca las dos muestras (M26-301 y M26-302)</td></tr>
                 <tr><th>Organismo</th><td><b>Bivalvos</b> · Parte: ☑ <b>Cuerpo completo</b></td></tr>
                 <tr><th>Procesamiento</th><td>Igual que en ASP: <b>CR2</b> para drenar, <b>LC1</b> para moler con <b>135 g</b>, <b>BA1</b> con <b>133.2 g</b>, bolsa hermética</td></tr>
-                <tr><th>Resguardo · Personal</th><td>☑ <b>Entregado para extracción</b> · Procesó <b>Axel</b>, supervisó <b>Melisa</b></td></tr>
+                <tr><th>Resguardo · Personal</th><td>☑ <b>Entregado para extracción</b> · Procesó <b>Luis</b>, supervisó <b>Ricardo</b></td></tr>
               </table></div>
               <div class="result"><span><span class="kbd">Registrar procesamiento</span></span><span class="arrow">→</span><span class="pill">P 0000002</span></div>
             </div>
@@ -382,7 +383,7 @@
                 <h2>Extracción DSP con hidrólisis</h2>
                 <div class="where"><span class="crumb">Procesamiento</span>›<span class="crumb">fila P 0000002</span>›<span class="crumb">⋯ Extraer</span>›<span class="crumb">Registrar extracción DSP</span><span>Formato FX-TCF-GME-D</span></div>
               </div>
-              <span class="role">Axel</span>
+              <span class="role">Luis</span>
             </header>
             <div class="content">
               <p class="intro">Con molienda <b>congelada</b> se activan los pasos 1–2, y con hidrólisis se abren los pasos 15–23. Son 5 tubos (dos muestras, dos réplicas y el blanco).</p>
@@ -393,7 +394,7 @@
                 <tr><th>Aforo y filtrado (9–14)</th><td>9–13 marcados: <b>10</b> → Metanol grado HPLC (9 mL/tubo) · <b>11</b> → Homogeneizador <b>HO1</b> · <b>12</b> → CE1 · <b>13</b> → metanol de aforo, cantidad <b>2 mL</b>/tubo · <b>14</b> → <b>Filtro 0.45 µm</b> + <b>Vial ámbar 2 mL</b></td></tr>
                 <tr><th>Hidrólisis (15–23)</th><td><b>Sí requirió</b> · 15 → Vial ámbar · 16 → <b>NaOH 2.5 M</b> (125 µL/tubo), folio preparación <code>FX-TCR-PR-011</code>, Micropipeta <b>MP1</b> · 17 → VO1 + BA1 · 18 → Termoblock <b>TB1</b> + Termómetro <b>TM1</b> + CR2 (76 °C, 40 min) · 20 → BA1 · 21 → <b>HCl 2.5 M</b> (<code>FX-TCR-PR-012</code>) + MP1 · 22 → VO1 · 23 → Filtro + Vial</td></tr>
                 <tr><th>Resguardo</th><td>Extracto ☑ <b>Entregado a FX-106</b> · Molienda restante ☑ <b>Congelador CO1</b></td></tr>
-                <tr><th>Equipos · Personal</th><td>Folio de bitácora para cada equipo · Extrajo <b>Axel</b>, supervisó <b>Melisa</b></td></tr>
+                <tr><th>Equipos · Personal</th><td>Folio de bitácora para cada equipo · Extrajo <b>Luis</b>, supervisó <b>Ricardo</b></td></tr>
               </table></div>
               <div class="result"><span><span class="kbd">Registrar extracción DSP</span></span><span class="arrow">→</span><span class="pill">E-D 0000001</span></div>
               <div class="note observe"><b>Qué observar</b><ul><li>Movimientos: 5 tubos ámbar, ≈0.1 L de metanol (9 + 9 + 2 mL × 5), 0.000625 L de NaOH y de HCl, 10 filtros y 15 viales.</li><li>El medidor de <b>Metanol grado HPLC</b> baja de 6 L a 5.9 L.</li><li>Elige la micropipeta <code>MP2</code> en el paso 16: aviso de calibración y confirmación. Cambia a MP1.</li></ul></div>
@@ -408,7 +409,7 @@
                 <h2>Análisis por LC-MS/MS con una no conformidad</h2>
                 <div class="where"><span class="crumb">Extracción</span>›<span class="crumb">fila E-D 0000001</span>›<span class="crumb">⋯ Analizar</span></div>
               </div>
-              <span class="role">Axel</span>
+              <span class="role">Luis</span>
             </header>
             <div class="content">
               <div class="scroll"><table class="fields">
@@ -417,7 +418,7 @@
                 <tr><th>Resultados</th><td>Unidad µg/kg, límite 160. <code>M26-301</code>: <b>61.3</b> → <span class="pill ok">Cumple</span> · <code>M26-302</code>: <b>172.5</b> → <span class="pill bad">No cumple</span> (el sistema lo sugiere solo)</td></tr>
                 <tr><th>Controles</th><td>Blanco <i>&lt; LD</i>, Aceptable · MR: <b>CRM ácido okadaico</b>, esperado <b>100</b>, obtenido <b>102.1</b>, Aceptable · Duplicado M26-301, dif. <b>4.8 %</b></td></tr>
                 <tr><th>Insumos</th><td><b>Ácido fórmico 98–100 %</b>, <b>0.01</b> L. Verás el aviso de stock bajo.</td></tr>
-                <tr><th>Analista</th><td><b>Axel</b> · firma</td></tr>
+                <tr><th>Analista</th><td><b>Luis</b> · firma</td></tr>
               </table></div>
               <div class="result"><span><span class="kbd">Registrar análisis</span></span><span class="arrow">→</span><span class="pill">A 0000002</span></div>
             </div>
@@ -431,10 +432,10 @@
                 <h2>Revisión y aprobación</h2>
                 <div class="where"><span class="crumb">Análisis</span>›<span class="crumb">A 0000002</span></div>
               </div>
-              <span class="role melisa">Melisa → Axel</span>
+              <span class="role melisa">Ricardo → Patricia</span>
             </header>
             <div class="content">
-              <p class="intro">Igual que en ASP: Melisa <span class="kbd">Marcar revisado</span>, Axel <span class="kbd">Aprobar</span>. Esta vez prueba la excepción: intenta que Axel haga ambos pasos y captura el motivo <i>"Melisa no disponible"</i>; luego revisa cómo queda en el historial.</p>
+              <p class="intro">Igual que en ASP: Ricardo <span class="kbd">Marcar revisado</span>, Patricia <span class="kbd">Aprobar</span>. Luego entra como Luis y comprueba que no puede aprobar (no ve el botón); revisa en el historial quién hizo cada paso.</p>
             </div>
             <div class="done-row"><label><input type="checkbox" data-done="dsp-5"> Paso terminado</label><span class="folio">estado: Aprobado</span></div>
           </article>
@@ -446,14 +447,14 @@
                 <h2>Informe con resultado fuera de límite</h2>
                 <div class="where"><span class="crumb">Informes</span>›<span class="crumb">Nuevo informe</span></div>
               </div>
-              <span class="role">Axel → Melisa → Axel</span>
+              <span class="role">Luis → Ricardo → Patricia</span>
             </header>
             <div class="content">
               <div class="scroll"><table class="fields">
                 <tr><th>Recepción y cliente</th><td>Recepción <b>R 0000002</b> · Contacto: <b>Laura Medina</b></td></tr>
                 <tr><th>Análisis incluidos</th><td>☑ <b>A 0000002</b></td></tr>
                 <tr><th>Declaraciones</th><td>Opiniones: <i>M26-302 supera el límite regulatorio de 160 µg/kg; se recomienda no comercializar el lote.</i></td></tr>
-                <tr><th>Flujo</th><td>Borrador → revisado (Melisa) → autorizado (Axel) → PDF → entrega por <b>Correo electrónico</b> a Laura Medina</td></tr>
+                <tr><th>Flujo</th><td>Borrador → revisado (Ricardo) → autorizado (Patricia) → PDF → entrega (Patricia) por <b>Correo electrónico</b> a Laura Medina</td></tr>
               </table></div>
               <div class="note observe"><b>Qué observar</b><ul><li>En el PDF, la fila M26-302 aparece como <b>No cumple</b>.</li><li>Emite una <b>enmienda</b> (⋯ › Emitir enmienda, motivo "corrección de contacto"): nace IR 0000002 v2 en borrador y la v1 queda "Sustituida por enmienda".</li></ul></div>
             </div>
@@ -467,11 +468,11 @@
                 <h2>Cierre del lote</h2>
                 <div class="where"><span class="crumb">Recepción</span>›<span class="crumb">R 0000002</span>›<span class="crumb">Disposición final</span></div>
               </div>
-              <span class="role">Axel</span>
+              <span class="role">Luis</span>
             </header>
             <div class="content">
               <div class="scroll"><table class="fields">
-                <tr><th>Disposición final</th><td>Tipo <b>RPBI</b> · Fecha hoy · Responsable Axel · Remanentes: <i>Molienda y extractos de M26-301 y M26-302</i></td></tr>
+                <tr><th>Disposición final</th><td>Tipo <b>RPBI</b> · Fecha hoy · Responsable Luis · Remanentes: <i>Molienda y extractos de M26-301 y M26-302</i></td></tr>
               </table></div>
               <div class="result"><span><span class="kbd">Registrar disposición y cerrar la muestra</span></span><span class="arrow">→</span><span class="pill">Cerrada</span></div>
             </div>
@@ -486,10 +487,10 @@
         <div class="checks">
           <label><input type="checkbox" data-done="chk-1"> <span><b>Inicio</b>: "Avisos" muestra reactivos con stock bajo (3), consumibles (3), equipos con alerta (2) y mantenimientos; cada aviso abre su lista ya filtrada con el mismo número.</span></label>
           <label><input type="checkbox" data-done="chk-2"> <span><b>Inventario › Movimientos</b>: cada salida lleva el folio que la generó; las anulaciones aparecen como entradas de reposición.</span></label>
-          <label><input type="checkbox" data-done="chk-3"> <span><b>Equipos ↔ Mantenimiento</b>: marca la calibración de MP2 como completada (fecha realizada hoy, próxima calibración dentro de un año) y confirma que MP2 vuelve a Operativo y desaparece de Mantenimiento.</span></label>
-          <label><input type="checkbox" data-done="chk-4"> <span><b>Auditoría</b>: filtra por acción "Anuló" y por tu usuario; abre un renglón y lee los cambios antes → después; pulsa "Verificar integridad".</span></label>
+          <label><input type="checkbox" data-done="chk-3"> <span><b>Equipos ↔ Mantenimiento</b> (como Ricardo o Carmen, que tienen mantenimiento): marca la calibración de MP2 como completada (fecha realizada hoy, próxima calibración dentro de un año) y confirma que MP2 vuelve a Operativo y desaparece de Mantenimiento.</span></label>
+          <label><input type="checkbox" data-done="chk-4"> <span><b>Auditoría</b> (como Patricia o Héctor, Auditor Interno; Luis no tiene la bitácora): filtra por acción "Anuló" y por usuario; abre un renglón y lee los cambios antes → después; pulsa "Verificar integridad".</span></label>
           <label><input type="checkbox" data-done="chk-5"> <span><b>Búsqueda ⌘K</b>: escribe "D26-201" y "M26-302" y salta al registro desde cualquier pantalla.</span></label>
-          <label><input type="checkbox" data-done="chk-6"> <span><b>Como Melisa</b>: comprueba que no ve Administración y que puede revisar/aprobar pero no crear usuarios.</span></label>
+          <label><input type="checkbox" data-done="chk-6"> <span><b>Como Ricardo</b>: comprueba que no ve Administración y que puede revisar/aprobar pero no crear usuarios.</span></label>
         </div>
       </section>
     </main>

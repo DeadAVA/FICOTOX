@@ -64,7 +64,7 @@ check("la cadena esta integra antes de manipularla", inicial.data?.ok === true &
 {
   const db = new Database(process.env.TEST_DB_PATH);
   db.exec("DROP TRIGGER IF EXISTS auditoria_sin_update; DROP TRIGGER IF EXISTS auditoria_sin_delete");
-  const objetivo = db.prepare("SELECT id FROM auditoria ORDER BY id LIMIT 1 OFFSET 2").get();
+  const objetivo = db.prepare("SELECT id, motivo FROM auditoria ORDER BY id LIMIT 1 OFFSET 2").get();
   db.prepare("UPDATE auditoria SET motivo = 'motivo cambiado a mano' WHERE id = ?").run(objetivo.id);
   db.close();
   const alterada = await api("/audit/verify", token);
@@ -72,7 +72,7 @@ check("la cadena esta integra antes de manipularla", inicial.data?.ok === true &
   // Se deja como estaba para las siguientes comprobaciones.
   const db2 = new Database(process.env.TEST_DB_PATH);
   db2.exec("DROP TRIGGER IF EXISTS auditoria_sin_update; DROP TRIGGER IF EXISTS auditoria_sin_delete");
-  db2.prepare("UPDATE auditoria SET motivo = NULL WHERE id = ?").run(objetivo.id);
+  db2.prepare("UPDATE auditoria SET motivo = ? WHERE id = ?").run(objetivo.motivo, objetivo.id);
   db2.close();
   const restaurada = await api("/audit/verify", token);
   check("al deshacer el cambio la cadena vuelve a estar integra", restaurada.data?.ok === true, JSON.stringify(restaurada.data));

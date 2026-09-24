@@ -4,7 +4,7 @@ import { registrarAuditoria, snapshotRow } from "../audit";
 import { getConfig } from "../config";
 import { isIntegrityError, isOperationalError, type Session } from "../db";
 import { intParam, json, readJson, type RouteContext } from "../http";
-import { ensureRbacSchema, requirePermission, toBit } from "../rbac";
+import { assertAdministratorRemains, countActiveAdministrators, ensureRbacSchema, requirePermission, toBit } from "../rbac";
 import { ensureUsuariosSchema, normalizeUserPayload } from "../users";
 import { hashPassword, validatePasswordStrength } from "../password";
 
@@ -200,6 +200,7 @@ export async function updateRole({ request, s, params }: RouteContext): Promise<
     return json({ message: "Ya existe un rol con ese nombre" }, 409);
   }
 
+  const adminsAntes = await countActiveAdministrators(s);
   const antes = await snapshotRow(s, "roles", roleId);
   const permisosAntes = await s.query("SELECT p.clave, rp.can_read, rp.can_create, rp.can_update, rp.can_delete FROM rol_permisos rp INNER JOIN permisos p ON p.id = rp.id_permiso WHERE rp.id_rol = :role_id ORDER BY p.clave", { role_id: roleId });
   await s.execute(
@@ -214,6 +215,7 @@ export async function updateRole({ request, s, params }: RouteContext): Promise<
   );
   await saveRolePermissions(s, roleId, permissions);
   const permisosDespues = await s.query("SELECT p.clave, rp.can_read, rp.can_create, rp.can_update, rp.can_delete FROM rol_permisos rp INNER JOIN permisos p ON p.id = rp.id_permiso WHERE rp.id_rol = :role_id ORDER BY p.clave", { role_id: roleId });
+  await assertAdministratorRemains(s, adminsAntes);
   await registrarAuditoria(s, user, { accion: "editar", entidad: "roles", entidadId: roleId, referencia: nombre, antes: { ...antes, permisos: permisosAntes }, despues: { ...(await snapshotRow(s, "roles", roleId)), permisos: permisosDespues } });
   await s.commit();
 
@@ -288,13 +290,16 @@ export async function getUsuario({ request, s, params }: RouteContext): Promise<
   return json({ item: row });
 }
 
-async function validateUsuarioPayload(s: Session, request: Request, options: { passwordRequired: boolean }) {
+async function validateUsuarioPayload(s: Session, request: Request, options: { passwordRequired: boolean; currentEmail?: string | null }) {
   const payload = await readJson(request);
   const data = normalizeUserPayload(payload);
   const password = String(payload.password || "");
   if (!data.nombre) return { error: json({ message: "El nombre es obligatorio" }, 400) };
   if (!data.email) return { error: json({ message: "El email es obligatorio" }, 400) };
-  if (!emailDomainAllowed(data.email)) return { error: json({ message: domainErrorMessage() }, 400) };
+  // El dominio se exige al dar de alta o cambiar el correo; una cuenta existente
+  // (p. ej. las locales @ficotox.local creadas por el script de roles) se puede editar.
+  const emailSinCambio = !!options.currentEmail && String(options.currentEmail).toLowerCase() === String(data.email).toLowerCase();
+  if (!emailSinCambio && !emailDomainAllowed(data.email)) return { error: json({ message: domainErrorMessage() }, 400) };
   if (!data.id_rol) return { error: json({ message: "Selecciona un rol" }, 400) };
 
   const roleExists = await s.scalar("SELECT id FROM roles WHERE id = :id_rol LIMIT 1", { id_rol: data.id_rol });
@@ -346,12 +351,13 @@ export async function updateUsuario({ request, s, params }: RouteContext): Promi
   await requirePermission(s, user, "usuarios", "update");
   await ensureUsuariosSchema(s);
 
-  const validated = await validateUsuarioPayload(s, request, { passwordRequired: false });
+  const antesUsuario = await snapshotRow(s, "usuarios", userId);
+  const validated = await validateUsuarioPayload(s, request, { passwordRequired: false, currentEmail: antesUsuario ? String(antesUsuario.email || "") : null });
   if (validated.error) return validated.error;
   const data = validated.data;
 
   let rowcount: number;
-  const antesUsuario = await snapshotRow(s, "usuarios", userId);
+  const adminsAntes = await countActiveAdministrators(s);
   try {
     const result = await s.execute(
       `
@@ -368,6 +374,7 @@ export async function updateUsuario({ request, s, params }: RouteContext): Promi
       { ...data, avatar: data.avatar ?? null, avatar_set: data.avatar === undefined ? 0 : 1, password_hash: validated.passwordHash, user_id: userId },
     );
     rowcount = result.rowcount;
+    await assertAdministratorRemains(s, adminsAntes);
     if (rowcount > 0) {
       await registrarAuditoria(s, user, { accion: "editar", entidad: "usuarios", entidadId: userId, referencia: String(data.email), antes: antesUsuario, despues: await snapshotRow(s, "usuarios", userId), detalle: validated.passwordHash ? { contrasena: "cambiada" } : null });
     }
@@ -406,7 +413,9 @@ export async function deleteUsuario({ request, s, params }: RouteContext): Promi
   if (!antes) {
     return json({ message: "Usuario no encontrado" }, 404);
   }
+  const adminsAntes = await countActiveAdministrators(s);
   await s.execute("UPDATE usuarios SET activo = 0 WHERE id = :user_id", { user_id: userId });
+  await assertAdministratorRemains(s, adminsAntes);
   await registrarAuditoria(s, user, { accion: "baja", entidad: "usuarios", entidadId: userId, referencia: String(antes.email || userId), motivo, antes, despues: await snapshotRow(s, "usuarios", userId) });
   await s.commit();
   return json({ message: "Usuario dado de baja (inactivo); su historial se conserva" });

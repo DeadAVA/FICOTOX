@@ -28,7 +28,7 @@ const BASE = process.env.BASE || "http://localhost:3000/api";
 const ADMIN_EMAIL = process.env.FICOTOX_EMAIL;
 const ADMIN_PASSWORD = process.env.FICOTOX_PASSWORD;
 if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
-  console.error("Define FICOTOX_EMAIL y FICOTOX_PASSWORD (cuenta con rol Super Admin).");
+  console.error("Define FICOTOX_EMAIL y FICOTOX_PASSWORD (cuenta con permiso de alta en usuarios, roles, inventario, muestras, informes y documentos).");
   process.exit(1);
 }
 
