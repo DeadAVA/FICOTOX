@@ -53,7 +53,7 @@ export function DocumentoSheet({ open, item, onClose }: { open: boolean; item: A
     event.preventDefault();
     if (!form.clave.trim() || !form.titulo.trim()) return setError("Clave y título son obligatorios");
     if (!form.tipo || !form.area) return setError("Tipo y área son obligatorios (se derivan de la clave)");
-    if (!can("documentos", editing ? "update" : "create")) return setError("No tienes permiso para esta acción");
+    if (!can("documentos", editing ? "E" : "C", { objeto: "documento", borrador: true })) return setError("No tienes permiso para esta acción");
     setSubmitting(true);
     setError(null);
     const data = new FormData();

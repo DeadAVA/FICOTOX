@@ -20,7 +20,7 @@ El sistema esta orientado al seguimiento de actividades de laboratorio bajo un f
 3. Si la autenticacion Microsoft esta habilitada, tambien vera el boton **Continuar con Microsoft**.
 4. Al iniciar sesion correctamente, el sistema mostrara la pantalla de **Inicio**.
 
-Si no puede ingresar, contacte al administrador del sistema para validar que su usuario este dado de alta, activo, con un rol asignado y con contrasena definida.
+Si no puede ingresar, contacte al administrador del sistema para validar que su usuario este dado de alta, activo, con al menos un rol vigente y con contrasena definida. Si entra pero solo ve el mensaje "Sin permisos asignados", su cuenta no tiene roles vigentes: pida a la administracion que le asigne uno.
 
 ## 3. Navegacion general
 
@@ -37,7 +37,7 @@ Las entradas con ▸ se despliegan: al hacer clic en el nombre se abre la seccio
 
 En la cabecera de la barra hay un icono de **busqueda** y el boton para contraer la barra a solo iconos (el sistema lo recuerda); abajo, su avatar y su nombre con el menu **Mi cuenta** y **Cerrar sesion**.
 
-**Mi cuenta** muestra su nombre, correo y rol, y permite elegir su **avatar** entre las 18 ilustraciones del catalogo (criaturas y objetos del laboratorio). Si no elige uno, el sistema le asigna uno a partir de su correo. El cambio queda registrado en la bitacora. En dispositivos moviles la barra se abre con el boton de menu (tres lineas).
+**Mi cuenta** muestra su nombre, correo y sus roles vigentes, y permite elegir su **avatar** entre las 18 ilustraciones del catalogo (criaturas y objetos del laboratorio). Si no elige uno, el sistema le asigna uno a partir de su correo. El cambio queda registrado en la bitacora. En dispositivos moviles la barra se abre con el boton de menu (tres lineas).
 
 Atajos y ayudas:
 
@@ -260,10 +260,10 @@ El registro de analisis (folio **A**) captura lo que se midio en el extracto y l
 4. Registre los **controles de calidad** (blanco, material de referencia con lote y caducidad, duplicado) y los insumos adicionales que se descuentan del inventario.
 5. Presione **Registrar analisis**.
 
-Revision y aprobacion (requieren el permiso **Aprobaciones**):
+Revision y aprobacion (requieren los permisos **Ensayos: R** y **Ensayos: A**):
 
-- **Marcar revisado**: quien tenga permiso de Aprobaciones revisa el registro y firma. El cargo que aparece junto a la firma sale del rol de la persona (no se captura a mano).
-- **Aprobar**: cualquier persona con permiso de Aprobaciones puede aprobar, incluso si registro o reviso el mismo analisis (la regla de dos personas esta apagada por decision del laboratorio). Cada paso queda en la bitacora con quien lo hizo y cuando.
+- **Marcar revisado**: quien tenga permiso de revisar ensayos revisa el registro y firma. El cargo que aparece junto a la firma es el del rol con el que actua (si tiene varios roles que lo permiten, el sistema le pregunta cual).
+- **Aprobar**: cualquier persona con permiso de aprobar ensayos puede aprobar, incluso si registro o reviso el mismo analisis (la regla de dos personas esta apagada por decision del laboratorio). Cada paso queda en la bitacora con quien lo hizo y cuando.
 - Un analisis revisado que se edita vuelve a **Registrado** (hay que indicar el motivo del cambio) y debe revisarse de nuevo. Un analisis aprobado es de solo lectura; si esta mal, se anula y se captura otro.
 - Al aprobar, la extraccion pasa a **Analizada** y el procesamiento a **Completada**.
 
@@ -273,7 +273,7 @@ La seccion **Informes** emite el informe de resultados para el cliente (folio **
 
 1. Presione **Nuevo informe** y elija la recepcion. Se cargan el cliente, los items ensayados y los **analisis aprobados** de esa recepcion; marque los que se incluyen.
 2. Revise las declaraciones (alcance de los resultados, regla de decision, desviaciones del metodo, descargo cuando la muestra se acepto con desviacion, opiniones e interpretaciones) y presione **Crear borrador**. Con **Vista previa PDF** puede ver como quedara.
-3. **Marcar revisado** y luego **Autorizar** (permiso Aprobaciones; con firma obligatoria). Puede hacerlo la misma persona que elaboro o reviso: el sistema no exige que sean personas distintas. El cargo que aparece en el informe sale del rol de cada persona. Al autorizar, los resultados quedan **congelados** en el informe, se genera el PDF definitivo con su huella SHA-256 y la recepcion pasa a **Informada**.
+3. **Marcar revisado** (Informes: R) y luego **Autorizar** (Informes: A; con firma obligatoria). Puede hacerlo la misma persona que elaboro o reviso: el sistema no exige que sean personas distintas. El cargo que aparece en el informe es el del rol con el que actuo cada persona. Al autorizar, los resultados quedan **congelados** en el informe, se genera el PDF definitivo con su huella SHA-256 y la recepcion pasa a **Informada**.
 4. **Registrar entrega**: fecha, medio (correo, impreso, entrega en mano...) y a quien se entrego.
 5. Si hay que corregir un informe ya autorizado o entregado, use **Enmienda**: se crea la version siguiente (v2, v3...) en borrador que sustituye a la anterior y la indica en el PDF. Al autorizar la enmienda, el informe original pasa a **Sustituido** y su PDF se regenera con la leyenda "sin validez" (se conserva para el expediente). **Anular** marca el PDF como sin validez.
 
@@ -320,60 +320,79 @@ Ciclo de un documento:
 
 1. **Nuevo documento**: clave con el formato del laboratorio (`FX-<area><tipo>-<siglas>`, por ejemplo `FX-GCP-CD`); el tipo (manual, procedimiento, instructivo, formato, registro, lista, bitacora, externo) y el area (gestion de calidad, tecnica, direccion...) se derivan de la clave. Adjunte el archivo (PDF, Word, Excel...). Queda en **Borrador**.
 2. **Enviar a revision** (requiere archivo, salvo documentos externos).
-3. **Aprobar** (permiso Aprobaciones; solo documentos en revision y con archivo): pide cargo de quien aprueba y fecha de vigencia. La revision queda **Vigente** y la anterior pasa a **Obsoleta** automaticamente (se conserva identificada, no se borra).
+3. **Aprobar** (Documentos: A; solo documentos en revision y con archivo): pide cargo de quien aprueba y fecha de vigencia. La revision queda **Vigente** y la anterior pasa a **Obsoleta** automaticamente (se conserva identificada, no se borra).
 4. **Nueva revision**: crea el borrador de la revision siguiente indicando que cambio; **Declarar obsoleto** retira un documento vigente con motivo; **Cancelar borrador** descarta un borrador con motivo.
 
 Cada documento tiene **Ver detalle e historial** con sus revisiones, la huella SHA-256 del archivo y la bitacora.
 
 ## 11.1 Bitacora de auditoria
 
-En la barra lateral, grupo **Calidad**, **Auditoria** (permiso Auditoria, por defecto solo administradores) muestra quien hizo que, cuando y por que en todo el sistema: altas, ediciones (con el valor anterior y el nuevo), anulaciones, bajas, revisiones, aprobaciones, autorizaciones, entregas, inicios de sesion e intentos fallidos. Se presenta como la lista de Movimientos: una tabla con fecha y hora, usuario, accion (etiqueta de color), **que paso** en una frase ("Dio de baja el reactivo CH-3B" con el motivo y los hechos clave debajo), el registro afectado con enlace **Abrir**, y a la derecha "n cambios": al hacer clic en la fila se despliega el detalle de cada dato con su valor anterior y el nuevo. Arriba a la derecha van los contadores (total, 30 dias, anulaciones, accesos fallidos). Se filtra por entidad, accion, usuario, fecha y texto. La bitacora no se puede editar ni borrar; **Verificar integridad** comprueba la cadena de hashes, que no falten entradas al final y que la proteccion de la tabla siga activa, y avisa si algo fue alterado. Cada formato muestra su propio **Historial** a quien puede leer ese modulo.
+En la barra lateral, grupo **Calidad**, **Auditoria** (permiso Calidad: V) muestra quien hizo que, cuando y por que en todo el sistema: altas, ediciones (con el valor anterior y el nuevo), anulaciones, bajas, revisiones, aprobaciones, autorizaciones, entregas, inicios de sesion e intentos fallidos. Se presenta como la lista de Movimientos: una tabla con fecha y hora, usuario, accion (etiqueta de color), **que paso** en una frase ("Dio de baja el reactivo CH-3B" con el motivo y los hechos clave debajo), el registro afectado con enlace **Abrir**, y a la derecha "n cambios": al hacer clic en la fila se despliega el detalle de cada dato con su valor anterior y el nuevo. Arriba a la derecha van los contadores (total, 30 dias, anulaciones, accesos fallidos). Se filtra por entidad, accion, usuario, fecha y texto. La bitacora no se puede editar ni borrar; **Verificar integridad** comprueba la cadena de hashes, que no falten entradas al final y que la proteccion de la tabla siga activa, y avisa si algo fue alterado. Cada formato muestra su propio **Historial** a quien puede leer ese modulo.
 
 ## 12. Roles y permisos
 
-La seccion **Roles** esta destinada a usuarios administradores.
+Cada persona puede tener **uno o varios roles**, cada uno con fecha de inicio y, si se quiere, fecha de fin. Lo que una persona puede hacer es la suma de sus roles vigentes. El detalle de los 10 roles del laboratorio, sus permisos y las combinaciones prohibidas esta en `docs/CATALOGO_PERMISOS.md`.
 
-### 12.1 Crear rol
+Cada permiso dice **que** se puede hacer en cada modulo:
+
+| Letra | Significa |
+| --- | --- |
+| V | Ver |
+| C | Crear o capturar |
+| E | Editar un borrador (solo mientras el registro no pasa a revision o aprobacion) |
+| R | Revisar |
+| A | Aprobar, validar, autorizar o liberar |
+| AN | Anular con justificacion |
+| G | Administrar (todo lo anterior) |
+
+y **hasta donde** (alcance): por ejemplo "solo recepcion", "solo su propia cuenta", "solo el estado de la muestra" o "solo mantenimientos". Algunos alcances se guardan ya pero se aplicaran en fases posteriores; la pantalla los marca con "se aplica en Fase X".
+
+Los modulos son: Usuarios y roles, Documentos, Muestras (recepcion, custodia y disposicion), Ensayos (procesamiento, extraccion y analisis), Informes, Equipos (y mantenimientos), Inventario (reactivos, consumibles y movimientos), Calidad (bitacora de auditoria) y Compras. El Inicio lo ve toda persona activa, pero cada panel y aviso aparece solo si puede ver ese modulo.
+
+### 12.1 Ver y editar un rol
+
+Requiere el permiso de administrar usuarios (Usuarios: G).
 
 1. En la barra lateral, grupo **Administracion**, elija **Roles**.
-2. Presione **Nuevo rol**.
-3. Capture nombre y descripcion.
-4. Marque los permisos necesarios por modulo:
-   - Leer.
-   - Crear.
-   - Editar.
-   - Eliminar.
-5. Presione **Crear rol** (o **Guardar cambios** al editar).
+2. Presione **Nuevo rol** o elija **Editar** en el menu **⋯** de un rol.
+3. En la **matriz** marque, por modulo, las acciones (V C E R A AN G) y elija el alcance de cada una.
+4. Guarde e indique el **motivo** del cambio (queda en la bitacora).
 
-Los modulos con permisos configurables son:
-
-- Dashboard.
-- Reactivos.
-- Consumibles.
-- Equipos.
-- Muestras.
-- Movimientos.
-- Mantenimiento.
-- Documentos SGC.
-- Roles.
-- Usuarios.
+Si el cambio dejaria a alguien con una **combinacion de roles prohibida** (por ejemplo, administracion tecnica del sistema junto con captura o aprobacion de ensayos), el sistema no lo guarda y muestra a quien afectaria. Tampoco permite dejar el sistema sin ninguna persona activa que pueda administrar usuarios y roles. El rol "Administrador técnico del sistema" no se puede eliminar; un rol que ya se asigno a alguien tampoco (se puede desactivar).
 
 ## 13. Usuarios
 
-La seccion **Usuarios** permite administrar cuentas de acceso.
+La seccion **Usuarios** permite administrar cuentas de acceso y sus roles. Quien solo tiene permiso sobre su propia cuenta ve unicamente la suya.
 
 ### 13.1 Crear usuario
 
 1. En la barra lateral, grupo **Administracion**, elija **Usuarios**.
 2. Presione **Nuevo usuario**.
-3. Capture nombre, correo electronico, rol, departamento, contrasena inicial (minimo 8 caracteres) y estado.
+3. Capture nombre, correo electronico, **rol inicial**, departamento, contrasena inicial (minimo 8 caracteres) y estado.
 4. Presione **Crear usuario**.
 
 Para cambiar la contrasena de un usuario existente, editelo y capture una nueva contrasena; si deja el campo vacio se conserva la actual.
 
-### 13.2 Activar o desactivar usuario
+### 13.2 Asignar y revocar roles
 
-Edite el usuario y cambie su estado a activo o inactivo. Un usuario inactivo no puede iniciar sesion. Los permisos de un rol solo cambian cuando alguien los edita en **Roles**: el sistema nunca amplia por su cuenta lo que un rol puede hacer. La accion **Dar de baja** de la lista tambien desactiva la cuenta pidiendo un motivo; los usuarios nunca se borran, porque la bitacora y los registros que firmaron los referencian.
+1. Abra la ficha del usuario: sus roles aparecen como lista con su **vigencia** (desde / hasta) y su estado (vigente, por comenzar, vencido o revocado).
+2. **Asignar rol**: elija el rol, la fecha de inicio, opcionalmente la fecha de fin, y escriba el **motivo** (minimo 5 caracteres).
+3. **Revocar**: en el rol vigente, presione **Revocar** e indique el motivo. El rol deja de contar de inmediato, sin que la persona tenga que volver a iniciar sesion.
+
+Reglas:
+
+- Nadie puede asignarse ni revocarse roles a si mismo.
+- Algunas combinaciones de roles estan prohibidas (independencia del auditor, estudiantes sin otros roles, administracion sin captura tecnica); el sistema explica que regla se violaria.
+- Cuando un rol llega a su fecha de fin deja de contar solo y queda registrado en la bitacora como "Venció rol". No se puede asignar un rol con una fecha de fin que ya paso.
+- Nada se borra: las asignaciones revocadas o vencidas se conservan en la ficha y en la bitacora.
+
+### 13.3 Activar o desactivar usuario
+
+Edite el usuario y cambie su estado a activo o inactivo. Un usuario inactivo no puede iniciar sesion ni usar una sesion abierta. La accion **Dar de baja** de la lista tambien desactiva la cuenta pidiendo un motivo; los usuarios nunca se borran, porque la bitacora y los registros que firmaron los referencian.
+
+### 13.4 Con que cargo firmo
+
+Cuando firma, revisa, aprueba, autoriza, entrega o anula, el sistema guarda el **cargo** con el que actuo (el nombre de su rol). Si solo uno de sus roles permite esa accion se usa ese; si varios lo permiten, el sistema le pregunta **"¿Con qué cargo actúas?"** y usted elige. El cargo aparece junto a su firma en el registro y en el PDF del informe.
 
 ## 14. Buenas practicas de uso
 
@@ -393,15 +412,15 @@ Verifique que su correo este registrado, que la contrasena sea correcta, que el 
 
 ### No veo una seccion en la barra lateral
 
-Su rol probablemente no tiene permiso de lectura para esa seccion. Solicite revision al administrador.
+Ninguno de sus roles vigentes tiene permiso de ver (V) ese modulo. Solicite revision al administrador. Si un rol le fue revocado o vencio, la barra se actualiza sola en menos de un minuto.
 
 ### No puedo crear, editar, anular o dar de baja
 
-Aunque pueda ver una seccion, su rol puede no tener permisos de crear, editar o eliminar (en este sistema "eliminar" significa anular o dar de baja con motivo). Revisar, aprobar o autorizar requiere ademas el permiso **Aprobaciones**.
+Aunque pueda ver una seccion, sus roles pueden no tener las acciones C (crear), E (editar borrador) o AN (anular o dar de baja con motivo), o tenerlas con un alcance limitado (por ejemplo, "solo recepcion" o "solo mantenimientos"). Revisar y aprobar son las acciones R y A de cada modulo. Un analisis revisado o un informe en revision ya no se editan: se anulan o se enmiendan.
 
 ### El sistema no me deja aprobar o autorizar
 
-Revise que su rol tenga el permiso **Aprobaciones**; con ese permiso cualquier persona puede revisar, aprobar y autorizar, aunque haya capturado el registro. Un informe solo se autoriza cuando todos sus analisis estan aprobados.
+Revise que alguno de sus roles tenga R (revisar) o A (aprobar/autorizar) en Ensayos o Informes; con esos permisos cualquier persona puede revisar, aprobar y autorizar, aunque haya capturado el registro. Un informe solo se autoriza cuando todos sus analisis estan aprobados.
 
 ### El registro aparece en solo lectura
 

@@ -18,7 +18,7 @@ const META: Record<string, { title: string; description: string }> = {
 export default function InventarioLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { can } = useSession();
-  const tabs = INVENTORY_TABS.filter((tab) => can(tab.module)).map((tab) => ({ href: tab.href, label: tab.label }));
+  const tabs = INVENTORY_TABS.filter((tab) => !!tab.module && can(tab.module)).map((tab) => ({ href: tab.href, label: tab.label }));
   const meta = Object.entries(META).find(([href]) => pathname === href || pathname.startsWith(`${href}/`))?.[1] || { title: "Inventario", description: "Reactivos, consumibles, equipos y su mantenimiento." };
   return (
     <PageBody>

@@ -1,7 +1,7 @@
 import { requireUser } from "../../auth";
 import { isSqlite } from "../../db";
 import { json, type RouteContext } from "../../http";
-import { requirePermission } from "../../rbac";
+import { cargarAutorizacion, permisoDe, recortarPorModulo, requirePermission, soloEstado } from "../../rbac";
 import { ensureSamplesExtraccionSchema } from "./extraccion";
 import { ensureSamplesProcesamientoSchema } from "./procesamiento";
 import { ensureSamplesRecepcionSchema } from "./recepcion";
@@ -24,7 +24,7 @@ async function ensureAll(ctx: RouteContext): Promise<void> {
 
 export async function samplesSummary(ctx: RouteContext): Promise<Response> {
   const user = await requireUser(ctx.request);
-  await requirePermission(ctx.s, user, "dashboard", "read");
+  const auth = await cargarAutorizacion(ctx.s, user);
   await ensureAll(ctx);
 
   const summary = await ctx.s.queryOne(
@@ -48,12 +48,16 @@ export async function samplesSummary(ctx: RouteContext): Promise<Response> {
       ) AS completadas
     `,
   );
-  return json(summary || {});
+  return json(recortarPorModulo(auth, summary || {}, { total_muestras: "muestras", pendientes: "muestras", en_proceso: "muestras", completadas: "muestras" }));
 }
 
 export async function listSamples(ctx: RouteContext): Promise<Response> {
   const user = await requireUser(ctx.request);
-  await requirePermission(ctx.s, user, "muestras", "read");
+  // Mezcla recepciones (muestras) con procesamientos y extracciones (ensayos): cada fila segun su modulo.
+  const auth = await cargarAutorizacion(ctx.s, user);
+  const muestras = permisoDe(auth, "muestras", "V");
+  const ensayos = permisoDe(auth, "ensayos", "V");
+  if (!muestras && !ensayos) await requirePermission(ctx.s, user, "muestras", "V", undefined, auth);
   await ensureAll(ctx);
 
   const rows = await ctx.s.query(
@@ -79,12 +83,15 @@ export async function listSamples(ctx: RouteContext): Promise<Response> {
     LIMIT 200
     `,
   );
-  return json({ items: rows, total: rows.length });
+  const items = rows
+    .filter((row) => (row.tipo === "Recepcion" ? !!muestras : !!ensayos))
+    .map((row) => (row.tipo === "Recepcion" && muestras && soloEstado(muestras) ? { ...row, analista: null } : row));
+  return json({ items, total: items.length });
 }
 
 export async function listPendingSamples(ctx: RouteContext): Promise<Response> {
   const user = await requireUser(ctx.request);
-  await requirePermission(ctx.s, user, "muestras", "read");
+  await requirePermission(ctx.s, user, "ensayos", "V");
   await ensureAll(ctx);
 
   const rows = await ctx.s.query(

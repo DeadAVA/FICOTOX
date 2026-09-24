@@ -33,7 +33,7 @@ export interface FlowItem {
   dias: number;
   estado: string;
   etapa: FlowStep["key"] | "cierre";
-  siguiente: { label: string; href: string; accion: "capturar" | "revisar" | "aprobar" | "cerrar" };
+  siguiente: { label: string; href: string; accion: "capturar" | "revisar" | "aprobar" | "cerrar" | "ver" };
   pasos: FlowStep[];
 }
 
@@ -44,6 +44,7 @@ const ACTION_ICON = {
   revisar: <Eye size={13} weight="bold" />,
   aprobar: <SealCheck size={13} weight="bold" />,
   cerrar: <FlagCheckered size={13} weight="bold" />,
+  ver: <Eye size={13} weight="bold" />,
 };
 
 const ACTION_TONE = {
@@ -51,6 +52,8 @@ const ACTION_TONE = {
   revisar: "bg-ink text-white hover:bg-deep-2",
   aprobar: "bg-ink text-white hover:bg-deep-2",
   cerrar: "bg-surface-3 text-ink hover:bg-line-strong/70",
+  // Paso que la persona no puede dar: solo informa y abre la recepcion.
+  ver: "bg-surface-2 text-ink-3 ring-1 ring-line hover:bg-surface-3",
 };
 
 function StepNode({ step, last }: { step: FlowStep; last: boolean }) {

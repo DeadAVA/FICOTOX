@@ -4,7 +4,7 @@ import { isIntegrityError, isSqlite, type Row, type Session } from "../db";
 import { darDeBaja, ensureBajaColumns, itemRef, reactivarItem } from "../inventory-baja";
 import { intParam, json, readJson, type RouteContext } from "../http";
 import { ensureMovimientosSchema } from "../inventory-usage";
-import { requirePermission } from "../rbac";
+import { cargarAutorizacion, recortarPorModulo, requirePermission } from "../rbac";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
 import { ensureConsumiblesSchema } from "./consumables";
 import { firstTruthy, isTruthy, searchParam, toFloatOrNull, toIntOrNull, toStrOrNull, utcTimestampReference } from "./helpers";
@@ -605,7 +605,7 @@ const REACTIVO_UPDATE_ASSIGNMENTS = REACTIVO_COLUMNS.map((column) => `${column} 
 
 export async function inventorySummary({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "dashboard", "read");
+  const auth = await cargarAutorizacion(s, user);
   await ensureReactivosSchema(s);
   await ensureConsumiblesSchema(s);
   await ensureEquiposSchema(s);
@@ -643,12 +643,12 @@ export async function inventorySummary({ request, s }: RouteContext): Promise<Re
       ) AS equipos_calibracion_pendiente
     `,
   );
-  return json(summary || {});
+  return json(recortarPorModulo(auth, summary || {}, { total_reactivos: "inventario", total_consumibles: "inventario", reactivos_stock_bajo: "inventario", consumibles_stock_bajo: "inventario", total_equipos: "equipos", equipos_calibracion_pendiente: "equipos" }));
 }
 
 export async function listReactivos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "reactivos", "read");
+  await requirePermission(s, user, "inventario", "V");
   await ensureReactivosSchema(s);
 
   const search = searchParam(request, "search");
@@ -690,7 +690,7 @@ export async function listReactivos({ request, s }: RouteContext): Promise<Respo
 export async function getReactivo({ request, s, params }: RouteContext): Promise<Response> {
   const reactivoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "reactivos", "read");
+  await requirePermission(s, user, "inventario", "V");
   await ensureReactivosSchema(s);
 
   const row = await s.queryOne("SELECT * FROM reactivos WHERE id = :id", { id: reactivoId });
@@ -702,7 +702,7 @@ export async function getReactivo({ request, s, params }: RouteContext): Promise
 
 export async function createReactivo({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "reactivos", "create");
+  await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" });
   await ensureReactivosSchema(s);
 
   const data = normalizeReactivoPayload(await readJson(request));
@@ -722,7 +722,7 @@ const reactivoRef = (row: Record<string, unknown> | null | undefined): string =>
 export async function updateReactivo({ request, s, params }: RouteContext): Promise<Response> {
   const reactivoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "reactivos", "update");
+  await requirePermission(s, user, "inventario", "E", { objeto: "catalogo_inventario" });
   await ensureReactivosSchema(s);
 
   const antes = await snapshotRow(s, "reactivos", reactivoId);
@@ -756,7 +756,7 @@ export async function updateReactivo({ request, s, params }: RouteContext): Prom
 export async function refillReactivo({ request, s, params }: RouteContext): Promise<Response> {
   const reactivoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "reactivos", "update");
+  await requirePermission(s, user, "inventario", "C", { objeto: "movimiento" });
   await ensureReactivosSchema(s);
   await ensureMovimientosSchema(s);
 
@@ -823,7 +823,7 @@ export async function importReactivos({ request, s }: RouteContext): Promise<Res
    * 5. Regresar resumen operativo para la interfaz.
    */
   const user = await requireUser(request);
-  await requirePermission(s, user, "reactivos", "create");
+  await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" });
   await ensureReactivosSchema(s);
 
   const payload = await readJson(request);
@@ -929,7 +929,7 @@ export async function importReactivos({ request, s }: RouteContext): Promise<Res
 export async function deleteReactivo({ request, s, params }: RouteContext): Promise<Response> {
   const reactivoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "reactivos", "delete");
+  await requirePermission(s, user, "inventario", "AN");
   await ensureReactivosSchema(s);
   return darDeBaja(s, user, "reactivos", reactivoId, await readJson(request), "Reactivo");
 }
@@ -937,7 +937,7 @@ export async function deleteReactivo({ request, s, params }: RouteContext): Prom
 export async function reactivarReactivo({ request, s, params }: RouteContext): Promise<Response> {
   const reactivoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "reactivos", "delete");
+  await requirePermission(s, user, "inventario", "G");
   await ensureReactivosSchema(s);
   return reactivarItem(s, user, "reactivos", reactivoId, await readJson(request), "Reactivo");
 }
@@ -1136,7 +1136,7 @@ const EQUIPO_SELECT = `
 
 export async function listEquipos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "equipos", "read");
+  await requirePermission(s, user, "equipos", "V");
   await ensureEquiposSchema(s);
 
   const search = searchParam(request, "search");
@@ -1162,7 +1162,7 @@ export async function listEquipos({ request, s }: RouteContext): Promise<Respons
 export async function getEquipo({ request, s, params }: RouteContext): Promise<Response> {
   const equipoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "equipos", "read");
+  await requirePermission(s, user, "equipos", "V");
   await ensureEquiposSchema(s);
 
   const row = await s.queryOne(`${EQUIPO_SELECT} WHERE e.id = :id LIMIT 1`, { id: equipoId });
@@ -1174,7 +1174,7 @@ export async function getEquipo({ request, s, params }: RouteContext): Promise<R
 
 export async function createEquipo({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "equipos", "create");
+  await requirePermission(s, user, "equipos", "C", { objeto: "equipo" });
   await ensureEquiposSchema(s);
 
   const data = normalizeEquipoPayload(await readJson(request));
@@ -1213,7 +1213,7 @@ export async function createEquipo({ request, s }: RouteContext): Promise<Respon
 export async function updateEquipo({ request, s, params }: RouteContext): Promise<Response> {
   const equipoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "equipos", "update");
+  await requirePermission(s, user, "equipos", "E", { objeto: "equipo" });
   await ensureEquiposSchema(s);
 
   const data = normalizeEquipoPayload(await readJson(request));
@@ -1265,7 +1265,7 @@ export async function updateEquipo({ request, s, params }: RouteContext): Promis
 export async function deleteEquipo({ request, s, params }: RouteContext): Promise<Response> {
   const equipoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "equipos", "delete");
+  await requirePermission(s, user, "equipos", "AN");
   await ensureEquiposSchema(s);
   return darDeBaja(s, user, "equipos", equipoId, await readJson(request), "Equipo");
 }
@@ -1273,14 +1273,14 @@ export async function deleteEquipo({ request, s, params }: RouteContext): Promis
 export async function reactivarEquipo({ request, s, params }: RouteContext): Promise<Response> {
   const equipoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "equipos", "delete");
+  await requirePermission(s, user, "equipos", "G");
   await ensureEquiposSchema(s);
   return reactivarItem(s, user, "equipos", equipoId, await readJson(request), "Equipo");
 }
 
 export async function listConsumiblesInventory({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "consumibles", "read");
+  await requirePermission(s, user, "inventario", "V");
   await ensureConsumiblesSchema(s);
 
   const rows = await s.query(
@@ -1297,7 +1297,7 @@ export async function listConsumiblesInventory({ request, s }: RouteContext): Pr
 
 export async function listMovimientos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "movimientos", "read");
+  await requirePermission(s, user, "inventario", "V");
   await ensureMovimientosSchema(s);
 
   const rows = await s.query(
@@ -1366,7 +1366,7 @@ const MANTENIMIENTO_SELECT = `
 
 export async function listMantenimientos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "mantenimiento", "read");
+  await requirePermission(s, user, "equipos", "V");
   await ensureMantenimientosSchema(s);
 
   const search = searchParam(request, "search");
@@ -1393,7 +1393,7 @@ export async function listMantenimientos({ request, s }: RouteContext): Promise<
 export async function getMantenimiento({ request, s, params }: RouteContext): Promise<Response> {
   const mantenimientoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "mantenimiento", "read");
+  await requirePermission(s, user, "equipos", "V");
   await ensureMantenimientosSchema(s);
 
   const row = await s.queryOne(`${MANTENIMIENTO_SELECT} WHERE mt.id = :id LIMIT 1`, { id: mantenimientoId });
@@ -1435,7 +1435,7 @@ async function syncEquipoEstado(s: Session, equipoId: number, proximaCalibracion
 
 export async function createMantenimiento({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "mantenimiento", "create");
+  await requirePermission(s, user, "equipos", "C", { objeto: "mantenimiento" });
   await ensureMantenimientosSchema(s);
 
   const payload = await readJson(request);
@@ -1473,7 +1473,7 @@ export async function createMantenimiento({ request, s }: RouteContext): Promise
 export async function updateMantenimiento({ request, s, params }: RouteContext): Promise<Response> {
   const mantenimientoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "mantenimiento", "update");
+  await requirePermission(s, user, "equipos", "E", { objeto: "mantenimiento" });
   await ensureMantenimientosSchema(s);
 
   const payload = await readJson(request);
@@ -1521,7 +1521,7 @@ export async function updateMantenimiento({ request, s, params }: RouteContext):
 export async function deleteMantenimiento({ request, s, params }: RouteContext): Promise<Response> {
   const mantenimientoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "mantenimiento", "delete");
+  await requirePermission(s, user, "equipos", "AN");
   await ensureMantenimientosSchema(s);
 
   let rowcount: number;

@@ -2,7 +2,7 @@ import { requireUser } from "../auth";
 import { isOperationalError, isSqlite } from "../db";
 import { json, type RouteContext } from "../http";
 import { ensureMovimientosSchema } from "../inventory-usage";
-import { requirePermission } from "../rbac";
+import { cargarAutorizacion, permisoDe, recortarPorModulo } from "../rbac";
 import { ensureConsumiblesSchema } from "./consumables";
 import { ensureEquiposSchema, ensureMantenimientosSchema, ensureReactivosSchema } from "./inventory";
 import { ensureSamplesExtraccionSchema } from "./samples/extraccion";
@@ -13,7 +13,7 @@ import { ensureSamplesRecepcionSchema } from "./samples/recepcion";
 
 export async function dashboardOverview({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "dashboard", "read");
+  const auth = await cargarAutorizacion(s, user);
 
   try {
     await ensureReactivosSchema(s);
@@ -125,10 +125,16 @@ export async function dashboardOverview({ request, s }: RouteContext): Promise<R
       `,
     );
 
+    const inventario = "inventario" as const;
+    const equipos = "equipos" as const;
     return json({
-      counters: counters || {},
-      recent_movements: recentMovements,
-      recent_maintenances: recentMaintenances,
+      counters: recortarPorModulo(auth, counters || {}, {
+        total_reactivos: inventario, total_consumibles: inventario, entradas_reactivos: inventario, entradas_consumibles: inventario, salidas_reactivos: inventario, salidas_consumibles: inventario,
+        total_equipos: equipos, mantenimientos_proximos: equipos, mantenimientos_realizados: equipos, mantenimientos_pendientes: equipos, mantenimientos_vencidos: equipos,
+        total_muestras: "muestras",
+      }),
+      recent_movements: permisoDe(auth, "inventario", "V") ? recentMovements : [],
+      recent_maintenances: permisoDe(auth, "equipos", "V") ? recentMaintenances : [],
     });
   } catch (error) {
     if (isOperationalError(error)) {

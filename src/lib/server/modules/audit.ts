@@ -2,13 +2,32 @@ import { requireUser } from "../auth";
 import { ensureAuditSchema, verifyAuditChain } from "../audit";
 import { type Row } from "../db";
 import { json, type RouteContext } from "../http";
-import { requirePermission } from "../rbac";
+import { cargarAutorizacion, permisoDe, requirePermission, soloEstado, type Autorizacion } from "../rbac";
+import type { Modulo } from "../../shared/permisos";
 import { safeJsonLoad, searchParam } from "./helpers";
 
 /*
  * Consulta de la bitacora de auditoria. Solo lectura: no existe endpoint
  * para modificar ni borrar entradas.
  */
+
+/*
+ * La bitacora muestra a quien la consulta que paso, quien y cuando; los datos
+ * (antes, despues y cambios) de una entrada solo si puede ver el modulo del
+ * registro y, en muestras, si su alcance no es solo "estado" (Fase 1). Asi el
+ * alcance de un modulo no se elude leyendo la bitacora.
+ */
+function datosVisibles(auth: Autorizacion, entidad: unknown): boolean {
+  const modulo = ENTITY_MODULE[String(entidad || "")];
+  if (!modulo) return true;
+  const permiso = permisoDe(auth, modulo, "V");
+  return !!permiso && !(modulo === "muestras" && soloEstado(permiso));
+}
+
+function recortar(item: Row, visible: boolean): Row {
+  if (visible) return item;
+  return { ...item, cambios: {}, datos_anteriores: null, datos_nuevos: null, datos_restringidos: true };
+}
 
 function serialize(row: Row): Row {
   return {
@@ -28,20 +47,20 @@ function serialize(row: Row): Row {
 }
 
 /* Modulo cuyo permiso de lectura da acceso al historial de cada entidad. */
-const ENTITY_MODULE: Record<string, string> = {
+const ENTITY_MODULE: Record<string, Modulo> = {
   muestras_recepcion: "muestras",
-  muestras_procesamiento: "muestras",
-  muestras_extraccion: "muestras",
-  muestras_analisis: "muestras",
+  muestras_procesamiento: "ensayos",
+  muestras_extraccion: "ensayos",
+  muestras_analisis: "ensayos",
   informes: "informes",
   documentos_sgc: "documentos",
-  reportes_mantenimiento: "documentos",
-  reactivos: "reactivos",
-  consumibles: "consumibles",
+  reportes_mantenimiento: "equipos",
+  reactivos: "inventario",
+  consumibles: "inventario",
   equipos: "equipos",
-  mantenimientos: "mantenimiento",
+  mantenimientos: "equipos",
   usuarios: "usuarios",
-  roles: "roles",
+  roles: "usuarios",
 };
 
 export async function listAudit({ request, s }: RouteContext): Promise<Response> {
@@ -52,7 +71,8 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
   // El historial de un registro concreto lo puede ver quien puede leer el modulo
   // al que pertenece; todo lo demas requiere el permiso de auditoria.
   const modulo = entidad && entidadId ? ENTITY_MODULE[entidad] : undefined;
-  await requirePermission(s, user, modulo || "auditoria", "read");
+  const auth = await cargarAutorizacion(s, user);
+  await requirePermission(s, user, modulo || "calidad", "V", undefined, auth);
   const accion = searchParam(request, "accion");
   const usuario = searchParam(request, "usuario");
   const search = searchParam(request, "search");
@@ -88,36 +108,36 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
       hasta_fin: hasta ? `${hasta}T23:59:59.999Z` : "",
     },
   );
-  return json({ items: rows.map(serialize), total: rows.length });
+  return json({ items: rows.map((row) => recortar(serialize(row), datosVisibles(auth, row.entidad))), total: rows.length });
 }
 
 export async function getAuditEntry({ request, s, params }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "auditoria", "read");
+  const auth = await cargarAutorizacion(s, user);
+  await requirePermission(s, user, "calidad", "V", undefined, auth);
   await ensureAuditSchema(s);
   const id = Number.parseInt(String(params.id || ""), 10);
   const row = await s.queryOne<Row>("SELECT * FROM auditoria WHERE id = :id", { id });
   if (!row) return json({ message: "Registro no encontrado" }, 404);
-  return json({
-    item: {
-      ...serialize(row),
-      hash_anterior: row.hash_anterior,
-      datos_anteriores: safeJsonLoad(row.datos_anteriores_json, null),
-      datos_nuevos: safeJsonLoad(row.datos_nuevos_json, null),
-    },
-  });
+  const item = {
+    ...serialize(row),
+    hash_anterior: row.hash_anterior,
+    datos_anteriores: safeJsonLoad(row.datos_anteriores_json, null),
+    datos_nuevos: safeJsonLoad(row.datos_nuevos_json, null),
+  };
+  return json({ item: recortar(item, datosVisibles(auth, row.entidad)) });
 }
 
 /* Integridad de la cadena de hashes (ISO/IEC 17025 7.11.3). */
 export async function verifyAudit({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "auditoria", "read");
+  await requirePermission(s, user, "calidad", "V");
   return json(await verifyAuditChain(s));
 }
 
 export async function auditSummary({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "auditoria", "read");
+  await requirePermission(s, user, "calidad", "V");
   await ensureAuditSchema(s);
   const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
   const summary = await s.queryOne(

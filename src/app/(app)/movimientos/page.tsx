@@ -20,7 +20,7 @@ const insumoName = (item: ApiRecord) => item.item_nombre || item.item_codigo || 
 
 export default function MovimientosPage() {
   return (
-    <RequireModule modules="movimientos">
+    <RequireModule modules="inventario">
       <MovimientosContent />
     </RequireModule>
   );

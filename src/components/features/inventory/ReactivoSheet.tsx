@@ -63,7 +63,7 @@ export function ReactivoSheet({ open, item, onClose }: { open: boolean; item: Ap
       setError("Completa los campos obligatorios de esta categoría");
       return;
     }
-    if (!can("reactivos", editing ? "update" : "create")) {
+    if (!can("inventario", editing ? "E" : "C", { objeto: "catalogo_inventario" })) {
       setError("No tienes permiso para esta acción");
       return;
     }

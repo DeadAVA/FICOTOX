@@ -1,7 +1,8 @@
 import { requireUser } from "../auth";
 import { isSqlite, type Row } from "../db";
 import { json, type RouteContext } from "../http";
-import { requirePermission } from "../rbac";
+import { cargarAutorizacion, permisoDe, requirePermission, soloEstado } from "../rbac";
+import type { Accion, ContextoAlcance, Modulo } from "../../shared/permisos";
 import { ensureConsumiblesSchema } from "./consumables";
 import { ensureInformesSchema } from "./informes";
 import { ensureEquiposSchema, ensureMantenimientosSchema, ensureReactivosSchema } from "./inventory";
@@ -48,7 +49,8 @@ interface FlowItem {
   dias: number;
   estado: string;
   etapa: StepKey | "cierre";
-  siguiente: { label: string; href: string; accion: "capturar" | "revisar" | "aprobar" | "cerrar" };
+  /* accion "ver": la persona no tiene el permiso de ese paso; solo se informa. */
+  siguiente: { label: string; href: string; accion: "capturar" | "revisar" | "aprobar" | "cerrar" | "ver" };
   pasos: FlowStep[];
 }
 
@@ -77,7 +79,7 @@ const daysSince = (iso: string | null): number => {
 
 export async function inicioEnCurso({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "read");
+  const permiso = await requirePermission(s, user, "muestras", "V");
   await ensureSamplesRecepcionSchema(s);
   await ensureSamplesProcesamientoSchema(s);
   await ensureSamplesExtraccionSchema(s);
@@ -137,42 +139,58 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
     /* Etapa actual y siguiente paso. */
     let etapa: FlowItem["etapa"];
     let siguiente: FlowItem["siguiente"];
+    let requiere: [Modulo, Accion, ContextoAlcance?];
     if (!aceptada) {
       etapa = "recepcion";
       siguiente = { label: "Registrar decisión de aceptación", href: `/muestras/recepcion/${id}`, accion: "capturar" };
+      requiere = ["muestras", "E", { objeto: "recepcion", borrador: true }];
     } else if (!proc) {
       etapa = "procesamiento";
       siguiente = { label: "Registrar procesamiento", href: `/muestras/procesamiento/nuevo?recepcion=${id}`, accion: "capturar" };
+      requiere = ["ensayos", "C", { objeto: "procesamiento", borrador: true }];
     } else if (!ext || faltaTipo) {
       etapa = "extraccion";
       const label = ext && faltaTipo ? `Registrar extracción ${faltaTipo === "E-D" ? "DSP" : "ASP"}` : "Registrar extracción";
       siguiente = { label, href: `/muestras/extraccion/nueva?procesamiento=${proc.id}${tipoExtraccion ? `&tipo=${tipoExtraccion}` : ""}`, accion: "capturar" };
+      requiere = ["ensayos", "C", { objeto: "extraccion", borrador: true }];
     } else if (!an || extSinAnalisis) {
       etapa = "analisis";
       const objetivo = extSinAnalisis || ext;
       const label = an && extSinAnalisis ? `Registrar análisis ${String(extSinAnalisis.tipo_registro) === "E-D" ? "DSP" : "ASP"}` : "Registrar análisis";
       siguiente = { label, href: `/muestras/analisis/nuevo?extraccion=${objetivo.id}`, accion: "capturar" };
+      requiere = ["ensayos", "C", { objeto: "analisis", borrador: true }];
     } else if (anEstado === "registrado") {
       etapa = "analisis";
       siguiente = { label: "Revisar análisis", href: `/muestras/analisis/${an.id}`, accion: "revisar" };
+      requiere = ["ensayos", "R"];
     } else if (anEstado === "revisado") {
       etapa = "analisis";
       siguiente = { label: "Aprobar análisis", href: `/muestras/analisis/${an.id}`, accion: "aprobar" };
+      requiere = ["ensayos", "A"];
     } else if (!inf) {
       etapa = "informe";
       siguiente = { label: "Crear informe", href: `/informes/nuevo?recepcion=${id}`, accion: "capturar" };
+      requiere = ["informes", "C", { objeto: "informe", borrador: true }];
     } else if (infEstado === "borrador") {
       etapa = "informe";
       siguiente = { label: "Revisar informe", href: `/informes/${inf.id}`, accion: "revisar" };
+      requiere = ["informes", "R"];
     } else if (infEstado === "en_revision") {
       etapa = "informe";
       siguiente = { label: "Autorizar informe", href: `/informes/${inf.id}`, accion: "aprobar" };
+      requiere = ["informes", "A"];
     } else if (infEstado === "autorizado") {
       etapa = "informe";
       siguiente = { label: "Registrar entrega", href: `/informes/${inf.id}`, accion: "cerrar" };
+      requiere = ["informes", "A"];
     } else {
       etapa = "cierre";
       siguiente = { label: "Registrar disposición final", href: `/muestras/recepcion/${id}`, accion: "cerrar" };
+      requiere = ["muestras", "A"];
+    }
+    // Si la persona no puede dar ese paso, se muestra como pendiente (sin boton de accion) y enlaza a la recepcion.
+    if (!permisoDe(permiso.auth, requiere[0], requiere[1], requiere[2])) {
+      siguiente = { label: `Pendiente: ${siguiente.label.charAt(0).toLowerCase()}${siguiente.label.slice(1)}`, href: `/muestras/recepcion/${id}`, accion: "ver" };
     }
 
     const order: StepKey[] = ["recepcion", "procesamiento", "extraccion", "analisis", "informe"];
@@ -202,11 +220,16 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
   });
 
   /* Lo más urgente primero: quien espera una firma, luego lo más antiguo. */
-  const weight: Record<FlowItem["siguiente"]["accion"], number> = { aprobar: 0, revisar: 1, capturar: 2, cerrar: 3 };
+  const weight: Record<FlowItem["siguiente"]["accion"], number> = { aprobar: 0, revisar: 1, capturar: 2, cerrar: 3, ver: 4 };
   items.sort((a, b) => weight[a.siguiente.accion] - weight[b.siguiente.accion] || b.dias - a.dias);
 
   const resumen: Record<string, number> = {};
   for (const item of items) resumen[item.etapa] = (resumen[item.etapa] || 0) + 1;
+  // Alcance "estado": folio, solicitante, fechas y estado; sin muestras, analisis ni enlaces a ensayos.
+  if (soloEstado(permiso)) {
+    const recortados = items.map((item) => ({ ...item, muestras: [], analisis_tipos: [], pasos: item.pasos.map((paso) => ({ ...paso, href: paso.key === "recepcion" ? paso.href : null, detail: null }))}));
+    return json({ items: recortados, resumen, total, solo_estado: true });
+  }
   return json({ items, resumen, total });
 }
 
@@ -227,9 +250,21 @@ interface Aviso {
   items: AvisoItem[];
 }
 
+/* Modulo cuyo permiso de ver habilita cada aviso (el Inicio lo ve toda persona activa). */
+const MODULO_AVISO: Record<string, Modulo> = {
+  mant_vencidos: "equipos",
+  mant_proximos: "equipos",
+  equipos_cal: "equipos",
+  reactivos_bajos: "inventario",
+  consumibles_bajos: "inventario",
+  analisis_pendientes: "ensayos",
+  informes_revision: "informes",
+  informes_entrega: "informes",
+};
+
 export async function inicioAvisos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "dashboard", "read");
+  const auth = await cargarAutorizacion(s, user);
   await ensureReactivosSchema(s);
   await ensureConsumiblesSchema(s);
   await ensureEquiposSchema(s);
@@ -278,7 +313,7 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
     build("informes_revision", "Informes por revisar o autorizar", "info", "/informes?filtro=pendiente", informesRevision, (i) => ({ label: `IR ${pad(i.folio_num)}${Number(i.version || 1) > 1 ? ` v${i.version}` : ""}`, sub: `${String(i.estado) === "en_revision" ? "Falta autorizar" : "Borrador, falta revisar"}${cliente(i) ? ` · ${cliente(i)}` : ""}`, href: `/informes/${i.id}` })),
     build("informes_entrega", "Informes autorizados sin entregar", "info", "/informes?filtro=autorizado", informesEntrega, (i) => ({ label: `IR ${pad(i.folio_num)}${Number(i.version || 1) > 1 ? ` v${i.version}` : ""}`, sub: cliente(i) || "Falta registrar la entrega", href: `/informes/${i.id}` })),
     build("mant_proximos", "Mantenimientos en los próximos 30 días", "info", "/inventario/mantenimiento?filtro=proximo", mantProximos, (m) => ({ label: String(m.equipo || "Equipo"), sub: `${TIPO_MANT[String(m.tipo)] || m.tipo || "Mantenimiento"} · ${fmtDate(m.fecha_programada)}`, href: "/inventario/mantenimiento?filtro=proximo" })),
-  ].filter((a) => a.count > 0);
+  ].filter((a) => a.count > 0 && !!permisoDe(auth, MODULO_AVISO[a.key], "V"));
 
   return json({ items: avisos, total: avisos.reduce((sum, a) => sum + a.count, 0) });
 }

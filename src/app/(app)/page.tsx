@@ -44,7 +44,7 @@ export default function InicioPage() {
     async () => {
       const empty: ApiRecord = {};
       const quiet = (url: string, allowed: boolean) => (allowed ? getJsonAuth(url, token).catch(() => empty) : Promise.resolve(empty));
-      const [flujo, avisos] = await Promise.all([quiet(`${API_BASE_URL}/inicio/en-curso`, can("muestras")), quiet(`${API_BASE_URL}/inicio/avisos`, can("dashboard"))]);
+      const [flujo, avisos] = await Promise.all([quiet(`${API_BASE_URL}/inicio/en-curso`, can("muestras")), quiet(`${API_BASE_URL}/inicio/avisos`, true)]);
       return {
         flujo: (flujo.items || []) as FlowItem[],
         flujoTotal: Number(flujo.total || 0),
@@ -66,8 +66,8 @@ export default function InicioPage() {
   /* Tres ejemplos que escriben en el buscador: enseñan qué se puede buscar sin explicarlo. */
   const examples = [
     { label: "R 0000001", allowed: can("muestras") },
-    { label: "metanol", allowed: can("reactivos") },
-    { label: "nueva recepción", allowed: can("muestras", "create") },
+    { label: "metanol", allowed: can("inventario") },
+    { label: "nueva recepción", allowed: can("muestras", "C", { objeto: "recepcion", borrador: true }) },
     { label: "informes por revisar", allowed: can("informes") },
   ]
     .filter((e) => e.allowed)
@@ -123,9 +123,9 @@ export default function InicioPage() {
                 <Quiet
                   icon={<CheckCircle size={20} weight="fill" />}
                   title="Nada en curso"
-                  description={can("muestras", "create") ? "Registra una recepción para iniciar el flujo." : "No hay muestras pendientes."}
+                  description={can("muestras", "C", { objeto: "recepcion", borrador: true }) ? "Registra una recepción para iniciar el flujo." : "No hay muestras pendientes."}
                   action={
-                    can("muestras", "create") ? (
+                    can("muestras", "C", { objeto: "recepcion", borrador: true }) ? (
                       <Link href="/muestras/recepcion/nueva" className="press inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3 text-[13px] font-medium text-white hover:bg-brand-strong">
                         <Plus size={14} weight="bold" /> Nueva recepción
                       </Link>
@@ -151,24 +151,22 @@ export default function InicioPage() {
           ) : null}
 
           <div className="flex min-w-0 flex-col gap-3">
-            {can("dashboard") ? (
-              <Panel id="avisos" title="Avisos" count={data ? data.avisosTotal : null} meta={urgentes ? `${fmt(urgentes)} ${urgentes === 1 ? "urgente" : "urgentes"}` : null} metaTone="danger">
-                {!data ? (
-                  <div className="flex flex-col gap-3 px-5 pb-5">
-                    <Skeleton className="h-4 w-2/3" />
-                    <Skeleton className="h-4 w-1/2" />
-                  </div>
-                ) : !data.avisos.length ? (
-                  <Quiet icon={<CheckCircle size={20} weight="fill" />} title="Todo en orden" description="Sin stock bajo, calibraciones vencidas ni firmas pendientes." />
-                ) : (
-                  <ul className="inset-group stagger">
-                    {data.avisos.map((aviso) => (
-                      <AvisoRow key={aviso.key} aviso={aviso} />
-                    ))}
-                  </ul>
-                )}
-              </Panel>
-            ) : null}
+            <Panel id="avisos" title="Avisos" count={data ? data.avisosTotal : null} meta={urgentes ? `${fmt(urgentes)} ${urgentes === 1 ? "urgente" : "urgentes"}` : null} metaTone="danger">
+              {!data ? (
+                <div className="flex flex-col gap-3 px-5 pb-5">
+                  <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+              ) : !data.avisos.length ? (
+                <Quiet icon={<CheckCircle size={20} weight="fill" />} title="Todo en orden" description="Sin stock bajo, calibraciones vencidas ni firmas pendientes." />
+              ) : (
+                <ul className="inset-group stagger">
+                  {data.avisos.map((aviso) => (
+                    <AvisoRow key={aviso.key} aviso={aviso} />
+                  ))}
+                </ul>
+              )}
+            </Panel>
             <p className="px-1 text-[12.5px] text-ink-4">
               ¿Primera vez aquí?{" "}
               <Link href="/ayuda" className="font-medium text-ink-3 underline decoration-line-strong underline-offset-[3px] hover:text-brand-strong hover:decoration-brand">

@@ -4,6 +4,33 @@ import type { ApiRecord } from "./types";
 
 export const API_BASE_URL = "/api";
 
+/*
+ * "Actuar como" (Fase 1): si una accion la permiten varios roles vigentes de la
+ * persona, el servidor responde 409 con codigo ELEGIR_CARGO y las opciones; el
+ * cliente pide elegir (ActuarComoProvider) y repite la peticion con el
+ * encabezado X-Actuar-Como. Si la persona cancela, la accion no se realiza.
+ */
+export interface OpcionCargo {
+  rol_id: number;
+  nombre: string;
+}
+type ElegirCargo = (opciones: OpcionCargo[], mensaje: string) => Promise<number | null>;
+let elegirCargo: ElegirCargo | null = null;
+
+export function registrarSelectorDeCargo(fn: ElegirCargo | null): void {
+  elegirCargo = fn;
+}
+
+async function conCargo(send: (extra: Record<string, string>) => Promise<Response>): Promise<Response> {
+  const response = await send({});
+  if (response.status !== 409 || !elegirCargo) return response;
+  const data = await response.clone().json().catch(() => ({}) as ApiRecord);
+  if (data?.codigo !== "ELEGIR_CARGO" || !Array.isArray(data.opciones)) return response;
+  const rolId = await elegirCargo(data.opciones as OpcionCargo[], String(data.message || ""));
+  if (rolId === null) throw new Error("Acción cancelada: no se eligió con qué cargo actuar");
+  return send({ "X-Actuar-Como": String(rolId) });
+}
+
 async function parseJson(response: Response): Promise<ApiRecord> {
   try {
     const data = await response.json();
@@ -38,14 +65,17 @@ export const getJsonAuth = async (url: string, token: string): Promise<ApiRecord
 };
 
 export const sendJsonAuth = async (method: string, url: string, token: string, body?: unknown): Promise<ApiRecord> => {
-  const response = await fetch(url, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const response = await conCargo((extra) =>
+    fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        ...extra,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+  );
   const data = await parseJson(response);
   if (!response.ok) {
     throw new Error(data.message || "No se pudo completar la solicitud");
@@ -54,13 +84,16 @@ export const sendJsonAuth = async (method: string, url: string, token: string, b
 };
 
 export const sendFormAuth = async (url: string, token: string, formData: FormData, method: string = "POST"): Promise<ApiRecord> => {
-  const response = await fetch(url, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: formData,
-  });
+  const response = await conCargo((extra) =>
+    fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...extra,
+      },
+      body: formData,
+    }),
+  );
   const data = await parseJson(response);
   if (!response.ok) {
     throw new Error(data.message || "No se pudo completar la carga");

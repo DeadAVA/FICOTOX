@@ -1,6 +1,4 @@
-import { createHmac, randomBytes } from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
+import { construirRegistro, primerEslabonRoto, resolverClaveSello, sellar as sellarRegistro } from "../shared/audit-chain.mjs";
 import type { CurrentUser } from "./auth";
 import { getConfig } from "./config";
 import { isSqlite, type Row, type Session } from "./db";
@@ -19,10 +17,8 @@ import { addColumnIfMissing, markSchemaReady, schemaReady } from "./schema";
  *   cadena tras alterarla. Si la llave cambia o se pierde, la verificacion de lo
  *   ya escrito falla: hay que respaldarla junto con la base.
  * - Las imagenes de firma no se copian al detalle (solo se marca que cambio).
- * - scripts/seed-roles-usuarios.mjs replica registrarAuditoria/sellar (no puede
- *   importar este modulo desde Node). Si cambia el registro sellado (campos,
- *   stableJson, VOLATILE, llave), hay que cambiar tambien ese script;
- *   tests/api-roles.mjs lo detecta (verifica la cadena de la base de prueba).
+ * - El registro sellado, el sello y la llave viven en src/lib/shared/audit-chain.mjs,
+ *   que usan tanto este modulo como los scripts de terminal (una sola implementacion).
  */
 
 export type AuditAction =
@@ -44,7 +40,10 @@ export type AuditAction =
   | "reponer"
   | "login"
   | "login_fallido"
-  | "descargar";
+  | "descargar"
+  | "asignar_rol"
+  | "revocar_rol"
+  | "vencer_rol";
 
 export interface AuditEntry {
   accion: AuditAction;
@@ -56,9 +55,6 @@ export interface AuditEntry {
   despues?: Row | null;
   detalle?: Record<string, unknown> | null;
 }
-
-/* Campos que cambian solos en cada guardado y no aportan al historial. */
-const VOLATILE = new Set(["actualizado_en", "actualizado_por", "creado_en", "creado_por", "password_hash"]);
 
 export async function ensureAuditSchema(s: Session): Promise<void> {
   if (schemaReady("auditoria")) {
@@ -160,97 +156,17 @@ async function ensureMysqlTrigger(s: Session, name: string, timing: string): Pro
   await s.execute(`CREATE TRIGGER ${name} ${timing} ON auditoria FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'La bitacora de auditoria es inmutable'`);
 }
 
-/* Representacion estable (claves ordenadas) para comparar y para el hash. */
-export function stableJson(value: unknown): string {
-  return JSON.stringify(sortKeys(value));
-}
-
-function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeys);
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(value as object).sort()) out[key] = sortKeys((value as Record<string, unknown>)[key]);
-    return out;
-  }
-  return value;
-}
-
-function isSignature(value: unknown): boolean {
-  return typeof value === "string" && value.length > 200 && value.startsWith("data:image");
-}
-
-/* Normaliza un registro para el historial: JSON de texto -> objeto, firmas -> marcador. */
-export function auditSnapshot(row: Row | null | undefined): Row | null {
-  if (!row) return null;
-  const out: Row = {};
-  for (const [key, raw] of Object.entries(row)) {
-    if (VOLATILE.has(key)) continue;
-    let value: unknown = raw;
-    if (typeof raw === "bigint") value = Number(raw);
-    if (key.endsWith("_json") && typeof raw === "string") {
-      try {
-        value = JSON.parse(raw);
-      } catch {
-        value = raw;
-      }
-    }
-    out[key] = scrubSignatures(value);
-  }
-  return out;
-}
-
-function scrubSignatures(value: unknown): unknown {
-  if (isSignature(value)) return "[firma]";
-  if (Array.isArray(value)) return value.map(scrubSignatures);
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) out[key] = scrubSignatures(entry);
-    return out;
-  }
-  return value;
-}
-
-/* Diferencias campo por campo: { campo: { antes, despues } }. */
-export function auditDiff(antes: Row | null, despues: Row | null): Record<string, { antes: unknown; despues: unknown }> {
-  const cambios: Record<string, { antes: unknown; despues: unknown }> = {};
-  const keys = new Set([...Object.keys(antes || {}), ...Object.keys(despues || {})]);
-  for (const key of keys) {
-    const a = antes ? antes[key] : undefined;
-    const d = despues ? despues[key] : undefined;
-    if (stableJson(a ?? null) !== stableJson(d ?? null)) cambios[key] = { antes: a ?? null, despues: d ?? null };
-  }
-  return cambios;
-}
+export { auditDiff, auditSnapshot, stableJson } from "../shared/audit-chain.mjs";
 
 export async function registrarAuditoria(s: Session, user: CurrentUser | null | undefined, entry: AuditEntry): Promise<void> {
   await ensureAuditSchema(s);
-  const antes = auditSnapshot(entry.antes);
-  const despues = auditSnapshot(entry.despues);
-  const cambios = entry.accion === "editar" || (antes && despues) ? auditDiff(antes, despues) : {};
-  if (entry.accion === "editar" && antes && despues && !Object.keys(cambios).length && !entry.detalle) {
-    // Guardar sin cambios no deja rastro distinto de un guardado igual: no se registra.
-    return;
-  }
   // En MySQL se bloquea la ultima fila para que dos escrituras concurrentes no
   // encadenen al mismo hash anterior (en SQLite la sesion ya es exclusiva).
   const previous = await s.queryOne<{ hash: string }>(`SELECT hash FROM auditoria ORDER BY id DESC LIMIT 1${isSqlite() ? "" : " FOR UPDATE"}`);
-  const fechaHora = new Date().toISOString();
-  const record = {
-    fecha_hora: fechaHora,
-    usuario_id: user?.sub ? Number.parseInt(String(user.sub), 10) || null : null,
-    usuario_nombre: user?.nombre ? String(user.nombre).slice(0, 150) : null,
-    usuario_email: user?.email ? String(user.email).slice(0, 150) : null,
-    accion: entry.accion,
-    entidad: entry.entidad,
-    entidad_id: entry.entidadId === undefined || entry.entidadId === null ? null : String(entry.entidadId),
-    referencia: entry.referencia ? String(entry.referencia).slice(0, 160) : null,
-    motivo: entry.motivo ? String(entry.motivo) : null,
-    cambios_json: stableJson({ ...cambios, ...(entry.detalle ? { _detalle: entry.detalle } : {}) }),
-    datos_anteriores_json: antes ? stableJson(antes) : null,
-    datos_nuevos_json: despues ? stableJson(despues) : null,
-    hash_anterior: previous?.hash || null,
-  };
-  const hash = sellar(record);
+  // Guardar sin cambios no deja rastro distinto de un guardado igual: construirRegistro devuelve null.
+  const record = construirRegistro(entry, user, previous?.hash || null);
+  if (!record) return;
+  const hash = sellarRegistro(record, claveSello());
   await s.execute(
     `
     INSERT INTO auditoria (
@@ -267,36 +183,10 @@ export async function registrarAuditoria(s: Session, user: CurrentUser | null | 
 
 let claveCache: string | null = null;
 
-/*
- * Llave del sello. Se prefiere SECRET_KEY cuando esta configurada de verdad; si
- * quedo el valor por omision, se usa (y se crea) una llave aleatoria propia de
- * la bitacora guardada junto a la base, para que la proteccion no dependa de
- * recordar configurar el entorno.
- */
+/* Llave del sello (SECRET_KEY o <instance>/auditoria.key); ver audit-chain.mjs. */
 export function claveSello(): string {
-  if (claveCache) return claveCache;
-  const configurada = (process.env.SECRET_KEY || "").trim();
-  if (configurada && configurada !== "ficotox-dev-secret") {
-    claveCache = configurada;
-    return claveCache;
-  }
-  const archivo = path.join(getConfig().INSTANCE_DIR, "auditoria.key");
-  try {
-    claveCache = fs.readFileSync(archivo, "utf8").trim();
-  } catch {
-    claveCache = "";
-  }
-  if (!claveCache) {
-    claveCache = randomBytes(32).toString("hex");
-    fs.mkdirSync(path.dirname(archivo), { recursive: true });
-    fs.writeFileSync(archivo, `${claveCache}\n`, { mode: 0o600 });
-  }
+  if (!claveCache) claveCache = resolverClaveSello(process.env.SECRET_KEY, getConfig().INSTANCE_DIR);
   return claveCache;
-}
-
-/* Sello encadenado de una entrada (HMAC con la llave del servidor). */
-function sellar(record: Record<string, unknown>): string {
-  return createHmac("sha256", claveSello()).update(stableJson(record)).digest("hex");
 }
 
 /* Lee un registro completo para tomar la foto antes/despues de un cambio. */
@@ -338,28 +228,5 @@ export async function verifyAuditChain(s: Session): Promise<AuditVerification> {
     filas_faltantes_intermedias: huecos,
     triggers_ok: triggersOk,
   });
-  let previous: string | null = null;
-  for (const row of rows) {
-    const record = {
-      fecha_hora: row.fecha_hora,
-      usuario_id: row.usuario_id === null || row.usuario_id === undefined ? null : Number(row.usuario_id),
-      usuario_nombre: row.usuario_nombre ?? null,
-      usuario_email: row.usuario_email ?? null,
-      accion: row.accion,
-      entidad: row.entidad,
-      entidad_id: row.entidad_id ?? null,
-      referencia: row.referencia ?? null,
-      motivo: row.motivo ?? null,
-      cambios_json: row.cambios_json ?? null,
-      datos_anteriores_json: row.datos_anteriores_json ?? null,
-      datos_nuevos_json: row.datos_nuevos_json ?? null,
-      hash_anterior: row.hash_anterior ?? null,
-    };
-    const expected = sellar(record);
-    if (expected !== row.hash || (row.hash_anterior ?? null) !== previous) {
-      return result(Number(row.id));
-    }
-    previous = String(row.hash);
-  }
-  return result(null);
+  return result(primerEslabonRoto(rows, claveSello()));
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSession } from "@/components/session/SessionProvider";
+import { useSession, type SessionValue } from "@/components/session/SessionProvider";
 import { FEATURES } from "../shared/features";
 import { API_BASE_URL, getJsonAuth } from "./api";
 import { resetSearchIndex, searchIndexState as idx } from "./search-index";
@@ -180,7 +180,7 @@ function informeFolio(item: ApiRecord): string {
   return `IR ${String(Number(item.folio_num || 0)).padStart(7, "0")}${Number(item.version || 1) > 1 ? ` v${item.version}` : ""}`;
 }
 
-async function buildIndex(token: string, can: (module: string, action?: "read" | "create" | "update" | "delete") => boolean): Promise<SearchHit[]> {
+async function buildIndex(token: string, can: SessionValue["can"]): Promise<SearchHit[]> {
   const safe = async (url: string, allowed: boolean): Promise<ApiRecord[]> => {
     if (!allowed) return [];
     try {
@@ -191,16 +191,16 @@ async function buildIndex(token: string, can: (module: string, action?: "read" |
     }
   };
   const [reactivos, consumibles, equipos, recepciones, procesamientos, extracciones, analisis, informes, documentos, mantenimientos] = await Promise.all([
-    safe(`${API_BASE_URL}/inventory/reactivos`, can("reactivos")),
-    safe(`${API_BASE_URL}/consumables`, can("consumibles")),
+    safe(`${API_BASE_URL}/inventory/reactivos`, can("inventario")),
+    safe(`${API_BASE_URL}/consumables`, can("inventario")),
     safe(`${API_BASE_URL}/inventory/equipos`, can("equipos")),
     safe(`${API_BASE_URL}/samples/reception`, can("muestras")),
-    safe(`${API_BASE_URL}/samples/processing`, can("muestras")),
-    safe(`${API_BASE_URL}/samples/extraction`, can("muestras")),
-    safe(`${API_BASE_URL}/samples/analysis`, can("muestras")),
+    safe(`${API_BASE_URL}/samples/processing`, can("ensayos")),
+    safe(`${API_BASE_URL}/samples/extraction`, can("ensayos")),
+    safe(`${API_BASE_URL}/samples/analysis`, can("ensayos")),
     safe(`${API_BASE_URL}/informes`, can("informes")),
     safe(`${API_BASE_URL}/documentos-sgc`, FEATURES.documentos && can("documentos")),
-    safe(`${API_BASE_URL}/inventory/mantenimientos`, can("mantenimiento")),
+    safe(`${API_BASE_URL}/inventory/mantenimientos`, can("equipos")),
   ]);
 
   const hits: SearchHit[] = [];
@@ -254,7 +254,7 @@ async function buildIndex(token: string, can: (module: string, action?: "read" |
 }
 
 export function useGlobalSearch() {
-  const { token, user, can } = useSession();
+  const { token, user, can, alcance } = useSession();
   const owner = String(user?.email || user?.nombre || "");
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<SearchScope>("todo");
@@ -300,26 +300,26 @@ export function useGlobalSearch() {
   const destinations = useMemo<SearchHit[]>(
     () =>
       [
-        { label: "Inicio", href: "/", allowed: can("dashboard"), kw: "inicio home dashboard" },
-        { label: "Todas las muestras", href: "/muestras", allowed: can("muestras"), kw: "muestras flujo" },
+        { label: "Inicio", href: "/", allowed: true, kw: "inicio home dashboard" },
+        { label: "Todas las muestras", href: "/muestras", allowed: can("muestras") || can("ensayos"), kw: "muestras flujo" },
         { label: "Recepción de muestras", href: "/muestras/recepcion", allowed: can("muestras"), kw: "muestras recepcion" },
-        { label: "Procesamiento", href: "/muestras/procesamiento", allowed: can("muestras"), kw: "muestras procesamiento" },
-        { label: "Extracción", href: "/muestras/extraccion", allowed: can("muestras"), kw: "muestras extraccion asp dsp" },
-        { label: "Análisis", href: "/muestras/analisis", allowed: can("muestras"), kw: "muestras analisis" },
+        { label: "Procesamiento", href: "/muestras/procesamiento", allowed: can("ensayos"), kw: "muestras procesamiento" },
+        { label: "Extracción", href: "/muestras/extraccion", allowed: can("ensayos"), kw: "muestras extraccion asp dsp" },
+        { label: "Análisis", href: "/muestras/analisis", allowed: can("ensayos"), kw: "muestras analisis" },
         { label: "Informes de resultados", href: "/informes", allowed: can("informes"), kw: "informes resultados" },
-        { label: "Reactivos", href: "/inventario/reactivos", allowed: can("reactivos"), kw: "inventario reactivos" },
-        { label: "Consumibles", href: "/inventario/consumibles", allowed: can("consumibles"), kw: "inventario consumibles" },
+        { label: "Reactivos", href: "/inventario/reactivos", allowed: can("inventario"), kw: "inventario reactivos" },
+        { label: "Consumibles", href: "/inventario/consumibles", allowed: can("inventario"), kw: "inventario consumibles" },
         { label: "Equipos", href: "/inventario/equipos", allowed: can("equipos"), kw: "inventario equipos" },
-        { label: "Mantenimiento", href: "/inventario/mantenimiento", allowed: can("mantenimiento"), kw: "inventario mantenimiento" },
-        { label: "Movimientos de inventario", href: "/movimientos", allowed: can("movimientos"), kw: "movimientos entradas salidas" },
+        { label: "Mantenimiento", href: "/inventario/mantenimiento", allowed: can("equipos"), kw: "inventario mantenimiento" },
+        { label: "Movimientos de inventario", href: "/movimientos", allowed: can("inventario"), kw: "movimientos entradas salidas" },
         { label: "Documentos del SGC", href: "/documentos", allowed: FEATURES.documentos && can("documentos"), kw: "documentos sgc calidad lista maestra" },
-        { label: "Bitácora de auditoría", href: "/auditoria", allowed: can("auditoria"), kw: "auditoria bitacora" },
+        { label: "Bitácora de auditoría", href: "/auditoria", allowed: can("calidad"), kw: "auditoria bitacora" },
         { label: "Usuarios", href: "/administracion/usuarios", allowed: can("usuarios"), kw: "administracion usuarios cuentas" },
-        { label: "Roles y permisos", href: "/administracion/roles", allowed: can("roles"), kw: "administracion roles permisos" },
+        { label: "Roles y permisos", href: "/administracion/roles", allowed: can("usuarios") && alcance("usuarios") !== "propio", kw: "administracion roles permisos" },
       ]
         .filter((d) => d.allowed)
         .map((d) => ({ id: `go-${d.href}`, kind: "destino" as const, label: d.label, href: d.href, keywords: norm(`${d.label} ${d.kw} ir a abrir`) })),
-    [can],
+    [can, alcance],
   );
 
   /* Vistas filtradas: lo que normalmente se busca "por estado" (lo mismo que abren los avisos del Inicio). */
@@ -327,18 +327,18 @@ export function useGlobalSearch() {
     () =>
       [
         { label: "Muestras en curso", sub: "Recepciones que no han terminado su flujo", href: "/muestras", allowed: can("muestras"), kw: "pendientes en proceso flujo" },
-        { label: "Análisis por revisar o aprobar", sub: "Registrados o revisados, sin aprobar", href: "/muestras/analisis?filtro=pendiente", allowed: can("muestras"), kw: "analisis pendientes revisar aprobar firma" },
+        { label: "Análisis por revisar o aprobar", sub: "Registrados o revisados, sin aprobar", href: "/muestras/analisis?filtro=pendiente", allowed: can("ensayos"), kw: "analisis pendientes revisar aprobar firma" },
         { label: "Informes por revisar o autorizar", sub: "Borradores y en revisión", href: "/informes?filtro=pendiente", allowed: can("informes"), kw: "informes revision revisar autorizar pendientes" },
         { label: "Informes autorizados sin entregar", sub: "Falta registrar la entrega al cliente", href: "/informes?filtro=autorizado", allowed: can("informes"), kw: "informes autorizados entregar entrega" },
         { label: "Informes entregados", sub: "Ya en manos del cliente", href: "/informes?filtro=entregado", allowed: can("informes"), kw: "informes entregados historial" },
-        { label: "Reactivos con stock bajo", sub: "Por debajo del mínimo o agotados", href: "/inventario/reactivos?filtro=bajo", allowed: can("reactivos"), kw: "reactivos stock bajo agotado minimo" },
-        { label: "Reactivos por vencer", sub: "Caducan pronto o ya caducaron", href: "/inventario/reactivos?filtro=vencer", allowed: can("reactivos"), kw: "reactivos caducidad vencer vencidos" },
-        { label: "Consumibles con stock bajo", sub: "5 piezas o menos", href: "/inventario/consumibles?filtro=bajo", allowed: can("consumibles"), kw: "consumibles stock bajo agotado" },
+        { label: "Reactivos con stock bajo", sub: "Por debajo del mínimo o agotados", href: "/inventario/reactivos?filtro=bajo", allowed: can("inventario"), kw: "reactivos stock bajo agotado minimo" },
+        { label: "Reactivos por vencer", sub: "Caducan pronto o ya caducaron", href: "/inventario/reactivos?filtro=vencer", allowed: can("inventario"), kw: "reactivos caducidad vencer vencidos" },
+        { label: "Consumibles con stock bajo", sub: "5 piezas o menos", href: "/inventario/consumibles?filtro=bajo", allowed: can("inventario"), kw: "consumibles stock bajo agotado" },
         { label: "Equipos con alerta de calibración", sub: "Calibración vencida, pendiente o fuera de servicio", href: "/inventario/equipos?filtro=calibracion", allowed: can("equipos"), kw: "equipos calibracion vencida pendiente fuera de servicio" },
         { label: "Equipos en mantenimiento", sub: "Con un mantenimiento pendiente", href: "/inventario/equipos?filtro=mantenimiento", allowed: can("equipos"), kw: "equipos mantenimiento" },
-        { label: "Mantenimientos vencidos", sub: "Programados y no realizados a tiempo", href: "/inventario/mantenimiento?filtro=vencido", allowed: can("mantenimiento"), kw: "mantenimientos vencidos atrasados" },
-        { label: "Mantenimientos próximos", sub: "En los próximos 30 días", href: "/inventario/mantenimiento?filtro=proximo", allowed: can("mantenimiento"), kw: "mantenimientos proximos calendario 30 dias" },
-        { label: "Mantenimientos completados", sub: "Historial por equipo", href: "/inventario/mantenimiento?filtro=completado", allowed: can("mantenimiento"), kw: "mantenimientos completados historial" },
+        { label: "Mantenimientos vencidos", sub: "Programados y no realizados a tiempo", href: "/inventario/mantenimiento?filtro=vencido", allowed: can("equipos"), kw: "mantenimientos vencidos atrasados" },
+        { label: "Mantenimientos próximos", sub: "En los próximos 30 días", href: "/inventario/mantenimiento?filtro=proximo", allowed: can("equipos"), kw: "mantenimientos proximos calendario 30 dias" },
+        { label: "Mantenimientos completados", sub: "Historial por equipo", href: "/inventario/mantenimiento?filtro=completado", allowed: can("equipos"), kw: "mantenimientos completados historial" },
       ]
         .filter((v) => v.allowed)
         .map((v) => ({ id: `view-${v.href}`, kind: "vista" as const, label: v.label, sub: v.sub, href: v.href, keywords: norm(`${v.label} ${v.sub} ${v.kw} ver lista filtro`) })),
@@ -356,18 +356,18 @@ export function useGlobalSearch() {
     () =>
       [
         /* Lo general primero; las variantes concretas (ASP/DSP) solo salen al escribir. */
-        { label: "Nueva recepción", sub: "Registrar la llegada de una muestra o lote", href: "/muestras/recepcion/nueva", allowed: can("muestras", "create"), kw: "muestra lote solicitante" },
-        { label: "Nuevo procesamiento", sub: "Lavado, desconche y molienda", href: "/muestras/procesamiento/nuevo", allowed: can("muestras", "create"), kw: "molienda" },
-        { label: "Nueva extracción", sub: "Elige el formato (ASP, DSP…) al abrir", href: "/muestras/extraccion/nueva", allowed: can("muestras", "create"), kw: "extracto" },
-        { label: "Nuevo análisis", sub: "Resultados, controles y firma", href: "/muestras/analisis/nuevo", allowed: can("muestras", "create"), kw: "resultados cromatografia" },
-        { label: "Nuevo informe", sub: "Informe de resultados para el cliente", href: "/informes/nuevo", allowed: can("informes", "create"), kw: "resultados cliente pdf" },
-        { label: "Nuevo reactivo", sub: "Alta en el inventario", href: "/inventario/reactivos?nuevo=1", allowed: can("reactivos", "create"), kw: "inventario alta" },
-        { label: "Nuevo consumible", sub: "Alta en el inventario", href: "/inventario/consumibles?nuevo=1", allowed: can("consumibles", "create"), kw: "inventario alta" },
-        { label: "Nuevo equipo", sub: "Alta con clave de bitácora", href: "/inventario/equipos?nuevo=1", allowed: can("equipos", "create"), kw: "inventario alta bitacora" },
-        { label: "Programar mantenimiento", sub: "Preventivo, correctivo, calibración o verificación", href: "/inventario/mantenimiento?nuevo=1", allowed: can("mantenimiento", "create"), kw: "calibracion verificacion" },
-        { label: "Nuevo documento del SGC", sub: "Documento controlado", href: "/documentos?nuevo=1", allowed: FEATURES.documentos && can("documentos", "create"), kw: "calidad" },
-        { label: "Nueva extracción ASP", sub: "Ácido domoico · metanol:agua 50:50", href: "/muestras/extraccion/nueva?tipo=E-A", allowed: can("muestras", "create"), kw: "acido domoico asp e-a", specific: true },
-        { label: "Nueva extracción DSP", sub: "Toxinas lipofílicas · metanol 100 % e hidrólisis", href: "/muestras/extraccion/nueva?tipo=E-D", allowed: can("muestras", "create"), kw: "toxinas lipofilicas dsp e-d okadaico", specific: true },
+        { label: "Nueva recepción", sub: "Registrar la llegada de una muestra o lote", href: "/muestras/recepcion/nueva", allowed: can("muestras", "C", { objeto: "recepcion", borrador: true }), kw: "muestra lote solicitante" },
+        { label: "Nuevo procesamiento", sub: "Lavado, desconche y molienda", href: "/muestras/procesamiento/nuevo", allowed: can("ensayos", "C", { objeto: "procesamiento", borrador: true }), kw: "molienda" },
+        { label: "Nueva extracción", sub: "Elige el formato (ASP, DSP…) al abrir", href: "/muestras/extraccion/nueva", allowed: can("ensayos", "C", { objeto: "extraccion", borrador: true }), kw: "extracto" },
+        { label: "Nuevo análisis", sub: "Resultados, controles y firma", href: "/muestras/analisis/nuevo", allowed: can("ensayos", "C", { objeto: "analisis", borrador: true }), kw: "resultados cromatografia" },
+        { label: "Nuevo informe", sub: "Informe de resultados para el cliente", href: "/informes/nuevo", allowed: can("informes", "C"), kw: "resultados cliente pdf" },
+        { label: "Nuevo reactivo", sub: "Alta en el inventario", href: "/inventario/reactivos?nuevo=1", allowed: can("inventario", "C", { objeto: "catalogo_inventario" }), kw: "inventario alta" },
+        { label: "Nuevo consumible", sub: "Alta en el inventario", href: "/inventario/consumibles?nuevo=1", allowed: can("inventario", "C", { objeto: "catalogo_inventario" }), kw: "inventario alta" },
+        { label: "Nuevo equipo", sub: "Alta con clave de bitácora", href: "/inventario/equipos?nuevo=1", allowed: can("equipos", "C", { objeto: "equipo" }), kw: "inventario alta bitacora" },
+        { label: "Programar mantenimiento", sub: "Preventivo, correctivo, calibración o verificación", href: "/inventario/mantenimiento?nuevo=1", allowed: can("equipos", "C", { objeto: "mantenimiento" }), kw: "calibracion verificacion" },
+        { label: "Nuevo documento del SGC", sub: "Documento controlado", href: "/documentos?nuevo=1", allowed: FEATURES.documentos && can("documentos", "C", { objeto: "documento", borrador: true }), kw: "calidad" },
+        { label: "Nueva extracción ASP", sub: "Ácido domoico · metanol:agua 50:50", href: "/muestras/extraccion/nueva?tipo=E-A", allowed: can("ensayos", "C", { objeto: "extraccion", borrador: true }), kw: "acido domoico asp e-a", specific: true },
+        { label: "Nueva extracción DSP", sub: "Toxinas lipofílicas · metanol 100 % e hidrólisis", href: "/muestras/extraccion/nueva?tipo=E-D", allowed: can("ensayos", "C", { objeto: "extraccion", borrador: true }), kw: "toxinas lipofilicas dsp e-d okadaico", specific: true },
       ]
         .filter((a) => a.allowed)
         .map((a) => ({ id: `new-${a.href}`, kind: "accion" as const, label: a.label, sub: a.sub, href: a.href, keywords: norm(`${a.label} ${a.sub} ${a.kw} nuevo nueva crear registrar alta`), specific: !!a.specific })),

@@ -109,14 +109,11 @@ try {
   const datosApoyo = path.join(path.dirname(testDb), "datos-apoyo.json");
   const api = { BASE: `http://localhost:${PORT}/api`, TEST_DB_PATH: testDb, BETTER_SQLITE3: path.join(root, "node_modules/better-sqlite3"), CREDENCIALES_ROLES: CREDENCIALES, DATOS_APOYO_FILE: datosApoyo };
 
-  // Catalogo de roles sobre la base recien reiniciada, antes de que otras suites agreguen roles.
-  console.log("\n=== api-roles.mjs");
-  failed += (await run(path.join(here, "api-roles.mjs"), api)) ? 1 : 0;
-
   console.log("\n=== datos-apoyo.mjs");
   if (await run(path.join(here, "datos-apoyo.mjs"), api)) throw new Error("No se pudieron crear los datos de apoyo de las pruebas");
 
-  for (const file of ["api-dsp.mjs", "api-sgc.mjs"]) {
+  // api-roles corre despues de api-dsp y api-sgc: crea registros y personas de prueba que alterarian los folios que esas suites esperan.
+  for (const file of ["api-dsp.mjs", "api-sgc.mjs", "api-roles.mjs"]) {
     console.log(`\n=== ${file}`);
     failed += (await run(path.join(here, file), api)) ? 1 : 0;
   }

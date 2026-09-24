@@ -8,7 +8,7 @@ import { RequireModule } from "@/components/session/RequireModule";
 export default function EditarExtraccionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireModule modules="muestras">
+    <RequireModule modules="ensayos">
       <RecordLoader url={`/samples/extraction/${id}`}>{(item) => <ExtractionForm key={String(item.id)} item={item} />}</RecordLoader>
     </RequireModule>
   );

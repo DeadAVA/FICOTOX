@@ -63,7 +63,7 @@ function InformesContent() {
   );
   const items = resource.data?.items;
   const summary = resource.data?.summary || {};
-  const canCreate = can("informes", "create");
+  const canCreate = can("informes", "C");
 
   const groups: FilterGroup[] = [
     {

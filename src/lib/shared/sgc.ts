@@ -287,6 +287,9 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   login: "Inició sesión",
   login_fallido: "Intento de acceso fallido",
   descargar: "Descargó",
+  asignar_rol: "Asignó rol",
+  revocar_rol: "Revocó rol",
+  vencer_rol: "Venció rol",
 };
 
 export const AUDIT_ENTITIES: Record<string, string> = {

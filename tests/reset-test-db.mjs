@@ -5,8 +5,8 @@
  * instance/ficotox.sqlite3.
  *
  * Solo en la copia de prueba:
- * - crea el rol "QA pruebas automatizadas" con todos los permisos y el usuario
- *   qa@ficotox.local, con el que corren las suites;
+ * - crea el rol "QA pruebas automatizadas" (G en todos los modulos) y el usuario
+ *   qa@ficotox.local con ese rol vigente, con el que corren las suites;
  * - asigna contrasenas aleatorias a los usuarios del catalogo de roles y las
  *   deja en instance/test/credenciales-roles.json para tests/api-roles.mjs.
  */
@@ -48,14 +48,20 @@ export function resetTestDb() {
   const db = new Database(TEST_DB);
   db.pragma("journal_mode = DELETE");
   db.transaction(() => {
-    db.prepare("DELETE FROM usuarios WHERE email = ?").run(QA_USER.email);
-    let rol = db.prepare("SELECT id FROM roles WHERE nombre = ?").get(QA_ROLE);
-    if (!rol) rol = { id: Number(db.prepare("INSERT INTO roles (nombre, descripcion, es_sistemico, activo) VALUES (?, 'Solo en la base de prueba', 0, 1)").run(QA_ROLE).lastInsertRowid) };
-    db.prepare("DELETE FROM rol_permisos WHERE id_rol = ?").run(rol.id);
-    for (const { id } of db.prepare("SELECT id FROM permisos WHERE activo = 1").all()) {
-      db.prepare("INSERT INTO rol_permisos (id_rol, id_permiso, can_read, can_create, can_update, can_delete) VALUES (?, ?, 1, 1, 1, 1)").run(rol.id, id);
+    const qaPrevio = db.prepare("SELECT id FROM usuarios WHERE email = ?").get(QA_USER.email);
+    if (qaPrevio) {
+      db.prepare("DELETE FROM usuario_roles WHERE usuario_id = ?").run(qaPrevio.id);
+      db.prepare("DELETE FROM usuarios WHERE id = ?").run(qaPrevio.id);
     }
-    db.prepare("INSERT INTO usuarios (nombre, email, activo, id_rol, auth_provider, password_hash) VALUES (?, ?, 1, ?, 'local', ?)").run("QA Ficotox", QA_USER.email, rol.id, hash(QA_USER.password));
+    let rol = db.prepare("SELECT id FROM roles WHERE nombre = ?").get(QA_ROLE);
+    if (!rol) rol = { id: Number(db.prepare("INSERT INTO roles (nombre, descripcion, clave, es_sistemico, activo) VALUES (?, 'Solo en la base de prueba', 'qa_pruebas', 0, 1)").run(QA_ROLE).lastInsertRowid) };
+    // Modelo de la Fase 1: G (todas las acciones, alcance total) en cada modulo del catalogo.
+    db.prepare("DELETE FROM rol_acciones WHERE id_rol = ?").run(rol.id);
+    for (const { clave } of db.prepare("SELECT clave FROM permisos WHERE activo = 1").all()) {
+      db.prepare("INSERT INTO rol_acciones (id_rol, modulo, accion, alcance) VALUES (?, ?, 'G', 'total')").run(rol.id, clave);
+    }
+    const qaId = Number(db.prepare("INSERT INTO usuarios (nombre, email, activo, id_rol, auth_provider, password_hash) VALUES (?, ?, 1, ?, 'local', ?)").run("QA Ficotox", QA_USER.email, rol.id, hash(QA_USER.password)).lastInsertRowid);
+    db.prepare("INSERT INTO usuario_roles (usuario_id, rol_id, vigente_desde, vigente_hasta, motivo, asignado_por, asignado_en) VALUES (?, ?, '2000-01-01', NULL, 'Rol de pruebas automatizadas (solo base de prueba)', NULL, ?)").run(qaId, rol.id, new Date().toISOString());
 
     const credenciales = {};
     for (const { id, email } of db.prepare("SELECT id, email FROM usuarios WHERE email LIKE '%@ficotox.local' AND email <> ?").all(QA_USER.email)) {

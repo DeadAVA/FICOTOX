@@ -7,7 +7,7 @@ import { getConfig } from "../config";
 import { isIntegrityError, isSqlite, type Row, type Session } from "../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
 import { renderInformePdf, type InformeAnalisis, type InformeRender } from "../informe-pdf";
-import { requirePermission } from "../rbac";
+import { cargoActuante, requirePermission } from "../rbac";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
 import { advanceState, ensureAnulacionColumns, nextFolioNum, readMotivo } from "../samples-flow";
 import { ANALYSIS_METHODS, ANALYSIS_TYPES, REPORT_DEFAULT_STATEMENTS, REPORT_DELIVERY_MEDIA } from "../../shared/sgc";
@@ -117,6 +117,10 @@ export async function ensureInformesSchema(s: Session): Promise<void> {
       `,
   );
   await addColumnIfMissing(s, TABLE, "pdf_sha256", "VARCHAR(64) DEFAULT NULL");
+  // Fase 1: rol con el que actuo cada firmante (el cargo se guarda en *_cargo).
+  await addColumnIfMissing(s, TABLE, "elaborado_rol_id", "INT DEFAULT NULL");
+  await addColumnIfMissing(s, TABLE, "revisado_rol_id", "INT DEFAULT NULL");
+  await addColumnIfMissing(s, TABLE, "autorizado_rol_id", "INT DEFAULT NULL");
   await ensureAnulacionColumns(s, TABLE);
   markSchemaReady("informes");
 }
@@ -236,7 +240,7 @@ async function loadAnalyses(s: Session, ids: number[]): Promise<Row[]> {
   return rows.map(serializeAnalysis);
 }
 
-function normalizePayload(raw: Record<string, unknown>, user?: { rol?: string | null }) {
+function normalizePayload(raw: Record<string, unknown>) {
   const payload = raw || {};
   const ids = Array.isArray(payload.analisis_ids) ? payload.analisis_ids.map((v) => toIntOrNull(v)).filter((v): v is number => v !== null) : [];
   return {
@@ -247,7 +251,6 @@ function normalizePayload(raw: Record<string, unknown>, user?: { rol?: string | 
     declaraciones: payload.declaraciones,
     fecha_emision: strippedOrNull(payload.fecha_emision, 10),
     elaborado_nombre: strippedOrNull(payload.elaborado_nombre, 180),
-    elaborado_cargo: strippedOrNull(payload.elaborado_cargo, 120) || strippedOrNull(user?.rol, 120),
     elaborado_firma: strippedOrNull(payload.elaborado_firma),
     observaciones: strippedOrNull(payload.observaciones),
   };
@@ -256,22 +259,23 @@ function normalizePayload(raw: Record<string, unknown>, user?: { rol?: string | 
 function assertDraft(row: Row | null): Row {
   if (!row) throw new HttpError(404, { message: "Informe no encontrado" });
   const estado = String(row.estado || "");
-  if (!["borrador", "en_revision"].includes(estado)) {
-    throw new HttpError(409, { message: `El informe ${informeFolio(row)} esta ${estado}; ya no se edita. Emite una enmienda si necesita cambios` });
+  // E solo mientras el informe no ha pasado a revision (Fase 1); despues se corrige por enmienda o anulacion.
+  if (estado !== "borrador") {
+    throw new HttpError(409, { message: `El informe ${informeFolio(row)} esta ${estado}; ya no se edita. Emite una enmienda o anúlalo si necesita cambios` });
   }
   return row;
 }
 
 export async function getNextFolio({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "informes", "read");
+  await requirePermission(s, user, "informes", "V");
   await ensureInformesSchema(s);
   return json({ next_folio: await nextFolioNum(s, TABLE) });
 }
 
 export async function listInformes({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "informes", "read");
+  await requirePermission(s, user, "informes", "V");
   await ensureInformesSchema(s);
   const search = searchParam(request, "search");
   const estado = searchParam(request, "estado");
@@ -309,7 +313,7 @@ export async function listInformes({ request, s }: RouteContext): Promise<Respon
 export async function getInforme({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "informes", "read");
+  await requirePermission(s, user, "informes", "V");
   await ensureInformesSchema(s);
   const row = await snapshotRow(s, TABLE, id);
   if (!row) return json({ message: "Informe no encontrado" }, 404);
@@ -328,7 +332,7 @@ export async function getInforme({ request, s, params }: RouteContext): Promise<
 /* Analisis aprobados listos para informar de una recepcion (para armar el borrador). */
 export async function reportableForReception({ request, s, params }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "informes", "read");
+  await requirePermission(s, user, "informes", "V");
   await ensureInformesSchema(s);
   const recepcionId = intParam(params.id);
   const recepcion = await snapshotRow(s, "muestras_recepcion", recepcionId);
@@ -345,9 +349,10 @@ export async function reportableForReception({ request, s, params }: RouteContex
 
 export async function createInforme({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "informes", "create");
+  const permiso = await requirePermission(s, user, "informes", "C", { objeto: "informe", borrador: true });
+  const actuo = cargoActuante(request, permiso);
   await ensureInformesSchema(s);
-  const data = normalizePayload(await readJson(request), user);
+  const data = normalizePayload(await readJson(request));
   const recepcion = await loadRecepcion(s, data.recepcion_id);
   const analyses = await loadAnalyses(s, data.analisis_ids);
   if (analyses.some((a) => Number(a.recepcion_id) !== Number(recepcion.id))) return json({ message: "Todos los analisis deben pertenecer a la recepcion del informe" }, 400);
@@ -357,9 +362,9 @@ export async function createInforme({ request, s }: RouteContext): Promise<Respo
     const result = await s.execute(
       `
       INSERT INTO ${TABLE} (folio_num, version, recepcion_id, cliente_json, muestras_json, analisis_ids_json, resultados_json, declaraciones_json,
-        fecha_emision, elaborado_por, elaborado_nombre, elaborado_cargo, elaborado_firma, observaciones, estado, creado_por, actualizado_por)
+        fecha_emision, elaborado_por, elaborado_nombre, elaborado_cargo, elaborado_rol_id, elaborado_firma, observaciones, estado, creado_por, actualizado_por)
       VALUES (:folio_num, 1, :recepcion_id, :cliente_json, :muestras_json, :analisis_ids_json, :resultados_json, :declaraciones_json,
-        :fecha_emision, :elaborado_por, :elaborado_nombre, :elaborado_cargo, :elaborado_firma, :observaciones, 'borrador', :creado_por, :actualizado_por)
+        :fecha_emision, :elaborado_por, :elaborado_nombre, :elaborado_cargo, :elaborado_rol_id, :elaborado_firma, :observaciones, 'borrador', :creado_por, :actualizado_por)
       `,
       {
         folio_num: folio,
@@ -372,7 +377,8 @@ export async function createInforme({ request, s }: RouteContext): Promise<Respo
         fecha_emision: data.fecha_emision,
         elaborado_por: userId,
         elaborado_nombre: data.elaborado_nombre || String(user.nombre || ""),
-        elaborado_cargo: data.elaborado_cargo,
+        elaborado_cargo: actuo.cargo,
+        elaborado_rol_id: actuo.rol_id,
         elaborado_firma: data.elaborado_firma,
         observaciones: data.observaciones,
         creado_por: userId,
@@ -381,7 +387,7 @@ export async function createInforme({ request, s }: RouteContext): Promise<Respo
     );
     const id = result.lastrowid as number;
     const despues = await snapshotRow(s, TABLE, id);
-    await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), despues });
+    await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), despues, detalle: { actuo_como: actuo } });
     await s.commit();
     return json({ message: "Informe creado en borrador", id, folio_num: folio }, 201);
   } catch (error) {
@@ -394,10 +400,11 @@ export async function createInforme({ request, s }: RouteContext): Promise<Respo
 export async function updateInforme({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "informes", "update");
+  const permiso = await requirePermission(s, user, "informes", "E", { objeto: "informe", borrador: true });
+  const actuo = cargoActuante(request, permiso);
   await ensureInformesSchema(s);
   const antes = assertDraft(await snapshotRow(s, TABLE, id));
-  const data = normalizePayload(await readJson(request), user);
+  const data = normalizePayload(await readJson(request));
   const recepcion = await loadRecepcion(s, data.recepcion_id || Number(antes.recepcion_id));
   const analyses = await loadAnalyses(s, data.analisis_ids);
   if (analyses.some((a) => Number(a.recepcion_id) !== Number(recepcion.id))) return json({ message: "Todos los analisis deben pertenecer a la recepcion del informe" }, 400);
@@ -405,7 +412,7 @@ export async function updateInforme({ request, s, params }: RouteContext): Promi
     `
     UPDATE ${TABLE} SET recepcion_id = :recepcion_id, cliente_json = :cliente_json, muestras_json = :muestras_json, analisis_ids_json = :analisis_ids_json,
       resultados_json = :resultados_json, declaraciones_json = :declaraciones_json, fecha_emision = :fecha_emision,
-      elaborado_nombre = :elaborado_nombre, elaborado_cargo = :elaborado_cargo, elaborado_firma = :elaborado_firma,
+      elaborado_nombre = :elaborado_nombre, elaborado_firma = :elaborado_firma,
       observaciones = :observaciones, estado = 'borrador', revisado_por = NULL, revisado_nombre = NULL, revisado_cargo = NULL, revisado_en = NULL, revisado_firma = NULL,
       actualizado_por = :actualizado_por
     WHERE id = :id
@@ -420,21 +427,20 @@ export async function updateInforme({ request, s, params }: RouteContext): Promi
       declaraciones_json: jsonText(normalizeDeclaraciones(data.declaraciones)),
       fecha_emision: data.fecha_emision,
       elaborado_nombre: data.elaborado_nombre || antes.elaborado_nombre,
-      elaborado_cargo: data.elaborado_cargo,
       elaborado_firma: data.elaborado_firma,
       observaciones: data.observaciones,
       actualizado_por: userIdFromClaims(user),
     },
   );
   const despues = await snapshotRow(s, TABLE, id);
-  await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues });
+  await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, detalle: { actuo_como: actuo } });
   await s.commit();
   return json({ message: "Informe actualizado" });
 }
 
 export async function deleteInforme({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "informes", "delete");
+  await requirePermission(s, user, "informes", "AN");
   throw new HttpError(405, { message: "Los informes no se eliminan: anule el informe indicando el motivo" });
 }
 
@@ -442,7 +448,7 @@ export async function deleteInforme({ request, s }: RouteContext): Promise<Respo
 export async function reviewInforme({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "aprobaciones", "update");
+  const actuo = cargoActuante(request, await requirePermission(s, user, "informes", "R"));
   await ensureInformesSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
@@ -454,11 +460,11 @@ export async function reviewInforme({ request, s, params }: RouteContext): Promi
   const excepcion = await samePersonException(antes.elaborado_por, user, payload, "La revision debe hacerla una persona distinta de quien elaboro el informe");
   if (excepcion instanceof Response) return excepcion;
   await s.execute(
-    `UPDATE ${TABLE} SET estado = 'en_revision', revisado_por = :usuario, revisado_nombre = :nombre, revisado_cargo = :cargo, revisado_en = :fecha, revisado_firma = :firma, actualizado_por = :usuario WHERE id = :id`,
-    { usuario: userIdFromClaims(user), nombre: String(user.nombre || user.email || "").slice(0, 180), cargo: strippedOrNull(payload.cargo, 120) || strippedOrNull(user.rol, 120), fecha: new Date().toISOString(), firma: strippedOrNull(payload.firma), id },
+    `UPDATE ${TABLE} SET estado = 'en_revision', revisado_por = :usuario, revisado_nombre = :nombre, revisado_cargo = :cargo, revisado_rol_id = :rol_id, revisado_en = :fecha, revisado_firma = :firma, actualizado_por = :usuario WHERE id = :id`,
+    { usuario: userIdFromClaims(user), nombre: String(user.nombre || user.email || "").slice(0, 180), cargo: actuo.cargo, rol_id: actuo.rol_id, fecha: new Date().toISOString(), firma: strippedOrNull(payload.firma), id },
   );
   const despues = await snapshotRow(s, TABLE, id);
-  await registrarAuditoria(s, user, { accion: "revisar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, motivo: excepcion || strippedOrNull(payload.observaciones), detalle: excepcion ? { excepcion: "misma persona elaboro y reviso" } : null });
+  await registrarAuditoria(s, user, { accion: "revisar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, motivo: excepcion || strippedOrNull(payload.observaciones), detalle: { actuo_como: actuo, ...(excepcion ? { excepcion: "misma persona elaboro y reviso" } : {}) } });
   await s.commit();
   return json({ message: "Informe revisado; listo para autorizar", item: serializeInforme(despues!) });
 }
@@ -508,7 +514,7 @@ async function marcarSustituido(s: Session, user: CurrentUser, originalId: numbe
 export async function authorizeInforme({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "aprobaciones", "update");
+  const actuo = cargoActuante(request, await requirePermission(s, user, "informes", "A"));
   await ensureInformesSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
@@ -526,8 +532,8 @@ export async function authorizeInforme({ request, s, params }: RouteContext): Pr
   const now = new Date().toISOString();
   const fechaEmision = strippedOrNull(payload.fecha_emision, 10) || String(antes.fecha_emision || now.slice(0, 10));
   await s.execute(
-    `UPDATE ${TABLE} SET estado = 'autorizado', resultados_json = :resultados_json, fecha_emision = :fecha_emision, autorizado_por = :usuario, autorizado_nombre = :nombre, autorizado_cargo = :cargo, autorizado_en = :fecha, autorizado_firma = :firma, actualizado_por = :usuario WHERE id = :id`,
-    { resultados_json: jsonText(snapshotAnalyses(analyses)), fecha_emision: fechaEmision, usuario: userIdFromClaims(user), nombre: String(user.nombre || user.email || "").slice(0, 180), cargo: strippedOrNull(payload.cargo, 120) || strippedOrNull(user.rol, 120), fecha: now, firma: strippedOrNull(payload.firma), id },
+    `UPDATE ${TABLE} SET estado = 'autorizado', resultados_json = :resultados_json, fecha_emision = :fecha_emision, autorizado_por = :usuario, autorizado_nombre = :nombre, autorizado_cargo = :cargo, autorizado_rol_id = :rol_id, autorizado_en = :fecha, autorizado_firma = :firma, actualizado_por = :usuario WHERE id = :id`,
+    { resultados_json: jsonText(snapshotAnalyses(analyses)), fecha_emision: fechaEmision, usuario: userIdFromClaims(user), nombre: String(user.nombre || user.email || "").slice(0, 180), cargo: actuo.cargo, rol_id: actuo.rol_id, fecha: now, firma: strippedOrNull(payload.firma), id },
   );
   const row = (await snapshotRow(s, TABLE, id))!;
   const pdf = await renderInformePdf(await buildRender(s, row, analyses));
@@ -539,7 +545,7 @@ export async function authorizeInforme({ request, s, params }: RouteContext): Pr
   // 7.8.8: el informe enmendado deja de ser valido y su PDF lo declara.
   if (row.sustituye_a) await marcarSustituido(s, user, Number(row.sustituye_a), row);
   const despues = await snapshotRow(s, TABLE, id);
-  await registrarAuditoria(s, user, { accion: "autorizar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, motivo: excepcion, detalle: { pdf: filename, sha256: sha, ...(excepcion ? { excepcion: "misma persona reviso y autorizo" } : {}) } });
+  await registrarAuditoria(s, user, { accion: "autorizar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, motivo: excepcion, detalle: { pdf: filename, sha256: sha, actuo_como: actuo, ...(excepcion ? { excepcion: "misma persona reviso y autorizo" } : {}) } });
   await s.commit();
   return json({ message: "Informe autorizado; PDF generado", item: serializeInforme(despues!) });
 }
@@ -548,7 +554,7 @@ export async function authorizeInforme({ request, s, params }: RouteContext): Pr
 export async function deliverInforme({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "informes", "update");
+  const actuo = cargoActuante(request, await requirePermission(s, user, "informes", "A"));
   await ensureInformesSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
@@ -558,7 +564,7 @@ export async function deliverInforme({ request, s, params }: RouteContext): Prom
   const fecha = strippedOrNull(payload.fecha, 10);
   const aQuien = strippedOrNull(payload.a_quien, 180);
   if (!DELIVERY.has(medio) || !fecha || !aQuien) return json({ message: "Indica fecha, medio y a quien se entrego el informe" }, 400);
-  const entrega = { fecha, medio, a_quien: aQuien, observaciones: strippedOrNull(payload.observaciones), entregado_por: userIdFromClaims(user), entregado_en: new Date().toISOString() };
+  const entrega = { fecha, medio, a_quien: aQuien, observaciones: strippedOrNull(payload.observaciones), entregado_por: userIdFromClaims(user), entregado_rol_id: actuo.rol_id, entregado_cargo: actuo.cargo, entregado_en: new Date().toISOString() };
   await s.execute(`UPDATE ${TABLE} SET estado = 'entregado', entrega_json = :entrega, actualizado_por = :usuario WHERE id = :id`, { entrega: jsonText(entrega), usuario: userIdFromClaims(user), id });
   const despues = await snapshotRow(s, TABLE, id);
   await registrarAuditoria(s, user, { accion: "entregar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, detalle: entrega });
@@ -570,14 +576,14 @@ export async function deliverInforme({ request, s, params }: RouteContext): Prom
 export async function anularInforme({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "informes", "delete");
+  const actuo = cargoActuante(request, await requirePermission(s, user, "informes", "AN"));
   await ensureInformesSchema(s);
   const motivo = await readMotivo(request);
   if (motivo.length < 5) return json({ message: "Indica el motivo de la anulacion (al menos 5 caracteres)" }, 400);
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
   if (String(antes.estado) === "anulado") return json({ message: "El informe ya esta anulado" }, 409);
-  await s.execute(`UPDATE ${TABLE} SET estado_previo = :previo, estado = 'anulado', anulado_en = :fecha, anulado_por = :usuario, motivo_anulacion = :motivo WHERE id = :id`, { previo: String(antes.estado), fecha: new Date().toISOString(), usuario: userIdFromClaims(user), motivo, id });
+  await s.execute(`UPDATE ${TABLE} SET estado_previo = :previo, estado = 'anulado', anulado_en = :fecha, anulado_por = :usuario, anulado_rol_id = :rol_id, anulado_cargo = :cargo, motivo_anulacion = :motivo WHERE id = :id`, { previo: String(antes.estado), fecha: new Date().toISOString(), usuario: userIdFromClaims(user), rol_id: actuo.rol_id, cargo: actuo.cargo, motivo, id });
   const despues = (await snapshotRow(s, TABLE, id))!;
   if (despues.archivo_pdf) {
     // Se regenera el PDF con la marca de anulado; el original queda en auditoria por su huella.
@@ -585,7 +591,7 @@ export async function anularInforme({ request, s, params }: RouteContext): Promi
     await fs.promises.writeFile(path.join(informesDir(), String(despues.archivo_pdf)), pdf);
     await s.execute(`UPDATE ${TABLE} SET pdf_sha256 = :sha WHERE id = :id`, { sha: createHash("sha256").update(pdf).digest("hex"), id });
   }
-  await registrarAuditoria(s, user, { accion: "anular", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), motivo, antes, despues });
+  await registrarAuditoria(s, user, { accion: "anular", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), motivo, antes, despues, detalle: { actuo_como: actuo } });
   await s.commit();
   return json({ message: "Informe anulado", item: serializeInforme((await snapshotRow(s, TABLE, id))!) });
 }
@@ -594,7 +600,7 @@ export async function anularInforme({ request, s, params }: RouteContext): Promi
 export async function amendInforme({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "informes", "create");
+  const actuo = cargoActuante(request, await requirePermission(s, user, "informes", "C", { objeto: "informe", borrador: true }));
   await ensureInformesSchema(s);
   const original = await snapshotRow(s, TABLE, id);
   if (!original) return json({ message: "Informe no encontrado" }, 404);
@@ -608,9 +614,9 @@ export async function amendInforme({ request, s, params }: RouteContext): Promis
   const result = await s.execute(
     `
     INSERT INTO ${TABLE} (folio_num, version, recepcion_id, sustituye_a, motivo_enmienda, cliente_json, muestras_json, analisis_ids_json, resultados_json, declaraciones_json,
-      fecha_emision, elaborado_por, elaborado_nombre, elaborado_cargo, observaciones, estado, creado_por, actualizado_por)
+      fecha_emision, elaborado_por, elaborado_nombre, elaborado_cargo, elaborado_rol_id, observaciones, estado, creado_por, actualizado_por)
     VALUES (:folio_num, :version, :recepcion_id, :sustituye_a, :motivo, :cliente_json, :muestras_json, :analisis_ids_json, :resultados_json, :declaraciones_json,
-      NULL, :usuario, :nombre, :cargo, :observaciones, 'borrador', :usuario, :usuario)
+      NULL, :usuario, :nombre, :cargo, :rol_id, :observaciones, 'borrador', :usuario, :usuario)
     `,
     {
       folio_num: original.folio_num,
@@ -625,13 +631,14 @@ export async function amendInforme({ request, s, params }: RouteContext): Promis
       declaraciones_json: original.declaraciones_json,
       usuario: userId,
       nombre: String(user.nombre || ""),
-      cargo: strippedOrNull(user.rol, 120),
+      cargo: actuo.cargo,
+      rol_id: actuo.rol_id,
       observaciones: original.observaciones,
     },
   );
   const nuevoId = result.lastrowid as number;
   const despues = await snapshotRow(s, TABLE, nuevoId);
-  await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: nuevoId, referencia: `${informeFolio(despues)} v${maxVersion + 1}`, motivo, despues, detalle: { enmienda_de: id } });
+  await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: nuevoId, referencia: `${informeFolio(despues)} v${maxVersion + 1}`, motivo, despues, detalle: { enmienda_de: id, actuo_como: actuo } });
   await s.commit();
   return json({ message: "Enmienda creada en borrador", id: nuevoId, version: maxVersion + 1 }, 201);
 }
@@ -639,7 +646,7 @@ export async function amendInforme({ request, s, params }: RouteContext): Promis
 export async function getInformePdf({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "informes", "read");
+  await requirePermission(s, user, "informes", "V");
   await ensureInformesSchema(s);
   const row = await snapshotRow(s, TABLE, id);
   if (!row) return json({ message: "Informe no encontrado" }, 404);
@@ -663,7 +670,7 @@ export async function getInformePdf({ request, s, params }: RouteContext): Promi
 
 export async function informesSummary({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "informes", "read");
+  await requirePermission(s, user, "informes", "V");
   await ensureInformesSchema(s);
   const summary = await s.queryOne(
     `

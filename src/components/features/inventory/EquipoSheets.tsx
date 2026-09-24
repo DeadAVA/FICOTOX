@@ -60,7 +60,7 @@ export function EquipoSheet({ open, item, onClose }: { open: boolean; item: ApiR
       setError("El nombre del equipo es obligatorio");
       return;
     }
-    if (!can("equipos", editing ? "update" : "create")) {
+    if (!can("equipos", editing ? "E" : "C", { objeto: "equipo" })) {
       setError("No tienes permiso para esta acción");
       return;
     }
@@ -204,7 +204,7 @@ export function MantenimientoSheet({ open, item, onClose }: { open: boolean; ite
       setError("Indica la fecha en que se realizó para marcarlo como completado");
       return;
     }
-    if (!can("mantenimiento", editing ? "update" : "create")) {
+    if (!can("equipos", editing ? "E" : "C", { objeto: "mantenimiento" })) {
       setError("No tienes permiso para esta acción");
       return;
     }

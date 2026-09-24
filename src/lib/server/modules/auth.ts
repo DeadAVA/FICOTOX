@@ -1,11 +1,12 @@
 import { createRemoteJWKSet, jwtVerify, errors as joseErrors, type JWTPayload } from "jose";
 import { isAvatarKey } from "../../shared/avatars";
-import { createAccessToken, requireUser } from "../auth";
+import { createAccessToken, requireUser, type CurrentUser } from "../auth";
 import { registrarAuditoria } from "../audit";
 import { getConfig } from "../config";
 import { isOperationalError, type Row, type Session } from "../db";
 import { HttpError, json, readJson, type RouteContext } from "../http";
-import { ensureRbacSchema, getPermissionsForUser, getRolePermissionsMap } from "../rbac";
+import { cargarAutorizacion, ensureRbacSchema, filasDeRoles, hoy } from "../rbac";
+import { expandirPermisos, mapaPermisos, permite } from "../../shared/permisos";
 import { ensureUsuariosSchema } from "../users";
 import { verifyPassword } from "../password";
 
@@ -17,9 +18,8 @@ function domainAllowed(email: string): boolean {
 }
 
 const USER_QUERY = `
-  SELECT u.id, u.id_rol AS role_id, u.nombre, u.email, u.activo, u.password_hash, u.avatar, r.nombre AS rol
+  SELECT u.id, u.nombre, u.email, u.activo, u.password_hash, u.avatar
   FROM usuarios u
-  INNER JOIN roles r ON r.id = u.id_rol
   WHERE LOWER(u.email) = LOWER(:email)
   LIMIT 1
 `;
@@ -28,6 +28,11 @@ async function getUserByEmail(s: Session, email: string): Promise<Row | null> {
   return s.queryOne(USER_QUERY, { email });
 }
 
+/*
+ * Sesion: el JWT solo identifica a la persona (sub, correo, nombre). Los roles y
+ * permisos se calculan en cada peticion desde la base (rbac.ts), asi que un rol
+ * revocado o vencido deja de contar sin volver a iniciar sesion.
+ */
 async function issueSession(s: Session, row: Row): Promise<Response> {
   if (!row.activo) {
     return json({ message: "Usuario inactivo" }, 403);
@@ -38,27 +43,29 @@ async function issueSession(s: Session, row: Row): Promise<Response> {
 
   const token = await createAccessToken({
     sub: String(row.id),
-    role_id: row.role_id,
     email: row.email,
     nombre: row.nombre,
-    rol: row.rol,
   });
+  const perfil = await perfilSesion(s, { sub: String(row.id), email: String(row.email || ""), nombre: String(row.nombre || "") });
+  return json({ token, ...perfil });
+}
 
-  await ensureRbacSchema(s);
-  const permissions = await getRolePermissionsMap(s, row.role_id);
-
-  return json({
-    token,
+/* Usuario, roles vigentes y permisos efectivos { modulo: { accion: alcance } }. */
+async function perfilSesion(s: Session, user: CurrentUser) {
+  const auth = await cargarAutorizacion(s, user);
+  const row = await s.queryOne<{ nombre: string; email: string; avatar: string | null }>("SELECT nombre, email, avatar FROM usuarios WHERE id = :id", { id: auth.userId });
+  const roles = auth.roles.map((r) => ({ id: r.id, nombre: r.nombre, clave: r.clave, vigente_desde: r.vigente_desde, vigente_hasta: r.vigente_hasta ?? null, permisos: mapaPermisos(expandirPermisos(r.filas)) }));
+  return {
     user: {
-      id: row.id,
-      role_id: row.role_id,
-      nombre: row.nombre,
-      email: row.email,
-      rol: row.rol,
-      avatar: row.avatar || null,
+      id: auth.userId,
+      nombre: row?.nombre ?? user.nombre,
+      email: row?.email ?? user.email,
+      avatar: row?.avatar ?? null,
+      roles: roles.map((r) => r.nombre),
     },
-    permissions,
-  });
+    roles,
+    permissions: mapaPermisos(auth.efectivos),
+  };
 }
 
 function buildMicrosoftAuthority(): string {
@@ -211,10 +218,8 @@ export async function me({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await ensureRbacSchema(s);
   await ensureUsuariosSchema(s);
-  const permissions = await getPermissionsForUser(s, user);
-  // El avatar y el nombre se leen de la base (no del token) para reflejar cambios sin volver a entrar.
-  const row = await s.queryOne<{ nombre: string; avatar: string | null }>("SELECT nombre, avatar FROM usuarios WHERE id = :id", { id: Number(user.sub) });
-  return json({ user: { ...user, id: Number(user.sub), nombre: row?.nombre ?? user.nombre, avatar: row?.avatar ?? null }, permissions });
+  // Nombre, avatar, roles y permisos se leen de la base (no del token) para reflejar cambios sin volver a entrar.
+  return json(await perfilSesion(s, user));
 }
 
 /*
@@ -222,28 +227,49 @@ export async function me({ request, s }: RouteContext): Promise<Response> {
  * formatos (cualquier usuario autenticado puede verlo; no expone correos ni claves).
  */
 export async function personal({ request, s }: RouteContext): Promise<Response> {
-  await requireUser(request);
-  await ensureRbacSchema(s);
+  const user = await requireUser(request);
   await ensureUsuariosSchema(s);
-  const rows = await s.query<Row>("SELECT u.id, u.nombre, u.id_rol, r.nombre AS rol FROM usuarios u LEFT JOIN roles r ON r.id = u.id_rol WHERE COALESCE(u.activo, 1) = 1 ORDER BY u.nombre");
-  const cache = new Map<number, Awaited<ReturnType<typeof getRolePermissionsMap>>>();
-  const items = [];
-  for (const row of rows) {
-    const roleId = row.id_rol === null || row.id_rol === undefined ? null : Number(row.id_rol);
-    if (roleId !== null && !cache.has(roleId)) cache.set(roleId, await getRolePermissionsMap(s, roleId));
-    const perms = roleId !== null ? cache.get(roleId) || {} : {};
-    items.push({
+  await cargarAutorizacion(s, user);
+  const usuarios = await s.query<Row>("SELECT id, nombre FROM usuarios WHERE COALESCE(activo, 1) = 1 ORDER BY nombre");
+  const asignaciones = await s.query<Row>(
+    `
+    SELECT ur.usuario_id, r.id AS rol_id, r.nombre
+    FROM usuario_roles ur INNER JOIN roles r ON r.id = ur.rol_id
+    WHERE ur.revocado_en IS NULL AND ur.vigente_desde <= :hoy AND (ur.vigente_hasta IS NULL OR ur.vigente_hasta >= :hoy) AND r.activo = 1
+    `,
+    { hoy: hoy() },
+  );
+  const filasRol = await filasDeRoles(s, asignaciones.map((a) => Number(a.rol_id)));
+  const items = usuarios.map((row) => {
+    const propias = asignaciones.filter((a) => Number(a.usuario_id) === Number(row.id));
+    const efectivos = expandirPermisos(propias.flatMap((a) => filasRol.get(Number(a.rol_id)) || []));
+    type Par = [Parameters<typeof permite>[1], Parameters<typeof permite>[2]];
+    const CAPACIDADES: Record<string, Par[]> = {
+      muestras: [["muestras", "C"], ["muestras", "E"], ["ensayos", "C"], ["ensayos", "E"]],
+      revision: [["ensayos", "R"], ["ensayos", "A"], ["informes", "R"], ["informes", "A"]],
+      informes: [["informes", "C"], ["informes", "E"]],
+      inventario: [["inventario", "C"], ["inventario", "E"], ["equipos", "C"], ["equipos", "E"]],
+    };
+    const puede: Record<string, boolean> = {};
+    // Cargo con el que figura la persona para cada capacidad: el primer rol (por nombre) que la otorga.
+    const cargos: Record<string, string | null> = {};
+    for (const [capacidad, pares] of Object.entries(CAPACIDADES)) {
+      puede[capacidad] = pares.some(([modulo, accion]) => permite(efectivos, modulo, accion));
+      const rol = propias
+        .map((a) => ({ nombre: String(a.nombre), filas: filasRol.get(Number(a.rol_id)) || [] }))
+        .sort((x, y) => x.nombre.localeCompare(y.nombre))
+        .find((r) => pares.some(([modulo, accion]) => permite(expandirPermisos(r.filas), modulo, accion)));
+      cargos[capacidad] = rol?.nombre ?? null;
+    }
+    return {
       id: Number(row.id),
       nombre: String(row.nombre || ""),
-      rol: row.rol ? String(row.rol) : null,
-      puede: {
-        muestras: !!(perms.muestras?.create || perms.muestras?.update),
-        aprobaciones: !!perms.aprobaciones?.update,
-        informes: !!(perms.informes?.create || perms.informes?.update),
-        inventario: !!(perms.reactivos?.update || perms.consumibles?.update || perms.equipos?.update),
-      },
-    });
-  }
+      rol: propias.map((a) => String(a.nombre)).join(", ") || null,
+      roles: propias.map((a) => String(a.nombre)),
+      puede,
+      cargos,
+    };
+  });
   return json({ items });
 }
 

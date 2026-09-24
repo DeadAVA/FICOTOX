@@ -66,6 +66,16 @@ export function useFormReadOnly(): boolean {
   return !!useContext(FormPageContext)?.readOnly;
 }
 
+/*
+ * Vuelve editable lo que envuelve aunque el formato este en solo lectura: los
+ * dialogos de firma (revisar, aprobar, autorizar) se abren sobre registros que
+ * ya no se editan pero si se firman.
+ */
+export function EditableScope({ children }: { children: ReactNode }) {
+  const ctx = useContext(FormPageContext);
+  return ctx ? <FormPageContext.Provider value={{ ...ctx, readOnly: false }}>{children}</FormPageContext.Provider> : <>{children}</>;
+}
+
 /* Abre (si esta plegada) y enfoca una seccion del formato; lo usan las validaciones al guardar. */
 export function openFormSection(id: string) {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: id }));
@@ -457,7 +467,8 @@ export function PersonCard({ title, name, onName, cargo, onCargo, signature, onS
               value={name}
               onChange={(value, persona) => {
                 onName(value);
-                onCargo?.(persona?.rol || "");
+                // Un solo cargo: el rol que le da la capacidad pedida (no la lista de todos sus roles).
+                onCargo?.(persona?.cargos?.[requires] || persona?.roles?.[0] || "");
               }}
               requires={requires}
               disabled={disabled}

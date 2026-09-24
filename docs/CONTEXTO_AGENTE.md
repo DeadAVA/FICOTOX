@@ -50,12 +50,14 @@ reales del laboratorio; **la implementación debe ser fiel a ellos**):
   (ojo: `||` es concatenación en SQLite pero OR lógico en MySQL → usar `CONCAT`).
 - Sesión: JWT con `jose`. Contraseña local con scrypt (`src/lib/server/password.ts`).
   También hay login con Microsoft Entra ID.
-- **RBAC** por módulo/acción: `requirePermission(s, user, "modulo", "accion")`.
-  Módulos: `dashboard, reactivos, consumibles, equipos, muestras, movimientos,
-  mantenimiento, documentos, informes, aprobaciones, auditoria, roles, usuarios`.
-  Acciones: `read, create, update, delete`. Un rol por usuario (Fase 0; la Fase 1
-  cambiará el modelo de permisos y permitirá varios roles por usuario).
-  Catálogo provisional de 10 roles en `scripts/roles-catalogo.json` (sección 4 bis).
+- **Permisos (Fase 1)**: `requirePermission(s, user, modulo, accion, contexto?)`
+  (`src/lib/server/rbac.ts`). Módulos: `usuarios, documentos, muestras, ensayos,
+  informes, equipos, inventario, calidad, compras` (ya no existe `aprobaciones`).
+  Acciones: `V C E R A AN G` con **alcance** por permiso. Varios roles por persona
+  con vigencia (`usuario_roles`); permisos = unión de los vigentes, calculados en
+  cada petición (el JWT solo identifica). Cargo con el que se actúa:
+  `cargoActuante` + encabezado `X-Actuar-Como`. Todo en **`docs/CATALOGO_PERMISOS.md`**;
+  matriz en `scripts/roles-catalogo.json`.
 - Todos los handlers pasan por `apiRoute` (`src/lib/server/http.ts`), que abre una
   sesión de base, hace `commit` al final o `rollback` si algo falla.
 - Esquemas: funciones `ensure*Schema()` (creación idempotente de tablas y
@@ -130,18 +132,29 @@ Son decisiones explícitas del usuario o correcciones de auditoría ya validadas
    bloquea.
 5. **Regla de dos personas apagada** (`TWO_PERSON_RULE = false` en
    `src/lib/shared/features.ts`, decisión de Axel 2026-09-11): cualquier persona
-   con permiso de aprobaciones revisa/aprueba/autoriza aunque haya capturado. El
+   con R/A (ensayos, informes) revisa/aprueba/autoriza aunque haya capturado. El
    código de la excepción (`permitir_misma_persona` + motivo) sigue ahí por si se
-   vuelve a encender. El **cargo** de quien firma sale de `user.rol`; no se
-   captura a mano (los `SignDialog` de análisis e informes usan `withCargo={false}`).
+   vuelve a encender. El **cargo** de quien firma es el **rol con el que actúa**
+   (Fase 1; ya no `user.rol`); si varios roles vigentes lo permiten, la UI pide
+   "Actuar como" (`ActuarComoProvider`). No se captura a mano.
 6. **Permisos**: un permiso ausente en un rol significa "no concedido".
    `ensureRbacSchema` **no crea roles ni rellena permisos** (Fase 0: se quitó el
    rol "Super Admin" y el relleno por nombre de rol / `es_sistemico` / módulo
-   nuevo). Solo asegura las tablas y el catálogo de módulos.
-11. **Siempre queda un administrador**: un cambio de usuario o de rol que deje en
-    cero a los usuarios activos con `usuarios:update` y `roles:update` responde
-    409 (`assertAdministratorRemains`, `rbac.ts`). "Administrador técnico del
-    sistema" es `es_sistemico` (no se elimina).
+   nuevo). Solo asegura las tablas y el catálogo de módulos. Ninguna verificación
+   usa el nombre de un rol: las reglas de combinación usan permisos o `roles.clave`.
+11. **Siempre queda un administrador**: un cambio (revocar, desactivar, dar de
+    baja, editar permisos) que deje en cero a los usuarios activos con
+    `usuarios:G` vigente, o que deje solo administradores con fecha de fin,
+    responde 409 (`assertAdministratorRemains`, `rbac.ts`).
+    "Administrador técnico del sistema" es `es_sistemico` (no se elimina).
+12. **Combinaciones prohibidas** (`src/lib/shared/combinaciones-roles.ts`, no
+    editable en la UI): se evalúan al asignar roles y al editar permisos de un rol.
+13. **Nadie se asigna ni se revoca roles a sí mismo** (403). Nada se borra en
+    `usuario_roles`: revocar llena las columnas de revocación.
+14. **E solo en borrador**: un análisis revisado/aprobado o un informe en revisión
+    ya no se editan (se anulan o se enmiendan).
+15. **Commits sin "Co-Authored-By: Claude" ni "Generated with Claude Code"**
+    (decisión de Axel, Fase 1; `.claude/settings.json` lo desactiva).
 7. **Insumos dados de baja**: no se pueden elegir en un registro nuevo (409), pero
    un registro que ya los declaraba se sigue editando y repone **hasta la
    cantidad que ya tenía**.
@@ -270,7 +283,7 @@ npm run test:reset-db # solo regenerar la base de prueba
   está apagado** (2026-09-11, pedido de Axel): sin menú, sin aviso en Inicio, sin búsqueda, sin fila
   en roles, y `/documentos` responde notFound. API, tabla `documentos_sgc`, archivos y pruebas de API
   siguen; para reactivar basta `documentos: true`.
-- Personal: `GET /api/auth/personal` (activos + `puede.{muestras,aprobaciones,informes,inventario}`),
+- Personal: `GET /api/auth/personal` (activos + `puede.{muestras,revision,informes,inventario}` y `cargos` por capacidad —el rol que la otorga—, calculado con el modelo de la Fase 1; `revision` no es un módulo),
   `usePersonal`/`PersonSelect` (`features/samples/PersonSelect.tsx`) en `PersonCard` y campos de
   "quién"; `formatActiveUserSignature()` ahora devuelve solo el nombre. Autollenado:
   `findUniqueOperativeEquipo` (operativo y calibración vigente), `equipos.ultimo_folio_bitacora`
@@ -314,7 +327,23 @@ npm run test:reset-db # solo regenerar la base de prueba
   replica el sellado de `audit.ts` (no importable desde Node) — se podría mover
   `stableJson`/`sellar` a un módulo `.mjs` compartido.
 
+## 8 ter. Fase 1 — permisos finos y varios roles (2026-09-24, rama `fase-1-permisos`)
+
+- Git: el commit de la Fase 0 se reescribió sin el trailer de coautoría
+  (`6d4a066`) y se hizo merge fast-forward a `main` (local, sin push).
+- Modelo nuevo de permisos (módulos, acciones V/C/E/R/A/AN/G, alcances aplicados y
+  diferidos), `rol_acciones`, `usuario_roles` (migración de `usuarios.id_rol`),
+  permisos por petición, cargo con el que se actúa en firmas y PDF, combinaciones
+  prohibidas, guarda de `usuarios:G`, vencimientos en bitácora.
+- Sello de la bitácora en un solo módulo compartido `src/lib/shared/audit-chain.mjs`
+  (servidor y script de alta).
+- Detalle y decisiones pendientes de validar con Mejora Continua:
+  `docs/CATALOGO_PERMISOS.md`.
+
 ## 9. Pendientes conocidos
+
+- (Visto en la revisión de la Fase 1, anterior a ella) `POST /samples/processing` sin `recepcion_id` crea un procesamiento sin recepción: exigir la recepción en una fase posterior.
+
 
 1. **Confirmar con la coordinación técnica** los límites regulatorios precargados
    (marcados "por confirmar" en `sgc.ts`: ASP 20 µg/g, DSP 160 µg/kg,

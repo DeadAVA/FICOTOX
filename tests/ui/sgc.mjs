@@ -334,8 +334,10 @@ try {
   await page.getByText("Nueva recepción", { exact: true }).first().waitFor();
   check("buscador: al enfocar ofrece acciones generales y no las específicas", (await page.getByText("Nueva extracción DSP", { exact: true }).count()) === 0);
   await search.fill("por revisar");
-  await page.getByText("Informes por revisar o autorizar", { exact: true }).waitFor();
-  check("buscador: vistas por estado («por revisar»)", (await page.getByText("Análisis por revisar o aprobar", { exact: true }).count()) === 1);
+  // Dentro de los resultados (grupo "Ver"): el Inicio puede mostrar un aviso con el mismo texto.
+  const vistas = page.getByRole("group", { name: "Ver" });
+  await vistas.getByText("Informes por revisar o autorizar", { exact: true }).waitFor();
+  check("buscador: vistas por estado («por revisar»)", (await vistas.getByText("Análisis por revisar o aprobar", { exact: true }).count()) === 1);
   await search.fill("ayuda");
   await page.getByText("Cómo usar la plataforma", { exact: true }).waitFor();
   check("buscador: temas de ayuda", true);

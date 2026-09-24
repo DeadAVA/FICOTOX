@@ -66,8 +66,9 @@ export function apiRoute(handler: RouteHandler) {
     const params = routeCtx?.params ? await routeCtx.params : {};
     try {
       // Equivalente al arranque de create_app(): asegurar esquemas antes de atender.
-      const { ensureInitialSchema } = await import("./bootstrap");
+      const { barrerVencimientos, ensureInitialSchema } = await import("./bootstrap");
       await ensureInitialSchema();
+      await barrerVencimientos();
       return await withSession(async (s) => {
         try {
           return await handler({ request, params, s });

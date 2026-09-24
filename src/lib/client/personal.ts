@@ -10,13 +10,18 @@ import { useResource } from "./store";
  * invalida con la clave "personal" (altas/bajas de usuarios).
  */
 
-export type PersonaCapacidad = "muestras" | "aprobaciones" | "informes" | "inventario";
+/* Capacidades para los selectores de "quién" (no son modulos de permisos): revision = R/A en ensayos o informes. */
+export type PersonaCapacidad = "muestras" | "revision" | "informes" | "inventario";
 
 export interface Persona {
   id: number;
   nombre: string;
+  /* Roles vigentes unidos por comas (para mostrar). */
   rol: string | null;
+  roles?: string[];
   puede: Record<PersonaCapacidad, boolean>;
+  /* Cargo con el que figura para cada capacidad: el rol que la otorga. */
+  cargos?: Partial<Record<PersonaCapacidad, string | null>>;
 }
 
 let cache: Persona[] | null = null;

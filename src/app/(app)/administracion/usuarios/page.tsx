@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { PencilSimple, Plus, Trash, Users } from "@phosphor-icons/react";
+import { Eye, PencilSimple, Plus, Trash, Users } from "@phosphor-icons/react";
 import { UserSheet } from "@/components/features/admin/AdminSheets";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
@@ -22,7 +22,7 @@ import type { ApiRecord } from "@/lib/client/types";
 export default function UsuariosPage() {
   return (
     <PageBody>
-      <PageHeader title="Usuarios" description="Cuentas de acceso al sistema. Las cuentas no se eliminan: se dan de baja con motivo." />
+      <PageHeader title="Usuarios" description="Cuentas de acceso y sus roles con vigencia. Las cuentas no se eliminan: se dan de baja con motivo." />
       <RequireModule modules="usuarios">
         <UsuariosContent />
       </RequireModule>
@@ -31,7 +31,7 @@ export default function UsuariosPage() {
 }
 
 function UsuariosContent() {
-  const { token, can, user: me } = useSession();
+  const { token, can, user: me, alcance } = useSession();
   const prompt = usePrompt();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
@@ -47,15 +47,18 @@ function UsuariosContent() {
   );
   const items = resource.data;
 
-  const roles = useMemo(() => Array.from(new Set((items || []).map((item) => String(item.rol || "")).filter(Boolean))).sort((a, b) => a.localeCompare(b)), [items]);
+  const rolesDe = (item: ApiRecord): string[] => ((item.roles || []) as ApiRecord[]).map((r) => String(r.nombre || "")).filter(Boolean);
+  const roles = useMemo(() => Array.from(new Set((items || []).flatMap((item) => ((item.roles || []) as ApiRecord[]).map((r) => String(r.nombre || ""))).filter(Boolean))).sort((a, b) => a.localeCompare(b)), [items]);
   const rows = useMemo(() => {
     const term = normalizeText(search);
-    return (items || []).filter((item) => (!term || normalizeText(`${item.nombre || ""} ${item.email || ""}`).includes(term)) && (!roleFilter || item.rol === roleFilter));
+    return (items || []).filter((item) => (!term || normalizeText(`${item.nombre || ""} ${item.email || ""}`).includes(term)) && (!roleFilter || ((item.roles || []) as ApiRecord[]).some((r) => r.nombre === roleFilter)));
   }, [items, search, roleFilter]);
 
-  const editUser = async (id: number) => {
+  const [soloLectura, setSoloLectura] = useState(false);
+  const editUser = async (id: number, lectura = false) => {
     try {
       const data = await getJsonAuth(`${API_BASE_URL}/admin/usuarios/${id}`, token);
+      setSoloLectura(lectura);
       modal.open(resolveApiEntity(data));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo cargar el usuario");
@@ -76,9 +79,10 @@ function UsuariosContent() {
   };
 
   const list = items || [];
-  const canCreate = can("usuarios", "create");
-  const canUpdate = can("usuarios", "update");
-  const canDelete = can("usuarios", "delete");
+  // usuarios:G administra cuentas y roles; con alcance "propio" la lista solo trae la cuenta propia.
+  const canAdmin = can("usuarios", "G");
+  const propio = alcance("usuarios", "V") === "propio";
+  const canCreate = canAdmin && !propio;
 
   const groups: FilterGroup[] = [
     {
@@ -87,14 +91,15 @@ function UsuariosContent() {
       value: roleFilter,
       defaultValue: "",
       onChange: setRoleFilter,
-      options: [{ value: "", label: "Todos los roles" }, ...roles.map((role) => ({ value: role, label: role, count: (items || []).filter((u) => u.rol === role).length }))],
+      options: [{ value: "", label: "Todos los roles" }, ...roles.map((role) => ({ value: role, label: role, count: (items || []).filter((u) => rolesDe(u).includes(role)).length }))],
     },
   ];
 
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const list: MenuItem[] = [];
-    if (canUpdate) list.push({ label: "Editar", description: "Nombre, rol, departamento, contraseña o avatar", icon: <PencilSimple size={16} weight="duotone" />, tone: "brand", onSelect: () => editUser(Number(item.id)) });
-    if (canDelete && me?.id !== item.id) list.push({ label: "Dar de baja…", description: "La cuenta queda inactiva; su historial se conserva", icon: <Trash size={16} weight="duotone" />, tone: "danger", disabled: !item.activo, separatorBefore: list.length > 0, onSelect: () => deleteUser(item) });
+    if (canAdmin) list.push({ label: "Editar y roles", description: "Datos de acceso; asignar o revocar roles con vigencia", icon: <PencilSimple size={16} weight="duotone" />, tone: "brand", onSelect: () => editUser(Number(item.id)) });
+    else list.push({ label: "Ver ficha", description: "Datos de la cuenta y roles con su vigencia", icon: <Eye size={16} weight="duotone" />, tone: "brand", onSelect: () => editUser(Number(item.id), true) });
+    if (canAdmin && Number(me?.id) !== Number(item.id)) list.push({ label: "Dar de baja…", description: "La cuenta queda inactiva; su historial se conserva", icon: <Trash size={16} weight="duotone" />, tone: "danger", disabled: !item.activo, separatorBefore: list.length > 0, onSelect: () => deleteUser(item) });
     return list;
   };
 
@@ -108,7 +113,13 @@ function UsuariosContent() {
       <Toolbar
         end={
           canCreate ? (
-            <Button icon={<Plus size={16} weight="bold" />} onClick={() => modal.open(null)}>
+            <Button
+              icon={<Plus size={16} weight="bold" />}
+              onClick={() => {
+                setSoloLectura(false);
+                modal.open(null);
+              }}
+            >
               Nuevo usuario
             </Button>
           ) : null
@@ -131,7 +142,7 @@ function UsuariosContent() {
             <THead>
               <tr>
                 <Th>Usuario</Th>
-                <Th>Rol</Th>
+                <Th>Roles vigentes</Th>
                 <Th>Departamento</Th>
                 <Th>Último acceso</Th>
                 <Th>Estado</Th>
@@ -147,14 +158,22 @@ function UsuariosContent() {
                       <div className="flex min-w-0 flex-col">
                         <span className="truncate font-medium text-ink">
                           {item.nombre || "Sin nombre"}
-                          {me?.id === item.id ? <span className="ml-1.5 text-[11.5px] font-normal text-ink-3">(tú)</span> : null}
+                          {Number(me?.id) === Number(item.id) ? <span className="ml-1.5 text-[11.5px] font-normal text-ink-3">(tú)</span> : null}
                         </span>
                         <span className="truncate text-[12px] text-ink-3">{item.email}</span>
                       </div>
                     </div>
                   </Td>
-                  <Td>
-                    <Badge tone={normalizeText(item.rol).includes("admin") ? "brand" : "neutral"}>{item.rol || "Sin rol"}</Badge>
+                  <Td className="max-w-[360px]">
+                    <div className="flex flex-wrap gap-1">
+                      {((item.roles || []) as ApiRecord[]).map((r) => (
+                        <Badge key={String(r.id)} tone={normalizeText(r.nombre).includes("admin") ? "brand" : "neutral"}>
+                          {r.nombre}
+                          {r.vigente_hasta ? ` · hasta ${fmtDate(r.vigente_hasta)}` : ""}
+                        </Badge>
+                      ))}
+                      {!((item.roles || []) as ApiRecord[]).length ? <Badge tone="warning">Sin roles vigentes</Badge> : null}
+                    </div>
                   </Td>
                   <Td muted>{item.departamento || "-"}</Td>
                   <Td muted>{fmtDate(item.ultimo_acceso || item.creado_en)}</Td>
@@ -176,7 +195,7 @@ function UsuariosContent() {
         )}
       </TableShell>
 
-      {modal.key ? <UserSheet key={`modal-${modal.key}`} open={modal.isOpen} item={modal.payload} onClose={modal.close} /> : null}
+      {modal.key ? <UserSheet key={`modal-${modal.key}`} open={modal.isOpen} item={modal.payload} readOnly={soloLectura} onClose={modal.close} /> : null}
     </>
   );
 }

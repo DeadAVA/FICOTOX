@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { PageBody } from "@/components/shell/AppShell";
 import { LinkTabs, PageHeader } from "@/components/ui/PageHeader";
+import { useSession } from "@/components/session/SessionProvider";
 import { SAMPLE_TABS } from "@/lib/client/nav";
 
 /*
@@ -19,13 +20,14 @@ const STAGE_META: Record<string, { title: string; description: string }> = {
 
 export default function MuestrasLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { can } = useSession();
   const isForm = /\/muestras\/(recepcion|procesamiento|extraccion|analisis)\/(nueva|nuevo|\d+)/.test(pathname);
   if (isForm) return <>{children}</>;
   const meta = Object.entries(STAGE_META).find(([href]) => pathname === href || pathname.startsWith(`${href}/`))?.[1] || { title: "Muestras", description: "Recepción, procesamiento, extracción y análisis." };
   return (
     <PageBody>
       <PageHeader title={meta.title} description={meta.description} />
-      <LinkTabs className="lg:hidden" items={SAMPLE_TABS.map((tab) => ({ href: tab.href, label: tab.label }))} />
+      <LinkTabs className="lg:hidden" items={SAMPLE_TABS.filter((tab) => !tab.module || can(tab.module)).map((tab) => ({ href: tab.href, label: tab.label }))} />
       {children}
     </PageBody>
   );

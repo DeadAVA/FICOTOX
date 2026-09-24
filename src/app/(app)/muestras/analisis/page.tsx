@@ -26,7 +26,7 @@ const ESTADOS: string[] = ["pendiente", "registrado", "revisado", "aprobado"];
 
 export default function AnalisisListPage() {
   return (
-    <RequireModule modules="muestras">
+    <RequireModule modules="ensayos">
       <Suspense fallback={<Skeleton className="h-64 w-full" />}>
         <AnalisisList />
       </Suspense>
@@ -64,9 +64,9 @@ function AnalisisList() {
   );
   const items = (resource.data || []).filter((item) => !tipoFilter || item.tipo_analisis === tipoFilter);
   const loaded = !!resource.data;
-  const canCreate = can("muestras", "create");
-  const canUpdate = can("muestras", "update");
-  const canDelete = can("muestras", "delete");
+  const canCreate = can("ensayos", "C", { objeto: "analisis", borrador: true });
+  const canEdit = (item: ApiRecord) => can("ensayos", "E", { objeto: "analisis", borrador: item.estado === "registrado" });
+  const canDelete = can("ensayos", "AN");
   const count = (predicate: (item: ApiRecord) => boolean) => (resource.data ? resource.data.filter(predicate).length : null);
 
   const groups: FilterGroup[] = [
@@ -97,7 +97,7 @@ function AnalisisList() {
 
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulado = item.estado === "anulado";
-    const editable = canUpdate && !anulado && item.estado === "registrado";
+    const editable = canEdit(item) && !anulado && item.estado === "registrado";
     const list: MenuItem[] = [{ label: "Abrir", description: item.estado === "aprobado" ? "Solo lectura: análisis aprobado" : "Ver resultados, controles y revisión", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/muestras/analisis/${item.id}`) }];
     if (editable) list.push({ label: "Editar", description: "Corregir resultados antes de la revisión", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/analisis/${item.id}`) });
     if (canDelete) {

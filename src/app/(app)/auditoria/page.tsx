@@ -47,7 +47,7 @@ function integridadDetalle(r: Integridad): string {
 export default function AuditoriaPage() {
   return (
     <PageBody>
-      <RequireModule modules="auditoria">
+      <RequireModule modules="calidad">
         <AuditoriaContent />
       </RequireModule>
     </PageBody>

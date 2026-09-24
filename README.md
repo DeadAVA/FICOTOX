@@ -11,7 +11,7 @@ Sistema web de gestión operativa para laboratorio: inventario, muestras, trazab
 - **Gestión de inventario** — Reactivos, consumibles, equipos y mantenimientos.
 - **Gestión de muestras** — Recepción, procesamiento y extracción, con registro automático de movimientos.
 - **Trazabilidad** — Historial de movimientos y consulta de documentos del sistema de gestión de calidad (SGC).
-- **Usuarios, roles y permisos** — Autenticación local con correo y contraseña, o vía Microsoft Entra ID (SSO corporativo).
+- **Usuarios, roles y permisos** — Varios roles por persona con vigencia, permisos finos por módulo (ver/capturar/editar/revisar/aprobar/anular/administrar) con alcance, combinaciones prohibidas y cargo en las firmas. Autenticación local con correo y contraseña, o vía Microsoft Entra ID (SSO corporativo).
 - **Interfaz** — Navegación superior, paleta de comandos (⌘K / Ctrl+K), paneles laterales para catálogos y formatos de muestra a pantalla completa (ver `docs/DISENO_UI.md`).
 - **Respaldo y sincronización** — Respaldo local automatizado con sincronización opcional a OneDrive/Graph.
 - **Distribución autocontenida** — Build `standalone` de Next.js para desplegar con solo Node.js.
@@ -68,7 +68,7 @@ La base SQLite vive en `instance/ficotox.sqlite3` (se crea sola si no existe) y 
 
 ### Roles y usuarios iniciales
 
-El arranque ya no crea ningún rol ni concede permisos. Los 10 roles provisionales (catálogo en `scripts/roles-catalogo.json`) y un usuario local por rol se dan de alta con:
+El arranque ya no crea ningún rol ni concede permisos. Los 10 roles del laboratorio (matriz de la Fase 1 en `scripts/roles-catalogo.json`: acciones V/C/E/R/A/AN/G con alcance por módulo) y un usuario local por rol, con su asignación de rol, se dan de alta con:
 
 ```bash
 cp scripts/seed-usuarios.example.json scripts/seed-usuarios.local.json   # ignorado por git: escribir aquí las contraseñas
@@ -76,7 +76,7 @@ npm run dev            # solo la primera vez en una base nueva: abrir /api/healt
 npm run seed:roles     # node scripts/seed-roles-usuarios.mjs (idempotente; solo SQLite; servidor detenido)
 ```
 
-Cada alta queda en la bitácora de auditoría. Detalle y procedimiento de reinicio en `MANUAL_TECNICO.md` §9.2.1 y §15.3.
+Es idempotente y también carga la matriz en roles que ya existían sin ella. Cada alta y asignación queda en la bitácora de auditoría. Una persona puede tener varios roles con vigencia; se asignan y revocan desde Administración › Usuarios. Detalle en `docs/CATALOGO_PERMISOS.md` y `MANUAL_TECNICO.md` §9.2 y §15.3.
 
 ## Documentación
 
@@ -85,6 +85,7 @@ Cada alta queda en la bitácora de auditoría. Detalle y procedimiento de reinic
 - [`docs/EXPLICACION_PROYECTO.md`](./docs/EXPLICACION_PROYECTO.md) — arquitectura y flujo completo del sistema.
 - [`docs/DISENO_UI.md`](./docs/DISENO_UI.md) — sistema de diseño: tokens, tipografía, navegación y estados.
 - [`docs/MIGRACION_NEXTJS.md`](./docs/MIGRACION_NEXTJS.md) — plan, decisiones y resultado de la migración desde Flask.
+- [`docs/CATALOGO_PERMISOS.md`](./docs/CATALOGO_PERMISOS.md) — matriz de roles y permisos, alcances, combinaciones prohibidas y decisiones pendientes.
 
 ---
 

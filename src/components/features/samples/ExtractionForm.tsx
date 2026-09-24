@@ -446,7 +446,8 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
   const [error, setError] = useState<string | null>(null);
   const detailCache = useRef(new Map<number, ApiRecord>());
   const editing = !!item?.id;
-  const readOnly = editing && isSampleReadOnly(item?.estado);
+  const canEdit = editing ? can("ensayos", "E", { objeto: "extraccion", borrador: String(item?.estado || "registrada") === "registrada" }) : can("ensayos", "C", { objeto: "extraccion", borrador: true });
+  const readOnly = editing && (isSampleReadOnly(item?.estado) || !canEdit);
   const patch = (changes: Partial<ExtractionState>) => setForm((prev) => ({ ...prev, ...changes }));
   const setField = (key: string, value: string) => setForm((prev) => ({ ...prev, fields: { ...prev.fields, [key]: value } }));
   const setSteps = (changes: Record<string, boolean>) => setForm((prev) => ({ ...prev, steps: { ...prev.steps, ...changes } }));
@@ -583,7 +584,7 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
       const section = document.querySelector(`[data-fixed-key="${stockErrors[0].key}"]`)?.closest("section")?.id || "sec-extraccion";
       return fail(`Stock insuficiente: ${stockErrors.map((e) => e.message).join("; ")}`, section);
     }
-    if (!can("muestras", editing ? "update" : "create")) return fail("No tienes permiso para esta acción", "sec-datos");
+    if (!canEdit) return fail("No tienes permiso para esta acción", "sec-datos");
 
     // Equipos no aptos o insumos sin descuento: se avisa y se pide confirmacion explicita
     // (el catalogo de equipos aun no esta validado y las soluciones preparadas pueden no estar en inventario).
@@ -742,6 +743,7 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
       {readOnly && item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}
+          {item.anulado_cargo ? ` · Anuló como ${String(item.anulado_cargo)}` : ""}
         </Callout>
       ) : null}
       <FormCard id="sec-datos" title="Datos generales" description={`${meta.label}. ${meta.descripcion}`}>
@@ -844,7 +846,7 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
           {protocol.hasLimpiezaPerson && form.fields.limpieza === "si" ? (
             <PersonCard title="Quien realizó la limpieza" name={form.quienLimpieza} onName={(v) => patch({ quienLimpieza: v })} signature={form.firmaLimpieza} onSignature={(v) => patch({ firmaLimpieza: v })} />
           ) : null}
-          <PersonCard title="Quien supervisó" requires="aprobaciones" name={form.quienSuperviso} onName={(v) => patch({ quienSuperviso: v })} signature={form.firmaSuperviso} onSignature={(v) => patch({ firmaSuperviso: v })} />
+          <PersonCard title="Quien supervisó" requires="revision" name={form.quienSuperviso} onName={(v) => patch({ quienSuperviso: v })} signature={form.firmaSuperviso} onSignature={(v) => patch({ firmaSuperviso: v })} />
         </div>
         <Callout tone="info" title="Bitácoras" className="mt-4">
           Registrar el uso de cada equipo en su bitácora correspondiente y anotar el folio en la sección de equipos.

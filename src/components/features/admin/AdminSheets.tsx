@@ -1,88 +1,89 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { Eye, EyeSlash } from "@phosphor-icons/react";
+import { Eye, EyeSlash, Plus, Prohibit } from "@phosphor-icons/react";
+import { Callout, Panel } from "@/components/features/samples/FormLayout";
 import { useSession } from "@/components/session/SessionProvider";
 import { AvatarPicker } from "@/components/ui/AvatarPicker";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, Field, FormGrid, Input, Select, Switch, Textarea } from "@/components/ui/Field";
-import { Sheet } from "@/components/ui/Overlay";
+import { Sheet, usePrompt } from "@/components/ui/Overlay";
+import { Badge } from "@/components/ui/Primitives";
 import { HIDDEN_MODULES } from "@/lib/shared/features";
+import { ACCIONES, ACCION_KEYS, ALCANCES, MODULOS, alcanceLabel, firmaFilas, type Accion, type PermisoFila } from "@/lib/shared/permisos";
+import { REGLAS_COMBINACION } from "@/lib/shared/combinaciones-roles";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
+import { fmtDate } from "@/lib/client/format";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 
-/* ---------- Roles ---------- */
+/* ---------- Roles: matriz modulos x acciones con alcance por celda (Fase 1) ---------- */
 
-const FLAGS = [
-  { key: "can_read", label: "Leer" },
-  { key: "can_create", label: "Crear" },
-  { key: "can_update", label: "Editar" },
-  { key: "can_delete", label: "Eliminar" },
-] as const;
-type FlagKey = (typeof FLAGS)[number]["key"];
+type Matriz = Record<string, string | null>;
+const celda = (modulo: string, accion: string) => `${modulo}:${accion}`;
 
-export interface PermissionRow {
-  permiso_id: number;
-  /* Clave del módulo (reactivos, muestras, documentos...). */
-  clave: string;
-  nombre: string;
-  descripcion: string;
-  can_read: boolean;
-  can_create: boolean;
-  can_update: boolean;
-  can_delete: boolean;
+function matrizDesdeFilas(filas: PermisoFila[]): Matriz {
+  const out: Matriz = {};
+  for (const fila of filas) {
+    const key = celda(fila.modulo, fila.accion);
+    // Si una celda tuviera varios alcances, se muestra el primero ("total" primero).
+    if (!out[key] || fila.alcance === "total") out[key] = fila.alcance || "total";
+  }
+  return out;
 }
 
-export const toPermissionRows = (items: ApiRecord[]): PermissionRow[] =>
-  items.map((perm) => ({
-    permiso_id: Number(perm.permiso_id || perm.id),
-    clave: String(perm.clave || perm.permiso_clave || ""),
-    nombre: String(perm.nombre || ""),
-    descripcion: String(perm.descripcion || ""),
-    can_read: !!perm.can_read,
-    can_create: !!perm.can_create,
-    can_update: !!perm.can_update,
-    can_delete: !!perm.can_delete,
-  }));
+function filasDesdeMatriz(matriz: Matriz): PermisoFila[] {
+  const filas: PermisoFila[] = [];
+  for (const modulo of MODULOS) {
+    for (const accion of ACCION_KEYS) {
+      const alcance = matriz[celda(modulo.clave, accion)];
+      if (alcance) filas.push({ modulo: modulo.clave, accion, alcance });
+    }
+  }
+  return filas;
+}
 
-const fullRow = (row: PermissionRow) => FLAGS.every((flag) => row[flag.key]);
+const ACCION_AYUDA: Record<Accion, string> = {
+  V: "Ver",
+  C: "Crear / capturar",
+  E: "Editar borrador",
+  R: "Revisar",
+  A: "Aprobar / validar / liberar",
+  AN: "Anular con justificación",
+  G: "Administrar (implica todas)",
+};
 
-export function RoleSheet({ open, role, initialPermissions, onClose }: { open: boolean; role: ApiRecord | null; initialPermissions: PermissionRow[]; onClose: () => void }) {
+export function RoleSheet({ open, role, initialPermisos, usuarios = [], readOnly = false, onClose }: { open: boolean; role: ApiRecord | null; initialPermisos: PermisoFila[]; usuarios?: ApiRecord[]; readOnly?: boolean; onClose: () => void }) {
   const { token, can } = useSession();
+  const prompt = usePrompt();
   const [nombre, setNombre] = useState(String(role?.nombre || ""));
   const [descripcion, setDescripcion] = useState(String(role?.descripcion || ""));
   const [activo, setActivo] = useState(role ? !!role.activo : true);
-  const [rows, setRows] = useState<PermissionRow[]>(initialPermissions);
+  const [matriz, setMatriz] = useState<Matriz>(() => matrizDesdeFilas(initialPermisos));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editing = !!role?.id;
+  const puedeEditar = !readOnly && can("usuarios", "G");
 
-  const fullCount = rows.filter(fullRow).length;
-  const allChecked = rows.length > 0 && fullCount === rows.length;
-  const someChecked = fullCount > 0 && fullCount < rows.length;
-
-  const setRowFlag = (id: number, flag: FlagKey, checked: boolean) => setRows((prev) => prev.map((row) => (row.permiso_id === id ? { ...row, [flag]: checked } : row)));
-  const setRowAll = (id: number, checked: boolean) => setRows((prev) => prev.map((row) => (row.permiso_id === id ? { ...row, can_read: checked, can_create: checked, can_update: checked, can_delete: checked } : row)));
-  const setAll = (checked: boolean) => setRows((prev) => prev.map((row) => ({ ...row, can_read: checked, can_create: checked, can_update: checked, can_delete: checked })));
+  const toggle = (modulo: string, accion: string, checked: boolean) => setMatriz((prev) => ({ ...prev, [celda(modulo, accion)]: checked ? prev[celda(modulo, accion)] || "total" : null }));
+  const setAlcance = (modulo: string, accion: string, alcance: string) => setMatriz((prev) => ({ ...prev, [celda(modulo, accion)]: alcance }));
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    const payload = {
-      nombre: nombre.trim(),
-      descripcion: descripcion.trim(),
-      activo,
-      permissions: rows.map((row) => ({ permiso_id: row.permiso_id, can_read: row.can_read, can_create: row.can_create, can_update: row.can_update, can_delete: row.can_delete })),
-    };
-    if (!payload.nombre) {
+    if (!puedeEditar) return;
+    const permisos = filasDesdeMatriz(matriz);
+    if (!nombre.trim()) {
       setError("El nombre del rol es obligatorio");
       return;
     }
-    if (!can("roles", editing ? "update" : "create")) {
-      setError("No tienes permiso para esta acción");
-      return;
+    const cambiaPermisos = editing && (firmaFilas(initialPermisos) !== firmaFilas(permisos) || !!role?.activo !== activo);
+    let motivo: string | null = null;
+    if (cambiaPermisos) {
+      motivo = await prompt({ title: "Motivo del cambio de permisos", description: "Queda en la bitácora junto con los permisos antes y después.", label: "Motivo", minLength: 5, confirmLabel: "Guardar cambios" });
+      if (!motivo) return;
     }
+    const payload = { nombre: nombre.trim(), descripcion: descripcion.trim(), activo, permisos, ...(motivo ? { motivo } : {}) };
     setSubmitting(true);
     setError(null);
     try {
@@ -102,84 +103,134 @@ export function RoleSheet({ open, role, initialPermissions, onClose }: { open: b
     }
   };
 
+  const modulos = MODULOS.filter((m) => !HIDDEN_MODULES.has(m.clave) || Object.keys(matriz).some((k) => k.startsWith(`${m.clave}:`) && matriz[k]));
+
   return (
     <Sheet
       open={open}
       onOpenChange={(value) => !value && onClose()}
-      title={editing ? "Editar rol" : "Nuevo rol"}
-      description="Define qué puede ver y hacer cada módulo."
-      size="lg"
+      title={!puedeEditar ? `Permisos de ${String(role?.nombre || "rol")}` : editing ? "Editar rol" : "Nuevo rol"}
+      description="Qué puede hacer el rol en cada módulo y con qué alcance. Lo que no se marca, no se concede."
+      size="xl"
       footer={
         <>
-          {error ? <p className="mr-auto text-[13px] text-danger">{error}</p> : null}
           <Button variant="secondary" onClick={onClose}>
-            Cancelar
+            {puedeEditar ? "Cancelar" : "Cerrar"}
           </Button>
-          <Button type="submit" form="role-form" loading={submitting}>
-            {editing ? "Guardar cambios" : "Crear rol"}
-          </Button>
+          {puedeEditar ? (
+            <Button type="submit" form="role-form" loading={submitting}>
+              {editing ? "Guardar cambios" : "Crear rol"}
+            </Button>
+          ) : null}
         </>
       }
     >
       <form id="role-form" onSubmit={handleSubmit} className="flex flex-col gap-6" noValidate>
-        <FormGrid>
-          <Field label="Nombre" htmlFor="role-nombre" required className="sm:col-span-2">
-            <Input id="role-nombre" maxLength={50} value={nombre} onChange={(event) => setNombre(event.target.value)} autoFocus={!editing} invalid={!!error && !nombre.trim()} />
-          </Field>
-          <Field label="Descripción" htmlFor="role-descripcion" className="sm:col-span-2">
-            <Textarea id="role-descripcion" rows={2} value={descripcion} onChange={(event) => setDescripcion(event.target.value)} />
-          </Field>
-        </FormGrid>
-        <Switch checked={activo} onCheckedChange={setActivo} label="Rol activo" description="Los usuarios con un rol inactivo no pueden entrar." />
+        {error ? (
+          <Callout tone="danger" title={/combinaci/i.test(error) ? "Combinación de roles prohibida" : "No se pudo guardar"}>
+            {error}
+          </Callout>
+        ) : null}
+        <fieldset disabled={!puedeEditar} className="contents">
+          <FormGrid>
+            <Field label="Nombre" htmlFor="role-nombre" required className="sm:col-span-2">
+              <Input id="role-nombre" maxLength={100} value={nombre} onChange={(event) => setNombre(event.target.value)} autoFocus={!editing} invalid={!!error && !nombre.trim()} />
+            </Field>
+            <Field label="Descripción" htmlFor="role-descripcion" className="sm:col-span-2">
+              <Textarea id="role-descripcion" rows={2} value={descripcion} onChange={(event) => setDescripcion(event.target.value)} />
+            </Field>
+          </FormGrid>
+          <Switch checked={activo} onCheckedChange={setActivo} label="Rol activo" description="Un rol inactivo no concede permisos a nadie (sus asignaciones se conservan)." />
+        </fieldset>
 
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
+          <div>
             <h3 className="text-[15px] font-semibold text-ink">Permisos por módulo</h3>
-            <Checkbox
-              label="Seleccionar todo"
-              checked={allChecked}
-              disabled={!rows.length}
-              ref={(el) => {
-                if (el) el.indeterminate = someChecked;
-              }}
-              onChange={(event) => setAll(event.target.checked)}
-            />
+            <p className="text-[12.5px] text-ink-3">C, E, R, A y AN implican ver (V); G implica todas las acciones del módulo. El alcance limita la acción; los alcances marcados «se aplica en Fase X» se guardan pero todavía no restringen.</p>
           </div>
-          <div className="overflow-hidden rounded-card border border-line">
-            <table className="w-full text-[13px]">
+          <div className="overflow-x-auto rounded-card border border-line">
+            <table className="w-full min-w-[880px] text-[13px]">
               <thead className="bg-surface-2/70 text-[12px] text-ink-3">
                 <tr>
                   <th className="h-9 px-3 text-left font-medium">Módulo</th>
-                  {FLAGS.map((flag) => (
-                    <th key={flag.key} className="h-9 w-16 px-2 text-center font-medium">
-                      {flag.label}
+                  {ACCIONES.map((accion) => (
+                    <th key={accion.clave} className="h-9 px-1 text-center font-medium" title={ACCION_AYUDA[accion.clave]}>
+                      {accion.clave}
                     </th>
                   ))}
-                  <th className="h-9 w-16 px-2 text-center font-medium">Todo</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {/* Los módulos apagados (ver features.ts) no se muestran; sus permisos guardados viajan intactos al guardar. */}
-                {rows.filter((row) => !HIDDEN_MODULES.has(String(row.clave || ""))).map((row) => (
-                  <tr key={row.permiso_id} className="hover:bg-surface-2/40">
+                {modulos.map((modulo) => (
+                  <tr key={modulo.clave} className="align-top hover:bg-surface-2/40">
                     <td className="px-3 py-2">
-                      <div className="font-medium text-ink">{row.nombre}</div>
-                      {row.descripcion ? <div className="text-[12px] text-ink-3">{row.descripcion}</div> : null}
+                      <div className="font-medium text-ink">{modulo.nombre}</div>
+                      <div className="text-[11.5px] text-ink-3">{HIDDEN_MODULES.has(modulo.clave) ? "Módulo apagado por ahora" : modulo.descripcion}</div>
                     </td>
-                    {FLAGS.map((flag) => (
-                      <td key={flag.key} className="px-2 text-center">
-                        <Checkbox className="inline-flex" aria-label={`${flag.label} en ${row.nombre}`} checked={row[flag.key]} onChange={(event) => setRowFlag(row.permiso_id, flag.key, event.target.checked)} />
-                      </td>
-                    ))}
-                    <td className="px-2 text-center">
-                      <Checkbox className="inline-flex" aria-label={`Todo en ${row.nombre}`} checked={fullRow(row)} onChange={(event) => setRowAll(row.permiso_id, event.target.checked)} />
-                    </td>
+                    {ACCION_KEYS.map((accion) => {
+                      const alcance = matriz[celda(modulo.clave, accion)] || null;
+                      return (
+                        <td key={accion} className="px-1 py-2 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <Checkbox className="inline-flex" aria-label={`${accion} en ${modulo.nombre}`} checked={!!alcance} disabled={!puedeEditar} onChange={(event) => toggle(modulo.clave, accion, event.target.checked)} />
+                            {alcance ? (
+                              <select
+                                aria-label={`Alcance de ${accion} en ${modulo.nombre}`}
+                                value={alcance}
+                                disabled={!puedeEditar}
+                                onChange={(event) => setAlcance(modulo.clave, accion, event.target.value)}
+                                className="w-[92px] rounded-[6px] border border-line bg-surface px-1 py-0.5 text-[11px] text-ink-2"
+                                title={alcanceLabel(alcance)}
+                              >
+                                {ALCANCES.map((a) => (
+                                  <option key={a.clave} value={a.clave}>
+                                    {alcanceLabel(a.clave)}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : null}
+                          </div>
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
+
+        <Callout tone="info" title="Combinaciones de roles prohibidas">
+          Al guardar se comprueba que ninguna persona con este rol quede con una combinación prohibida; si pasa, el cambio se rechaza y se indica a quién afecta.
+          <ul className="mt-1.5 list-disc pl-4">
+            {REGLAS_COMBINACION.map((regla) => (
+              <li key={regla.numero}>
+                Regla {regla.numero}: {regla.titulo}
+              </li>
+            ))}
+          </ul>
+        </Callout>
+
+        {editing ? (
+          <Panel title="Personas con este rol" description="Asignaciones vigentes o por comenzar.">
+            {usuarios.length ? (
+              <ul className="flex flex-col gap-1 text-[13px]">
+                {usuarios.map((u) => (
+                  <li key={String(u.id)} className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="font-medium text-ink">{u.nombre || u.email}</span>
+                    <span className="text-ink-3">{u.email}</span>
+                    <span className="text-[12px] text-ink-4">
+                      desde {fmtDate(u.vigente_desde)}
+                      {u.vigente_hasta ? ` hasta ${fmtDate(u.vigente_hasta)}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-ink-3">Nadie tiene este rol.</p>
+            )}
+          </Panel>
+        ) : null}
       </form>
     </Sheet>
   );
@@ -187,36 +238,59 @@ export function RoleSheet({ open, role, initialPermissions, onClose }: { open: b
 
 /* ---------- Usuarios ---------- */
 
-export function UserSheet({ open, item, onClose }: { open: boolean; item: ApiRecord | null; onClose: () => void }) {
-  const { token, can, authConfig } = useSession();
+const ESTADO_ASIGNACION: Record<string, { label: string; tone: "success" | "brand" | "neutral" | "danger" }> = {
+  vigente: { label: "Vigente", tone: "success" },
+  futuro: { label: "Por comenzar", tone: "brand" },
+  vencido: { label: "Vencido", tone: "neutral" },
+  revocado: { label: "Revocado", tone: "danger" },
+};
+
+const hoyLocal = () => new Date().toLocaleDateString("en-CA");
+
+export function UserSheet({ open, item, readOnly = false, onClose }: { open: boolean; item: ApiRecord | null; readOnly?: boolean; onClose: () => void }) {
+  const { token, can, authConfig, user: me } = useSession();
+  const prompt = usePrompt();
   const [roles, setRoles] = useState<ApiRecord[]>([]);
   const [nombre, setNombre] = useState(String(item?.nombre || ""));
   const [email, setEmail] = useState(String(item?.email || ""));
-  const [roleId, setRoleId] = useState(item?.id_rol ? String(item.id_rol) : "");
+  const [roleId, setRoleId] = useState("");
+  const [motivoAlta, setMotivoAlta] = useState("Alta de usuario");
   const [departamento, setDepartamento] = useState(String(item?.departamento || ""));
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [activo, setActivo] = useState(item ? !!item.activo : true);
   const [avatar, setAvatar] = useState<string | null>(item?.avatar ? String(item.avatar) : null);
+  const [asignaciones, setAsignaciones] = useState<ApiRecord[]>((item?.asignaciones || []) as ApiRecord[]);
+  const [nueva, setNueva] = useState({ rol_id: "", desde: hoyLocal(), hasta: "", motivo: "" });
+  const [asignando, setAsignando] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editing = !!item?.id;
+  const puedeAdministrar = !readOnly && can("usuarios", "G");
+  const esPropia = editing && Number(me?.id) === Number(item?.id);
 
   useEffect(() => {
-    if (!open || !token) return;
+    if (!open || !token || !puedeAdministrar) return;
     getJsonAuth(`${API_BASE_URL}/admin/roles`, token)
       .then((data) => setRoles(((data.items || []) as ApiRecord[]).filter((role) => !!role.activo)))
       .catch(() => setRoles([]));
-  }, [open, token]);
+  }, [open, token, puedeAdministrar]);
+
+  const userId = item?.id;
+  const recargar = async () => {
+    if (!userId) return;
+    const data = await getJsonAuth(`${API_BASE_URL}/admin/usuarios/${userId}`, token);
+    setAsignaciones(((data.item || {}).asignaciones || []) as ApiRecord[]);
+  };
 
   const allowedDomain = authConfig.microsoft?.allowedDomain || "cicese.mx";
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!puedeAdministrar) return;
     const payload: Record<string, unknown> = {
       nombre: nombre.trim(),
       email: email.trim(),
-      id_rol: Number(roleId || 0),
       departamento: departamento.trim() || null,
       ...(avatar ? { avatar } : {}),
       activo,
@@ -226,13 +300,22 @@ export function UserSheet({ open, item, onClose }: { open: boolean; item: ApiRec
       setError("El correo es obligatorio");
       return;
     }
-    if (!String(payload.email).toLowerCase().endsWith(`@${allowedDomain}`)) {
+    const emailCambio = !editing || String(item?.email || "").toLowerCase() !== String(payload.email).toLowerCase();
+    if (emailCambio && !String(payload.email).toLowerCase().endsWith(`@${allowedDomain}`)) {
       setError(`Solo se aceptan correos @${allowedDomain}`);
       return;
     }
-    if (!payload.id_rol) {
-      setError("Selecciona un rol");
-      return;
+    if (!editing) {
+      if (!roleId) {
+        setError("Selecciona el rol inicial");
+        return;
+      }
+      if (motivoAlta.trim().length < 5) {
+        setError("Indica el motivo de la asignación (al menos 5 caracteres)");
+        return;
+      }
+      payload.rol_id = Number(roleId);
+      payload.motivo = motivoAlta.trim();
     }
     if (!editing && !password) {
       setError("Define una contraseña inicial");
@@ -240,10 +323,6 @@ export function UserSheet({ open, item, onClose }: { open: boolean; item: ApiRec
     }
     if (password && password.length < 8) {
       setError("La contraseña debe tener al menos 8 caracteres");
-      return;
-    }
-    if (!can("usuarios", editing ? "update" : "create")) {
-      setError("No tienes permiso para esta acción");
       return;
     }
     setSubmitting(true);
@@ -265,65 +344,198 @@ export function UserSheet({ open, item, onClose }: { open: boolean; item: ApiRec
     }
   };
 
+  const asignar = async () => {
+    if (!nueva.rol_id) return toast.error("Elige el rol a asignar");
+    if (nueva.motivo.trim().length < 5) return toast.error("Indica el motivo de la asignación (al menos 5 caracteres)");
+    setAsignando(true);
+    try {
+      await sendJsonAuth("POST", `${API_BASE_URL}/admin/usuarios/${item!.id}/roles`, token, { rol_id: Number(nueva.rol_id), vigente_desde: nueva.desde || null, vigente_hasta: nueva.hasta || null, motivo: nueva.motivo.trim() });
+      toast.success("Rol asignado");
+      setNueva({ rol_id: "", desde: hoyLocal(), hasta: "", motivo: "" });
+      await recargar();
+      invalidate("usuarios", "roles");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo asignar el rol");
+    } finally {
+      setAsignando(false);
+    }
+  };
+
+  const revocar = async (asignacion: ApiRecord) => {
+    const motivo = await prompt({ title: `Revocar el rol "${asignacion.rol}"`, description: "La asignación se conserva en el historial como revocada; los permisos dejan de contar de inmediato.", label: "Motivo", minLength: 5, confirmLabel: "Revocar", tone: "danger" });
+    if (!motivo) return;
+    try {
+      await sendJsonAuth("POST", `${API_BASE_URL}/admin/usuarios/${item!.id}/roles/${asignacion.id}/revocar`, token, { motivo });
+      toast.success("Rol revocado");
+      await recargar();
+      invalidate("usuarios", "roles");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo revocar el rol");
+    }
+  };
+
+  const ordenadas = useMemo(() => {
+    const peso: Record<string, number> = { vigente: 0, futuro: 1, vencido: 2, revocado: 3 };
+    return [...asignaciones].sort((a, b) => (peso[String(a.estado)] ?? 9) - (peso[String(b.estado)] ?? 9));
+  }, [asignaciones]);
+
   return (
     <Sheet
       open={open}
       onOpenChange={(value) => !value && onClose()}
-      title={editing ? "Editar usuario" : "Nuevo usuario"}
-      description="Acceso con correo institucional y permisos según su rol."
+      title={!puedeAdministrar ? String(item?.nombre || item?.email || "Usuario") : editing ? "Editar usuario" : "Nuevo usuario"}
+      description={editing ? "Datos de acceso y roles con su vigencia." : "Acceso con correo institucional; la cuenta nace con un rol inicial."}
+      size="lg"
       footer={
         <>
           {error ? <p className="mr-auto text-[13px] text-danger">{error}</p> : null}
           <Button variant="secondary" onClick={onClose}>
-            Cancelar
+            {puedeAdministrar ? "Cancelar" : "Cerrar"}
           </Button>
-          <Button type="submit" form="user-form" loading={submitting}>
-            {editing ? "Guardar cambios" : "Crear usuario"}
-          </Button>
+          {puedeAdministrar ? (
+            <Button type="submit" form="user-form" loading={submitting}>
+              {editing ? "Guardar cambios" : "Crear usuario"}
+            </Button>
+          ) : null}
         </>
       }
     >
       <form id="user-form" onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
-        <FormGrid>
-          <Field label="Nombre" htmlFor="u-nombre">
-            <Input id="u-nombre" maxLength={100} value={nombre} onChange={(event) => setNombre(event.target.value)} autoFocus={!editing} />
-          </Field>
-          <Field label="Correo" htmlFor="u-email" required hint={`Debe ser @${allowedDomain}`}>
-            <Input id="u-email" type="email" maxLength={100} value={email} onChange={(event) => setEmail(event.target.value)} invalid={!!error && !email.trim()} />
-          </Field>
-          <Field label="Rol" htmlFor="u-rol" required>
-            <Select id="u-rol" value={roles.some((role) => String(role.id) === roleId) ? roleId : ""} onChange={(event) => setRoleId(event.target.value)} invalid={!!error && !roleId}>
-              <option value="">Seleccionar rol</option>
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.nombre}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Departamento" htmlFor="u-depto">
-            <Input id="u-depto" maxLength={100} value={departamento} onChange={(event) => setDepartamento(event.target.value)} />
-          </Field>
-          <Field label="Avatar" hint={editing ? "La persona también puede cambiarlo desde Mi cuenta." : "Si no eliges uno, se asigna al azar."} className="sm:col-span-2">
-            <AvatarPicker value={avatar} seed={email.trim().toLowerCase() || nombre.toLowerCase()} onChange={setAvatar} size={44} />
-          </Field>
-          <Field label={editing ? "Nueva contraseña" : "Contraseña"} htmlFor="u-password" required={!editing} hint={editing ? "Déjala vacía para conservar la actual." : "Mínimo 8 caracteres."} className="sm:col-span-2">
-            <Input
-              id="u-password"
-              type={showPassword ? "text" : "password"}
-              autoComplete="new-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              trailing={
-                <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"} className="rounded-full p-1 text-ink-3 hover:bg-surface-2 hover:text-ink">
-                  {showPassword ? <EyeSlash size={16} /> : <Eye size={16} />}
-                </button>
-              }
-            />
-          </Field>
-        </FormGrid>
-        <Switch checked={activo} onCheckedChange={setActivo} label="Usuario activo" description="Un usuario inactivo conserva su historial pero no puede entrar." />
+        <fieldset disabled={!puedeAdministrar} className="contents">
+          <FormGrid>
+            <Field label="Nombre" htmlFor="u-nombre">
+              <Input id="u-nombre" maxLength={100} value={nombre} onChange={(event) => setNombre(event.target.value)} autoFocus={!editing} />
+            </Field>
+            <Field label="Correo" htmlFor="u-email" required hint={editing ? undefined : `Debe ser @${allowedDomain}`}>
+              <Input id="u-email" type="email" maxLength={100} value={email} onChange={(event) => setEmail(event.target.value)} invalid={!!error && !email.trim()} />
+            </Field>
+            {!editing ? (
+              <>
+                <Field label="Rol inicial" htmlFor="u-rol" required>
+                  <Select id="u-rol" value={roles.some((role) => String(role.id) === roleId) ? roleId : ""} onChange={(event) => setRoleId(event.target.value)} invalid={!!error && !roleId}>
+                    <option value="">Seleccionar rol</option>
+                    {roles.map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.nombre}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Motivo de la asignación" htmlFor="u-motivo-rol" required hint="Queda en la bitácora.">
+                  <Input id="u-motivo-rol" maxLength={200} value={motivoAlta} onChange={(event) => setMotivoAlta(event.target.value)} />
+                </Field>
+              </>
+            ) : null}
+            <Field label="Departamento" htmlFor="u-depto">
+              <Input id="u-depto" maxLength={100} value={departamento} onChange={(event) => setDepartamento(event.target.value)} />
+            </Field>
+            {puedeAdministrar ? (
+              <>
+                <Field label="Avatar" hint={editing ? "La persona también puede cambiarlo desde Mi cuenta." : "Si no eliges uno, se asigna al azar."} className="sm:col-span-2">
+                  <AvatarPicker value={avatar} seed={email.trim().toLowerCase() || nombre.toLowerCase()} onChange={setAvatar} size={44} />
+                </Field>
+                <Field label={editing ? "Nueva contraseña" : "Contraseña"} htmlFor="u-password" required={!editing} hint={editing ? "Déjala vacía para conservar la actual." : "Mínimo 8 caracteres."} className="sm:col-span-2">
+                  <Input
+                    id="u-password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    trailing={
+                      <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"} className="rounded-full p-1 text-ink-3 hover:bg-surface-2 hover:text-ink">
+                        {showPassword ? <EyeSlash size={16} /> : <Eye size={16} />}
+                      </button>
+                    }
+                  />
+                </Field>
+              </>
+            ) : null}
+          </FormGrid>
+          {puedeAdministrar ? <Switch checked={activo} onCheckedChange={setActivo} label="Usuario activo" description="Un usuario inactivo conserva su historial pero no puede entrar." /> : null}
+        </fieldset>
       </form>
+
+      {editing ? (
+        <section className="mt-6 flex flex-col gap-3" aria-label="Roles del usuario">
+          <div>
+            <h3 className="text-[15px] font-semibold text-ink">Roles</h3>
+            <p className="text-[12.5px] text-ink-3">Los permisos son la unión de los roles vigentes. Nada se borra: revocar deja la asignación en el historial.</p>
+          </div>
+          {ordenadas.length ? (
+            <ul className="flex flex-col divide-y divide-line rounded-card border border-line">
+              {ordenadas.map((a) => {
+                const estado = ESTADO_ASIGNACION[String(a.estado)] || ESTADO_ASIGNACION.vigente;
+                const revocable = puedeAdministrar && !esPropia && (a.estado === "vigente" || a.estado === "futuro");
+                return (
+                  <li key={String(a.id)} className="flex flex-wrap items-start gap-3 px-3 py-2.5" data-asignacion={String(a.id)}>
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-ink">{a.rol || `Rol #${a.rol_id}`}</span>
+                        <Badge tone={estado.tone} dot>
+                          {estado.label}
+                        </Badge>
+                      </div>
+                      <span className="text-[12.5px] text-ink-3">
+                        Desde {fmtDate(a.vigente_desde)}
+                        {a.vigente_hasta ? ` hasta ${fmtDate(a.vigente_hasta)}` : " · sin fecha de fin"}
+                        {a.asignado_por_nombre ? ` · asignó ${a.asignado_por_nombre}` : ""}
+                      </span>
+                      {a.motivo ? <span className="text-[12.5px] text-ink-2">Motivo: {a.motivo}</span> : null}
+                      {a.revocado_en ? (
+                        <span className="text-[12.5px] text-danger">
+                          Revocado el {fmtDate(a.revocado_en)}
+                          {a.revocado_por_nombre ? ` por ${a.revocado_por_nombre}` : ""}
+                          {a.motivo_revocacion ? ` · ${a.motivo_revocacion}` : ""}
+                        </span>
+                      ) : null}
+                    </div>
+                    {revocable ? (
+                      <Button size="sm" variant="secondary" icon={<Prohibit size={14} />} onClick={() => revocar(a)}>
+                        Revocar
+                      </Button>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-ink-3">Sin roles: la persona puede entrar pero no ve nada.</p>
+          )}
+
+          {puedeAdministrar && esPropia ? <Callout tone="info">Nadie puede asignarse ni revocarse roles a sí mismo: pide a otra persona con administración de usuarios que lo haga.</Callout> : null}
+
+          {puedeAdministrar && !esPropia ? (
+            <Panel title="Asignar rol" description="La asignación se valida contra las combinaciones prohibidas y queda en la bitácora con su motivo.">
+              <FormGrid>
+                <Field label="Rol" htmlFor="u-asignar-rol" required>
+                  <Select id="u-asignar-rol" value={nueva.rol_id} onChange={(event) => setNueva((prev) => ({ ...prev, rol_id: event.target.value }))}>
+                    <option value="">Seleccionar rol</option>
+                    {roles.map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.nombre}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Motivo" htmlFor="u-asignar-motivo" required>
+                  <Input id="u-asignar-motivo" maxLength={300} value={nueva.motivo} onChange={(event) => setNueva((prev) => ({ ...prev, motivo: event.target.value }))} placeholder="Ej. Cambio de funciones" />
+                </Field>
+                <Field label="Vigente desde" htmlFor="u-asignar-desde">
+                  <Input id="u-asignar-desde" type="date" value={nueva.desde} onChange={(event) => setNueva((prev) => ({ ...prev, desde: event.target.value }))} />
+                </Field>
+                <Field label="Vigente hasta" htmlFor="u-asignar-hasta" hint="Opcional">
+                  <Input id="u-asignar-hasta" type="date" value={nueva.hasta} onChange={(event) => setNueva((prev) => ({ ...prev, hasta: event.target.value }))} />
+                </Field>
+              </FormGrid>
+              <div>
+                <Button icon={<Plus size={14} weight="bold" />} onClick={asignar} loading={asignando}>
+                  Asignar rol
+                </Button>
+              </div>
+            </Panel>
+          ) : null}
+        </section>
+      ) : null}
     </Sheet>
   );
 }

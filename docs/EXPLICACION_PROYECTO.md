@@ -171,14 +171,16 @@ Se usan funciones `ensure*Schema()` en cada request para:
 
 ### 7.2 Autorizacion
 
-RBAC por modulo y accion (un rol por usuario):
-- Acciones tipicas: `read`, `create`, `update`, `delete`.
-- El arranque no crea roles ni concede permisos; un permiso ausente es "no concedido".
-- Catalogo provisional de 10 roles (Fase 0) en `scripts/roles-catalogo.json`, dado de alta con `scripts/seed-roles-usuarios.mjs`; tabla completa en `MANUAL_TECNICO.md` §9.2.1.
-- Siempre debe quedar un usuario activo con `usuarios:update` y `roles:update` (409 si un cambio lo impide).
+Permisos por modulo, accion y alcance (Fase 1; detalle en `docs/CATALOGO_PERMISOS.md`):
+- Modulos: usuarios, documentos, muestras, ensayos, informes, equipos, inventario, calidad, compras.
+- Acciones: V (ver), C (crear), E (editar borrador), R (revisar), A (aprobar), AN (anular), G (administrar); cada permiso lleva un alcance (total, propio, estado, recepcion, preparacion, borrador...).
+- Una persona puede tener varios roles con vigencia (`usuario_roles`); sus permisos son la union de los roles vigentes y se calculan en cada peticion (el JWT solo identifica a la persona).
+- El arranque no crea roles ni concede permisos; la matriz de los 10 roles esta en `scripts/roles-catalogo.json`.
+- Combinaciones de roles prohibidas (`src/lib/shared/combinaciones-roles.ts`) y guarda: siempre queda un usuario activo con `usuarios:G`.
+- Al firmar, revisar, aprobar, autorizar o anular se guarda el cargo (rol) con el que se actuo.
 - Validacion en cada endpoint:
   - `await requireUser(request)`
-  - `await requirePermission(s, user, "modulo", "accion")`
+  - `await requirePermission(s, user, "modulo", "V" | "C" | "E" | "R" | "A" | "AN" | "G", contexto?)`
 
 ## 8. Inventario y muestras (flujo operativo)
 

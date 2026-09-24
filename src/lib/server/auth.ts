@@ -4,12 +4,11 @@ import { HttpError } from "./http";
 
 /* Portado de utils/auth.py del backend Flask original (JWT HS256 con PyJWT). */
 
+/* El token solo identifica a la persona; roles y permisos se leen de la base en cada peticion. */
 export interface CurrentUser extends JWTPayload {
   sub: string;
-  role_id?: number | null;
   email?: string;
   nombre?: string;
-  rol?: string;
 }
 
 function secretKey(): Uint8Array {

@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Field, Input, Textarea } from "@/components/ui/Field";
+import { Field, Textarea } from "@/components/ui/Field";
 import { Dialog } from "@/components/ui/Overlay";
+import { EditableScope } from "./FormLayout";
 import { SignaturePad } from "./SignaturePad";
 
 /*
- * Dialogo de firma para revisar, aprobar o autorizar: deja constancia con
- * nombre (el de la sesion), cargo opcional, firma y observaciones.
+ * Dialogo de firma para revisar, aprobar o autorizar: deja constancia con el
+ * nombre de la sesion, firma y observaciones. El cargo no se captura: el
+ * servidor guarda el del rol con el que se actua (si hay varios, el dialogo
+ * "Actuar como" lo pregunta al confirmar).
  */
 export function SignDialog({
   open,
@@ -16,7 +19,6 @@ export function SignDialog({
   title,
   description,
   confirmLabel,
-  withCargo = true,
   withObservaciones = false,
   requireSignature = false,
   loading = false,
@@ -27,14 +29,12 @@ export function SignDialog({
   title: string;
   description?: string;
   confirmLabel: string;
-  withCargo?: boolean;
   withObservaciones?: boolean;
   requireSignature?: boolean;
   loading?: boolean;
-  onConfirm: (data: { firma: string; cargo: string; observaciones: string }) => Promise<void> | void;
+  onConfirm: (data: { firma: string; observaciones: string }) => Promise<void> | void;
 }) {
   const [firma, setFirma] = useState("");
-  const [cargo, setCargo] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +44,7 @@ export function SignDialog({
       return;
     }
     setError(null);
-    await onConfirm({ firma, cargo: cargo.trim(), observaciones: observaciones.trim() });
+    await onConfirm({ firma, observaciones: observaciones.trim() });
   };
 
   return (
@@ -66,18 +66,15 @@ export function SignDialog({
       }
     >
       <div className="flex flex-col gap-4">
-        {withCargo ? (
-          <Field label="Cargo" htmlFor="sign-cargo" hint="Aparece junto a tu nombre en el registro y en el informe.">
-            <Input id="sign-cargo" maxLength={120} value={cargo} onChange={(event) => setCargo(event.target.value)} placeholder="Ej. Coordinadora técnica" />
-          </Field>
-        ) : null}
         {withObservaciones ? (
           <Field label="Observaciones" htmlFor="sign-obs">
             <Textarea id="sign-obs" rows={3} value={observaciones} onChange={(event) => setObservaciones(event.target.value)} />
           </Field>
         ) : null}
         <Field label={requireSignature ? "Firma" : "Firma (opcional)"}>
-          <SignaturePad value={firma} onChange={setFirma} label={`Firma: ${title}`} />
+          <EditableScope>
+            <SignaturePad value={firma} onChange={setFirma} label={`Firma: ${title}`} />
+          </EditableScope>
         </Field>
       </div>
     </Dialog>

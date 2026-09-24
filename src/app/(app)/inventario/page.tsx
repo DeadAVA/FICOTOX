@@ -10,7 +10,7 @@ import { INVENTORY_TABS } from "@/lib/client/nav";
 export default function InventarioIndexPage() {
   const router = useRouter();
   const { can } = useSession();
-  const first = INVENTORY_TABS.find((tab) => can(tab.module));
+  const first = INVENTORY_TABS.find((tab) => !!tab.module && can(tab.module));
 
   useEffect(() => {
     if (first) router.replace(first.href);

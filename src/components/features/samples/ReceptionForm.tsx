@@ -17,7 +17,7 @@ import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { ACCEPTANCE_DECISIONS, DISPOSAL_TYPES, LEGACY_INSPECTION_REQUIREMENTS, LEGACY_RECEPTION_METHODS, LEGACY_RECEPTION_SAMPLE_TYPES, RECEPTION_ANALYSIS_TYPES, RECEPTION_INSPECTION_REQUIREMENTS, RECEPTION_METHODS, RECEPTION_SAMPLE_TYPES, CLIENT_CONTACT_MEDIA, RECEPTION_DELIVERY_MEDIA, STORAGE_PLACES } from "@/lib/shared/sgc";
-import { Callout, ChoiceCard, ChoiceGrid, FieldGroup, FormCard, FormPage, Panel, PersonCard, missingMessage, missingSections, openFormSection, type FormSectionDef } from "./FormLayout";
+import { Callout, ChoiceCard, ChoiceGrid, EditableScope, FieldGroup, FormCard, FormPage, Panel, PersonCard, missingMessage, missingSections, openFormSection, type FormSectionDef } from "./FormLayout";
 import { PersonSelect } from "./PersonSelect";
 import { SignaturePad } from "./SignaturePad";
 import { FolioChip, SampleStatus } from "./status";
@@ -249,7 +249,8 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
   const [disposicion, setDisposicion] = useState({ tipo: "", tipoOtro: "", fecha: isoDate(new Date()), responsable: formatActiveUserSignature(), remanentes: "", observaciones: "", firma: "" });
   const [savingDisposicion, setSavingDisposicion] = useState(false);
   const editing = !!item?.id;
-  const readOnly = editing && isSampleReadOnly(item?.estado);
+  const canEdit = editing ? can("muestras", "E", { objeto: "recepcion", borrador: String(item?.estado || "registrada") === "registrada" }) : can("muestras", "C", { objeto: "recepcion", borrador: true });
+  const readOnly = editing && (isSampleReadOnly(item?.estado) || !canEdit);
   const patch = (changes: Partial<SampleForm>) => setForm((prev) => ({ ...prev, ...changes }));
 
   useEffect(() => {
@@ -362,7 +363,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
     if (form.decision && !inspectionComplete) return fail("Para decidir la aceptación completa la inspección visual (C, NC o NA en cada requisito)", "sec-inspeccion");
     if (form.decision === "aceptada" && hasNc) return fail("Hay requisitos que no cumplen: la muestra solo puede aceptarse con desviación o rechazarse", "sec-aceptacion");
     if (needsComunicacion && (!form.comunicacion.fecha || !form.comunicacion.medio)) return fail("Registra la comunicación al cliente (fecha y medio)", "sec-aceptacion");
-    if (!can("muestras", editing ? "update" : "create")) return fail("No tienes permiso para esta acción", "sec-recepcion");
+    if (!canEdit) return fail("No tienes permiso para esta acción", "sec-recepcion");
     setSubmitting(true);
     setError(null);
     try {
@@ -411,7 +412,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
   const procesamientos = (item?.procesamientos || []) as ApiRecord[];
   // Una muestra rechazada tambien se dispone (se devuelve o se desecha); solo las
   // cerradas y las anuladas ya no admiten disposicion.
-  const puedeDisponer = editing && !["cerrada", "anulada"].includes(String(form.estado)) && can("muestras", "update") && !savedDisposicion;
+  const puedeDisponer = editing && !["cerrada", "anulada"].includes(String(form.estado)) && can("muestras", "A") && !savedDisposicion;
 
   return (
     <FormPage
@@ -501,7 +502,9 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
                     <Textarea id="r-disp-obs" rows={3} value={disposicion.observaciones} onChange={(event) => setDisposicion({ ...disposicion, observaciones: event.target.value })} />
                   </Field>
                   <Field label="Firma del responsable">
-                    <SignaturePad value={disposicion.firma} onChange={(value) => setDisposicion({ ...disposicion, firma: value })} label="Firma de la disposición" />
+                    <EditableScope>
+                      <SignaturePad value={disposicion.firma} onChange={(value) => setDisposicion({ ...disposicion, firma: value })} label="Firma de la disposición" />
+                    </EditableScope>
                   </Field>
                 </FormGrid>
                 <div>
@@ -536,6 +539,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
       {readOnly && item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}
+          {item.anulado_cargo ? ` · Anuló como ${String(item.anulado_cargo)}` : ""}
         </Callout>
       ) : null}
 

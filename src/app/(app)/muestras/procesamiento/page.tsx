@@ -23,7 +23,7 @@ import type { ApiRecord } from "@/lib/client/types";
 
 export default function ProcesamientoListPage() {
   return (
-    <RequireModule modules="muestras">
+    <RequireModule modules="ensayos">
       <ProcesamientoList />
     </RequireModule>
   );
@@ -53,9 +53,10 @@ function ProcesamientoList() {
   );
   const items = resource.data;
 
-  const canCreate = can("muestras", "create");
-  const canUpdate = can("muestras", "update");
-  const canDelete = can("muestras", "delete");
+  const canCreate = can("ensayos", "C", { objeto: "procesamiento", borrador: true });
+  const canEdit = (item: ApiRecord) => can("ensayos", "E", { objeto: "procesamiento", borrador: String(item.estado || "registrada") === "registrada" });
+  const canExtraer = can("ensayos", "C", { objeto: "extraccion", borrador: true });
+  const canDelete = can("ensayos", "AN");
 
   const organismoDe = (item: ApiRecord) => (Array.isArray(item.tipo_organismo) ? String(item.tipo_organismo[0] || "") : String(item.tipo_organismo || ""));
   const count = (predicate: (item: ApiRecord) => boolean) => (items ? items.filter(predicate).length : null);
@@ -94,8 +95,8 @@ function ProcesamientoList() {
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulada = item.estado === "anulada";
     const list: MenuItem[] = [{ label: "Abrir", description: "Ver el formato completo", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/muestras/procesamiento/${item.id}`) }];
-    if (canUpdate && !anulada) list.push({ label: "Editar", description: "Corregir pasos, pesos o resguardo", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/procesamiento/${item.id}`) });
-    if (canCreate && !anulada) list.push({ label: "Extraer", description: "Nueva extracción ASP o DSP de esta molienda", icon: <Drop size={16} weight="duotone" />, tone: "success", onSelect: () => router.push(`/muestras/extraccion/nueva?procesamiento=${item.id}`) });
+    if (canEdit(item) && !anulada) list.push({ label: "Editar", description: "Corregir pasos, pesos o resguardo", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/procesamiento/${item.id}`) });
+    if (canExtraer && !anulada) list.push({ label: "Extraer", description: "Nueva extracción ASP o DSP de esta molienda", icon: <Drop size={16} weight="duotone" />, tone: "success", onSelect: () => router.push(`/muestras/extraccion/nueva?procesamiento=${item.id}`) });
     if (canDelete) {
       if (anulada) list.push({ label: "Restaurar procesamiento", description: "Vuelve a la lista con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => restaurar(item) });
       else list.push({ label: "Anular procesamiento…", description: "Queda en la bitácora con motivo", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => anular(item) });

@@ -57,9 +57,10 @@ function RecepcionList() {
   );
   const items = resource.data;
 
-  const canCreate = can("muestras", "create");
-  const canUpdate = can("muestras", "update");
-  const canDelete = can("muestras", "delete");
+  const canCreate = can("muestras", "C", { objeto: "recepcion", borrador: true });
+  const canEdit = (item: ApiRecord) => can("muestras", "E", { objeto: "recepcion", borrador: String(item.estado || "registrada") === "registrada" });
+  const canProcesar = can("ensayos", "C", { objeto: "procesamiento", borrador: true });
+  const canDelete = can("muestras", "AN");
 
   const count = (predicate: (item: ApiRecord) => boolean) => (items ? items.filter(predicate).length : null);
   const visible = useMemo(() => {
@@ -108,9 +109,9 @@ function RecepcionList() {
 
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulada = item.estado === "anulada";
-    const puedeProcesar = canCreate && !anulada && ["aceptada", "aceptada_con_desviacion"].includes(String(item.decision_aceptacion || "")) && !["rechazada", "cerrada"].includes(String(item.estado));
+    const puedeProcesar = canProcesar && !anulada && ["aceptada", "aceptada_con_desviacion"].includes(String(item.decision_aceptacion || "")) && !["rechazada", "cerrada"].includes(String(item.estado));
     const list: MenuItem[] = [{ label: "Abrir", description: "Ver el formato completo", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/muestras/recepcion/${item.id}`) }];
-    if (canUpdate && !anulada) list.push({ label: "Editar", description: "Cambiar datos o decidir la aceptación", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/recepcion/${item.id}`) });
+    if (canEdit(item) && !anulada) list.push({ label: "Editar", description: "Cambiar datos o decidir la aceptación", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/recepcion/${item.id}`) });
     if (puedeProcesar) list.push({ label: "Procesar", description: "Crear el procesamiento de esta muestra", icon: <Flask size={16} weight="duotone" />, tone: "success", onSelect: () => router.push(`/muestras/procesamiento/nuevo?recepcion=${item.id}`) });
     if (canDelete) {
       if (anulada) list.push({ label: "Restaurar recepción", description: "Vuelve a la lista con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => restaurar(item) });

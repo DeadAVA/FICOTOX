@@ -209,23 +209,27 @@ src/lib/server/modules/admin.ts
 ```
 
 ```text
-GET    /api/admin/roles
-GET    /api/admin/permissions
-GET    /api/admin/roles/<id>
-POST   /api/admin/roles
-PUT    /api/admin/roles/<id>
-DELETE /api/admin/roles/<id>
+GET    /api/admin/permissions                          catalogo: modulos, acciones y alcances
+GET    /api/admin/roles                                roles con su matriz (permisos) y usuarios vigentes
+GET    /api/admin/roles/<id>                           { role, permisos, usuarios }
+POST   /api/admin/roles                                { nombre, descripcion, activo, permisos: [{modulo, accion, alcance}], motivo }
+PUT    /api/admin/roles/<id>                           idem; motivo obligatorio si cambian permisos o activo
+DELETE /api/admin/roles/<id>                           solo si nunca se asigno y no es sistemico
 
-GET    /api/admin/usuarios
-GET    /api/admin/usuarios/<id>
-POST   /api/admin/usuarios
-PUT    /api/admin/usuarios/<id>
-DELETE /api/admin/usuarios/<id>
+GET    /api/admin/usuarios                             con roles vigentes (alcance "propio": solo la propia cuenta)
+GET    /api/admin/usuarios/<id>                        con asignaciones (vigente / futuro / vencido / revocado)
+POST   /api/admin/usuarios                             exige rol_id (rol inicial)
+PUT    /api/admin/usuarios/<id>                        datos de la cuenta (los roles no se cambian aqui)
+DELETE /api/admin/usuarios/<id>                        baja logica con motivo
+POST   /api/admin/usuarios/<id>/roles                  asignar { rol_id, vigente_desde, vigente_hasta?, motivo }
+POST   /api/admin/usuarios/<id>/roles/<asig>/revocar   revocar { motivo }
 ```
 
-- **Siempre queda un administrador**: un cambio de usuario (desactivar, cambiar de rol, dar de baja) o de rol (quitar permisos) que deje en cero a los usuarios activos con `usuarios:update` y `roles:update` responde **409** y no se aplica (`countActiveAdministrators` / `assertAdministratorRemains` en `rbac.ts`).
-- Un rol con `es_sistemico = 1` ("Administrador técnico del sistema") no se elimina (403).
-- El correo de un usuario nuevo (o un correo que cambia) debe ser del dominio `MICROSOFT_ALLOWED_DOMAIN`; una cuenta existente que conserva su correo se puede editar aunque sea de otro dominio (p. ej. las cuentas locales `@ficotox.local` del reinicio).
+- Ver cuentas y roles: `usuarios:V`; todo lo demas: `usuarios:G`.
+- **Siempre queda un administrador**: un cambio (revocar, desactivar, dar de baja, editar permisos o desactivar un rol) que deje en cero a los usuarios activos con `usuarios:G` vigente, o que deje solo administradores con fecha de fin, responde **409** y no se aplica (`countActiveAdministrators` / `assertAdministratorRemains` en `rbac.ts`).
+- **Combinaciones prohibidas**: al asignar un rol y al editar los permisos de un rol se evaluan las reglas de `src/lib/shared/combinaciones-roles.ts` (409 `COMBINACION_PROHIBIDA`; en la edicion de rol, con la lista de personas afectadas).
+- Nadie se asigna ni se revoca roles a si mismo (403). Un rol con `es_sistemico = 1` ("Administrador técnico del sistema") no se elimina (403).
+- El correo de una cuenta nueva (o un correo que cambia) debe ser del dominio `MICROSOFT_ALLOWED_DOMAIN`; una cuenta existente que conserva su correo se puede editar aunque sea de otro dominio (p. ej. las cuentas locales `@ficotox.local`).
 
 ### 7.3 `dashboard`
 
@@ -320,9 +324,9 @@ GET    /api/samples/analysis/next-folio
 GET    /api/samples/analysis?estado=&anulados=1&search=
 GET    /api/samples/analysis/<id>
 POST   /api/samples/analysis                   # cadena derivada de la extraccion
-PUT    /api/samples/analysis/<id>              # revisado -> exige motivo_cambio; aprobado -> 409
-POST   /api/samples/analysis/<id>/revisar      # aprobaciones:update
-POST   /api/samples/analysis/<id>/aprobar      # persona distinta o permitir_misma_persona+motivo
+PUT    /api/samples/analysis/<id>              # ensayos:E solo en "registrado"; revisado o aprobado -> 409 (se anula y se registra otro)
+POST   /api/samples/analysis/<id>/revisar      # ensayos:R (cargo: X-Actuar-Como si hay varios roles)
+POST   /api/samples/analysis/<id>/aprobar      # ensayos:A (regla de dos personas apagada)
 POST   /api/samples/analysis/<id>/anular       # 409 si esta en un informe autorizado
 POST   /api/samples/analysis/<id>/restaurar
 ```
@@ -344,17 +348,17 @@ GET  /api/informes/summary
 GET  /api/informes/next-folio
 GET  /api/informes/recepcion/<id>      # cliente, items y analisis aprobados reportables
 GET  /api/informes/<id>
-POST /api/informes                     # borrador (informes:create)
-PUT  /api/informes/<id>                # solo borrador / en_revision
-POST /api/informes/<id>/revisar        # aprobaciones:update; persona distinta de quien elaboro (o permitir_misma_persona + motivo)
-POST /api/informes/<id>/autorizar      # todos los analisis aprobados; persona distinta de quien reviso; congela resultados, genera PDF y marca el original de una enmienda como "sustituido" (PDF regenerado con la leyenda)
-POST /api/informes/<id>/entregar       # solo autorizados
+POST /api/informes                     # borrador (informes:C); elaborado_cargo = rol con el que se actua
+PUT  /api/informes/<id>                # informes:E, solo borrador (en revision ya no se edita)
+POST /api/informes/<id>/revisar        # informes:R; revisado_cargo/revisado_rol_id del rol con el que se actua
+POST /api/informes/<id>/autorizar      # informes:A; todos los analisis aprobados; autorizado_cargo del rol con el que se actua; congela resultados, genera PDF y marca el original de una enmienda como "sustituido" (PDF regenerado con la leyenda)
+POST /api/informes/<id>/entregar       # informes:A; solo autorizados (entregado_cargo en entrega_json)
 POST /api/informes/<id>/enmienda       # nueva version (v+1) en borrador, sustituye_a
-POST /api/informes/<id>/anular         # regenera PDF con marca ANULADO
+POST /api/informes/<id>/anular         # informes:AN; regenera PDF con marca ANULADO
 GET  /api/informes/<id>/pdf            # PDF definitivo o vista previa en borrador
 ```
 
-El PDF se genera con `pdfkit` (`informe-pdf.ts`) con el contenido de 7.8.2: identificacion del laboratorio y del informe (folio `IR`, version, pagina x de y), cliente, items ensayados, metodos y fechas, resultados con unidades, limites y conformidad, declaraciones, firmas de elaboro/reviso/autorizo (imagenes embebidas) y las marcas de enmienda o anulacion. Se guarda en `<instance>/informes/` con su `pdf_sha256`.
+El PDF se genera con `pdfkit` (`informe-pdf.ts`) con el contenido de 7.8.2: identificacion del laboratorio y del informe (folio `IR`, version, pagina x de y), cliente, items ensayados, metodos y fechas, resultados con unidades, limites y conformidad, declaraciones, firmas de elaboro/reviso/autorizo con el cargo con el que actuo cada quien (imagenes embebidas) y las marcas de enmienda o anulacion. Se guarda en `<instance>/informes/` con su `pdf_sha256`.
 
 ### 7.5.2 `documentos-sgc`
 
@@ -366,7 +370,7 @@ GET  /api/documentos-sgc/<id>                  # con revisiones de la misma clav
 POST /api/documentos-sgc                       # multipart (archivo) o JSON
 PUT  /api/documentos-sgc/<id>                  # solo borrador / en_revision
 POST /api/documentos-sgc/<id>/enviar-revision
-POST /api/documentos-sgc/<id>/aprobar          # aprobaciones:update; solo en_revision y con archivo (salvo externos); la vigente anterior pasa a obsoleta
+POST /api/documentos-sgc/<id>/aprobar          # documentos:A; solo en_revision y con archivo (salvo externos); la vigente anterior pasa a obsoleta
 POST /api/documentos-sgc/<id>/nueva-revision   # { cambios }; solo desde una revision vigente u obsoleta
 POST /api/documentos-sgc/<id>/obsoletar        # { motivo }
 POST /api/documentos-sgc/<id>/cancelar         # { motivo }
@@ -438,7 +442,7 @@ Helpers de API en `src/lib/client/api.ts`: `getJsonAuth`, `sendJsonAuth`, `sendF
 
 ### 9.1 JWT
 
-Los tokens se emiten en login y se firman con `JWT_SECRET` usando HS256 (mismos claims que antes: `sub`, `role_id`, `email`, `nombre`, `rol`, `iat`, `exp`). Los tokens emitidos por el backend Flask siguen siendo validos si `JWT_SECRET` no cambia.
+Los tokens se emiten en login y se firman con `JWT_SECRET` usando HS256. Desde la Fase 1 **el token solo identifica a la persona** (`sub`, `email`, `nombre`, `iat`, `exp`): los roles y permisos se calculan en cada peticion desde la base, asi que revocar o vencer un rol tiene efecto inmediato sin volver a iniciar sesion. Una cuenta desactivada recibe 403 aunque su token siga vigente.
 
 El acceso local requiere correo y contrasena. Las contrasenas se guardan en `usuarios.password_hash` con scrypt (`src/lib/server/password.ts`, formato `scrypt$N$salt$hash`) y se validan en `POST /api/auth/login`; un correo inexistente o una contrasena incorrecta responden 401 con el mismo mensaje. Los usuarios se crean con contrasena desde la pantalla de Usuarios (minimo 8 caracteres) y `scripts/set-password.mjs <correo> <contrasena>` permite asignarla desde la terminal en instalaciones SQLite.
 
@@ -449,39 +453,20 @@ Los endpoints protegidos llaman a `requireUser(request)`, que:
 3. Decodifica el JWT.
 4. Responde 401 con "Token expirado" o "Token invalido" segun corresponda.
 
-### 9.2 RBAC
+### 9.2 Permisos (Fase 1)
 
-`src/lib/server/rbac.ts` define los permisos por modulo: `dashboard`, `reactivos`, `consumibles`, `equipos`, `muestras`, `movimientos`, `mantenimiento`, `documentos`, `informes`, `aprobaciones`, `auditoria`, `roles`, `usuarios`, con acciones `read`, `create`, `update`, `delete`.
+Detalle completo, matriz y decisiones pendientes: **`docs/CATALOGO_PERMISOS.md`**.
 
-`ensureRbacSchema()` corre una vez por proceso y **solo** asegura las tablas y el catalogo de modulos (`permisos`). **No crea roles** (ya no existe "Super Admin") **ni concede permisos**: un permiso ausente significa "no concedido", tambien para un modulo nuevo. Los roles y sus permisos se dan de alta con `scripts/seed-roles-usuarios.mjs` (seccion 15.3) o en Administracion > Roles. El modelo sigue siendo un rol por usuario y `read/create/update/delete` por modulo (la Fase 1 lo cambiara).
+- **Modelo**: un permiso es `(rol, modulo, accion, alcance)` en la tabla `rol_acciones` (`src/lib/shared/permisos.ts`). Modulos: `usuarios, documentos, muestras, ensayos, informes, equipos, inventario, calidad, compras`. Acciones: `V C E R A AN G` (C/E/R/A/AN implican V; G implica todas). Alcances aplicados: `total, propio, estado, recepcion, preparacion, borrador, bitacora, uso, mantenimiento, movimientos`; diferidos (se comportan como `total`, salvo en usuarios, donde son solo V): `asignado, supervisado, proyecto, tecnico, investigacion, autorizados, administrativo, limitado, incidencias, auditoria`.
+- **Varios roles por persona** (`usuario_roles`, con vigencia, motivo y revocacion; nada se borra). Permisos efectivos = union de los roles vigentes hoy de roles activos. `usuarios.id_rol` se migro al arrancar ("Migración Fase 1", en la bitacora) y ya no se lee.
+- **Servidor**: cada endpoint llama `requirePermission(s, user, modulo, accion, contexto?)` (`src/lib/server/rbac.ts`), que carga la persona (activa) y sus roles vigentes desde la base, exige la accion y, con contexto, el alcance (`{ objeto, borrador, propio }`). Devuelve los alcances y los roles que otorgan la accion. `soloEstado(permiso)` recorta las respuestas de muestras con alcance `estado`. No queda ninguna verificacion por nombre de rol ni el modulo `aprobaciones`.
+- **Cargo con el que se actua**: `cargoActuante(request, permiso)` elige el rol (uno solo, o el que llega en `X-Actuar-Como`; si hay varios y no llega, 409 `ELEGIR_CARGO` con las opciones). El cliente (`src/lib/client/api.ts` + `ActuarComoProvider`) pide "Actuar como" y repite la peticion. Se guarda en `creado_rol_id/creado_cargo`, `revisado_*`, `aprobado_*`, `autorizado_*`, `elaborado_*`, `anulado_*`, `entrega_json` y en la bitacora (`actuo_como`).
+- **Captura con recursos**: una extraccion o un analisis con equipos usados exige ademas `equipos:C` (alcance `uso` o mayor); con insumos, `inventario:C` (alcance `movimientos` o mayor).
+- **El arranque no crea roles ni concede permisos**: solo asegura tablas y el catalogo de modulos. Los roles se cargan con `scripts/seed-roles-usuarios.mjs` o desde Administracion > Roles.
+- **Vencimientos**: `barrerVencimientos()` (bootstrap, una vez por minuto antes de atender peticiones) deja `vencer_rol` en la bitacora para cada asignacion cuya vigencia termino.
+- **Interfaz**: `useSession().can(modulo, accion = "V", contexto?)` y `alcance(modulo, accion)`; los permisos se vuelven a pedir cada minuto y al volver a la ventana. Una persona sin roles vigentes solo ve "Sin permisos asignados".
 
-#### 9.2.1 Catalogo provisional de roles (Fase 0)
-
-Definido en `scripts/roles-catalogo.json` (especificacion "Roles y permisos FICOTOX", FX-MO-2-1). R=read, C=create, U=update, D=delete; un modulo que no aparece queda sin permiso.
-
-| Rol | Permisos |
-| --- | --- |
-| Administrador técnico del sistema (sistemico, no se elimina) | dashboard R; usuarios RCUD; roles RCUD; auditoria R |
-| Responsable General | R en todos; informes RU; aprobaciones RU |
-| Coordinador/a de Mejora Continua | R en todos; documentos RCUD |
-| Coordinador/a del Área Técnica | dashboard R; muestras RCUD; informes RCU; aprobaciones RU; reactivos, consumibles, equipos, mantenimiento, movimientos RCUD; documentos R |
-| Coordinador/a de Investigación y Desarrollo | dashboard R; muestras RCU; equipos R; reactivos RCU; consumibles RCU; movimientos R; documentos R |
-| Técnico Analista | dashboard R; muestras RCU; informes RC; reactivos RC; consumibles RC; equipos R; movimientos RC; documentos R |
-| Técnico Auxiliar | dashboard R; muestras RCU; reactivos RC; consumibles RC; movimientos RC; documentos R |
-| Administrador/a Auxiliar | dashboard R; muestras R; equipos RCU; mantenimiento RCU; reactivos RCU; consumibles RCU; movimientos RCU |
-| Auditor Interno | R en todos los modulos; nada mas |
-| Estudiante / personal en formación | dashboard R; muestras RC; documentos R |
-
-`documentos` sigue apagado en la interfaz (`FEATURES.documentos = false`): el permiso existe pero el menu no lo muestra. `aprobaciones` (revisar/aprobar analisis, autorizar informes, aprobar documentos) no tiene pantalla propia: habilita esos botones dentro de Muestras e Informes.
-
-La accion `delete` significa anular o dar de baja con motivo: ningun endpoint de registros tecnicos o de inventario borra filas (la unica excepcion son los roles sin usuarios, que si se eliminan y quedan en la bitacora como `eliminar`). Un reactivo o consumible dado de baja no se puede **elegir de nuevo** (409), pero un registro que ya lo declaraba se sigue pudiendo reabrir y guardar: `applyStageInventory` recibe los insumos que el registro ya tenia (`insumosDeclarados`) y los repone aunque esten inactivos, para no congelar los registros historicos.
-
-Los endpoints combinan:
-
-```ts
-const user = await requireUser(request);
-await requirePermission(s, user, "modulo", "accion");
-```
+La accion `AN` significa anular o dar de baja con motivo: ningun endpoint de registros tecnicos o de inventario borra filas (la unica excepcion son los roles que nunca se asignaron, que si se eliminan y quedan en la bitacora como `eliminar`). Un reactivo o consumible dado de baja no se puede **elegir de nuevo** (409), pero un registro que ya lo declaraba se sigue pudiendo reabrir y guardar.
 
 ### 9.3 Microsoft Entra ID
 
@@ -491,7 +476,7 @@ El login Microsoft valida el `id_token` con las claves JWKS del tenant (`jose`),
 
 ### 10.1 Tablas principales
 
-`roles`, `permisos`, `rol_permisos`, `usuarios`, `reactivos`, `consumibles`, `equipos`, `mantenimientos`, `movimientos`, `muestras_recepcion`, `muestras_procesamiento`, `muestras_extraccion`, `muestras_analisis`, `informes`, `documentos_sgc`, `auditoria`, `reportes_mantenimiento`.
+`roles`, `permisos` (catalogo de modulos), `rol_acciones` (permisos de la Fase 1), `usuario_roles` (asignaciones con vigencia), `rol_permisos` (modelo anterior, sin uso), `usuarios`, `reactivos`, `consumibles`, `equipos`, `mantenimientos`, `movimientos`, `muestras_recepcion`, `muestras_procesamiento`, `muestras_extraccion`, `muestras_analisis`, `informes`, `documentos_sgc`, `auditoria`, `reportes_mantenimiento`.
 
 Columnas de baja logica y anulacion (`src/lib/server/inventory-baja.ts`, `src/lib/server/samples-flow.ts`): `activo`, `baja_motivo`, `baja_en`, `baja_por` en reactivos, consumibles y equipos; `anulado_en`, `anulado_por`, `motivo_anulacion`, `estado_previo` en las tablas de muestras. `muestras_recepcion` agrega `decision_aceptacion`, `aceptacion_json` (inspeccion, comunicacion al cliente) y `disposicion_json`. Las listas filtran `activo = 1` / `estado <> 'anulada'` salvo `?bajas=1` / `?anuladas=1`.
 
@@ -590,12 +575,12 @@ Ver `docs/backups.md` y `scripts/backup_ficotox.py` (lee `.env` de la raiz y res
 `scripts/demo-seed.mjs` llena una instancia **a traves de la API** (todo queda en la bitacora, con usuarios y fechas reales):
 
 ```bash
-FICOTOX_EMAIL=admin@cicese.mx FICOTOX_PASSWORD='...' node scripts/demo-seed.mjs   # BASE=http://localhost:3000/api por omision
+FICOTOX_EMAIL=jorge.ramirez@ficotox.local FICOTOX_PASSWORD='...' node scripts/demo-seed.mjs   # BASE=http://localhost:3000/api por omision
 ```
 
-Requiere una cuenta con permiso de alta en usuarios, roles, inventario, muestras, informes y documentos (tras el reinicio de la Fase 0 ningun rol del catalogo los tiene todos: crear antes un rol temporal o darlos a mano). Crea tres roles y tres personas (analista, coordinacion tecnica, direccion: contrasenas en el script), 19 equipos con clave de bitacora (`FX-TCB-BA1`, `LC1`, `CE1`, `VO1`...), mantenimientos, soluciones preparadas y consumibles del protocolo, documentos del SGC vigentes y nueve recepciones en distintos puntos del flujo (hasta informe entregado y disposicion final; una rechazada, una con desviacion, una anulada). Es idempotente: busca antes de crear. Respaldar la base antes de correrlo sobre una instancia real.
+Requiere los roles del catalogo (`npm run seed:roles`) y una cuenta con `usuarios:G` (p. ej. el Administrador técnico del sistema), que solo da de alta a tres personas con roles del catalogo (dos "Coordinador/a del Área Técnica" y una "Responsable General"); cada paso lo hace la persona con el permiso que corresponde. Crea 19 equipos con clave de bitacora (`FX-TCB-BA1`, `LC1`, `CE1`, `VO1`...), mantenimientos, soluciones preparadas y consumibles del protocolo, documentos del SGC vigentes y nueve recepciones en distintos puntos del flujo (hasta informe entregado y disposicion final; una rechazada, una con desviacion, una anulada). Es idempotente: busca antes de crear. Respaldar la base antes de correrlo sobre una instancia real.
 
-### 15.3 Reinicio limpio y alta de roles (Fase 0)
+### 15.3 Reinicio limpio y alta de roles (Fase 0; script actualizado en la Fase 1)
 
 Procedimiento aplicado el 2026-09-24 (rama `fase-0-reinicio`); repetible en otra instalacion SQLite:
 
@@ -610,24 +595,26 @@ Procedimiento aplicado el 2026-09-24 (rama `fase-0-reinicio`); repetible en otra
    npm run seed:roles            # node scripts/seed-roles-usuarios.mjs [--usuarios archivo.json] [--db base.sqlite3]
    ```
 
-   Crea los 10 roles de `scripts/roles-catalogo.json` con sus permisos exactos y un usuario local por rol, con `hashPassword()` de `src/lib/server/password.ts` (requiere Node 22.18+ o 24). Es idempotente: un rol o usuario existente no se duplica ni se modifica. Cada alta queda en la bitacora (actor `sistema`, motivo `Reinicio Fase 0`) sellada igual que en el servidor, y al final recalcula la cadena completa. Solo SQLite (en MySQL, alta desde Administracion).
+   Crea los 10 roles de `scripts/roles-catalogo.json` con su matriz de la Fase 1 (y `roles.clave`), un usuario local por rol y su asignacion en `usuario_roles`, con `hashPassword()` de `src/lib/server/password.ts` (requiere Node 22.18+ o 24). Es idempotente: un rol (por clave o nombre) o usuario (por correo) existente no se duplica; a un rol existente sin permisos del modelo nuevo (p. ej. de la Fase 0) se le carga la matriz; si ya tiene otros permisos se respeta (aviso) salvo con `--actualizar-permisos`; si una persona no tiene vigente su rol del catalogo, se le asigna. Cada cambio queda en la bitacora (actor `sistema`, motivo `--motivo`, por omision "Catálogo de roles Fase 1") sellado con `src/lib/shared/audit-chain.mjs`, **la misma implementacion que usa el servidor**, y al final recalcula la cadena completa. Requiere el esquema de la Fase 1 (arrancar el servidor una vez). Solo SQLite (en MySQL, ver abajo).
 7. **Comprobar**: iniciar sesion con cada usuario, revisar el menu y pulsar **Verificar integridad** en Auditoria.
 
 **MySQL/MariaDB.** El script solo aplica a SQLite y el arranque ya no crea ningun rol, asi que en una instalacion MySQL nueva nadie puede entrar a Administracion hasta crear a mano el primer administrador (despues de que el arranque cree el esquema):
 
 ```sql
-INSERT INTO roles (nombre, descripcion, es_sistemico, activo)
-VALUES ('Administrador técnico del sistema', 'Administra cuentas, roles y permisos; consulta la bitácora.', 1, 1);
+INSERT INTO roles (nombre, descripcion, clave, es_sistemico, activo)
+VALUES ('Administrador técnico del sistema', 'Administra cuentas, roles y asignaciones; consulta la bitácora.', 'admin_tecnico', 1, 1);
 SET @rol = LAST_INSERT_ID();
-INSERT INTO rol_permisos (id_rol, id_permiso, can_read, can_create, can_update, can_delete)
-SELECT @rol, id, 1, IF(clave IN ('usuarios','roles'), 1, 0), IF(clave IN ('usuarios','roles'), 1, 0), IF(clave IN ('usuarios','roles'), 1, 0)
-FROM permisos WHERE clave IN ('dashboard','usuarios','roles','auditoria');
+INSERT INTO rol_acciones (id_rol, modulo, accion, alcance) VALUES
+  (@rol, 'usuarios', 'G', 'total'), (@rol, 'documentos', 'V', 'tecnico'), (@rol, 'muestras', 'V', 'estado'),
+  (@rol, 'equipos', 'V', 'total'), (@rol, 'calidad', 'V', 'bitacora');
 -- hash: node -e 'import("./src/lib/server/password.ts").then(m=>console.log(m.hashPassword(process.argv[1])))' 'contraseña'
 INSERT INTO usuarios (nombre, email, activo, id_rol, auth_provider, password_hash)
 VALUES ('Nombre Apellido', 'correo@cicese.mx', 1, @rol, 'local', '<hash scrypt$...>');
+INSERT INTO usuario_roles (usuario_id, rol_id, vigente_desde, motivo, asignado_en)
+VALUES (LAST_INSERT_ID(), @rol, CURDATE(), 'Alta manual del primer administrador', NOW());
 ```
 
-Esas dos altas no quedan en la bitacora (se hicieron fuera de la aplicacion); anotarlas en el registro de la instalacion. El resto de los roles de `scripts/roles-catalogo.json` se da de alta desde Administracion > Roles, con bitacora. Soporte MySQL en el script: pendiente (Fase 1).
+Esas altas no quedan en la bitacora (se hicieron fuera de la aplicacion); anotarlas en el registro de la instalacion. El resto de los roles de `scripts/roles-catalogo.json` se da de alta desde Administracion > Roles, con bitacora. Soporte MySQL en el script: sigue fuera de alcance (documentado).
 
 Las cuentas del catalogo son locales (`@ficotox.local`); no pueden entrar con Microsoft. Para dar de alta personal real, usar correos `@cicese.mx` desde Administracion > Usuarios.
 

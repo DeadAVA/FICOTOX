@@ -1,19 +1,32 @@
+import type { Accion, PermisosMapa } from "../shared/permisos";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ApiRecord = Record<string, any>;
 
 export interface SessionUser {
   id?: number;
-  role_id?: number | null;
   nombre?: string;
   email?: string;
-  rol?: string;
   sub?: string;
+  /* Nombres de los roles vigentes (el detalle esta en SessionValue.roles). */
+  roles?: string[];
   /* Clave del catalogo de avatares; null = el que se deriva del correo. */
   avatar?: string | null;
 }
 
-export type PermissionFlags = { read?: boolean; create?: boolean; update?: boolean; delete?: boolean };
-export type PermissionsMap = Record<string, PermissionFlags>;
+/* Permisos efectivos { modulo: { accion: alcance } } (Fase 1; src/lib/shared/permisos.ts). */
+export type PermissionsMap = PermisosMapa;
+export type ModuleAction = Accion;
+
+/* Rol vigente de la persona con sesion, con sus propios permisos (para "Actuar como"). */
+export interface RolSesion {
+  id: number;
+  nombre: string;
+  clave: string | null;
+  vigente_desde?: string;
+  vigente_hasta?: string | null;
+  permisos: PermisosMapa;
+}
 
 export interface AuthConfig {
   microsoft: {
@@ -39,4 +52,4 @@ export type PageKey =
   | "roles"
   | "usuarios";
 
-export type ModuleAction = "read" | "create" | "update" | "delete";
+

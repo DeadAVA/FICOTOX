@@ -72,8 +72,11 @@ corredor devuelve codigo 1 si alguna falla. Las de navegador guardan
   resultados, declaraciones y firmas.
 - Revisar en **Auditoria** que la accion realizada aparezca con su motivo y que
   **Verificar integridad** siga en verde.
-- Con un usuario sin permiso `aprobaciones`, confirmar que los botones de
-  revisar/aprobar/autorizar no aparecen y que la API responde 403.
+- Con un usuario sin R/A en ensayos o informes (p. ej. Técnico Analista), confirmar que los
+  botones de revisar/aprobar/autorizar no aparecen y que la API responde 403.
+- Con una persona con dos roles que otorgan la misma accion (p. ej. Responsable General +
+  Coordinador/a del Área Técnica), confirmar que al revisar o autorizar pide "Actuar como"
+  y que el PDF del informe muestra el cargo elegido.
 - Tras cambiar `SECRET_KEY` (o perder `instance/auditoria.key`, la llave que el
   sistema genera cuando no hay `SECRET_KEY` propia), recordar que **Verificar
   integridad** marcara como alteradas las entradas escritas con la llave

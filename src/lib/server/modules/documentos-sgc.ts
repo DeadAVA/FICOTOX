@@ -222,7 +222,7 @@ function docRef(row: Row | null | undefined): string {
 
 export async function listDocumentos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "read");
+  await requirePermission(s, user, "documentos", "V");
   await ensureDocumentosSgcSchema(s);
   const search = searchParam(request, "search");
   const estado = searchParam(request, "estado");
@@ -250,7 +250,7 @@ export async function listDocumentos({ request, s }: RouteContext): Promise<Resp
 /* Lista maestra (FX-GCL-MD): revision vigente de cada clave, con proxima revision. */
 export async function listaMaestra({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "read");
+  await requirePermission(s, user, "documentos", "V");
   await ensureDocumentosSgcSchema(s);
   const rows = await s.query(
     `
@@ -273,7 +273,7 @@ export async function listaMaestra({ request, s }: RouteContext): Promise<Respon
 
 export async function documentosSummary({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "read");
+  await requirePermission(s, user, "documentos", "V");
   await ensureDocumentosSgcSchema(s);
   const today = new Date().toISOString().slice(0, 10);
   const summary = await s.queryOne(
@@ -293,7 +293,7 @@ export async function documentosSummary({ request, s }: RouteContext): Promise<R
 export async function getDocumento({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "read");
+  await requirePermission(s, user, "documentos", "V");
   await ensureDocumentosSgcSchema(s);
   const row = await snapshotRow(s, TABLE, id);
   if (!row) return json({ message: "Documento no encontrado" }, 404);
@@ -303,7 +303,7 @@ export async function getDocumento({ request, s, params }: RouteContext): Promis
 
 export async function createDocumento({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "create");
+  await requirePermission(s, user, "documentos", "C", { objeto: "documento", borrador: true });
   await ensureDocumentosSgcSchema(s);
   const { data, file } = await readPayload(request);
   const normalized = normalize(data, null);
@@ -348,7 +348,7 @@ export async function createDocumento({ request, s }: RouteContext): Promise<Res
 export async function updateDocumento({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "update");
+  await requirePermission(s, user, "documentos", "E", { objeto: "documento", borrador: true });
   await ensureDocumentosSgcSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Documento no encontrado" }, 404);
@@ -376,14 +376,14 @@ export async function updateDocumento({ request, s, params }: RouteContext): Pro
 
 export async function deleteDocumento({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "delete");
+  await requirePermission(s, user, "documentos", "AN");
   throw new HttpError(405, { message: "Los documentos controlados no se eliminan: cancele el borrador o declare obsoleta la revision" });
 }
 
 export async function enviarRevision({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "update");
+  await requirePermission(s, user, "documentos", "E", { objeto: "documento", borrador: true });
   await ensureDocumentosSgcSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Documento no encontrado" }, 404);
@@ -402,7 +402,7 @@ export async function enviarRevision({ request, s, params }: RouteContext): Prom
 export async function aprobarDocumento({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "aprobaciones", "update");
+  await requirePermission(s, user, "documentos", "A");
   await ensureDocumentosSgcSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Documento no encontrado" }, 404);
@@ -431,7 +431,7 @@ export async function aprobarDocumento({ request, s, params }: RouteContext): Pr
 export async function obsoletarDocumento({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "aprobaciones", "update");
+  await requirePermission(s, user, "documentos", "AN");
   await ensureDocumentosSgcSchema(s);
   const motivo = await readMotivo(request);
   if (motivo.length < 5) return json({ message: "Indica el motivo (al menos 5 caracteres)" }, 400);
@@ -448,7 +448,7 @@ export async function obsoletarDocumento({ request, s, params }: RouteContext): 
 export async function cancelarDocumento({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "delete");
+  await requirePermission(s, user, "documentos", "AN");
   await ensureDocumentosSgcSchema(s);
   const motivo = await readMotivo(request);
   if (motivo.length < 5) return json({ message: "Indica el motivo (al menos 5 caracteres)" }, 400);
@@ -466,7 +466,7 @@ export async function cancelarDocumento({ request, s, params }: RouteContext): P
 export async function nuevaRevision({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "create");
+  await requirePermission(s, user, "documentos", "C", { objeto: "documento", borrador: true });
   await ensureDocumentosSgcSchema(s);
   const original = await snapshotRow(s, TABLE, id);
   if (!original) return json({ message: "Documento no encontrado" }, 404);
@@ -521,7 +521,7 @@ const MIME: Record<string, string> = {
 export async function getDocumentoArchivo({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "read");
+  await requirePermission(s, user, "documentos", "V");
   await ensureDocumentosSgcSchema(s);
   const row = await snapshotRow(s, TABLE, id);
   if (!row || !row.archivo_nombre) return json({ message: "Archivo no encontrado" }, 404);

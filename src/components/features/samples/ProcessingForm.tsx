@@ -262,7 +262,8 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
   const [error, setError] = useState<string | null>(null);
   const detailCache = useRef(new Map<number, ApiRecord>());
   const editing = !!item?.id;
-  const readOnly = editing && isSampleReadOnly(item?.estado);
+  const canEdit = editing ? can("ensayos", "E", { objeto: "procesamiento", borrador: String(item?.estado || "registrada") === "registrada" }) : can("ensayos", "C", { objeto: "procesamiento", borrador: true });
+  const readOnly = editing && (isSampleReadOnly(item?.estado) || !canEdit);
   const patch = (changes: Partial<ProcessingForm>) => setForm((prev) => ({ ...prev, ...changes }));
   const stepKeys = form.organismo === "bivalvos" ? BIVALVOS_STEPS.map(([k]) => k) : form.organismo === "sardinas" ? SARDINAS_STEPS.map(([k]) => k) : [];
   const completeness: Record<string, boolean> = {
@@ -428,7 +429,7 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
     if (payload.muestra_tipo === "unica" && !payload.id_interno) return fail("Captura el ID interno de la muestra", "sec-muestra");
     if (payload.muestra_tipo === "lote" && !payload.lote_seleccion.length) return fail("Selecciona al menos una muestra del lote", "sec-muestra");
     if (!payload.tipo_organismo.length) return fail("Selecciona el tipo de organismo", "sec-organismo");
-    if (!can("muestras", editing ? "update" : "create")) return fail("No tienes permiso para esta acción", "sec-datos");
+    if (!canEdit) return fail("No tienes permiso para esta acción", "sec-datos");
     setSubmitting(true);
     setError(null);
     try {
@@ -496,6 +497,7 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
       {readOnly && item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}
+          {item.anulado_cargo ? ` · Anuló como ${String(item.anulado_cargo)}` : ""}
         </Callout>
       ) : null}
       <FormCard id="sec-datos" title="Datos generales" description="Folio, fecha y recepción de origen.">
@@ -674,7 +676,7 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
         <div className="flex flex-col gap-3">
           {/* El formato oficial pide nombre y firma; el cargo no se guarda en este registro. */}
           <PersonCard title="Quien procesó" name={form.quienProceso} onName={(v) => patch({ quienProceso: v })} signature={form.firmaProceso} onSignature={(v) => patch({ firmaProceso: v })} />
-          <PersonCard title="Quien supervisó" requires="aprobaciones" name={form.quienSuperviso} onName={(v) => patch({ quienSuperviso: v })} signature={form.firmaSuperviso} onSignature={(v) => patch({ firmaSuperviso: v })} />
+          <PersonCard title="Quien supervisó" requires="revision" name={form.quienSuperviso} onName={(v) => patch({ quienSuperviso: v })} signature={form.firmaSuperviso} onSignature={(v) => patch({ firmaSuperviso: v })} />
         </div>
         <Callout tone="info" className="mt-4">Recuerda registrar el uso de cada equipo en su bitácora correspondiente.</Callout>
       </FormCard>

@@ -6,10 +6,10 @@ import { getConfig } from "../../config";
 import { isSqlite, type Row, type Session } from "../../db";
 import { intParam, json, readJson, type RouteContext } from "../../http";
 import { restoreInventoryUsage } from "../../inventory-usage";
-import { requirePermission } from "../../rbac";
+import { cargoActuante, requirePermission } from "../../rbac";
 import { recordBitacoraFolios } from "../inventory";
 import { addColumnIfMissing, getTableColumns, markSchemaReady, schemaReady } from "../../schema";
-import { advanceState, anularRegistro, applyStageInventory, assertEditable, assertOrigin, deletionNotAllowed, ensureAnulacionColumns, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarRegistro } from "../../samples-flow";
+import { advanceState, anularRegistro, applyStageInventory, assertEditable, assertOrigin, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarRegistro } from "../../samples-flow";
 import { EXTRACTION_TYPES, claveForType, normalizeExtractionType, parseExtractionFolioSearch, type ExtractionType } from "../../../shared/extraction";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
 import { ensureEquiposSchema } from "../inventory";
@@ -156,6 +156,7 @@ export async function ensureSamplesExtraccionSchema(s: Session): Promise<void> {
   await addColumnIfMissing(s, TABLE, "uso_inventario_json", "TEXT DEFAULT NULL");
   await addColumnIfMissing(s, TABLE, "equipos_json", "LONGTEXT AFTER `registro_pesos_json`");
   await ensureAnulacionColumns(s, TABLE);
+  await ensureActuoColumns(s, TABLE);
   if (!folioPerTypeVerified) {
     await ensureFolioPerType(s);
   }
@@ -359,7 +360,7 @@ function serializeRow(row: Row): Row {
 
 export async function getNextFolio({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "read");
+  await requirePermission(s, user, "ensayos", "V");
   await ensureSamplesExtraccionSchema(s);
   const tipoParam = searchParam(request, "tipo");
   const tipo = tipoParam ? normalizeExtractionType(tipoParam) : "E-A";
@@ -371,7 +372,7 @@ export async function getNextFolio({ request, s }: RouteContext): Promise<Respon
 
 export async function listExtractionSamples({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "read");
+  await requirePermission(s, user, "ensayos", "V");
   await ensureSamplesExtraccionSchema(s);
 
   const search = searchParam(request, "search");
@@ -421,7 +422,7 @@ export async function listExtractionSamples({ request, s }: RouteContext): Promi
 export async function getExtractionSample({ request, s, params }: RouteContext): Promise<Response> {
   const extractionId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "read");
+  await requirePermission(s, user, "ensayos", "V");
   await ensureSamplesExtraccionSchema(s);
 
   const row = await s.queryOne(
@@ -448,7 +449,8 @@ export async function getExtractionSample({ request, s, params }: RouteContext):
 
 export async function createExtractionSample({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "create");
+  const permiso = await requirePermission(s, user, "ensayos", "C", { objeto: "extraccion", borrador: true });
+  const actuo = cargoActuante(request, permiso);
   await ensureSamplesExtraccionSchema(s);
 
   const payload = await readJson(request);
@@ -457,6 +459,7 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
     return json({ message: "Tipo de extraccion no valido" }, 400);
   }
   const data = normalizePayload(payload, tipo);
+  await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: (safeJsonLoad(data.equipos_json, []) as unknown[]).length > 0, insumosJson: data.uso_inventario_json });
   if (!data.folio_num) {
     data.folio_num = await nextFolioNum(s, TABLE, "tipo_registro = :tipo", { tipo });
   }
@@ -478,7 +481,7 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
           nombre_quien_limpieza, nombre_quien_superviso,
           firma_quien_extrajo, firma_quien_limpieza,
           firma_quien_superviso, uso_inventario_json,
-          estado, creado_por, actualizado_por
+          estado, creado_por, actualizado_por, creado_rol_id, creado_cargo
       ) VALUES (
           :folio_num, :tipo_registro, :clave_revision, :fecha_emision,
           :fecha_extraccion, :hora_extraccion, :procesamiento_id,
@@ -488,16 +491,16 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
           :nombre_quien_limpieza, :nombre_quien_superviso,
           :firma_quien_extrajo, :firma_quien_limpieza,
           :firma_quien_superviso, :uso_inventario_json,
-          :estado, :creado_por, :actualizado_por
+          :estado, :creado_por, :actualizado_por, :creado_rol_id, :creado_cargo
       )
       `,
-      { ...data, creado_por: userId, actualizado_por: userId },
+      { ...data, creado_por: userId, actualizado_por: userId, creado_rol_id: actuo.rol_id, creado_cargo: actuo.cargo },
     );
     const id = result.lastrowid as number;
     await applyStageInventory(s, "EXT", id, data.uso_inventario_json, `Extraccion ${data.tipo_registro} folio ${data.folio_num}`, userId);
     await advanceState(s, "muestras_procesamiento", data.procesamiento_id, "en_proceso");
     const despues = await snapshotRow(s, TABLE, id);
-    await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues });
+    await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues, detalle: { actuo_como: actuo } });
     await recordBitacoraFolios(s, (safeJsonLoad(data.equipos_json, []) as Array<{ equipo_id?: unknown; folio_bitacora?: unknown }>).map((e) => ({ equipoId: e.equipo_id, folio: e.folio_bitacora })));
     await s.commit();
     return json({ message: "Extraccion creada", id, tipo_registro: tipo, folio_num: data.folio_num }, 201);
@@ -513,10 +516,11 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
 export async function updateExtractionSample({ request, s, params }: RouteContext): Promise<Response> {
   const extractionId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "update");
   await ensureSamplesExtraccionSchema(s);
 
   const antes = await snapshotRow(s, TABLE, extractionId);
+  const permiso = await requirePermission(s, user, "ensayos", "E", { objeto: "extraccion", borrador: String(antes?.estado || "registrada") === "registrada" });
+  const actuo = cargoActuante(request, permiso);
   assertEditable(antes, TABLE);
   const payload = await readJson(request);
   const tipo = await resolveType(s, payload, extractionId);
@@ -573,7 +577,7 @@ export async function updateExtractionSample({ request, s, params }: RouteContex
     await replaceInventoryUsage(s, extractionId, data, userId, insumosDeclarados(antes?.uso_inventario_json));
     await advanceState(s, "muestras_procesamiento", data.procesamiento_id, "en_proceso");
     const despues = await snapshotRow(s, TABLE, extractionId);
-    await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: extractionId, referencia: folioLabel(TABLE, despues), antes, despues });
+    await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: extractionId, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { actuo_como: actuo } });
     await recordBitacoraFolios(s, (safeJsonLoad(data.equipos_json, []) as Array<{ equipo_id?: unknown; folio_bitacora?: unknown }>).map((e) => ({ equipoId: e.equipo_id, folio: e.folio_bitacora })));
     await s.commit();
     return json({ message: "Extraccion actualizada" });
@@ -589,17 +593,18 @@ export async function updateExtractionSample({ request, s, params }: RouteContex
 /* Los registros tecnicos no se eliminan; se anulan con motivo. */
 export async function deleteExtractionSample({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "delete");
+  await requirePermission(s, user, "ensayos", "AN");
   return deletionNotAllowed();
 }
 
 export async function anularExtractionSample({ request, s, params }: RouteContext): Promise<Response> {
   const extractionId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "delete");
+  const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "AN"));
   await ensureSamplesExtraccionSchema(s);
   const motivo = await readMotivo(request);
   const row = await anularRegistro(s, user, TABLE, extractionId, motivo, {
+    actuo,
     movimientosPrefix: `EXT-${extractionId}-INS-`,
     bloqueaSi: async () => {
       const activos = Number((await s.scalar("SELECT COUNT(*) FROM muestras_analisis WHERE extraccion_id = :id AND estado <> 'anulado'", { id: extractionId })) || 0);
@@ -613,9 +618,9 @@ export async function anularExtractionSample({ request, s, params }: RouteContex
 export async function restaurarExtractionSample({ request, s, params }: RouteContext): Promise<Response> {
   const extractionId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "delete");
+  const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "AN"));
   await ensureSamplesExtraccionSchema(s);
-  const row = await restaurarRegistro(s, user, TABLE, extractionId, await readMotivo(request));
+  const row = await restaurarRegistro(s, user, TABLE, extractionId, await readMotivo(request), actuo);
   await s.commit();
   return json({ message: "Extraccion restaurada. El inventario no se vuelve a descontar: revisa los insumos y guarda de nuevo si aplica", item: serializeRow(row) });
 }

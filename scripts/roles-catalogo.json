@@ -1,173 +1,400 @@
 {
-  "_comentario": "Catalogo provisional de roles de la Fase 0 (especificacion 'Roles y permisos FICOTOX', FX-MO-2-1). R=read C=create U=update D=delete; un modulo ausente = sin permiso. Lo usa scripts/seed-roles-usuarios.mjs.",
+  "_comentario": "Matriz de permisos de la Fase 1 (FX-MO-2-1, seccion 5 y decisiones anotadas; ver docs/CATALOGO_PERMISOS.md). Por rol: { modulo: { accion: alcance } }. Acciones V C E R A AN G; un modulo o accion ausente = sin permiso. 'clave' es estable (reglas de combinacion). Lo usa scripts/seed-roles-usuarios.mjs.",
+  "version": "fase-1",
   "modulos": [
-    "dashboard",
-    "reactivos",
-    "consumibles",
-    "equipos",
-    "mantenimiento",
-    "movimientos",
-    "muestras",
-    "informes",
-    "aprobaciones",
+    "usuarios",
     "documentos",
-    "auditoria",
-    "roles",
-    "usuarios"
+    "muestras",
+    "ensayos",
+    "informes",
+    "equipos",
+    "inventario",
+    "calidad",
+    "compras"
   ],
   "roles": [
     {
+      "clave": "admin_tecnico",
       "nombre": "Administrador técnico del sistema",
-      "descripcion": "Administra cuentas, roles y permisos; consulta la bitácora. Rol de sistema (no se elimina).",
+      "descripcion": "Administra cuentas, roles y asignaciones; consulta la bitácora. Rol de sistema (no se elimina).",
       "es_sistemico": true,
       "permisos": {
-        "dashboard": "R",
-        "usuarios": "RCUD",
-        "roles": "RCUD",
-        "auditoria": "R"
+        "usuarios": {
+          "G": "total"
+        },
+        "documentos": {
+          "V": "tecnico"
+        },
+        "muestras": {
+          "V": "estado"
+        },
+        "equipos": {
+          "V": "total"
+        },
+        "calidad": {
+          "V": "bitacora"
+        }
       }
     },
     {
+      "clave": "responsable_general",
       "nombre": "Responsable General",
-      "descripcion": "Consulta todo el sistema; revisa y autoriza informes y resultados.",
+      "descripcion": "Consulta todo; revisa, aprueba y anula de forma excepcional.",
       "es_sistemico": false,
       "permisos": {
-        "dashboard": "R",
-        "reactivos": "R",
-        "consumibles": "R",
-        "equipos": "R",
-        "mantenimiento": "R",
-        "movimientos": "R",
-        "muestras": "R",
-        "informes": "RU",
-        "aprobaciones": "RU",
-        "documentos": "R",
-        "auditoria": "R",
-        "roles": "R",
-        "usuarios": "R"
+        "usuarios": {
+          "V": "total"
+        },
+        "documentos": {
+          "V": "total",
+          "R": "total",
+          "A": "total",
+          "AN": "total"
+        },
+        "muestras": {
+          "V": "total",
+          "AN": "total"
+        },
+        "ensayos": {
+          "V": "total",
+          "R": "total",
+          "AN": "total"
+        },
+        "informes": {
+          "V": "total",
+          "R": "total",
+          "A": "total",
+          "AN": "total"
+        },
+        "equipos": {
+          "V": "total",
+          "AN": "total"
+        },
+        "inventario": {
+          "V": "total",
+          "AN": "total"
+        },
+        "calidad": {
+          "V": "total",
+          "R": "total",
+          "A": "total",
+          "AN": "total"
+        },
+        "compras": {
+          "V": "total",
+          "A": "total"
+        }
       }
     },
     {
+      "clave": "mejora_continua",
       "nombre": "Coordinador/a de Mejora Continua",
-      "descripcion": "Consulta todo el sistema; gestiona los documentos controlados del SGC.",
+      "descripcion": "Administra documentos controlados y calidad; consulta todo lo demás.",
       "es_sistemico": false,
       "permisos": {
-        "dashboard": "R",
-        "reactivos": "R",
-        "consumibles": "R",
-        "equipos": "R",
-        "mantenimiento": "R",
-        "movimientos": "R",
-        "muestras": "R",
-        "informes": "R",
-        "aprobaciones": "R",
-        "documentos": "RCUD",
-        "auditoria": "R",
-        "roles": "R",
-        "usuarios": "R"
+        "usuarios": {
+          "V": "total"
+        },
+        "documentos": {
+          "G": "total",
+          "R": "total",
+          "A": "total",
+          "AN": "total"
+        },
+        "muestras": {
+          "V": "total"
+        },
+        "ensayos": {
+          "V": "total"
+        },
+        "informes": {
+          "V": "total"
+        },
+        "equipos": {
+          "V": "total"
+        },
+        "inventario": {
+          "V": "total"
+        },
+        "calidad": {
+          "G": "total",
+          "R": "total",
+          "A": "total",
+          "AN": "total"
+        },
+        "compras": {
+          "V": "total"
+        }
       }
     },
     {
+      "clave": "coord_area_tecnica",
       "nombre": "Coordinador/a del Área Técnica",
-      "descripcion": "Coordina muestras, informes, aprobaciones e inventario del área técnica.",
+      "descripcion": "Coordina muestras, ensayos, informes, equipos e inventario del área técnica.",
       "es_sistemico": false,
       "permisos": {
-        "dashboard": "R",
-        "muestras": "RCUD",
-        "informes": "RCU",
-        "aprobaciones": "RU",
-        "reactivos": "RCUD",
-        "consumibles": "RCUD",
-        "equipos": "RCUD",
-        "mantenimiento": "RCUD",
-        "movimientos": "RCUD",
-        "documentos": "R"
+        "usuarios": {
+          "V": "total"
+        },
+        "documentos": {
+          "C": "tecnico",
+          "E": "tecnico",
+          "R": "tecnico"
+        },
+        "muestras": {
+          "C": "total",
+          "E": "total",
+          "R": "total",
+          "A": "total",
+          "AN": "total"
+        },
+        "ensayos": {
+          "C": "total",
+          "E": "total",
+          "R": "total",
+          "A": "total",
+          "AN": "total"
+        },
+        "informes": {
+          "C": "total",
+          "R": "total",
+          "A": "total",
+          "AN": "total"
+        },
+        "equipos": {
+          "G": "total",
+          "R": "total",
+          "AN": "total"
+        },
+        "inventario": {
+          "G": "total",
+          "R": "total",
+          "AN": "total"
+        },
+        "calidad": {
+          "C": "total",
+          "R": "total"
+        },
+        "compras": {
+          "V": "total"
+        }
       }
     },
     {
+      "clave": "coord_investigacion",
       "nombre": "Coordinador/a de Investigación y Desarrollo",
-      "descripcion": "Registra muestras y gestiona reactivos y consumibles de investigación.",
+      "descripcion": "Captura y revisa muestras y ensayos de sus proyectos; gestiona equipos e inventario de investigación.",
       "es_sistemico": false,
       "permisos": {
-        "dashboard": "R",
-        "muestras": "RCU",
-        "equipos": "R",
-        "reactivos": "RCU",
-        "consumibles": "RCU",
-        "movimientos": "R",
-        "documentos": "R"
+        "usuarios": {
+          "V": "total"
+        },
+        "documentos": {
+          "C": "investigacion",
+          "E": "investigacion",
+          "R": "investigacion"
+        },
+        "muestras": {
+          "C": "proyecto",
+          "E": "proyecto"
+        },
+        "ensayos": {
+          "C": "proyecto",
+          "E": "proyecto",
+          "R": "proyecto"
+        },
+        "informes": {
+          "C": "proyecto",
+          "R": "proyecto"
+        },
+        "equipos": {
+          "C": "total",
+          "E": "total",
+          "R": "total"
+        },
+        "inventario": {
+          "C": "total",
+          "E": "total"
+        },
+        "calidad": {
+          "C": "total",
+          "E": "total"
+        },
+        "compras": {
+          "V": "total"
+        }
       }
     },
     {
+      "clave": "tecnico_analista",
       "nombre": "Técnico Analista",
-      "descripcion": "Captura muestras y análisis, elabora informes y registra uso de insumos.",
+      "descripcion": "Captura ensayos, elabora borradores de informe y registra uso de equipos e insumos.",
       "es_sistemico": false,
       "permisos": {
-        "dashboard": "R",
-        "muestras": "RCU",
-        "informes": "RC",
-        "reactivos": "RC",
-        "consumibles": "RC",
-        "equipos": "R",
-        "movimientos": "RC",
-        "documentos": "R"
+        "usuarios": {
+          "V": "propio"
+        },
+        "documentos": {
+          "V": "total",
+          "C": "borrador"
+        },
+        "muestras": {
+          "V": "asignado",
+          "E": "asignado"
+        },
+        "ensayos": {
+          "C": "total",
+          "E": "total"
+        },
+        "informes": {
+          "C": "borrador"
+        },
+        "equipos": {
+          "C": "uso",
+          "E": "uso"
+        },
+        "inventario": {
+          "C": "movimientos",
+          "E": "movimientos"
+        },
+        "calidad": {
+          "C": "incidencias"
+        }
       }
     },
     {
+      "clave": "tecnico_auxiliar",
       "nombre": "Técnico Auxiliar",
-      "descripcion": "Apoya la captura de muestras y el registro de insumos.",
+      "descripcion": "Registra recepciones y procesamientos; registra uso de equipos e insumos.",
       "es_sistemico": false,
       "permisos": {
-        "dashboard": "R",
-        "muestras": "RCU",
-        "reactivos": "RC",
-        "consumibles": "RC",
-        "movimientos": "RC",
-        "documentos": "R"
+        "usuarios": {
+          "V": "propio"
+        },
+        "documentos": {
+          "V": "total"
+        },
+        "muestras": {
+          "C": "recepcion",
+          "E": "recepcion"
+        },
+        "ensayos": {
+          "C": "preparacion",
+          "E": "preparacion"
+        },
+        "equipos": {
+          "C": "uso",
+          "E": "uso"
+        },
+        "inventario": {
+          "C": "movimientos",
+          "E": "movimientos"
+        },
+        "calidad": {
+          "C": "incidencias"
+        }
       }
     },
     {
+      "clave": "admin_auxiliar",
       "nombre": "Administrador/a Auxiliar",
-      "descripcion": "Gestiona equipos, mantenimiento e inventario; consulta muestras.",
+      "descripcion": "Gestiona mantenimiento de equipos, inventario administrativo y compras; ve el estado de las muestras.",
       "es_sistemico": false,
       "permisos": {
-        "dashboard": "R",
-        "muestras": "R",
-        "equipos": "RCU",
-        "mantenimiento": "RCU",
-        "reactivos": "RCU",
-        "consumibles": "RCU",
-        "movimientos": "RCU"
+        "usuarios": {
+          "V": "limitado"
+        },
+        "documentos": {
+          "V": "administrativo",
+          "C": "administrativo"
+        },
+        "muestras": {
+          "V": "estado"
+        },
+        "equipos": {
+          "C": "mantenimiento",
+          "E": "mantenimiento"
+        },
+        "inventario": {
+          "C": "administrativo",
+          "E": "administrativo"
+        },
+        "calidad": {
+          "C": "incidencias"
+        },
+        "compras": {
+          "G": "total"
+        }
       }
     },
     {
+      "clave": "auditor_interno",
       "nombre": "Auditor Interno",
-      "descripcion": "Solo consulta: lectura de todos los módulos, sin cambios.",
+      "descripcion": "Solo consulta todos los módulos; en Fase 8 registrará auditorías internas.",
       "es_sistemico": false,
       "permisos": {
-        "dashboard": "R",
-        "reactivos": "R",
-        "consumibles": "R",
-        "equipos": "R",
-        "mantenimiento": "R",
-        "movimientos": "R",
-        "muestras": "R",
-        "informes": "R",
-        "aprobaciones": "R",
-        "documentos": "R",
-        "auditoria": "R",
-        "roles": "R",
-        "usuarios": "R"
+        "usuarios": {
+          "V": "total"
+        },
+        "documentos": {
+          "V": "total"
+        },
+        "muestras": {
+          "V": "total"
+        },
+        "ensayos": {
+          "V": "total"
+        },
+        "informes": {
+          "V": "total"
+        },
+        "equipos": {
+          "V": "total"
+        },
+        "inventario": {
+          "V": "total"
+        },
+        "calidad": {
+          "V": "total",
+          "C": "auditoria",
+          "E": "auditoria"
+        },
+        "compras": {
+          "V": "total"
+        }
       }
     },
     {
+      "clave": "estudiante",
       "nombre": "Estudiante / personal en formación",
-      "descripcion": "Registra muestras bajo supervisión y consulta documentos.",
+      "descripcion": "Captura muestras y ensayos bajo supervisión; no se combina con otros roles.",
       "es_sistemico": false,
       "permisos": {
-        "dashboard": "R",
-        "muestras": "RC",
-        "documentos": "R"
+        "usuarios": {
+          "V": "propio"
+        },
+        "documentos": {
+          "V": "autorizados"
+        },
+        "muestras": {
+          "C": "asignado",
+          "E": "asignado"
+        },
+        "ensayos": {
+          "C": "borrador",
+          "E": "borrador"
+        },
+        "equipos": {
+          "C": "supervisado",
+          "E": "supervisado"
+        },
+        "inventario": {
+          "C": "supervisado",
+          "E": "supervisado"
+        },
+        "calidad": {
+          "C": "incidencias"
+        }
       }
     }
   ]

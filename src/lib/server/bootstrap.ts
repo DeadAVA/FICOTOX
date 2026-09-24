@@ -1,6 +1,6 @@
 import { ensureAuditSchema } from "./audit";
 import { withSession } from "./db";
-import { ensureRbacSchema } from "./rbac";
+import { ensureRbacSchema, migrarRolesUnicos, registrarVencimientos } from "./rbac";
 import { resetSchemaMemo } from "./schema";
 import { ensureUsuariosSchema } from "./users";
 import { ensureMovimientosSchema } from "./inventory-usage";
@@ -30,6 +30,8 @@ export function ensureInitialSchema(): Promise<void> {
       await ensureRbacSchema(s);
       await ensureUsuariosSchema(s);
       await ensureAuditSchema(s);
+      // Fase 1: usuarios.id_rol -> usuario_roles (una vez; queda en la bitacora).
+      await migrarRolesUnicos(s);
       await ensureSamplesRecepcionSchema(s);
       await ensureSamplesProcesamientoSchema(s);
       await ensureSamplesExtraccionSchema(s);
@@ -51,4 +53,28 @@ export function ensureInitialSchema(): Promise<void> {
     });
   }
   return initialSchemaPromise;
+}
+
+/*
+ * Deja en la bitacora los roles cuya vigencia termino. Se ejecuta antes de
+ * atender peticiones, como mucho una vez por minuto, en su propia transaccion.
+ */
+let ultimoBarrido = 0;
+let barridoEnCurso: Promise<void> | null = null;
+
+export function barrerVencimientos(): Promise<void> {
+  if (barridoEnCurso) return barridoEnCurso;
+  if (Date.now() - ultimoBarrido < 60_000) return Promise.resolve();
+  ultimoBarrido = Date.now();
+  barridoEnCurso = withSession(async (s) => {
+    if (await registrarVencimientos(s)) await s.commit();
+  })
+    .catch((error: unknown) => {
+      ultimoBarrido = 0;
+      console.error("[roles] No se pudieron registrar los vencimientos:", error);
+    })
+    .finally(() => {
+      barridoEnCurso = null;
+    });
+  return barridoEnCurso;
 }

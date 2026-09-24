@@ -10,7 +10,7 @@ import { ensureSamplesRecepcionSchema } from "./samples/recepcion";
 
 export async function flowStatus({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "dashboard", "read");
+  await requirePermission(s, user, "muestras", "V");
   await ensureSamplesRecepcionSchema(s);
   await ensureSamplesProcesamientoSchema(s);
   await ensureSamplesExtraccionSchema(s);
@@ -34,7 +34,7 @@ export async function flowStatus({ request, s }: RouteContext): Promise<Response
 
 export async function recentEvents({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "movimientos", "read");
+  await requirePermission(s, user, "inventario", "V");
   await ensureMovimientosSchema(s);
 
   const rows = await s.query(

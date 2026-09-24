@@ -1,8 +1,12 @@
 /*
- * Menu por rol (Fase 0): cada usuario del catalogo inicia sesion en el navegador
- * y la barra lateral muestra solo los destinos de sus modulos. La tabla de
- * permisos se repite aqui a proposito (independiente del catalogo del script).
+ * Menu y botones por rol (Fase 1): cada usuario del catalogo inicia sesion en el
+ * navegador; la barra lateral muestra solo los destinos de los modulos que puede
+ * ver (V) y los botones de alta aparecen segun su accion y alcance. La tabla se
+ * repite aqui a proposito (independiente de scripts/roles-catalogo.json).
  * Documentos sigue apagado (FEATURES.documentos = false): nunca aparece.
+ *
+ * Nota: los alcances diferidos se comportan como "total" (Fase 1), asi que una C
+ * con alcance "incidencias" en calidad implica ver la bitacora.
  */
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -12,7 +16,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require("playwright-core");
 
 const BASE = process.env.BASE || "http://localhost:3100";
-const executablePath = process.env.CHROME_PATH || path.join(os.homedir(), "Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing");
+const executablePath = process.env.CHROME_PATH || path.join(os.homedir(), "Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing");
 const credenciales = JSON.parse(readFileSync(process.env.CREDENCIALES_ROLES, "utf8"));
 const results = [];
 const check = (name, ok, detail = "") => {
@@ -20,32 +24,70 @@ const check = (name, ok, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
 };
 
-const INVENTARIO = { reactivos: "/inventario/reactivos", consumibles: "/inventario/consumibles", equipos: "/inventario/equipos", mantenimiento: "/inventario/mantenimiento", movimientos: "/movimientos" };
-const TODOS = ["dashboard", "reactivos", "consumibles", "equipos", "mantenimiento", "movimientos", "muestras", "informes", "aprobaciones", "documentos", "auditoria", "roles", "usuarios"];
+const TODOS = ["muestras", "ensayos", "informes", "equipos", "inventario", "calidad", "usuarios"];
+/* Modulos con V (efectiva) de cada rol; "usuarios:propio" oculta Roles. */
 const USUARIOS = [
-  ["Administrador técnico del sistema", "jorge.ramirez@ficotox.local", ["dashboard", "usuarios", "roles", "auditoria"]],
+  ["Administrador técnico del sistema", "jorge.ramirez@ficotox.local", ["usuarios", "muestras", "equipos", "calidad"]],
   ["Responsable General", "patricia.luna@ficotox.local", TODOS],
   ["Coordinador/a de Mejora Continua", "ana.torres@ficotox.local", TODOS],
-  ["Coordinador/a del Área Técnica", "ricardo.medina@ficotox.local", ["dashboard", "muestras", "informes", "aprobaciones", "reactivos", "consumibles", "equipos", "mantenimiento", "movimientos", "documentos"]],
-  ["Coordinador/a de Investigación y Desarrollo", "gabriela.ortiz@ficotox.local", ["dashboard", "muestras", "equipos", "reactivos", "consumibles", "movimientos", "documentos"]],
-  ["Técnico Analista", "luis.castro@ficotox.local", ["dashboard", "muestras", "informes", "reactivos", "consumibles", "equipos", "movimientos", "documentos"]],
-  ["Técnico Auxiliar", "mariana.delgado@ficotox.local", ["dashboard", "muestras", "reactivos", "consumibles", "movimientos", "documentos"]],
-  ["Administrador/a Auxiliar", "carmen.aguilar@ficotox.local", ["dashboard", "muestras", "equipos", "mantenimiento", "reactivos", "consumibles", "movimientos"]],
+  ["Coordinador/a del Área Técnica", "ricardo.medina@ficotox.local", TODOS],
+  ["Coordinador/a de Investigación y Desarrollo", "gabriela.ortiz@ficotox.local", TODOS],
+  ["Técnico Analista", "luis.castro@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "informes", "equipos", "inventario", "calidad"]],
+  ["Técnico Auxiliar", "mariana.delgado@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "equipos", "inventario", "calidad"]],
+  ["Administrador/a Auxiliar", "carmen.aguilar@ficotox.local", ["usuarios", "muestras", "equipos", "inventario", "calidad"]],
   ["Auditor Interno", "hector.navarro@ficotox.local", TODOS],
-  ["Estudiante / personal en formación", "diego.salinas@ficotox.local", ["dashboard", "muestras", "documentos"]],
+  ["Estudiante / personal en formación", "diego.salinas@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "equipos", "inventario", "calidad"]],
 ];
 
-/* Enlaces esperados en la barra lateral segun los modulos con lectura. */
+/* Botones de alta esperados por rol: [ruta, texto, visible?]. */
+const BOTONES = {
+  "Técnico Auxiliar": [
+    ["/muestras/recepcion", "Nueva recepción", true],
+    ["/muestras/procesamiento", "Nuevo procesamiento", true],
+    ["/muestras/extraccion", "Nueva extracción", false],
+    ["/inventario/reactivos", "Nuevo reactivo", false],
+  ],
+  "Técnico Analista": [
+    ["/muestras/recepcion", "Nueva recepción", false],
+    ["/muestras/extraccion", "Nueva extracción", true],
+    ["/inventario/equipos", "Nuevo equipo", false],
+    ["/inventario/mantenimiento", "Programar mantenimiento", false],
+  ],
+  "Administrador/a Auxiliar": [
+    ["/inventario/mantenimiento", "Programar mantenimiento", true],
+    ["/inventario/equipos", "Nuevo equipo", false],
+    ["/muestras/recepcion", "Nueva recepción", false],
+  ],
+  "Auditor Interno": [
+    ["/muestras/recepcion", "Nueva recepción", false],
+    ["/informes", "Nuevo informe", false],
+    ["/inventario/reactivos", "Nuevo reactivo", false],
+  ],
+  "Coordinador/a del Área Técnica": [
+    ["/muestras/recepcion", "Nueva recepción", true],
+    ["/informes", "Nuevo informe", true],
+    ["/inventario/equipos", "Nuevo equipo", true],
+  ],
+  "Administrador técnico del sistema": [
+    ["/muestras/recepcion", "Nueva recepción", false],
+    ["/inventario/equipos", "Nuevo equipo", false],
+  ],
+};
+
 function enlacesEsperados(modulos) {
-  const lee = new Set(modulos);
-  const out = new Set(["/ayuda"]);
-  if (lee.has("dashboard")) out.add("/");
-  if (lee.has("muestras")) ["/muestras/recepcion", "/muestras/procesamiento", "/muestras/extraccion", "/muestras/analisis"].forEach((h) => out.add(h));
-  if (lee.has("informes")) out.add("/informes");
-  for (const [modulo, href] of Object.entries(INVENTARIO)) if (lee.has(modulo)) out.add(href);
-  if (lee.has("auditoria")) out.add("/auditoria");
-  if (lee.has("usuarios")) out.add("/administracion/usuarios");
-  if (lee.has("roles")) out.add("/administracion/roles");
+  const set = new Set(modulos.map((m) => m.split(":")[0]));
+  const propio = modulos.includes("usuarios:propio");
+  const out = new Set(["/", "/ayuda"]);
+  if (set.has("muestras")) out.add("/muestras/recepcion");
+  if (set.has("ensayos")) ["/muestras/procesamiento", "/muestras/extraccion", "/muestras/analisis"].forEach((h) => out.add(h));
+  if (set.has("informes")) out.add("/informes");
+  if (set.has("inventario")) ["/inventario/reactivos", "/inventario/consumibles", "/movimientos"].forEach((h) => out.add(h));
+  if (set.has("equipos")) ["/inventario/equipos", "/inventario/mantenimiento"].forEach((h) => out.add(h));
+  if (set.has("calidad")) out.add("/auditoria");
+  if (set.has("usuarios")) {
+    out.add("/administracion/usuarios");
+    if (!propio) out.add("/administracion/roles");
+  }
   return out;
 }
 
@@ -66,17 +108,33 @@ try {
       await page.fill("#login-password", credenciales[email]);
       await page.click("button[type=submit]");
       await page.waitForURL((url) => !url.pathname.startsWith("/login"));
-      const nav = page.locator('aside[aria-label="Navegación principal"] nav');
-      await nav.locator("a").first().waitFor();
+      const aside = page.locator('aside[aria-label="Navegación principal"]');
+      await aside.locator("nav a").first().waitFor();
       await page.waitForLoadState("networkidle");
-      const hrefs = new Set((await nav.locator("a").evaluateAll((links) => links.map((a) => new URL(a.href).pathname))).concat(await page.locator('aside[aria-label="Navegación principal"] a[href="/ayuda"]').evaluateAll((l) => l.map((a) => new URL(a.href).pathname))));
+      const hrefs = new Set(await aside.locator("a").evaluateAll((links) => links.map((a) => new URL(a.href).pathname)));
       const esperados = enlacesEsperados(modulos);
       const sobran = [...hrefs].filter((h) => !esperados.has(h));
       const faltan = [...esperados].filter((h) => !hrefs.has(h));
       check(`${rol}: menu con solo sus modulos`, !sobran.length && !faltan.length, `sobran=[${sobran.join(", ")}] faltan=[${faltan.join(", ")}]`);
       check(`${rol}: Documentos no aparece (modulo apagado)`, ![...hrefs].includes("/documentos"));
+
+      for (const [ruta, texto, visible] of BOTONES[rol] || []) {
+        await page.goto(`${BASE}${ruta}`);
+        await page.waitForLoadState("networkidle");
+        const main = page.locator("main");
+        await main.locator("h1").first().waitFor();
+        const hay = (await main.getByRole("button", { name: texto, exact: true }).count()) + (await main.getByRole("link", { name: texto, exact: true }).count());
+        check(`${rol}: "${texto}" en ${ruta} ${visible ? "visible" : "oculto"}`, visible ? hay > 0 : hay === 0, `encontrados=${hay}`);
+      }
+      if (rol === "Administrador técnico del sistema") {
+        // Alcance "estado": la ficha de la recepcion es de seguimiento, no el formato vacio.
+        const apoyo = JSON.parse(readFileSync(process.env.DATOS_APOYO_FILE, "utf8"));
+        await page.goto(`${BASE}/muestras/recepcion/${apoyo.recepcion_id}`);
+        await page.getByText("Sin acceso a datos técnicos").waitFor();
+        check(`${rol}: la recepcion con alcance "estado" se ve como ficha de seguimiento`, (await page.locator("#r-folio").count()) === 0);
+      }
       const relevantes = errores.filter((text) => !/favicon|404 \(Not Found\)/.test(text));
-      check(`${rol}: sin errores de consola en el Inicio`, relevantes.length === 0, relevantes.slice(0, 3).join(" | "));
+      check(`${rol}: sin errores de consola`, relevantes.length === 0, relevantes.slice(0, 3).join(" | "));
     } catch (error) {
       check(`${rol}: recorrido`, false, error.message);
       await page.screenshot({ path: path.join(path.dirname(new URL(import.meta.url).pathname), "fail.png"), fullPage: true }).catch(() => {});

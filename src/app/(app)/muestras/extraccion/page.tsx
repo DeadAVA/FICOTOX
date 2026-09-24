@@ -27,7 +27,7 @@ type MoliendaFilter = "" | "fresca" | "congelada";
 
 export default function ExtraccionListPage() {
   return (
-    <RequireModule modules="muestras">
+    <RequireModule modules="ensayos">
       <Suspense fallback={<Skeleton className="h-64 w-full" />}>
         <ExtraccionList />
       </Suspense>
@@ -60,9 +60,10 @@ function ExtraccionList() {
   );
   const items = resource.data;
 
-  const canCreate = can("muestras", "create");
-  const canUpdate = can("muestras", "update");
-  const canDelete = can("muestras", "delete");
+  const canCreate = can("ensayos", "C", { objeto: "extraccion", borrador: true });
+  const canEdit = (item: ApiRecord) => can("ensayos", "E", { objeto: "extraccion", borrador: String(item.estado || "registrada") === "registrada" });
+  const canAnalizar = can("ensayos", "C", { objeto: "analisis", borrador: true });
+  const canDelete = can("ensayos", "AN");
   const newItems: MenuItem[] = [
     ...EXTRACTION_TYPE_LIST.map((meta) => ({ label: meta.label, description: meta.clave, icon: <Flask size={16} weight="duotone" />, tone: "brand" as const, onSelect: () => router.push(`/muestras/extraccion/nueva?tipo=${meta.tipo}`) })),
     ...PLANNED_EXTRACTION_TYPES.map((meta, index) => ({ label: meta.label, description: "Próximamente · formato pendiente del SGC", icon: <Flask size={16} weight="duotone" />, disabled: true, separatorBefore: index === 0 })),
@@ -114,8 +115,8 @@ function ExtraccionList() {
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulada = item.estado === "anulada";
     const list: MenuItem[] = [{ label: "Abrir", description: "Ver el formato completo", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/muestras/extraccion/${item.id}`) }];
-    if (canUpdate && !anulada) list.push({ label: "Editar", description: "Corregir pasos, pesos o equipos", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/extraccion/${item.id}`) });
-    if (canCreate && !anulada) list.push({ label: "Analizar", description: "Registrar el análisis de este extracto", icon: <TestTube size={16} weight="duotone" />, tone: "success", onSelect: () => router.push(`/muestras/analisis/nuevo?extraccion=${item.id}`) });
+    if (canEdit(item) && !anulada) list.push({ label: "Editar", description: "Corregir pasos, pesos o equipos", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/extraccion/${item.id}`) });
+    if (canAnalizar && !anulada) list.push({ label: "Analizar", description: "Registrar el análisis de este extracto", icon: <TestTube size={16} weight="duotone" />, tone: "success", onSelect: () => router.push(`/muestras/analisis/nuevo?extraccion=${item.id}`) });
     if (canDelete) {
       if (anulada) list.push({ label: "Restaurar extracción", description: "Vuelve a la lista con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => restaurar(item) });
       else list.push({ label: "Anular extracción…", description: "Repone el inventario y queda en la bitácora", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => anular(item) });

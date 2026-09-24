@@ -22,7 +22,7 @@ import type { ApiRecord } from "@/lib/client/types";
 
 export default function ConsumiblesPage() {
   return (
-    <RequireModule modules="consumibles">
+    <RequireModule modules="inventario">
       <Suspense fallback={<TableSkeleton />}>
         <ConsumiblesContent />
       </Suspense>
@@ -64,7 +64,7 @@ function ConsumiblesContent() {
   const items = resource.data;
 
   useUrlTrigger("nuevo", () => {
-    if (can("consumibles", "create")) modal.open(null);
+    if (can("inventario", "C", { objeto: "catalogo_inventario" })) modal.open(null);
   });
 
   const counts = useMemo(() => {
@@ -123,9 +123,11 @@ function ConsumiblesContent() {
     }
   };
 
-  const canCreate = can("consumibles", "create");
-  const canUpdate = can("consumibles", "update");
-  const canDelete = can("consumibles", "delete");
+  const canCreate = can("inventario", "C", { objeto: "catalogo_inventario" });
+  const canEditar = can("inventario", "E", { objeto: "catalogo_inventario" });
+  const canRellenar = can("inventario", "C", { objeto: "movimiento" });
+  const canBaja = can("inventario", "AN");
+  const canReactivar = can("inventario", "G");
 
   const selected = detail.payload;
   const selectedInactive = selected ? Number(selected.activo ?? 1) === 0 : false;
@@ -151,9 +153,9 @@ function ConsumiblesContent() {
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const inactive = Number(item.activo ?? 1) === 0;
     const list: MenuItem[] = [{ label: "Ver ficha", description: "Piezas, presentación y resguardo", icon: <IdentificationCard size={16} weight="duotone" />, tone: "brand", onSelect: () => detail.open(item) }];
-    if (canUpdate && !inactive) list.push({ label: "Rellenar stock", description: "Registrar una entrada de piezas", icon: <ArrowsClockwise size={16} weight="duotone" />, tone: "success", onSelect: () => refill.open({ type: "consumible", id: Number(item.id), name: String(item.producto || "Consumible") }) });
-    if (canUpdate) list.push({ label: "Editar", description: "Cambiar datos del consumible", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => editConsumable(Number(item.id)) });
-    if (canDelete) {
+    if (canRellenar && !inactive) list.push({ label: "Rellenar stock", description: "Registrar una entrada de piezas", icon: <ArrowsClockwise size={16} weight="duotone" />, tone: "success", onSelect: () => refill.open({ type: "consumible", id: Number(item.id), name: String(item.producto || "Consumible") }) });
+    if (canEditar) list.push({ label: "Editar", description: "Cambiar datos del consumible", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => editConsumable(Number(item.id)) });
+    if (inactive ? canReactivar : canBaja) {
       if (inactive) list.push({ label: "Reactivar consumible…", description: "Vuelve al inventario con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => reactivarConsumable(item) });
       else list.push({ label: "Dar de baja…", description: "Deja de ofrecerse; conserva su historial", icon: <Trash size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => deleteConsumable(item) });
     }
@@ -278,7 +280,7 @@ function ConsumiblesContent() {
           ]}
           actions={
             <>
-              {canDelete ? (
+              {(selectedInactive ? canReactivar : canBaja) ? (
                 selectedInactive ? (
                   <Button variant="secondary" icon={<ArrowCounterClockwise size={16} />} onClick={() => reactivarConsumable(selected)}>
                     Reactivar
@@ -289,12 +291,12 @@ function ConsumiblesContent() {
                   </Button>
                 )
               ) : null}
-              {canUpdate && !selectedInactive ? (
+              {canRellenar && !selectedInactive ? (
                 <Button variant="secondary" icon={<ArrowsClockwise size={16} />} onClick={() => refill.open({ type: "consumible", id: Number(selected.id), name: String(selected.producto || "Consumible") })}>
                   Rellenar
                 </Button>
               ) : null}
-              {canUpdate ? (
+              {canEditar ? (
                 <Button icon={<PencilSimple size={16} />} onClick={() => editConsumable(Number(selected.id))}>
                   Editar
                 </Button>

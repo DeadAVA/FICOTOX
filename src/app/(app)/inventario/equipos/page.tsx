@@ -66,7 +66,7 @@ function EquiposContent() {
   const items = resource.data;
 
   useUrlTrigger("nuevo", () => {
-    if (can("equipos", "create")) modal.open(null);
+    if (can("equipos", "C", { objeto: "equipo" })) modal.open(null);
   });
 
   const isAlert = (item: ApiRecord) => ["fuera_servicio", "calibracion_pendiente"].includes(String(item.estado)) || calibrationTone(item.fecha_prox_calibracion) === "danger";
@@ -142,9 +142,10 @@ function EquiposContent() {
     }
   };
 
-  const canCreate = can("equipos", "create");
-  const canUpdate = can("equipos", "update");
-  const canDelete = can("equipos", "delete");
+  const canCreate = can("equipos", "C", { objeto: "equipo" });
+  const canEditar = can("equipos", "E", { objeto: "equipo" });
+  const canBaja = can("equipos", "AN");
+  const canReactivar = can("equipos", "G");
 
   const selected = detail.payload;
   const selectedInactive = selected ? Number(selected.activo ?? 1) === 0 : false;
@@ -170,9 +171,9 @@ function EquiposContent() {
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const inactive = Number(item.activo ?? 1) === 0;
     const list: MenuItem[] = [{ label: "Ver ficha", description: "Bitácora, serie, ubicación y calibración", icon: <IdentificationCard size={16} weight="duotone" />, tone: "brand", onSelect: () => detail.open(item) }];
-    if (can("mantenimiento", "create") && !inactive) list.push({ label: "Programar mantenimiento", description: "Preventivo, correctivo o calibración", icon: <Wrench size={16} weight="duotone" />, tone: "success", onSelect: () => router.push(`/inventario/mantenimiento?nuevo=1&equipo=${item.id}`) });
-    if (canUpdate) list.push({ label: "Editar", description: "Cambiar datos del equipo", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => editEquipo(Number(item.id)) });
-    if (canDelete) {
+    if (can("equipos", "C", { objeto: "mantenimiento" }) && !inactive) list.push({ label: "Programar mantenimiento", description: "Preventivo, correctivo o calibración", icon: <Wrench size={16} weight="duotone" />, tone: "success", onSelect: () => router.push(`/inventario/mantenimiento?nuevo=1&equipo=${item.id}`) });
+    if (canEditar) list.push({ label: "Editar", description: "Cambiar datos del equipo", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => editEquipo(Number(item.id)) });
+    if (inactive ? canReactivar : canBaja) {
       if (inactive) list.push({ label: "Reactivar equipo…", description: "Vuelve al inventario con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => reactivarEquipo(item) });
       else list.push({ label: "Dar de baja…", description: "Deja de ofrecerse; conserva su historial", icon: <Trash size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => deleteEquipo(item) });
     }
@@ -297,7 +298,7 @@ function EquiposContent() {
           ]}
           actions={
             <>
-              {canDelete ? (
+              {(selectedInactive ? canReactivar : canBaja) ? (
                 selectedInactive ? (
                   <Button variant="secondary" icon={<ArrowCounterClockwise size={16} />} onClick={() => reactivarEquipo(selected)}>
                     Reactivar
@@ -308,7 +309,7 @@ function EquiposContent() {
                   </Button>
                 )
               ) : null}
-              {canUpdate ? (
+              {canEditar ? (
                 <Button icon={<PencilSimple size={16} />} onClick={() => editEquipo(Number(selected.id))}>
                   Editar
                 </Button>

@@ -8,14 +8,15 @@ import { AvatarPicker } from "@/components/ui/AvatarPicker";
 import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Overlay";
 import { API_BASE_URL, sendJsonAuth } from "@/lib/client/api";
+import { fmtDate } from "@/lib/client/format";
 import { invalidate } from "@/lib/client/store";
 
 /*
- * "Mi cuenta": quien soy (nombre, correo, rol) y mi avatar. La persona elige
+ * "Mi cuenta": quien soy (nombre, correo, roles vigentes) y mi avatar. La persona elige
  * uno del catalogo; el cambio queda en la bitacora como edicion de su usuario.
  */
 export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { user, token, refreshMe } = useSession();
+  const { user, token, refreshMe, roles } = useSession();
   const seed = (user?.email || user?.nombre || "?").trim().toLowerCase();
   const current = resolveAvatarKey(user?.avatar, seed);
   const [choice, setChoice] = useState<string>(current);
@@ -60,7 +61,18 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
           <div className="flex min-w-0 flex-col">
             <p className="truncate text-[16px] font-semibold text-ink">{user?.nombre || user?.email}</p>
             <p className="truncate text-[13px] text-ink-3">{user?.email}</p>
-            {user?.rol ? <p className="mt-1 text-[12.5px] text-ink-2">{user.rol}</p> : null}
+            {roles.length ? (
+              <ul className="mt-1 flex flex-col gap-0.5 text-[12.5px] text-ink-2" aria-label="Roles vigentes">
+                {roles.map((rol) => (
+                  <li key={rol.id}>
+                    {rol.nombre}
+                    {rol.vigente_hasta ? <span className="text-ink-4"> · hasta {fmtDate(rol.vigente_hasta)}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-[12.5px] text-warning-text">Sin roles vigentes</p>
+            )}
             <p className="mt-1 text-[12px] text-ink-4">{AVATARS[resolveAvatarKey(choice, seed)].label}</p>
           </div>
         </div>
@@ -71,7 +83,7 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
           </div>
           <AvatarPicker value={choice} seed={seed} onChange={setChoice} />
         </section>
-        <p className="text-[12px] text-ink-4">Nombre, correo y rol los administra la coordinación desde Administración › Usuarios.</p>
+        <p className="text-[12px] text-ink-4">Nombre, correo y roles los administra quien tiene la administración de usuarios (Administración › Usuarios).</p>
       </div>
     </Sheet>
   );

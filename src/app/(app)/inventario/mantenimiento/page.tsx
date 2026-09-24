@@ -21,7 +21,7 @@ import type { ApiRecord } from "@/lib/client/types";
 
 export default function MantenimientoPage() {
   return (
-    <RequireModule modules="mantenimiento">
+    <RequireModule modules="equipos">
       <Suspense fallback={<TableSkeleton />}>
         <MantenimientoContent />
       </Suspense>
@@ -56,7 +56,7 @@ function MantenimientoContent() {
   // ?nuevo=1&equipo=ID (desde la ficha o el menú de un equipo) abre el alta con el equipo ya elegido.
   const equipoPrefill = useInitialParam("equipo");
   useUrlTrigger("nuevo", () => {
-    if (can("mantenimiento", "create")) modal.open(equipoPrefill ? ({ id_equipo: Number(equipoPrefill) } as ApiRecord) : null);
+    if (can("equipos", "C", { objeto: "mantenimiento" })) modal.open(equipoPrefill ? ({ id_equipo: Number(equipoPrefill) } as ApiRecord) : null);
   });
 
   // Mismas reglas que los contadores del Inicio: vencido = estado "vencido" o pendiente con fecha pasada;
@@ -112,9 +112,9 @@ function MantenimientoContent() {
     }
   };
 
-  const canCreate = can("mantenimiento", "create");
-  const canUpdate = can("mantenimiento", "update");
-  const canDelete = can("mantenimiento", "delete");
+  const canCreate = can("equipos", "C", { objeto: "mantenimiento" });
+  const canUpdate = can("equipos", "E", { objeto: "mantenimiento" });
+  const canDelete = can("equipos", "AN");
   const filtered = !!(search || tipo || estado !== "pendiente");
 
   const groups: FilterGroup[] = [

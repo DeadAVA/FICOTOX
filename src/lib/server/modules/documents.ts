@@ -77,7 +77,7 @@ export function secureFilename(filename: string): string {
 
 export async function documentsSummary({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "dashboard", "read");
+  await requirePermission(s, user, "equipos", "V");
   await ensureReportesMantenimientoSchema(s);
 
   const summary = await s.queryOne(
@@ -95,7 +95,7 @@ export async function documentsSummary({ request, s }: RouteContext): Promise<Re
 
 export async function listDocuments({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "read");
+  await requirePermission(s, user, "equipos", "V");
   await ensureReportesMantenimientoSchema(s);
 
   const rows = await s.query(
@@ -113,7 +113,7 @@ export async function listDocuments({ request, s }: RouteContext): Promise<Respo
 
 export async function createMaintenanceReport({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "create");
+  await requirePermission(s, user, "equipos", "C", { objeto: "mantenimiento" });
   await ensureReportesMantenimientoSchema(s);
 
   let form: FormData;
@@ -189,7 +189,7 @@ const MIME_TYPES: Record<string, string> = {
 
 export async function getDocumentFile({ request, s, params }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "read");
+  await requirePermission(s, user, "equipos", "V");
 
   const parts = Array.isArray(params.filename) ? params.filename : [String(params.filename || "")];
   const relative = parts.map((part) => decodeURIComponent(part)).join("/");

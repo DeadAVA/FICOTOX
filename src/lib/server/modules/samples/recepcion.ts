@@ -2,9 +2,9 @@ import { requireUser, userIdFromClaims } from "../../auth";
 import { registrarAuditoria, snapshotRow } from "../../audit";
 import { isSqlite, type Row, type Session } from "../../db";
 import { intParam, json, readJson, type RouteContext } from "../../http";
-import { requirePermission } from "../../rbac";
+import { cargoActuante, requirePermission, soloEstado } from "../../rbac";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../../schema";
-import { anularRegistro, assertEditable, deletionNotAllowed, ensureAnulacionColumns, folioLabel, isFolioConflict, nextFolioNum, readMotivo, restaurarRegistro } from "../../samples-flow";
+import { anularRegistro, assertEditable, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, folioLabel, isFolioConflict, nextFolioNum, readMotivo, restaurarRegistro } from "../../samples-flow";
 import { ACCEPTANCE_DECISIONS, DISPOSAL_TYPES } from "../../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
 
@@ -97,9 +97,22 @@ export async function ensureSamplesRecepcionSchema(s: Session): Promise<void> {
   await addColumnIfMissing(s, TABLE, "aceptacion_json", "LONGTEXT");
   await addColumnIfMissing(s, TABLE, "disposicion_json", "LONGTEXT");
   await ensureAnulacionColumns(s, TABLE);
+  await ensureActuoColumns(s, TABLE);
   markSchemaReady("muestras_recepcion");
 }
 
+
+/*
+ * Alcance "estado" (muestras:V): solo folio, solicitante, fechas y estado; sin
+ * datos tecnicos, resultados ni firmas.
+ */
+const CAMPOS_ESTADO = ["id", "folio_num", "tipo_registro", "solicitante", "fecha_emision", "fecha_recepcion", "hora_recepcion", "fecha_muestra", "estado", "creado_en", "anulado_en"];
+
+export function vistaEstado(row: Row): Row {
+  const out: Row = { solo_estado: true };
+  for (const campo of CAMPOS_ESTADO) if (campo in row) out[campo] = row[campo];
+  return out;
+}
 
 function serializeRow(row: Row): Row {
   const item: Row = { ...row };
@@ -211,14 +224,14 @@ function resolveState(stored: Row | null, data: ReceptionData): string {
 
 export async function getNextFolio({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "read");
+  await requirePermission(s, user, "muestras", "V");
   await ensureSamplesRecepcionSchema(s);
   return json({ next_folio: await nextFolioNum(s, TABLE) });
 }
 
 export async function listReceptionSamples({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "read");
+  const permiso = await requirePermission(s, user, "muestras", "V");
   await ensureSamplesRecepcionSchema(s);
 
   const search = searchParam(request, "search");
@@ -243,6 +256,7 @@ export async function listReceptionSamples({ request, s }: RouteContext): Promis
   );
   return json({
     items: rows.map((row) => {
+      if (soloEstado(permiso)) return vistaEstado(row);
       const item: Row = { ...row, analisis: safeJsonLoad(row.analisis_json, {}) };
       delete item.analisis_json;
       return item;
@@ -254,13 +268,14 @@ export async function listReceptionSamples({ request, s }: RouteContext): Promis
 export async function getReceptionSample({ request, s, params }: RouteContext): Promise<Response> {
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "read");
+  const permiso = await requirePermission(s, user, "muestras", "V");
   await ensureSamplesRecepcionSchema(s);
 
   const row = await s.queryOne(`SELECT * FROM ${TABLE} WHERE id = :id`, { id: sampleId });
   if (!row) {
     return json({ message: "Registro no encontrado" }, 404);
   }
+  if (soloEstado(permiso)) return json({ item: vistaEstado(row) });
   // Etapas derivadas, para mostrar la cadena completa desde la recepcion.
   const procesamientos = await s.query("SELECT id, folio_num, estado FROM muestras_procesamiento WHERE recepcion_id = :id ORDER BY folio_num", { id: sampleId });
   return json({ item: { ...serializeRow(row), procesamientos } });
@@ -268,7 +283,7 @@ export async function getReceptionSample({ request, s, params }: RouteContext): 
 
 export async function createReceptionSample({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "create");
+  const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "C", { objeto: "recepcion", borrador: true }));
   await ensureSamplesRecepcionSchema(s);
 
   const data = normalizePayload(await readJson(request));
@@ -291,7 +306,7 @@ export async function createReceptionSample({ request, s }: RouteContext): Promi
         lote_muestras_json, analisis_json, inspeccion_json,
         datos_solicitante_json, datos_custodio_json,
         decision_aceptacion, aceptacion_json, estado,
-        creado_por, actualizado_por
+        creado_por, actualizado_por, creado_rol_id, creado_cargo
       ) VALUES (
         :folio_num, :tipo_registro, :clave_revision, :fecha_emision,
           :fecha_recepcion, :hora_recepcion, :recibido_por, :medio_recepcion,
@@ -300,14 +315,14 @@ export async function createReceptionSample({ request, s }: RouteContext): Promi
         :lote_muestras_json, :analisis_json, :inspeccion_json,
         :datos_solicitante_json, :datos_custodio_json,
         :decision_aceptacion, :aceptacion_json, :estado,
-        :creado_por, :actualizado_por
+        :creado_por, :actualizado_por, :creado_rol_id, :creado_cargo
       )
       `,
-      { ...data, creado_por: userId, actualizado_por: userId },
+      { ...data, creado_por: userId, actualizado_por: userId, creado_rol_id: actuo.rol_id, creado_cargo: actuo.cargo },
     );
     const id = result.lastrowid as number;
     const despues = await snapshotRow(s, TABLE, id);
-    await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues });
+    await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues, detalle: { actuo_como: actuo } });
     if (data.decision_aceptacion) {
       await registrarAuditoria(s, user, { accion: data.decision_aceptacion === "rechazada" ? "rechazar" : "aceptar", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), detalle: { decision: data.decision_aceptacion } });
     }
@@ -325,10 +340,11 @@ export async function createReceptionSample({ request, s }: RouteContext): Promi
 export async function updateReceptionSample({ request, s, params }: RouteContext): Promise<Response> {
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "update");
   await ensureSamplesRecepcionSchema(s);
 
   const antes = await snapshotRow(s, TABLE, sampleId);
+  const permiso = await requirePermission(s, user, "muestras", "E", { objeto: "recepcion", borrador: String(antes?.estado || "registrada") === "registrada" });
+  const actuo = cargoActuante(request, permiso);
   assertEditable(antes, TABLE);
   const data = normalizePayload(await readJson(request));
   if (!data.folio_num) {
@@ -374,7 +390,7 @@ export async function updateReceptionSample({ request, s, params }: RouteContext
       return json({ message: "Registro no encontrado" }, 404);
     }
     const despues = await snapshotRow(s, TABLE, sampleId);
-    await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), antes, despues });
+    await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { actuo_como: actuo } });
     if (data.decision_aceptacion && data.decision_aceptacion !== String(antes?.decision_aceptacion || "")) {
       await registrarAuditoria(s, user, { accion: data.decision_aceptacion === "rechazada" ? "rechazar" : "aceptar", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), detalle: { decision: data.decision_aceptacion } });
     }
@@ -392,17 +408,18 @@ export async function updateReceptionSample({ request, s, params }: RouteContext
 /* Los registros tecnicos no se eliminan; el endpoint se conserva para responder 405 con la regla. */
 export async function deleteReceptionSample({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "delete");
+  await requirePermission(s, user, "muestras", "AN");
   return deletionNotAllowed();
 }
 
 export async function anularReceptionSample({ request, s, params }: RouteContext): Promise<Response> {
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "delete");
+  const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "AN"));
   await ensureSamplesRecepcionSchema(s);
   const motivo = await readMotivo(request);
   const row = await anularRegistro(s, user, TABLE, sampleId, motivo, {
+    actuo,
     bloqueaSi: async () => {
       const activos = Number((await s.scalar("SELECT COUNT(*) FROM muestras_procesamiento WHERE recepcion_id = :id AND estado <> 'anulada'", { id: sampleId })) || 0);
       return activos ? `La recepcion tiene ${activos} procesamiento(s) vigente(s); anulalos primero` : null;
@@ -415,9 +432,9 @@ export async function anularReceptionSample({ request, s, params }: RouteContext
 export async function restaurarReceptionSample({ request, s, params }: RouteContext): Promise<Response> {
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "delete");
+  const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "AN"));
   await ensureSamplesRecepcionSchema(s);
-  const row = await restaurarRegistro(s, user, TABLE, sampleId, await readMotivo(request));
+  const row = await restaurarRegistro(s, user, TABLE, sampleId, await readMotivo(request), actuo);
   await s.commit();
   return json({ message: "Recepcion restaurada", item: serializeRow(row) });
 }
@@ -428,7 +445,7 @@ const DISPOSALS = new Set(DISPOSAL_TYPES.map((item) => item.value));
 export async function registrarDisposicion({ request, s, params }: RouteContext): Promise<Response> {
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "update");
+  const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "A"));
   await ensureSamplesRecepcionSchema(s);
 
   const antes = await snapshotRow(s, TABLE, sampleId);
@@ -450,11 +467,13 @@ export async function registrarDisposicion({ request, s, params }: RouteContext)
     remanentes: strippedOrNull(payload.remanentes),
     observaciones: strippedOrNull(payload.observaciones),
     registrado_por: userIdFromClaims(user),
+    registrado_rol_id: actuo.rol_id,
+    registrado_cargo: actuo.cargo,
     registrado_en: new Date().toISOString(),
   };
   await s.execute(`UPDATE ${TABLE} SET disposicion_json = :disposicion, estado = 'cerrada', actualizado_por = :usuario WHERE id = :id`, { disposicion: jsonText(disposicion), usuario: userIdFromClaims(user), id: sampleId });
   const despues = await snapshotRow(s, TABLE, sampleId);
-  await registrarAuditoria(s, user, { accion: "cerrar", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { disposicion: tipo } });
+  await registrarAuditoria(s, user, { accion: "cerrar", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { disposicion: tipo, actuo_como: actuo } });
   await s.commit();
   return json({ message: "Disposicion final registrada; la muestra queda cerrada", item: serializeRow(despues || antes!) });
 }

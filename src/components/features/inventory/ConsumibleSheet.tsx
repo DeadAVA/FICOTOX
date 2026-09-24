@@ -52,7 +52,7 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
       setError("El producto es obligatorio");
       return;
     }
-    if (!can("consumibles", editing ? "update" : "create")) {
+    if (!can("inventario", editing ? "E" : "C", { objeto: "catalogo_inventario" })) {
       setError("No tienes permiso para esta acción");
       return;
     }

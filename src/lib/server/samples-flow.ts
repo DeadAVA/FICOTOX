@@ -4,6 +4,7 @@ import { isIntegrityError, type Row, type Session } from "./db";
 import { HttpError, readJson } from "./http";
 import { consumeConsumible, consumeReactivo, restoreInventoryUsage } from "./inventory-usage";
 import { addColumnIfMissing } from "./schema";
+import { requirePermission, type Autorizacion } from "./rbac";
 
 /*
  * Reglas comunes del flujo de muestras (ISO/IEC 17025 7.4, 7.5 y la
@@ -68,6 +69,37 @@ export async function ensureAnulacionColumns(s: Session, table: string): Promise
   await addColumnIfMissing(s, table, "anulado_por", "INT DEFAULT NULL");
   await addColumnIfMissing(s, table, "motivo_anulacion", "TEXT");
   await addColumnIfMissing(s, table, "estado_previo", "VARCHAR(30) DEFAULT NULL");
+  // Fase 1: rol (cargo) con el que se anulo.
+  await addColumnIfMissing(s, table, "anulado_rol_id", "INT DEFAULT NULL");
+  await addColumnIfMissing(s, table, "anulado_cargo", "VARCHAR(120) DEFAULT NULL");
+}
+
+/* Rol con el que actua quien captura, firma, revisa, aprueba o anula (rbac.cargoActuante). */
+export interface Actuo {
+  rol_id: number;
+  cargo: string;
+}
+
+/*
+ * Capturar un ensayo que declara equipos usados o insumos consumidos exige
+ * ademas registrar uso de equipos (equipos:C, alcance "uso" o mayor) y
+ * movimientos de inventario (inventario:C, alcance "movimientos" o mayor).
+ */
+export async function exigirUsoDeRecursos(s: Session, user: CurrentUser, auth: Autorizacion, uso: { equipos: boolean; insumosJson?: string | null }): Promise<void> {
+  if (uso.equipos) await requirePermission(s, user, "equipos", "C", { objeto: "uso_equipo" }, auth);
+  let insumos: unknown = [];
+  try {
+    insumos = JSON.parse(String(uso.insumosJson || "[]"));
+  } catch {
+    insumos = [];
+  }
+  if (Array.isArray(insumos) && insumos.length) await requirePermission(s, user, "inventario", "C", { objeto: "movimiento" }, auth);
+}
+
+/* Columnas con el rol de quien capturo el registro (Fase 1). */
+export async function ensureActuoColumns(s: Session, table: string): Promise<void> {
+  await addColumnIfMissing(s, table, "creado_rol_id", "INT DEFAULT NULL");
+  await addColumnIfMissing(s, table, "creado_cargo", "VARCHAR(120) DEFAULT NULL");
 }
 
 export function folioLabel(table: SampleTable, row: Row | null | undefined): string {
@@ -133,7 +165,7 @@ export async function anularRegistro(
   table: SampleTable,
   id: number,
   motivo: string,
-  options: { movimientosPrefix?: string; bloqueaSi?: () => Promise<string | null> } = {},
+  options: { movimientosPrefix?: string; bloqueaSi?: () => Promise<string | null>; actuo?: Actuo } = {},
 ): Promise<Row> {
   if (motivo.length < 5) throw new HttpError(400, { message: "Indica el motivo de la anulacion (al menos 5 caracteres)" });
   const antes = await snapshotRow(s, table, id);
@@ -145,8 +177,8 @@ export async function anularRegistro(
   }
   const userId = Number.parseInt(String(user.sub || ""), 10) || null;
   await s.execute(
-    `UPDATE ${table} SET estado_previo = :estado_previo, estado = :anulado, anulado_en = :anulado_en, anulado_por = :anulado_por, motivo_anulacion = :motivo WHERE id = :id`,
-    { estado_previo: String(antes.estado || "registrada"), anulado: ANULADO_VALUE[table], anulado_en: new Date().toISOString(), anulado_por: userId, motivo, id },
+    `UPDATE ${table} SET estado_previo = :estado_previo, estado = :anulado, anulado_en = :anulado_en, anulado_por = :anulado_por, anulado_rol_id = :rol_id, anulado_cargo = :cargo, motivo_anulacion = :motivo WHERE id = :id`,
+    { estado_previo: String(antes.estado || "registrada"), anulado: ANULADO_VALUE[table], anulado_en: new Date().toISOString(), anulado_por: userId, rol_id: options.actuo?.rol_id ?? null, cargo: options.actuo?.cargo ?? null, motivo, id },
   );
   let repuestos = 0;
   if (options.movimientosPrefix) {
@@ -161,7 +193,7 @@ export async function anularRegistro(
     motivo,
     antes,
     despues,
-    detalle: repuestos ? { movimientos_repuestos: repuestos } : null,
+    detalle: repuestos || options.actuo ? { ...(repuestos ? { movimientos_repuestos: repuestos } : {}), ...(options.actuo ? { actuo_como: options.actuo } : {}) } : null,
   });
   return despues || antes;
 }
@@ -170,7 +202,7 @@ export async function anularRegistro(
  * Restaurar un registro anulado (queda en auditoria con motivo). Exige que la
  * etapa de origen siga vigente. El inventario no se vuelve a descontar solo.
  */
-export async function restaurarRegistro(s: Session, user: CurrentUser, table: SampleTable, id: number, motivo: string): Promise<Row> {
+export async function restaurarRegistro(s: Session, user: CurrentUser, table: SampleTable, id: number, motivo: string, actuo?: Actuo): Promise<Row> {
   if (motivo.length < 5) throw new HttpError(400, { message: "Indica el motivo de la restauracion (al menos 5 caracteres)" });
   const antes = await snapshotRow(s, table, id);
   if (!antes) throw new HttpError(404, { message: "Registro no encontrado" });
@@ -181,9 +213,9 @@ export async function restaurarRegistro(s: Session, user: CurrentUser, table: Sa
     if (parentId) await assertOrigin(s, parent.table, parentId, { requireAccepted: parent.table === "muestras_recepcion" });
   }
   const estado = String(antes.estado_previo || (table === "muestras_analisis" ? "registrado" : "registrada"));
-  await s.execute(`UPDATE ${table} SET estado = :estado, estado_previo = NULL, anulado_en = NULL, anulado_por = NULL, motivo_anulacion = NULL WHERE id = :id`, { estado, id });
+  await s.execute(`UPDATE ${table} SET estado = :estado, estado_previo = NULL, anulado_en = NULL, anulado_por = NULL, anulado_rol_id = NULL, anulado_cargo = NULL, motivo_anulacion = NULL WHERE id = :id`, { estado, id });
   const despues = await snapshotRow(s, table, id);
-  await registrarAuditoria(s, user, { accion: "restaurar", entidad: table, entidadId: id, referencia: folioLabel(table, antes), motivo, antes, despues });
+  await registrarAuditoria(s, user, { accion: "restaurar", entidad: table, entidadId: id, referencia: folioLabel(table, antes), motivo, antes, despues, detalle: actuo ? { actuo_como: actuo } : null });
   return despues || antes;
 }
 

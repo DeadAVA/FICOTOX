@@ -33,16 +33,26 @@ for (let i = 0; i < 60; i += 1) {
   await new Promise((r) => setTimeout(r, 1000));
 }
 
-// ---------- Sesiones (QA, con el rol de prueba que tiene todos los permisos, y una revisora creada por API con ese mismo rol) ----------
+// ---------- Sesiones (QA, con el rol de prueba que tiene G en todo, y una revisora con un rol de revision creado por API) ----------
 {
   const bad = await api("POST", "/auth/login", { email: "qa@ficotox.local", password: "incorrecta-123" });
   check("login fallido -> 401", bad.status === 401, `status ${bad.status}`);
   const r = await api("POST", "/auth/login", { email: "qa@ficotox.local", password: "QaFicotox2026!" });
   token = r.data?.token || "";
-  check("login QA", r.status === 200 && !!token && r.data?.permissions?.auditoria?.read === true && r.data?.permissions?.aprobaciones?.update === true, `perm auditoria=${JSON.stringify(r.data?.permissions?.auditoria)} aprobaciones=${JSON.stringify(r.data?.permissions?.aprobaciones)}`);
-  // Segundo usuario (revisor independiente) creado por API
-  const u = await api("POST", "/admin/usuarios", { nombre: "Revisora QA", email: "revisora@cicese.mx", activo: true, id_rol: r.data?.user?.role_id, departamento: "Calidad", password: "RevisoraQA2026!" });
-  check("crear usuario revisora", u.status === 201, `status ${u.status} ${JSON.stringify(u.data)}`);
+  check("login QA", r.status === 200 && !!token && r.data?.permissions?.calidad?.V === "total" && r.data?.permissions?.ensayos?.A === "total", `perm calidad=${JSON.stringify(r.data?.permissions?.calidad)} ensayos=${JSON.stringify(r.data?.permissions?.ensayos)}`);
+  // Segundo usuario (revisor independiente) con un rol que revisa y aprueba (sin usuarios:G, para no violar la regla 1).
+  const rolRev = await api("POST", "/admin/roles", {
+    nombre: "Revisora QA",
+    descripcion: "Revisa y aprueba (pruebas)",
+    motivo: "Rol de pruebas",
+    permisos: [
+      { modulo: "ensayos", accion: "R" }, { modulo: "ensayos", accion: "A" },
+      { modulo: "informes", accion: "R" }, { modulo: "informes", accion: "A" },
+      { modulo: "documentos", accion: "A" }, { modulo: "muestras", accion: "V" },
+    ],
+  });
+  const u = await api("POST", "/admin/usuarios", { nombre: "Revisora QA", email: "revisora@cicese.mx", activo: true, rol_id: rolRev.data?.id, departamento: "Calidad", password: "RevisoraQA2026!" });
+  check("crear usuario revisora", rolRev.status === 201 && u.status === 201, `rol ${rolRev.status} usuario ${u.status} ${JSON.stringify(u.data)}`);
   const r2 = await api("POST", "/auth/login", { email: "revisora@cicese.mx", password: "RevisoraQA2026!" });
   token2 = r2.data?.token || "";
   check("login revisora", r2.status === 200 && !!token2, `status ${r2.status}`);
@@ -252,18 +262,16 @@ let informeId = null;
   await api("POST", `/inventory/reactivos/${acido.id}/reactivar`, { motivo: "Prueba terminada" });
 
   // Historial por registro: solo quien puede leer el modulo.
-  const permisos = (await api("GET", "/admin/permissions")).data?.items || [];
-  const muestrasPerm = permisos.find((p) => p.clave === "muestras");
-  const rol = await api("POST", "/admin/roles", { nombre: "Analista QA", descripcion: "Solo muestras", permissions: muestrasPerm ? [{ permiso_id: muestrasPerm.id, can_read: true, can_create: true, can_update: true, can_delete: false }] : [] });
-  const u3 = await api("POST", "/admin/usuarios", { nombre: "Analista QA", email: "analista@cicese.mx", activo: true, id_rol: rol.data?.id || rol.data?.role?.id, departamento: "Lab", password: "AnalistaQA2026!" });
+  const rol = await api("POST", "/admin/roles", { nombre: "Analista QA", descripcion: "Solo muestras", motivo: "Rol de pruebas", permisos: [{ modulo: "muestras", accion: "V" }, { modulo: "muestras", accion: "C" }, { modulo: "muestras", accion: "E" }] });
+  const u3 = await api("POST", "/admin/usuarios", { nombre: "Analista QA", email: "analista@cicese.mx", activo: true, rol_id: rol.data?.id, departamento: "Lab", password: "AnalistaQA2026!" });
   const t3 = (await api("POST", "/auth/login", { email: "analista@cicese.mx", password: "AnalistaQA2026!" })).data?.token || "";
-  check("usuario con rol limitado creado", rol.status === 201 && u3.status === 201 && !!t3, `rol ${rol.status} user ${u3.status} perm=${muestrasPerm?.id}`);
+  check("usuario con rol limitado creado", rol.status === 201 && u3.status === 201 && !!t3, `rol ${rol.status} user ${u3.status}`);
   const users = (await api("GET", "/admin/usuarios")).data?.items || [];
   const qa = users.find((u) => u.email === "qa@ficotox.local");
   const histUsuario = await api("GET", `/audit?entidad=usuarios&entidad_id=${qa?.id}`, undefined, { token: t3 });
   check("historial de usuarios sin permiso 'usuarios' -> 403", histUsuario.status === 403, `status ${histUsuario.status}`);
   const histMuestra = await api("GET", `/audit?entidad=muestras_recepcion&entidad_id=${recepcionId}`, undefined, { token: t3 });
-  check("historial de una recepcion con permiso 'muestras' -> 200", histMuestra.status === 200 && (histMuestra.data?.items || []).length > 0, `status ${histMuestra.status}`);
+  check("historial de una recepcion con permiso muestras:V -> 200", histMuestra.status === 200 && (histMuestra.data?.items || []).length > 0, `status ${histMuestra.status}`);
   const logCompleto = await api("GET", "/audit", undefined, { token: t3 });
   const aprobarSinPermiso = await api("POST", `/samples/analysis/${anaId}/revisar`, {}, { token: t3 });
   check("bitacora completa y revisar sin permiso -> 403", logCompleto.status === 403 && aprobarSinPermiso.status === 403, `log ${logCompleto.status} revisar ${aprobarSinPermiso.status}`);

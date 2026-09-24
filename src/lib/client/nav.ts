@@ -1,11 +1,13 @@
 import { HIDDEN_MODULES } from "../shared/features";
 import type { ModuleAction, PermissionsMap } from "./types";
+import type { Modulo } from "../shared/permisos";
 
 /*
  * Arquitectura de navegacion: una lista corta de destinos de primer nivel;
  * los que agrupan varias pantallas (Muestras, Inventario, Calidad,
  * Administracion) se despliegan en la barra lateral y muestran sus
- * subdestinos. Cada destino declara los modulos RBAC que lo hacen visible.
+ * subdestinos. Cada destino declara los modulos (Fase 1) cuyo permiso V lo
+ * hace visible; el Inicio lo ve toda persona activa.
  */
 
 export type NavIcon = "house" | "testtube" | "report" | "package" | "flask" | "cube" | "wrench" | "arrows" | "filetext" | "clock" | "users" | "shield" | "seal";
@@ -13,71 +15,75 @@ export type NavIcon = "house" | "testtube" | "report" | "package" | "flask" | "c
 export interface NavChild {
   href: string;
   label: string;
-  /* Modulo que debe poder leerse; si falta, hereda los del padre. */
-  module?: string;
+  /* Modulo que debe poder verse (V); si falta, hereda los del padre. */
+  module?: Modulo;
+  /* Oculta el destino si el alcance de V en su modulo es uno de estos (p. ej. "propio"). */
+  hideForScopes?: string[];
 }
 
 export interface NavItem {
   /* Destino del enlace; con hijos, el primero visible sustituye a este valor. */
   href: string;
   label: string;
-  modules: string[];
+  /* Modulos que lo hacen visible (con V); vacio = lo ve toda persona activa (el Inicio). */
+  modules: Modulo[];
   description: string;
   icon: NavIcon;
   children?: NavChild[];
 }
 
-export const INVENTORY_TABS = [
-  { href: "/inventario/reactivos", label: "Reactivos", module: "reactivos" },
-  { href: "/inventario/consumibles", label: "Consumibles", module: "consumibles" },
+export const INVENTORY_TABS: NavChild[] = [
+  { href: "/inventario/reactivos", label: "Reactivos", module: "inventario" },
+  { href: "/inventario/consumibles", label: "Consumibles", module: "inventario" },
   { href: "/inventario/equipos", label: "Equipos", module: "equipos" },
-  { href: "/inventario/mantenimiento", label: "Mantenimiento", module: "mantenimiento" },
+  { href: "/inventario/mantenimiento", label: "Mantenimiento", module: "equipos" },
 ];
 
-export const SAMPLE_TABS = [
-  { href: "/muestras/recepcion", label: "Recepción" },
-  { href: "/muestras/procesamiento", label: "Procesamiento" },
-  { href: "/muestras/extraccion", label: "Extracción" },
-  { href: "/muestras/analisis", label: "Análisis" },
+export const SAMPLE_TABS: NavChild[] = [
+  { href: "/muestras/recepcion", label: "Recepción", module: "muestras" },
+  { href: "/muestras/procesamiento", label: "Procesamiento", module: "ensayos" },
+  { href: "/muestras/extraccion", label: "Extracción", module: "ensayos" },
+  { href: "/muestras/analisis", label: "Análisis", module: "ensayos" },
 ];
 
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Inicio", modules: ["dashboard"], description: "Búsqueda y lo pendiente", icon: "house" },
-  { href: "/muestras", label: "Muestras", modules: ["muestras"], description: "Recepción, procesamiento, extracción y análisis", icon: "testtube", children: SAMPLE_TABS },
+  { href: "/", label: "Inicio", modules: [], description: "Búsqueda y lo pendiente", icon: "house" },
+  { href: "/muestras", label: "Muestras", modules: ["muestras", "ensayos"], description: "Recepción, procesamiento, extracción y análisis", icon: "testtube", children: SAMPLE_TABS },
   { href: "/informes", label: "Informes", modules: ["informes"], description: "Informes de resultados para el cliente", icon: "report" },
   {
     href: "/inventario",
     label: "Inventario",
-    modules: ["reactivos", "consumibles", "equipos", "mantenimiento", "movimientos"],
+    modules: ["inventario", "equipos"],
     description: "Reactivos, consumibles, equipos, mantenimiento y movimientos",
     icon: "package",
-    children: [...INVENTORY_TABS, { href: "/movimientos", label: "Movimientos", module: "movimientos" }],
+    children: [...INVENTORY_TABS, { href: "/movimientos", label: "Movimientos", module: "inventario" }],
   },
   {
     href: "/auditoria",
     label: "Calidad",
-    modules: ["documentos", "auditoria"].filter((m) => !HIDDEN_MODULES.has(m)),
+    modules: (["documentos", "calidad"] as Modulo[]).filter((m) => !HIDDEN_MODULES.has(m)),
     description: HIDDEN_MODULES.has("documentos") ? "Bitácora de auditoría" : "Documentos controlados y bitácora de auditoría",
     icon: "seal",
-    children: [
+    children: ([
       { href: "/documentos", label: "Documentos", module: "documentos" },
-      { href: "/auditoria", label: "Auditoría", module: "auditoria" },
-    ].filter((child) => !HIDDEN_MODULES.has(child.module)),
+      { href: "/auditoria", label: "Auditoría", module: "calidad" },
+    ] as NavChild[]).filter((child) => !HIDDEN_MODULES.has(String(child.module))),
   },
   {
     href: "/administracion/usuarios",
     label: "Administración",
-    modules: ["usuarios", "roles"],
-    description: "Cuentas de acceso y permisos",
+    modules: ["usuarios"],
+    description: "Cuentas, roles y permisos",
     icon: "users",
     children: [
       { href: "/administracion/usuarios", label: "Usuarios", module: "usuarios" },
-      { href: "/administracion/roles", label: "Roles", module: "roles" },
+      { href: "/administracion/roles", label: "Roles", module: "usuarios", hideForScopes: ["propio"] },
     ],
   },
 ];
 
-export function canAny(permissions: PermissionsMap, modules: string[], action: ModuleAction = "read"): boolean {
+export function canAny(permissions: PermissionsMap, modules: Modulo[], action: ModuleAction = "V"): boolean {
+  if (!modules.length) return true;
   return modules.some((moduleKey) => !!permissions[moduleKey]?.[action]);
 }
 
@@ -86,9 +92,14 @@ export function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/* Hijos que el rol puede ver; sin `module` heredan los modulos del padre. */
+/* Hijos que la persona puede ver; sin `module` heredan los modulos del padre. */
 export function visibleChildren(item: NavItem, permissions: PermissionsMap): NavChild[] {
-  return (item.children || []).filter((child) => (child.module ? !!permissions[child.module]?.read : canAny(permissions, item.modules)));
+  return (item.children || []).filter((child) => {
+    if (!child.module) return canAny(permissions, item.modules);
+    const alcance = permissions[child.module]?.V;
+    if (!alcance) return false;
+    return !child.hideForScopes?.includes(alcance);
+  });
 }
 
 /* Destinos de primer nivel visibles, con el enlace del padre apuntando a su primer hijo visible. */
@@ -105,7 +116,7 @@ export function isItemActive(pathname: string, item: NavItem): boolean {
   return (item.children || []).some((child) => isActivePath(pathname, child.href));
 }
 
-/* Primera ruta permitida al entrar. */
+/* Primera ruta permitida al entrar (el Inicio, que ve toda persona activa). */
 export function firstAllowedRoute(permissions: PermissionsMap): string | null {
   return visibleNav(permissions)[0]?.href || null;
 }

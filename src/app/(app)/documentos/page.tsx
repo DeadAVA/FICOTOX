@@ -97,10 +97,10 @@ function DocumentosContent() {
   }, [resource.data, search]);
   const summary = resource.data?.summary || {};
 
-  const canCreate = can("documentos", "create");
-  const canUpdate = can("documentos", "update");
-  const canDelete = can("documentos", "delete");
-  const canApprove = can("aprobaciones", "update");
+  const canCreate = can("documentos", "C", { objeto: "documento", borrador: true });
+  const canUpdate = can("documentos", "E", { objeto: "documento", borrador: true });
+  const canDelete = can("documentos", "AN");
+  const canApprove = can("documentos", "A");
 
   const act = async (path: string, body: Record<string, unknown>, ok: string) => {
     try {
@@ -158,7 +158,7 @@ function DocumentosContent() {
     if (canUpdate && estadoDoc === "borrador") items.push({ label: "Enviar a revisión", description: "Pasa a revisión técnica", icon: <PaperPlaneTilt size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => enviarRevision(item) });
     if (canApprove && ["en_revision", "borrador"].includes(estadoDoc)) items.push({ label: "Aprobar (vigente)", description: "Entra a la lista maestra", icon: <SealCheck size={16} weight="duotone" />, tone: "success", separatorBefore: estadoDoc !== "borrador", onSelect: () => setAprobar({ item, cargo: "", vigencia: "" }) });
     if (canCreate && ["vigente", "obsoleto"].includes(estadoDoc)) items.push({ label: "Nueva revisión…", description: "Borrador con revisión +1", icon: <ArrowsClockwise size={16} weight="duotone" />, tone: "success", separatorBefore: true, onSelect: () => nuevaRevision(item) });
-    if (canApprove && estadoDoc === "vigente") items.push({ label: "Declarar obsoleto…", description: "Deja de estar vigente, con motivo", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => obsoletar(item) });
+    if (canDelete && estadoDoc === "vigente") items.push({ label: "Declarar obsoleto…", description: "Deja de estar vigente, con motivo", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => obsoletar(item) });
     if (canDelete && ["borrador", "en_revision"].includes(estadoDoc)) items.push({ label: "Cancelar borrador…", description: "Queda cancelado con motivo", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => cancelar(item) });
     return items;
   };

@@ -187,7 +187,7 @@ export default function AyudaPage() {
             <Steps
               items={[
                 <>
-                  <b>Recepción (R).</b> Quién entrega, qué muestra o lote, análisis solicitado, inspección visual (7 requisitos) y la <b>decisión de aceptación</b>. Sin decisión, o con la muestra rechazada, no se puede seguir. {can("muestras", "create") ? <Go href="/muestras/recepcion/nueva">Nueva recepción</Go> : null}
+                  <b>Recepción (R).</b> Quién entrega, qué muestra o lote, análisis solicitado, inspección visual (7 requisitos) y la <b>decisión de aceptación</b>. Sin decisión, o con la muestra rechazada, no se puede seguir. {can("muestras", "C", { objeto: "recepcion", borrador: true }) ? <Go href="/muestras/recepcion/nueva">Nueva recepción</Go> : null}
                 </>,
                 <>
                   <b>Procesamiento (P).</b> Lavado, desconche y molienda; equipo usado en cada paso y peso de la molienda. Descuenta las bolsas del inventario.
@@ -223,7 +223,7 @@ export default function AyudaPage() {
                 <b>Equipos con alerta.</b> Si un equipo está en mantenimiento o con calibración vencida, se avisa y se pide confirmación; no se bloquea.
               </li>
             </ul>
-            <Tip>Las personas (quién extrajo, quién supervisó) se eligen de la lista del personal autorizado; el cargo sale de su rol, no se captura.</Tip>
+            <Tip>Las personas (quién extrajo, quién supervisó) se eligen de la lista del personal autorizado; el cargo no se captura: se guarda el del rol con el que actúa quien firma.</Tip>
           </Section>
 
           <Section anchor="analisis" title="Análisis, revisión y aprobación" lead="El análisis captura lo medido en el extracto y pasa por dos firmas antes de poder informarse.">
@@ -239,7 +239,7 @@ export default function AyudaPage() {
                   Registra los controles de calidad (blanco, material de referencia, duplicado) y presiona <b>Registrar análisis</b>.
                 </>,
                 <>
-                  <b>Marcar revisado</b> y luego <b>Aprobar</b> (permiso Aprobaciones). Cualquier persona con ese permiso puede hacerlo, aunque haya capturado el registro. Un análisis aprobado ya no se edita: si está mal, se anula y se captura otro.
+                  <b>Marcar revisado</b> y luego <b>Aprobar</b> (permisos de revisar y aprobar ensayos). Cualquier persona con ese permiso puede hacerlo, aunque haya capturado el registro. Si tienes varios roles que lo permiten, el sistema te pregunta con qué cargo actúas. Un análisis aprobado ya no se edita: si está mal, se anula y se captura otro.
                 </>,
               ]}
             />
@@ -249,7 +249,7 @@ export default function AyudaPage() {
             <Steps
               items={[
                 <>
-                  <b>Crear:</b> elige la recepción; se cargan cliente, ítems ensayados y los análisis aprobados. Revisa las declaraciones (alcance, regla de decisión, desviaciones) y crea el borrador. {can("informes", "create") ? <Go href="/informes/nuevo">Nuevo informe</Go> : null}
+                  <b>Crear:</b> elige la recepción; se cargan cliente, ítems ensayados y los análisis aprobados. Revisa las declaraciones (alcance, regla de decisión, desviaciones) y crea el borrador. {can("informes", "C") ? <Go href="/informes/nuevo">Nuevo informe</Go> : null}
                 </>,
                 <>
                   <b>Marcar revisado</b> y <b>Autorizar</b> con firma: los resultados quedan congelados y se genera el PDF definitivo con su huella SHA-256.

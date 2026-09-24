@@ -189,7 +189,9 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
   const { anular, restaurar } = useAnulacion("analysis", (row) => `A ${String(row.folio_num || 0).padStart(7, "0")}`);
   const editing = !!item?.id;
   const estado = String(item?.estado || "registrado");
-  const readOnly = editing && ["aprobado", "anulado", "anulada"].includes(estado);
+  // E solo mientras el análisis está registrado (Fase 1): revisado y aprobado se leen, no se editan.
+  const canEdit = editing ? can("ensayos", "E", { objeto: "analisis", borrador: estado === "registrado" }) && estado === "registrado" : can("ensayos", "C", { objeto: "analisis", borrador: true });
+  const readOnly = editing && (["aprobado", "revisado", "anulado", "anulada"].includes(estado) || !canEdit);
   const patch = (changes: Partial<AnalysisFormState>) => setForm((prev) => ({ ...prev, ...changes }));
   const meta = ANALYSIS_TYPES.find((t) => t.value === form.tipo);
   const requiereExtraccion = !!meta?.requiere_extraccion;
@@ -342,7 +344,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
     if (!payload.resultados.length) return fail("Captura al menos un resultado", "sec-resultados");
     if (payload.resultados.some((r) => !r.id_muestra || (r.resultado === null && !r.resultado_texto))) return fail("Cada fila necesita ID de muestra y resultado", "sec-resultados");
     if (!payload.analista_nombre) return fail("Indica el nombre del analista", "sec-personal");
-    if (!can("muestras", editing ? "update" : "create")) return fail("No tienes permiso para esta acción", "sec-datos");
+    if (!canEdit) return fail("No tienes permiso para esta acción", "sec-datos");
     let motivo: string | null = null;
     if (editing && estado === "revisado") {
       motivo = await prompt({ title: "El análisis ya fue revisado", description: "Al editarlo vuelve a estado registrado y debe revisarse de nuevo. Indica el motivo del cambio.", confirmLabel: "Guardar y reiniciar revisión" });
@@ -403,7 +405,8 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
   };
 
   const ext = extracciones.find((e) => String(e.id) === form.extraccionId);
-  const canApprove = can("aprobaciones", "update");
+  const canReview = can("ensayos", "R");
+  const canApprove = can("ensayos", "A");
   const folioLabel = `A ${form.folio ? String(form.folio).padStart(7, "0") : "—"}`;
   const resultadosOk = form.resultados.length > 0 && form.resultados.every((r) => r.id_muestra.trim() && (r.resultado.trim() || r.resultado_texto.trim()));
 
@@ -422,8 +425,8 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
 
   const anulado = ["anulado", "anulada"].includes(estado);
   const moreItems: MenuItem[] = [];
-  if (editing && !anulado && can("muestras", "delete")) moreItems.push({ label: "Anular análisis…", description: "Queda en la bitácora con motivo", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", onSelect: async () => (await anular(item!)) && router.push("/muestras/analisis") });
-  if (editing && anulado && can("muestras", "delete")) moreItems.push({ label: "Restaurar análisis", description: "Vuelve a la lista con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", onSelect: async () => (await restaurar(item!)) && router.push("/muestras/analisis") });
+  if (editing && !anulado && can("ensayos", "AN")) moreItems.push({ label: "Anular análisis…", description: "Queda en la bitácora con motivo", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", onSelect: async () => (await anular(item!)) && router.push("/muestras/analisis") });
+  if (editing && anulado && can("ensayos", "AN")) moreItems.push({ label: "Restaurar análisis", description: "Vuelve a la lista con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", onSelect: async () => (await restaurar(item!)) && router.push("/muestras/analisis") });
 
   return (
     <FormPage
@@ -449,7 +452,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
             {readOnly ? "Volver" : "Cancelar"}
           </Button>
           {moreItems.length ? <ActionMenu items={moreItems} label="Más acciones" header={folioLabel} /> : null}
-          {editing && estado === "registrado" && canApprove ? (
+          {editing && estado === "registrado" && canReview ? (
             <Button variant="soft" icon={<CheckCircle size={16} />} onClick={() => setSign("revisar")}>
               Marcar revisado
             </Button>
@@ -475,6 +478,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       {item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}
+          {item.anulado_cargo ? ` · Anuló como ${String(item.anulado_cargo)}` : ""}
         </Callout>
       ) : null}
       {!editing ? <Callout tone="info">La clave del formato oficial de registro de análisis (FX-TCI-[ID]) la define la coordinación; mientras tanto, anota la clave y revisión del protocolo aplicado en “Referencia del método”.</Callout> : null}
@@ -730,10 +734,10 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
 
       <FormCard id="sec-revision" title="Revisión y aprobación" description="Una segunda persona revisa; otra distinta aprueba. Solo los análisis aprobados pueden reportarse.">
         <div className="grid gap-3 sm:grid-cols-2">
-          <SignoffCard title="Revisó" name={item?.revisado_nombre} at={item?.revisado_en} note={item?.revision_observaciones} hint={editing ? "Se firma con “Marcar revisado”." : "Después de registrar el análisis."} />
-          <SignoffCard title="Aprobó" name={item?.aprobado_nombre} at={item?.aprobado_en} hint={editing ? "Se firma con “Aprobar” tras la revisión." : "Después de la revisión."} />
+          <SignoffCard title="Revisó" name={item?.revisado_nombre} cargo={item?.revisado_cargo} at={item?.revisado_en} note={item?.revision_observaciones} hint={editing ? "Se firma con “Marcar revisado”." : "Después de registrar el análisis."} />
+          <SignoffCard title="Aprobó" name={item?.aprobado_nombre} cargo={item?.aprobado_cargo} at={item?.aprobado_en} hint={editing ? "Se firma con “Aprobar” tras la revisión." : "Después de la revisión."} />
         </div>
-        {editing && estado === "registrado" && !canApprove ? <Callout tone="info" className="mt-4">Un usuario con permiso de aprobación debe revisar este análisis.</Callout> : null}
+        {editing && estado === "registrado" && !canReview ? <Callout tone="info" className="mt-4">Una persona con permiso de revisar ensayos debe revisar este análisis.</Callout> : null}
       </FormCard>
 
       <SignDialog
@@ -743,7 +747,6 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
         title={sign === "revisar" ? "Marcar análisis como revisado" : "Aprobar análisis"}
         description={sign === "revisar" ? `Quedará registrado a nombre de ${user?.nombre || user?.email || "tu usuario"}.` : "A partir de la aprobación el resultado puede incluirse en un informe."}
         confirmLabel={sign === "revisar" ? "Marcar revisado" : "Aprobar"}
-        withCargo={false}
         withObservaciones={sign === "revisar"}
         loading={signing}
         onConfirm={doSign}

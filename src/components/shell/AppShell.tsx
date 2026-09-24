@@ -191,7 +191,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 type VisibleItem = NavItem & { children: NavChild[] };
 
-function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAccount, onClose, isMac, user, onLogout }: { items: VisibleItem[]; pathname: string; collapsed: boolean; onSearch: () => void; onToggle: () => void; onAccount: () => void; onClose?: () => void; isMac: boolean; user: { nombre?: string; email?: string; rol?: string; avatar?: string | null } | null; onLogout: () => void }) {
+function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAccount, onClose, isMac, user, onLogout }: { items: VisibleItem[]; pathname: string; collapsed: boolean; onSearch: () => void; onToggle: () => void; onAccount: () => void; onClose?: () => void; isMac: boolean; user: { nombre?: string; email?: string; roles?: string[]; avatar?: string | null } | null; onLogout: () => void }) {
   // El shell solo se monta ya autenticado (en el cliente), así que leer localStorage al iniciar no desajusta la hidratación.
   const [expanded, setExpanded] = useState<string[]>(() => (typeof window === "undefined" ? [] : readExpanded()));
 
@@ -353,7 +353,7 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
               {!collapsed ? (
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-[13.5px] font-medium text-ink">{user?.nombre || user?.email}</span>
-                  <span className="truncate text-[12px] text-ink-3">{user?.rol || user?.email}</span>
+                  <span className="truncate text-[12px] text-ink-3">{user?.roles?.join(", ") || user?.email}</span>
                 </span>
               ) : null}
             </button>

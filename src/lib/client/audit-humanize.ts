@@ -1,4 +1,5 @@
 import type { ApiRecord } from "@/lib/client/types";
+import { ACCION_KEYS, MODULOS, alcanceLabel, isAccion, isModulo } from "@/lib/shared/permisos";
 import { ACCEPTANCE_DECISIONS, ANALYSIS_STATES, AUDIT_ENTITIES, CLIENT_CONTACT_MEDIA, DISPOSAL_TYPES, DOCUMENT_STATES, RECEPTION_DELIVERY_MEDIA, REPORT_DELIVERY_MEDIA, REPORT_STATES, SAMPLE_STATES, STORAGE_PLACES } from "@/lib/shared/sgc";
 
 /*
@@ -81,7 +82,55 @@ export const ACTION_TONE: Record<string, AuditTone> = {
   login: "neutral",
   login_fallido: "danger",
   descargar: "neutral",
+  asignar_rol: "brand",
+  revocar_rol: "danger",
+  vencer_rol: "warning",
 };
+
+/*
+ * Permisos de un rol (filas { modulo, accion, alcance }) en lenguaje llano, por
+ * modulo: "Muestras: C, E (Recepción)". Se usa en la bitacora y en Roles.
+ */
+export function resumenPermisos(filas: unknown): Map<string, string> {
+  const porModulo = new Map<string, Map<string, string[]>>();
+  for (const fila of Array.isArray(filas) ? filas : []) {
+    if (!fila || typeof fila !== "object") continue;
+    const { modulo, accion, alcance } = fila as ApiRecord;
+    if (!isModulo(modulo) || !isAccion(accion)) continue;
+    const grupos = porModulo.get(modulo) || new Map<string, string[]>();
+    const clave = String(alcance || "total");
+    grupos.set(clave, [...(grupos.get(clave) || []), accion]);
+    porModulo.set(modulo, grupos);
+  }
+  const out = new Map<string, string>();
+  for (const modulo of MODULOS) {
+    const grupos = porModulo.get(modulo.clave);
+    if (!grupos) continue;
+    const partes = [...grupos.entries()]
+      .sort(([a], [b]) => (a === "total" ? -1 : b === "total" ? 1 : a.localeCompare(b)))
+      .map(([alcance, acciones]) => {
+        const lista = acciones.sort((x, y) => ACCION_KEYS.indexOf(x as never) - ACCION_KEYS.indexOf(y as never)).join(", ");
+        return alcance === "total" ? lista : `${lista} (${alcanceLabel(alcance)})`;
+      });
+    out.set(modulo.nombre, partes.join("; "));
+  }
+  return out;
+}
+
+/* Diferencia entre dos matrices de permisos, una linea por modulo que cambio. */
+function diffPermisos(antes: unknown, despues: unknown): string[] {
+  const a = resumenPermisos(antes);
+  const b = resumenPermisos(despues);
+  const lines: string[] = [];
+  for (const modulo of MODULOS) {
+    const x = a.get(modulo.nombre) || "sin permiso";
+    const y = b.get(modulo.nombre) || "sin permiso";
+    if (x !== y) lines.push(`${modulo.nombre}: ${x} → ${y}`);
+  }
+  return lines;
+}
+
+const esMatrizPermisos = (value: unknown) => Array.isArray(value) && value.some((item) => !!item && typeof item === "object" && "modulo" in (item as object) && "accion" in (item as object));
 
 /* Etiquetas de campos. Lo que no esta aqui se muestra con el nombre "humanizado" (guiones bajos → espacios). */
 const FIELD_LABELS: Record<string, string> = {
@@ -215,6 +264,14 @@ const FIELD_LABELS: Record<string, string> = {
   can_create: "Crear",
   can_update: "Editar",
   can_delete: "Anular / dar de baja",
+  creado_cargo: "Cargo con el que se capturó",
+  anulado_cargo: "Cargo de quien anuló",
+  aprobado_cargo: "Cargo de quien aprobó",
+  entregado_cargo: "Cargo de quien entregó",
+  registrado_cargo: "Cargo de quien registró",
+  vigente_desde: "Vigente desde",
+  vigente_hasta: "Vigente hasta",
+  actuo_como: "Actuó como",
   es_sistemico: "Usuario del sistema",
   auth_provider: "Acceso mediante",
   ultimo_acceso: "Último acceso",
@@ -322,7 +379,7 @@ const HIDDEN_FIELDS = new Set([
 const BOOLEAN_FIELDS = new Set(["activo", "trabajar", "conformidad", "muestra_unica", "requiere_extraccion", "es_blanco", "vigente", "obsoleto", "existe_usuario", "es_sistemico"]);
 const isBooleanField = (key: string) => BOOLEAN_FIELDS.has(key) || key.startsWith("can_");
 /* Ademas de la lista, todo campo "*_por" es un id de usuario: no se muestra. */
-const isHidden = (key: string) => HIDDEN_FIELDS.has(key) || (key.endsWith("_por") && key !== "recibido_por");
+const isHidden = (key: string) => HIDDEN_FIELDS.has(key) || (key.endsWith("_por") && key !== "recibido_por") || key.endsWith("_rol_id") || key === "asignacion_id";
 
 const catalogLabel = (items: { value: string; label: string }[], value: unknown) => items.find((item) => item.value === String(value))?.label;
 
@@ -336,7 +393,7 @@ const STATE_BY_ENTITY: Record<string, Record<string, { label: string }>> = {
 };
 const GENERIC_STATES: Record<string, string> = { pendiente: "Pendiente", vencido: "Vencido", completado: "Completado", programado: "Programado", cancelado: "Cancelado", activo: "Activo", inactivo: "Inactivo", baja: "Dado de baja", vigente: "Vigente", obsoleto: "Obsoleto" };
 
-const CONSUMED_DETAIL = new Set(["enmienda_de", "enmienda", "nueva_revision_de", "avatar", "contrasena", "excepcion", "revisiones_obsoletas", "pdf", "sha256", "a_quien", "medio", "fecha", "decision", "disposicion", "cantidad", "insertados", "actualizados", "ignorados", "errores", "hojas", "movimientos_repuestos", "proveedor", "existe_usuario", "motivo", "permisos"]);
+const CONSUMED_DETAIL = new Set(["enmienda_de", "enmienda", "nueva_revision_de", "avatar", "contrasena", "excepcion", "revisiones_obsoletas", "pdf", "sha256", "a_quien", "medio", "fecha", "decision", "disposicion", "cantidad", "insertados", "actualizados", "ignorados", "errores", "hojas", "movimientos_repuestos", "proveedor", "existe_usuario", "motivo", "permisos", "rol", "rol_id", "asignacion_id", "vigente_desde", "vigente_hasta", "actuo_como"]);
 const DELIVERY_PHRASE: Record<string, string> = { correo: "por correo electrónico", impreso: "en mano (impreso)", portal: "por el portal o carpeta compartida", otro: "por otro medio" };
 const providerLabel = (value: unknown) => ({ microsoft: "Microsoft", local: "contraseña local" })[String(value)] || String(value);
 const exceptionLabel = (value: unknown) => {
@@ -483,6 +540,11 @@ function humanChanges(cambios: Cambios, entidad: string): HumanChange[] {
     const before = pair.antes;
     const after = pair.despues;
     if (JSON.stringify(before ?? null) === JSON.stringify(after ?? null)) continue;
+    if (key === "permisos" && (esMatrizPermisos(before) || esMatrizPermisos(after))) {
+      const lines = diffPermisos(before, after);
+      if (lines.length) out.push({ label: "Permisos", before: "", after: "", lines });
+      continue;
+    }
     if (key === "analisis_ids_json" && Array.isArray(before || []) && Array.isArray(after || [])) {
       // Ids internos: solo cuenta cuántos entraron o salieron.
       const b = new Set((before || []) as unknown[]);
@@ -625,6 +687,17 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       action = "inició sesión";
       if (detalle.proveedor) facts.push(`Acceso con ${providerLabel(detalle.proveedor)}`);
       break;
+    case "asignar_rol":
+    case "revocar_rol":
+    case "vencer_rol": {
+      const rol = detalle.rol ? `el rol "${String(detalle.rol)}"` : "un rol";
+      const quien = referencia ? ` ${accion === "vencer_rol" ? "de" : "a"} ${referencia}` : "";
+      action = accion === "asignar_rol" ? `asignó ${rol}${quien}` : accion === "revocar_rol" ? `revocó ${rol}${quien}` : `terminó la vigencia de ${rol}${quien}`;
+      if (detalle.vigente_desde || detalle.vigente_hasta) {
+        facts.push(`Vigencia: desde ${humanValue("vigente_desde", detalle.vigente_desde)}${detalle.vigente_hasta ? ` hasta ${humanValue("vigente_hasta", detalle.vigente_hasta)}` : " sin fecha de fin"}`);
+      }
+      break;
+    }
     case "login_fallido":
       action = `intento de acceso fallido${referencia ? ` con ${referencia}` : ""}`;
       if (detalle.motivo) facts.push(String(detalle.motivo));
@@ -640,7 +713,16 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
     facts.unshift(`Estado: ${humanValue("estado", estado.antes, entidad)} → ${humanValue("estado", estado.despues, entidad)}`);
   }
 
+  // Cargo con el que actuo quien firmo, reviso, aprobo, autorizo o anulo (Fase 1).
+  const actuo = detalle.actuo_como as ApiRecord | undefined;
+  if (actuo && typeof actuo === "object" && actuo.cargo) facts.push(`Actuó como: ${String(actuo.cargo)}`);
+
   const changes = humanChanges(cambios, entidad);
+  // Alta de un rol: su matriz de permisos, por modulo.
+  if (esMatrizPermisos(detalle.permisos)) {
+    const lines = [...resumenPermisos(detalle.permisos).entries()].map(([modulo, texto]) => `${modulo}: ${texto}`);
+    if (lines.length) changes.push({ label: "Permisos", before: "", after: "", lines });
+  }
   const route = ENTITY_ROUTE[entidad];
   const href = route !== undefined && (entry.entidad_id || referencia) ? route(String(entry.entidad_id || ""), referencia || "") : null;
   const when = entry.fecha_hora ? new Date(String(entry.fecha_hora)) : null;

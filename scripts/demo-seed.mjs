@@ -11,8 +11,9 @@
  * internos fijos y se omiten si ya existen.
  *
  * Qué deja:
- *   - 3 personas de laboratorio (analista, coordinación técnica, dirección) con
- *     sus roles, para cumplir la regla de dos personas.
+ *   - 3 personas de laboratorio con roles del catalogo de la Fase 1 (dos con
+ *     "Coordinador/a del Área Técnica" y una con "Responsable General"); la cuenta
+ *     administradora (usuarios:G) solo da de alta a las personas.
  *   - Equipos con clave de bitácora (BA1, LC1, CE1, VO1, ...), uno con
  *     calibración vencida y mantenimientos programados/vencidos/completados.
  *   - Soluciones preparadas (metanol:agua 50:50, NaOH 2.5 M, HCl 2.5 M, ácido
@@ -28,7 +29,7 @@ const BASE = process.env.BASE || "http://localhost:3000/api";
 const ADMIN_EMAIL = process.env.FICOTOX_EMAIL;
 const ADMIN_PASSWORD = process.env.FICOTOX_PASSWORD;
 if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
-  console.error("Define FICOTOX_EMAIL y FICOTOX_PASSWORD (cuenta con permiso de alta en usuarios, roles, inventario, muestras, informes y documentos).");
+  console.error("Define FICOTOX_EMAIL y FICOTOX_PASSWORD (cuenta con usuarios:G, p. ej. el Administrador técnico del sistema).");
   process.exit(1);
 }
 
@@ -60,51 +61,31 @@ const daysAhead = (n) => daysAgo(-n);
 const login = async (email, password) => must(await api("POST", "/auth/login", { email, password }), `login ${email}`);
 const admin = await login(ADMIN_EMAIL, ADMIN_PASSWORD);
 const T = admin.token;
-log(`Sesión: ${admin.user?.nombre || ADMIN_EMAIL} (${admin.user?.rol || "rol"})`);
+log(`Sesión: ${admin.user?.nombre || ADMIN_EMAIL} (${(admin.user?.roles || []).join(", ") || "sin roles"})`);
 
-/* ---------- 2. Roles y personas ---------- */
-const permisos = must(await api("GET", "/admin/permissions", null, { token: T }), "permisos").items;
-const permId = (clave) => permisos.find((p) => p.clave === clave)?.id;
-const perm = (clave, r = true, c = false, u = false, d = false) => (permId(clave) ? [{ permiso_id: permId(clave), can_read: r, can_create: c, can_update: u, can_delete: d }] : []);
-
-const ROLES = {
-  "Analista de laboratorio": {
-    descripcion: "Captura recepciones, procesamientos, extracciones y análisis; consulta y descuenta inventario.",
-    permissions: [...perm("dashboard"), ...perm("muestras", true, true, true, false), ...perm("reactivos", true, false, true), ...perm("consumibles", true, false, true), ...perm("equipos"), ...perm("mantenimiento"), ...perm("movimientos"), ...perm("documentos"), ...perm("informes", true, true, true)],
-  },
-  "Coordinación técnica": {
-    descripcion: "Revisa y aprueba análisis, revisa informes, controla documentos y administra inventario.",
-    permissions: [...perm("dashboard"), ...perm("muestras", true, true, true, true), ...perm("reactivos", true, true, true, true), ...perm("consumibles", true, true, true, true), ...perm("equipos", true, true, true, true), ...perm("mantenimiento", true, true, true, true), ...perm("movimientos"), ...perm("documentos", true, true, true, true), ...perm("informes", true, true, true, true), ...perm("aprobaciones", true, false, true), ...perm("auditoria")],
-  },
-  "Dirección del laboratorio": {
-    descripcion: "Autoriza informes y aprueba documentos; consulta todo.",
-    permissions: [...perm("dashboard"), ...perm("muestras"), ...perm("reactivos"), ...perm("consumibles"), ...perm("equipos"), ...perm("mantenimiento"), ...perm("movimientos"), ...perm("documentos", true, false, true), ...perm("informes", true, false, true), ...perm("aprobaciones", true, false, true), ...perm("auditoria"), ...perm("usuarios"), ...perm("roles")],
-  },
+/* ---------- 2. Personas (con roles del catalogo de la Fase 1) ---------- */
+// Los roles no se crean aqui: se usan los del catalogo (scripts/seed-roles-usuarios.mjs),
+// buscados por su clave estable. La cuenta administradora necesita usuarios:G.
+const rolesExistentes = must(await api("GET", "/admin/roles", null, { token: T }), "roles").items;
+const rolPorClave = (clave) => {
+  const rol = rolesExistentes.find((r) => r.clave === clave);
+  if (!rol) {
+    console.error(`No existe el rol del catalogo "${clave}". Corre antes: npm run seed:roles`);
+    process.exit(1);
+  }
+  return rol.id;
 };
 
-const rolesExistentes = must(await api("GET", "/admin/roles", null, { token: T }), "roles").items;
-const roleIds = {};
-for (const [nombre, def] of Object.entries(ROLES)) {
-  const found = rolesExistentes.find((r) => r.nombre === nombre);
-  if (found) {
-    roleIds[nombre] = found.id;
-    continue;
-  }
-  const created = must(await api("POST", "/admin/roles", { nombre, ...def }, { token: T }), `rol ${nombre}`);
-  roleIds[nombre] = created.id || created.role?.id;
-  log(`Rol creado: ${nombre}`);
-}
-
 const PEOPLE = [
-  { nombre: "Ana Lucía Ramírez", email: "ana.ramirez@cicese.mx", password: "Analista2026!", rol: "Analista de laboratorio", departamento: "LN-FICOTOX", cargo: "Analista" },
-  { nombre: "Daniela Cortés", email: "daniela.cortes@cicese.mx", password: "Coordinacion2026!", rol: "Coordinación técnica", departamento: "LN-FICOTOX", cargo: "Coordinadora técnica" },
-  { nombre: "Ernesto Gómez", email: "ernesto.gomez@cicese.mx", password: "Direccion2026!", rol: "Dirección del laboratorio", departamento: "LN-FICOTOX", cargo: "Director del laboratorio" },
+  { nombre: "Ana Lucía Ramírez", email: "ana.ramirez@cicese.mx", password: "Analista2026!", rol: "coord_area_tecnica", departamento: "LN-FICOTOX", cargo: "Coordinador/a del Área Técnica" },
+  { nombre: "Daniela Cortés", email: "daniela.cortes@cicese.mx", password: "Coordinacion2026!", rol: "coord_area_tecnica", departamento: "LN-FICOTOX", cargo: "Coordinador/a del Área Técnica" },
+  { nombre: "Ernesto Gómez", email: "ernesto.gomez@cicese.mx", password: "Direccion2026!", rol: "responsable_general", departamento: "LN-FICOTOX", cargo: "Responsable General" },
 ];
 const usuarios = must(await api("GET", "/admin/usuarios", null, { token: T }), "usuarios").items;
 const tokens = {};
 for (const p of PEOPLE) {
   if (!usuarios.find((u) => u.email === p.email)) {
-    must(await api("POST", "/admin/usuarios", { nombre: p.nombre, email: p.email, activo: true, id_rol: roleIds[p.rol], departamento: p.departamento, password: p.password }, { token: T }), `usuario ${p.email}`);
+    must(await api("POST", "/admin/usuarios", { nombre: p.nombre, email: p.email, activo: true, rol_id: rolPorClave(p.rol), motivo: "Datos de demostración", departamento: p.departamento, password: p.password }, { token: T }), `usuario ${p.email}`);
     log(`Usuario creado: ${p.nombre} (${p.rol})`);
   }
   const s = await api("POST", "/auth/login", { email: p.email, password: p.password });
@@ -578,8 +559,9 @@ async function analisis(spec) {
     log("    revisado por coordinación técnica");
   }
   if (spec.aprobar) {
-    must(await api("POST", `/samples/analysis/${created.id}/aprobar`, { cargo: ern.cargo }, { token: ERN }), "aprobar análisis");
-    log("    aprobado por dirección");
+    // Responsable General no tiene ensayos:A en la matriz de la Fase 1: aprueba la coordinación técnica.
+    must(await api("POST", `/samples/analysis/${created.id}/aprobar`, {}, { token: DANI }), "aprobar análisis");
+    log("    aprobado por coordinación técnica");
   }
   return created;
 }

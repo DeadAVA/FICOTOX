@@ -23,7 +23,7 @@ import type { ApiRecord } from "@/lib/client/types";
 
 export default function ReactivosPage() {
   return (
-    <RequireModule modules="reactivos">
+    <RequireModule modules="inventario">
       <Suspense fallback={<TableSkeleton />}>
         <ReactivosContent />
       </Suspense>
@@ -74,7 +74,7 @@ function ReactivosContent() {
   const items = resource.data;
 
   useUrlTrigger("nuevo", () => {
-    if (can("reactivos", "create")) modal.open(null);
+    if (can("inventario", "C", { objeto: "catalogo_inventario" })) modal.open(null);
   });
 
   const counts = useMemo(() => {
@@ -126,9 +126,11 @@ function ReactivosContent() {
     }
   };
 
-  const canCreate = can("reactivos", "create");
-  const canUpdate = can("reactivos", "update");
-  const canDelete = can("reactivos", "delete");
+  const canCreate = can("inventario", "C", { objeto: "catalogo_inventario" });
+  const canEditar = can("inventario", "E", { objeto: "catalogo_inventario" });
+  const canRellenar = can("inventario", "C", { objeto: "movimiento" });
+  const canBaja = can("inventario", "AN");
+  const canReactivar = can("inventario", "G");
 
   const selected = detail.payload;
   const selectedStock = selected ? getReactivoStockState(selected) : null;
@@ -154,9 +156,9 @@ function ReactivosContent() {
     const inactive = Number(item.activo ?? 1) === 0;
     const { unit } = getReactivoStockInfo(item);
     const list: MenuItem[] = [{ label: "Ver ficha", description: "Existencia, lote, ubicación y caducidad", icon: <IdentificationCard size={16} weight="duotone" />, tone: "brand", onSelect: () => detail.open(item) }];
-    if (canUpdate && !inactive) list.push({ label: "Rellenar stock", description: "Registrar una entrada", icon: <ArrowsClockwise size={16} weight="duotone" />, tone: "success", onSelect: () => refill.open({ type: "reactivo", id: Number(item.id), name: formatReactivoName(item), unit }) });
-    if (canUpdate) list.push({ label: "Editar", description: "Cambiar datos del reactivo", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => editReactivo(Number(item.id)) });
-    if (canDelete) {
+    if (canRellenar && !inactive) list.push({ label: "Rellenar stock", description: "Registrar una entrada", icon: <ArrowsClockwise size={16} weight="duotone" />, tone: "success", onSelect: () => refill.open({ type: "reactivo", id: Number(item.id), name: formatReactivoName(item), unit }) });
+    if (canEditar) list.push({ label: "Editar", description: "Cambiar datos del reactivo", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => editReactivo(Number(item.id)) });
+    if (inactive ? canReactivar : canBaja) {
       if (inactive) list.push({ label: "Reactivar reactivo…", description: "Vuelve al inventario con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => reactivarReactivo(item) });
       else list.push({ label: "Dar de baja…", description: "Deja de ofrecerse; conserva su historial", icon: <Trash size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => deleteReactivo(item) });
     }
@@ -299,7 +301,7 @@ function ReactivosContent() {
           ]}
           actions={
             <>
-              {canDelete ? (
+              {(selectedInactive ? canReactivar : canBaja) ? (
                 selectedInactive ? (
                   <Button variant="secondary" icon={<ArrowCounterClockwise size={16} />} onClick={() => reactivarReactivo(selected)}>
                     Reactivar
@@ -310,12 +312,12 @@ function ReactivosContent() {
                   </Button>
                 )
               ) : null}
-              {canUpdate && !selectedInactive ? (
+              {canRellenar && !selectedInactive ? (
                 <Button variant="secondary" icon={<ArrowsClockwise size={16} />} onClick={() => refill.open({ type: "reactivo", id: Number(selected.id), name: formatReactivoName(selected), unit: selectedStock?.unit || "" })}>
                   Rellenar
                 </Button>
               ) : null}
-              {canUpdate ? (
+              {canEditar ? (
                 <Button icon={<PencilSimple size={16} />} onClick={() => editReactivo(Number(selected.id))}>
                   Editar
                 </Button>

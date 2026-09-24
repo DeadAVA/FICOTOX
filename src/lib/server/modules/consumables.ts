@@ -214,7 +214,7 @@ const SELECT_COLUMNS = `
 
 export async function getConsumables({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "consumibles", "read");
+  await requirePermission(s, user, "inventario", "V");
   await ensureConsumiblesSchema(s);
 
   const search = new URL(request.url).searchParams.get("search") ?? "";
@@ -231,7 +231,7 @@ export async function getConsumables({ request, s }: RouteContext): Promise<Resp
 
 export async function createConsumable({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "consumibles", "create");
+  await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" });
   await ensureConsumiblesSchema(s);
 
   const data = normalizePayload(await readJson(request));
@@ -254,7 +254,7 @@ export async function createConsumable({ request, s }: RouteContext): Promise<Re
 export async function getConsumable({ request, s, params }: RouteContext): Promise<Response> {
   const consumableId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "consumibles", "read");
+  await requirePermission(s, user, "inventario", "V");
   await ensureConsumiblesSchema(s);
 
   const row = await s.queryOne(`${SELECT_COLUMNS} WHERE id = :id LIMIT 1`, { id: consumableId });
@@ -267,7 +267,7 @@ export async function getConsumable({ request, s, params }: RouteContext): Promi
 export async function updateConsumable({ request, s, params }: RouteContext): Promise<Response> {
   const consumableId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "consumibles", "update");
+  await requirePermission(s, user, "inventario", "E", { objeto: "catalogo_inventario" });
   await ensureConsumiblesSchema(s);
 
   const data = normalizePayload(await readJson(request));
@@ -299,7 +299,7 @@ export async function updateConsumable({ request, s, params }: RouteContext): Pr
 export async function refillConsumable({ request, s, params }: RouteContext): Promise<Response> {
   const consumableId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "consumibles", "update");
+  await requirePermission(s, user, "inventario", "C", { objeto: "movimiento" });
   await ensureConsumiblesSchema(s);
   await ensureMovimientosSchema(s);
 
@@ -353,7 +353,7 @@ export async function refillConsumable({ request, s, params }: RouteContext): Pr
 export async function deleteConsumable({ request, s, params }: RouteContext): Promise<Response> {
   const consumableId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "consumibles", "delete");
+  await requirePermission(s, user, "inventario", "AN");
   await ensureConsumiblesSchema(s);
   return darDeBaja(s, user, "consumibles", consumableId, await readJson(request), "Consumible");
 }
@@ -361,7 +361,7 @@ export async function deleteConsumable({ request, s, params }: RouteContext): Pr
 export async function reactivarConsumable({ request, s, params }: RouteContext): Promise<Response> {
   const consumableId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "consumibles", "delete");
+  await requirePermission(s, user, "inventario", "G");
   await ensureConsumiblesSchema(s);
   return reactivarItem(s, user, "consumibles", consumableId, await readJson(request), "Consumible");
 }
@@ -373,7 +373,7 @@ const IMPORT_INSERT = `
 
 export async function importConsumables({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "consumibles", "create");
+  await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" });
   await ensureConsumiblesSchema(s);
   let inserted = 0;
 
