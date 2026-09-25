@@ -184,14 +184,16 @@ const cadena = async (prefijo, token = QA) => {
   check("regla 3: quien supervisa no es quien proceso (409, sin importar acentos ni mayusculas)", pMismo.status === 409 && pMismo.data?.regla === 3, `${pMismo.status} ${pMismo.data?.message}`);
   check("regla 3: quien supervisa no es quien hizo la limpieza (409); con personas distintas se registra", eLimpieza.status === 409 && pOk.status === 201 && eOk.status === 201, `${eLimpieza.status} ${pOk.status} ${eOk.status}`);
 
-  // Regla 4: visto bueno de lo propio (se simula que el supervisor capturo el registro).
+  // Regla 4: el supervisor que edito lo capturado por su supervisado no le da visto bueno.
   const tD = await login("diego.salinas@ficotox.local", credenciales["diego.salinas@ficotox.local"]);
   const R4 = (await api("POST", "/samples/reception", aceptada(`SEG4-${Date.now()}`), tD)).data?.id;
   const R4b = (await api("POST", "/samples/reception", aceptada(`SEG4b-${Date.now()}`), tD)).data?.id;
-  sql("UPDATE muestras_recepcion SET supervision_solicitada_por = ? WHERE id = ?", idDe(RICARDO), R4);
+  const fichaR4 = (await api("GET", `/samples/reception/${R4}`, undefined, QA)).data?.item;
+  const editaR4 = await api("PUT", `/samples/reception/${R4}`, { ...aceptada(fichaR4?.id_interno), folio_num: fichaR4?.folio_num, solicitante: "Cliente corregido por el supervisor" }, tR);
+  if (editaR4.status !== 200) check("regla 4: el supervisor edita el registro de su supervisado", false, `${editaR4.status} ${editaR4.data?.message}`);
   const vbPropio = await api("POST", `/supervision/muestras_recepcion/${R4}/visto-bueno`, {}, tR);
   const vbOk = await api("POST", `/supervision/muestras_recepcion/${R4b}/visto-bueno`, {}, tR);
-  check("regla 4: el supervisor no da visto bueno a lo que el mismo capturo (409)", vbPropio.status === 409 && vbPropio.data?.regla === 4, `${vbPropio.status} ${vbPropio.data?.message}`);
+  check("regla 4: el supervisor que edito lo capturado no le da visto bueno (409)", vbPropio.status === 409 && vbPropio.data?.regla === 4, `${vbPropio.status} ${vbPropio.data?.message}`);
   check("regla 4: da visto bueno a lo capturado por su supervisado", vbOk.status === 200, `${vbOk.status} ${vbOk.data?.message}`);
 
   // Regla 5 (documentos): cubierta en api-sgc.mjs (elaborador no revisa; revisor no aprueba; tercera persona aprueba).
@@ -356,6 +358,21 @@ const cadena = async (prefijo, token = QA) => {
 
 /* ---------- 4. Cambios de acceso ---------- */
 {
+  // Fase 3.1: en usuarios G no implica A; nadie cambia los permisos de un rol que tiene vigente.
+  const JORGE = "jorge.ramirez@ficotox.local";
+  const tH = await login(JORGE, credenciales[JORGE]);
+  const altaH = await api("POST", "/admin/usuarios", { nombre: "Aprobador prueba", email: `aprobador.${Date.now()}@cicese.mx`, activo: true, rol_id: rolId("Técnico Auxiliar"), password: "Aprobador-Prueba-2026", motivo: "Alta de prueba" }, QA);
+  const apruebaAdmin = await api("POST", `/solicitudes/${altaH.data?.solicitud?.id}/aprobar`, { motivo: "Lo apruebo como administrador" }, tH);
+  const apruebaRG = await api("POST", `/solicitudes/${altaH.data?.solicitud?.id}/aprobar`, { motivo: "Autorizado por la Responsable General" }, tP);
+  check("usuarios:G no implica A: el Administrador tecnico no aprueba cambios de acceso (403); la Responsable General si", altaH.status === 201 && apruebaAdmin.status === 403 && apruebaRG.status === 200, `${altaH.status} ${apruebaAdmin.status} ${apruebaRG.status}`);
+  const rolAdmin = roles.find((r) => r.nombre === "Administrador técnico del sistema");
+  const detAdmin = (await api("GET", `/admin/roles/${rolAdmin?.id}`, undefined, tH)).data;
+  const propioRol = await api("PUT", `/admin/roles/${rolAdmin?.id}`, { nombre: rolAdmin?.nombre, descripcion: rolAdmin?.descripcion, activo: true, motivo: "Me agrego permisos", permisos: [...(detAdmin?.permisos || []), { modulo: "informes", accion: "V", alcance: "total" }] }, tH);
+  const rolTA = roles.find((r) => r.nombre === "Técnico Auxiliar");
+  const detTA = (await api("GET", `/admin/roles/${rolTA?.id}`, undefined, tH)).data;
+  const otroRol = await api("PUT", `/admin/roles/${rolTA?.id}`, { nombre: rolTA?.nombre, descripcion: rolTA?.descripcion, activo: true, motivo: "Sin cambios de permisos", permisos: detTA?.permisos || [] }, tH);
+  check("nadie edita los permisos de un rol que tiene vigente (409); otro rol si se edita", propioRol.status === 409 && propioRol.data?.codigo === "rol_propio" && otroRol.status === 200, `${propioRol.status} ${propioRol.data?.message} ${otroRol.status} ${otroRol.data?.message}`);
+
   // Rol inicial rechazado: la cuenta sigue sin roles, tambien tras reiniciar (api-roles --tras-reinicio lo comprueba).
   const emailR = `rechazo.${Date.now()}@cicese.mx`;
   const altaR = await api("POST", "/admin/usuarios", { nombre: "Alta rechazada", email: emailR, activo: true, rol_id: rolId("Técnico Auxiliar"), password: "Alta-Rechazada-2026", motivo: "Alta de prueba" }, QA);

@@ -121,6 +121,8 @@ function add(target: PermisosEfectivos, modulo: Modulo, accion: Accion, alcance:
 /*
  * Expande implicaciones (G -> todas; C/E/R/A/AN -> V) y aplica la regla de
  * usuarios (alcance diferido = solo V). Acepta filas de uno o varios roles.
+ * Fase 3.1: en usuarios, G no implica A; aprobar cambios de acceso exige A
+ * explicito (Responsable General).
  */
 export function expandirPermisos(filas: PermisoFila[]): PermisosEfectivos {
   const out: PermisosEfectivos = {};
@@ -134,7 +136,7 @@ export function expandirPermisos(filas: PermisoFila[]): PermisosEfectivos {
       add(out, modulo, "V", "propio");
       continue;
     }
-    const acciones: Accion[] = fila.accion === "G" ? ACCION_KEYS : [fila.accion];
+    const acciones: Accion[] = fila.accion === "G" ? ACCION_KEYS.filter((a) => !(modulo === "usuarios" && a === "A")) : [fila.accion];
     for (const accion of acciones) {
       add(out, modulo, accion, alcance);
       if (accion !== "V") add(out, modulo, "V", LIMITAN_VISTA.has(alcance) || ALCANCES_DIFERIDOS.has(alcance) ? alcance : "total");

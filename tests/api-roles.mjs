@@ -119,7 +119,8 @@ function expandir(filas) {
       continue;
     }
     if (modulo === "calidad" && DIFERIDOS.has(alcance)) continue;
-    for (const a of accion === "G" ? ACCIONES : [accion]) {
+    // Fase 3.1: en usuarios, G no implica A.
+    for (const a of accion === "G" ? ACCIONES.filter((x) => !(modulo === "usuarios" && x === "A")) : [accion]) {
       add(modulo, a, alcance);
       if (a !== "V") add(modulo, "V", ["propio", "estado", "bitacora"].includes(alcance) || DIFERIDOS.has(alcance) ? alcance : "total");
     }

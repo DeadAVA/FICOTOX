@@ -178,6 +178,10 @@ export async function updateRole({ request, s, params }: RouteContext): Promise<
   const cambiaPermisos = firmaFilas(permisosAntes) !== firmaFilas(data.permisos) || Number(antes.activo) !== data.activo;
   const motivo = motivoDe(payload);
   if (cambiaPermisos) exigirMotivo(motivo, "del cambio de permisos");
+  // Fase 3.1: nadie cambia los permisos de un rol que el mismo tiene vigente.
+  if (cambiaPermisos && (await rolesVigentes(s, userIdFromClaims(user) as number)).some((r) => Number(r.id) === roleId)) {
+    return json({ message: "Tienes este rol vigente: sus permisos los debe cambiar otra persona", codigo: "rol_propio" }, 409);
+  }
 
   // Combinaciones prohibidas: una edicion de permisos que las provoque en alguien se rechaza.
   const afectados = await afectadosPorCambioDeRol(s, roleId, data.permisos, !!data.activo, (antes.clave as string | null) || null, data.nombre);

@@ -392,7 +392,7 @@ export async function createInforme({ request, s }: RouteContext): Promise<Respo
   const recepcion = await loadRecepcion(s, data.recepcion_id);
   const analyses = await loadAnalyses(s, data.analisis_ids);
   if (analyses.some((a) => Number(a.recepcion_id) !== Number(recepcion.id))) return json({ message: "Todos los analisis deben pertenecer a la recepcion del informe" }, 400);
-  await exigirAnalisisSinSolicitud(s, data.analisis_ids, "incluirse en un informe");
+  await exigirAnalisisSinSolicitud(s, data.analisis_ids, "incluir en un informe");
   const folio = data.folio_num || (await nextFolioNum(s, TABLE));
   const userId = userIdFromClaims(user);
   const supervision = marcaSupervision(permiso);
@@ -448,7 +448,7 @@ export async function updateInforme({ request, s, params }: RouteContext): Promi
   const recepcion = await loadRecepcion(s, data.recepcion_id || Number(antes.recepcion_id));
   const analyses = await loadAnalyses(s, data.analisis_ids);
   if (analyses.some((a) => Number(a.recepcion_id) !== Number(recepcion.id))) return json({ message: "Todos los analisis deben pertenecer a la recepcion del informe" }, 400);
-  await exigirAnalisisSinSolicitud(s, data.analisis_ids, "incluirse en un informe");
+  await exigirAnalisisSinSolicitud(s, data.analisis_ids, "incluir en un informe");
   await s.execute(
     `
     UPDATE ${TABLE} SET recepcion_id = :recepcion_id, cliente_json = :cliente_json, muestras_json = :muestras_json, analisis_ids_json = :analisis_ids_json,
@@ -499,7 +499,7 @@ export async function reviewInforme({ request, s, params }: RouteContext): Promi
   await exigirSinSolicitudPendiente(s, TABLE, id, `El informe ${informeFolio(antes)}`, "revisar");
   const ids = safeJsonLoad<number[]>(String(antes.analisis_ids_json || "[]"), []);
   if (!ids.length) return json({ message: "El informe no incluye analisis" }, 400);
-  await exigirAnalisisSinSolicitud(s, ids, "revisarse en un informe");
+  await exigirAnalisisSinSolicitud(s, ids, "revisar en un informe");
   const payload = await readJson(request);
   // Segregacion (regla 2): quien elaboro el informe, o alguno de sus analisis, no lo revisa.
   const yo = userIdFromClaims(user) as number;
@@ -576,7 +576,7 @@ export async function authorizeInforme({ request, s, params }: RouteContext): Pr
   await exigirReauth(s, request, user, "informes:A");
   const analyses = await loadAnalyses(s, ids);
   if (!analyses.length) return json({ message: "El informe no incluye analisis" }, 400);
-  await exigirAnalisisSinSolicitud(s, ids, "autorizarse en un informe");
+  await exigirAnalisisSinSolicitud(s, ids, "autorizar en un informe");
   const noAprobados = analyses.filter((a) => String(a.estado) !== "aprobado");
   if (noAprobados.length) return json({ message: `Hay analisis sin aprobar: ${noAprobados.map((a) => `A ${String(a.folio_num).padStart(7, "0")}`).join(", ")}` }, 409);
 
