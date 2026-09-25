@@ -13,6 +13,7 @@
     "test:reset-db": "node tests/reset-test-db.mjs",
     "test:fixture": "node tests/build-fixture.mjs",
     "seed:roles": "node scripts/seed-roles-usuarios.mjs",
+    "demo:ejemplo": "node scripts/demo-ejemplo.mjs",
     "start:standalone": "node scripts/start-ficotox.mjs"
   },
   "dependencies": {
