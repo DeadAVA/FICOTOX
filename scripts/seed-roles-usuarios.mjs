@@ -14,8 +14,8 @@
  *     con --actualizar-permisos.
  *   - Un usuario se busca por correo y no se duplica ni se cambia su contrasena;
  *     si no tiene su rol del catalogo vigente, se le asigna.
- *   - Fase 4: autorizaciones de ejemplo (FX-THF-AP, folio "FX-THF-AP-DEMO") para
- *     las personas de ejemplo que existan (AUTORIZACIONES_DEMO); no se duplican.
+ *   - Fase 4: autorizaciones de ejemplo (FX-THF-AP, folio "FX-THF-AP-DEMO") de
+ *     cada persona con "autorizaciones" en el archivo de usuarios; no se duplican.
  *   - Fase 2: una persona con `"temporal": { "meses": 6, "supervisor": "correo" }`
  *     se da de alta como cuenta temporal (fin de vigencia a N meses y supervisor);
  *     su rol vence con la cuenta. El rol de estudiante / personal en formacion
@@ -154,22 +154,16 @@ const avatares = ["medusa", "pulpo", "tortuga", "ballena", "pez", "cangrejo", "e
 const resumen = { rolesCreados: [], rolesCargados: [], rolesIguales: [], rolesDistintos: [], usuariosCreados: [], usuariosExistentes: [], asignaciones: [], autorizaciones: [] };
 
 /*
- * Fase 4: autorizaciones de ejemplo (FX-THF-AP). Las otorga Ricardo (Coord. Area
- * Tecnica); las de Ricardo, Patricia (Responsable General). Los equipos no se
+ * Fase 4: autorizaciones de ejemplo (FX-THF-AP, folio FX-THF-AP-DEMO), definidas
+ * por persona en el archivo de usuarios:
+ *   "autorizaciones": { "actividades": [...], "metodos": [...], "otorga": "correo", "como_cuenta": false }
+ * `como_cuenta`: la vigencia es la de su cuenta temporal. Los equipos no se
  * siembran (el inventario esta vacio): se autorizan al darlos de alta.
  */
 const FOLIO_DEMO = "FX-THF-AP-DEMO";
-const RICARDO = "ricardo.medina@ficotox.local";
-const PATRICIA = "patricia.luna@ficotox.local";
-const TODAS_ACTIVIDADES = ["recepcion", "procesamiento", "extraccion", "analisis", "revision_resultados", "aprobacion_resultados", "revision_informe", "autorizacion_informe", "liberacion_informe"];
-const AUTORIZACIONES_DEMO = [
-  { email: "luis.castro@ficotox.local", actividades: ["procesamiento", "extraccion", "analisis"], metodos: ["ASP", "DSP"], otorga: RICARDO },
-  { email: "mariana.delgado@ficotox.local", actividades: ["recepcion", "procesamiento"], metodos: [], otorga: RICARDO },
-  { email: RICARDO, actividades: TODAS_ACTIVIDADES, metodos: ["ASP", "DSP"], otorga: PATRICIA },
-  { email: PATRICIA, actividades: ["revision_informe", "autorizacion_informe", "liberacion_informe"], metodos: [], otorga: RICARDO },
-  // Vigencia igual a la de su cuenta temporal.
-  { email: "diego.salinas@ficotox.local", actividades: ["procesamiento"], metodos: [], otorga: RICARDO, comoCuenta: true },
-];
+const AUTORIZACIONES_DEMO = personas
+  .filter((p) => p.autorizaciones)
+  .map((p) => ({ email: String(p.email).trim().toLowerCase(), actividades: p.autorizaciones.actividades || [], metodos: p.autorizaciones.metodos || [], otorga: String(p.autorizaciones.otorga || "").trim().toLowerCase(), comoCuenta: !!p.autorizaciones.como_cuenta }));
 
 const filasDe = (roleId) => db.prepare("SELECT modulo, accion, alcance FROM rol_acciones WHERE id_rol = ?").all(roleId);
 function guardarFilas(roleId, filas) {

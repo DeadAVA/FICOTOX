@@ -329,25 +329,23 @@ try {
   check("documentos encendido: la página abre con 'Proponer documento'", true);
   check("documentos encendido: aparece en el menú Calidad", (await page.locator("nav a", { hasText: /^Documentos$/ }).count()) > 0);
 
-  /* ---------- Auditoria ---------- */
+  /* ---------- Auditoria (lista resumida + detalle; la integridad se verifica sola) ---------- */
   await page.goto(`${BASE}/auditoria`);
   await page.getByText("Quién hizo qué, cuándo y por qué").waitFor();
-  const timeline = page.locator("tbody tr");
+  const timeline = page.locator("[data-audit-fila]");
   await timeline.first().waitFor();
-  await page.getByRole("button", { name: "Verificar integridad" }).click();
-  await page.getByText(/Íntegra ·/).waitFor();
-  check("bitácora: verificación de integridad OK", true);
+  await page.locator('[data-integridad="ok"]').waitFor();
+  check("bitácora: verificación de integridad automática OK (Íntegra · N entradas)", /Íntegra ·/.test((await page.locator("[data-integridad]").textContent()) || ""));
   // Cada entrada es una frase en español (actor + verbo), sin JSON ni nombres de columna.
   const firstText = (await timeline.first().textContent()) || "";
-  check("bitácora: entradas en lenguaje llano", /(inició sesión|creó|editó|anuló|restauró|aprobó|autorizó|marcó como revisado|dio de baja|reactivó|registró la entrega|envió|liberó|descargó|cambió|acceso fallido|repuso|importó|emitió)/i.test(firstText) && !firstText.includes("_json") && !firstText.includes("{"), firstText.slice(0, 80));
-  await timeline.filter({ hasText: /\d+ cambios?$/ }).first().click();
-  await page.getByText(/Sello/).first().waitFor();
-  check("bitácora: detalle con cambios antes → después y sello", true);
-  await page.getByRole("button", { name: /^Filtros/ }).click();
-  await page.getByRole("radiogroup", { name: "Acción" }).getByRole("radio", { name: "Anuló", exact: true }).click();
-  await page.keyboard.press("Escape");
-  await timeline.filter({ hasText: /Anuló/ }).first().waitFor();
-  check("bitácora: filtro por acción", true);
+  check("bitácora: entradas en lenguaje llano", /(inició sesión|creó|editó|anuló|restauró|aprobó|autorizó|marcó como revisado|dio de baja|reactivó|registró la entrega|envió|liberó|descargó|cambió|acceso fallido|repuso|importó|emitió|exportó|aceptó)/i.test(firstText) && !firstText.includes("_json") && !firstText.includes("{"), firstText.slice(0, 80));
+  await timeline.filter({ hasText: /\d+ cambios?/ }).first().click();
+  await page.locator("[data-audit-detalle]").getByText("Datos técnicos").waitFor();
+  check("bitácora: detalle con cambios antes → después y datos técnicos", (await page.locator("[data-audit-detalle]").getByText(/Qué cambió|Datos principales/).count()) > 0);
+  await page.getByRole("button", { name: /^Acción/ }).click();
+  await page.getByRole("menuitemradio", { name: "Anular / rechazar" }).click();
+  await timeline.filter({ hasText: /anuló/ }).first().waitFor();
+  check("bitácora: filtro por acción (categoría)", true);
 
   /* ---------- Inventario: baja logica + reactivar ---------- */
   await page.goto(`${BASE}/inventario/reactivos`);

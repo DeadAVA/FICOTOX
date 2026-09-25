@@ -11,7 +11,16 @@
       "rol": "Responsable General",
       "nombre": "Patricia Luna Herrera",
       "email": "patricia.luna@ficotox.local",
-      "password": "CAMBIAR"
+      "password": "CAMBIAR",
+      "autorizaciones": {
+        "actividades": [
+          "revision_informe",
+          "autorizacion_informe",
+          "liberacion_informe"
+        ],
+        "metodos": [],
+        "otorga": "ricardo.medina@ficotox.local"
+      }
     },
     {
       "rol": "Coordinador/a de Mejora Continua",
@@ -23,7 +32,25 @@
       "rol": "Coordinador/a del Área Técnica",
       "nombre": "Ricardo Medina Flores",
       "email": "ricardo.medina@ficotox.local",
-      "password": "CAMBIAR"
+      "password": "CAMBIAR",
+      "autorizaciones": {
+        "actividades": [
+          "recepcion",
+          "procesamiento",
+          "extraccion",
+          "analisis",
+          "revision_resultados",
+          "aprobacion_resultados",
+          "revision_informe",
+          "autorizacion_informe",
+          "liberacion_informe"
+        ],
+        "metodos": [
+          "ASP",
+          "DSP"
+        ],
+        "otorga": "patricia.luna@ficotox.local"
+      }
     },
     {
       "rol": "Coordinador/a de Investigación y Desarrollo",
@@ -35,13 +62,33 @@
       "rol": "Técnico Analista",
       "nombre": "Luis Fernando Castro Ruiz",
       "email": "luis.castro@ficotox.local",
-      "password": "CAMBIAR"
+      "password": "CAMBIAR",
+      "autorizaciones": {
+        "actividades": [
+          "procesamiento",
+          "extraccion",
+          "analisis"
+        ],
+        "metodos": [
+          "ASP",
+          "DSP"
+        ],
+        "otorga": "ricardo.medina@ficotox.local"
+      }
     },
     {
       "rol": "Técnico Auxiliar",
       "nombre": "Mariana Delgado Peña",
       "email": "mariana.delgado@ficotox.local",
-      "password": "CAMBIAR"
+      "password": "CAMBIAR",
+      "autorizaciones": {
+        "actividades": [
+          "recepcion",
+          "procesamiento"
+        ],
+        "metodos": [],
+        "otorga": "ricardo.medina@ficotox.local"
+      }
     },
     {
       "rol": "Administrador/a Auxiliar",
@@ -63,6 +110,14 @@
       "temporal": {
         "meses": 6,
         "supervisor": "ricardo.medina@ficotox.local"
+      },
+      "autorizaciones": {
+        "actividades": [
+          "procesamiento"
+        ],
+        "metodos": [],
+        "otorga": "ricardo.medina@ficotox.local",
+        "como_cuenta": true
       }
     }
   ]

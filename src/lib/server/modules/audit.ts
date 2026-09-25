@@ -45,6 +45,7 @@ function serialize(row: Row): Row {
     motivo: row.motivo,
     cambios: safeJsonLoad(row.cambios_json, {}),
     hash: row.hash,
+    hash_anterior: row.hash_anterior ?? null,
   };
 }
 
@@ -84,12 +85,21 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
   const limit = Math.min(Math.max(Number.parseInt(searchParam(request, "limit") || (csv ? "5000" : "200"), 10) || 200, 1), csv ? 20000 : 1000);
   // Fase 9: filtro por modulo (las entidades cuyo historial pertenece a ese modulo).
   const moduloFiltro = searchParam(request, "modulo");
+  /*
+   * Filtros de solo lectura para la vista de /auditoria (no cambian la bitacora):
+   * `acciones` (lista separada por comas: categoria de acciones), `sin_accesos=1`
+   * (oculta inicios de sesion y reautenticaciones; siguen en la bitacora y en el
+   * CSV) y `antes_de` (id: pagina siguiente, del mas reciente al mas antiguo).
+   */
+  const accionesLista = searchParam(request, "acciones").split(",").map((a) => a.trim()).filter((a) => /^[a-z_]{2,40}$/.test(a)).slice(0, 60);
+  const sinAccesos = !csv && searchParam(request, "sin_accesos") === "1";
+  const antesDe = Number.parseInt(searchParam(request, "antes_de") || "0", 10) || 0;
   const entidadesModulo = moduloFiltro ? Object.entries(ENTITY_MODULE).filter(([, m]) => m === moduloFiltro).map(([e]) => e) : [];
 
   const rows = await s.query<Row>(
     `
     SELECT id, fecha_hora, usuario_id, usuario_nombre, usuario_email, accion, entidad, entidad_id,
-           referencia, motivo, cambios_json, hash
+           referencia, motivo, cambios_json, hash, hash_anterior
     FROM auditoria
     WHERE (:entidad = '' OR entidad = :entidad)
       AND (:entidad_id = '' OR entidad_id = :entidad_id)
@@ -99,6 +109,9 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
       AND (:desde = '' OR fecha_hora >= :desde_ini)
       AND (:hasta = '' OR fecha_hora <= :hasta_fin)
       ${moduloFiltro ? `AND entidad IN (${entidadesModulo.map((e) => `'${e}'`).join(", ") || "''"})` : ""}
+      ${accionesLista.length ? `AND accion IN (${accionesLista.map((_, i) => `:acc${i}`).join(", ")})` : ""}
+      ${sinAccesos ? "AND accion NOT IN ('login', 'login_fallido', 'reauth_fallida', 'cerrar_sesiones')" : ""}
+      ${antesDe ? "AND id < :antes_de" : ""}
     ORDER BY id DESC
     LIMIT ${limit}
     `,
@@ -114,6 +127,8 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
       desde_ini: /^\d{4}-\d{2}-\d{2}$/.test(desde) ? inicioDiaLocal(desde) : desde,
       hasta,
       hasta_fin: /^\d{4}-\d{2}-\d{2}$/.test(hasta) ? finDiaLocal(hasta) : hasta ? `${hasta}T23:59:59.999Z` : "",
+      antes_de: antesDe,
+      ...Object.fromEntries(accionesLista.map((a, i) => [`acc${i}`, a])),
     },
   );
   const items = rows.map((row) => recortar(serialize(row), datosVisibles(auth, row.entidad)));
