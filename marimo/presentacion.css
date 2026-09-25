@@ -1,0 +1,97 @@
+/* Estilo de la presentación FICOTOX: océano #0F7A95, fondo claro, tipografía del sistema. */
+:root {
+  --fx-oceano: #0F7A95;
+  --fx-oceano-osc: #0b4f61;
+  --fx-oceano-claro: #e6f2f5;
+  --fx-texto: #16272d;
+  --fx-gris: #5b6b72;
+  --fx-borde: #d7e3e7;
+  --fx-fondo: #f7fafb;
+  --fx-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --fx-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+body, .markdown, .prose { font-family: var(--fx-sans); color: var(--fx-texto); }
+
+/* Encabezado común */
+.fx-head { display: flex; justify-content: space-between; align-items: flex-end;
+  border-bottom: 3px solid var(--fx-oceano); padding-bottom: 0.6rem; width: 100%; }
+.fx-kicker { font-family: var(--fx-mono); font-size: 0.85rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--fx-oceano); margin-bottom: 0.2rem; }
+.fx-title { font-size: 2.1rem; font-weight: 700; line-height: 1.15; margin: 0; color: var(--fx-texto);
+  border: none; padding: 0; }
+.fx-folio { font-family: var(--fx-mono); font-size: 0.95rem; color: var(--fx-gris); white-space: nowrap; }
+
+/* Portada */
+.fx-cover { display: flex; flex-direction: column; justify-content: center; min-height: 70vh;
+  padding: 2rem 0 2rem 1.5rem; border-left: 10px solid var(--fx-oceano); }
+.fx-cover-mark { font-family: var(--fx-mono); font-size: 1.1rem; letter-spacing: 0.35em; color: var(--fx-oceano); font-weight: 700; }
+.fx-cover-title { font-size: 3.2rem; font-weight: 750; line-height: 1.1; margin: 0.6rem 0 1rem; color: var(--fx-texto); border: none; }
+.fx-cover-sub { font-size: 1.5rem; color: var(--fx-oceano-osc); }
+.fx-cover-foot { margin-top: 4rem; font-family: var(--fx-mono); font-size: 1rem; color: var(--fx-gris); letter-spacing: 0.1em; }
+
+/* Listas */
+.fx-list { margin: 0; padding-left: 1.3rem; font-size: 1.3rem; line-height: 1.5; }
+.fx-list li { margin: 0.35rem 0; }
+.fx-list li::marker { color: var(--fx-oceano); }
+.fx-ol { margin: 0; padding-left: 2rem; font-size: 1.25rem; line-height: 1.45; }
+.fx-ol li { margin: 0.45rem 0; padding-left: 0.3rem; }
+.fx-ol li::marker { font-family: var(--fx-mono); color: var(--fx-oceano); font-weight: 700; }
+
+/* Roles */
+.fx-col { border-radius: 10px; padding: 0.8rem 1rem; border: 1px solid var(--fx-borde); background: #fff; height: 100%; }
+.fx-col ul { margin: 0; padding-left: 1.1rem; font-size: 1.05rem; line-height: 1.4; }
+.fx-col li { margin: 0.3rem 0; }
+.fx-col-t { font-weight: 700; margin-bottom: 0.4rem; font-size: 1.1rem; }
+.fx-si { border-top: 4px solid var(--fx-oceano); }
+.fx-si .fx-col-t { color: var(--fx-oceano); }
+.fx-no { border-top: 4px solid #b4533f; }
+.fx-no .fx-col-t { color: #b4533f; }
+
+/* Tarjetas */
+.fx-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+.fx-card { background: #fff; border: 1px solid var(--fx-borde); border-left: 5px solid var(--fx-oceano);
+  border-radius: 10px; padding: 1rem 1.1rem; }
+.fx-card-n { font-family: var(--fx-mono); color: var(--fx-oceano); font-size: 0.85rem; }
+.fx-card-t { font-weight: 700; font-size: 1.2rem; margin: 0.25rem 0 0.35rem; }
+.fx-card-d { color: var(--fx-gris); font-size: 1.05rem; line-height: 1.4; }
+
+/* Paneles */
+.fx-panel { background: #fff; border: 1px solid var(--fx-borde); border-top: 5px solid var(--fx-oceano);
+  border-radius: 10px; padding: 1.1rem 1.3rem; height: 100%; }
+.fx-panel-t { font-weight: 700; font-size: 1.35rem; margin-bottom: 0.6rem; color: var(--fx-oceano-osc); }
+
+/* Flujo de informe */
+.fx-steps { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+.fx-step { background: var(--fx-oceano-claro); border: 1px solid var(--fx-oceano); color: var(--fx-oceano-osc);
+  border-radius: 999px; padding: 0.35rem 1rem; font-weight: 600; font-size: 1.05rem; }
+.fx-step:last-child { background: var(--fx-oceano); color: #fff; }
+.fx-arrow { color: var(--fx-oceano); font-weight: 700; }
+
+/* Tabla de cobertura */
+.fx-table table { width: 100%; border-collapse: collapse; font-size: 1.1rem; }
+.fx-table th { text-align: left; color: var(--fx-gris); font-weight: 600; border-bottom: 2px solid var(--fx-oceano); padding: 0.45rem 0.6rem; }
+.fx-table td { border-bottom: 1px solid var(--fx-borde); padding: 0.55rem 0.6rem; vertical-align: top; line-height: 1.35; }
+.fx-table td:first-child, .fx-table th:first-child { text-align: center; width: 2.5rem; }
+
+/* Preguntas */
+.fx-qs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem 1.2rem; padding-top: 0.6rem; }
+.fx-q { border-left: 3px solid var(--fx-oceano); padding: 0.15rem 0 0.15rem 0.7rem; }
+.fx-q-t { font-size: 1.02rem; font-weight: 600; line-height: 1.3; }
+.fx-hoy { font-size: 0.9rem; color: var(--fx-gris); margin-top: 0.15rem; line-height: 1.3; }
+
+/* Ajustes del modo diapositivas: contenido alineado arriba y viñetas visibles. */
+.mo-slide-content { margin: 34px 44px auto !important; width: calc(100% - 88px); }
+.fx-list, .fx-col ul, .fx-panel ul { list-style: disc !important; }
+.fx-ol { list-style: decimal !important; }
+.fx-list li, .fx-col li, .fx-ol li { display: list-item; }
+.fx-qs, .fx-q, .fx-q-t, .fx-hoy, .fx-col, .fx-card, .fx-panel, .fx-table { font-family: var(--fx-sans) !important; }
+.fx-q-t { font-size: 1.12rem; }
+.fx-hoy { font-size: 0.98rem; }
+.fx-qs { gap: 0.8rem 1.6rem; }
+.fx-table table, .fx-table th, .fx-table td { text-align: left !important; }
+.fx-table td:first-child, .fx-table th:first-child { text-align: center !important; }
+.fx-table table { font-size: 1.2rem; }
+.fx-stats { zoom: 1.35; }
+.fx-col li { font-size: 1.12rem !important; line-height: 1.4 !important; margin: 0.25rem 0 !important; }
+.fx-q-t { font-size: 1.18rem; }
+.fx-hoy { font-size: 1rem; }
