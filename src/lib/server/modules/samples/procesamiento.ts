@@ -12,6 +12,8 @@ import { addColumnIfMissing, markSchemaReady, schemaReady } from "../../schema";
 import { advanceState, anularOSolicitar, applyStageInventory, assertEditableAsync, assertOrigin, conSolicitudes, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
 import { ensureSupervisionColumns } from "../../supervision";
+import { exigirAutorizaciones } from "../../autorizaciones";
+import { requisitosProcesamiento } from "../../../shared/autorizaciones";
 
 /*
  * Portado de modules/samples/procesamiento.py del backend Flask original.
@@ -262,6 +264,8 @@ export async function createProcessingSample({ request, s }: RouteContext): Prom
 
   const data = normalizePayload(await readJson(request));
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: false, insumosJson: data.uso_inventario_json });
+  // Fase 4: autorizacion FX-THF-AP de quien captura.
+  await exigirAutorizaciones(s, user, requisitosProcesamiento());
   if (!data.folio_num) {
     data.folio_num = await nextFolioNum(s, TABLE);
   }
@@ -333,6 +337,8 @@ export async function updateProcessingSample({ request, s, params }: RouteContex
   await assertEditableAsync(s, antes, TABLE);
   const data = normalizePayload(await readJson(request));
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: false, insumosJson: data.uso_inventario_json });
+  // Fase 4: autorizacion FX-THF-AP de quien captura.
+  await exigirAutorizaciones(s, user, requisitosProcesamiento());
   if (!data.folio_num) {
     return json({ message: "El folio de procesamiento es obligatorio" }, 400);
   }

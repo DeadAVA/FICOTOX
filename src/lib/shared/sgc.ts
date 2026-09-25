@@ -306,6 +306,9 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   rechazar_solicitud: "Rechazó la solicitud",
   cancelar_solicitud: "Canceló su solicitud",
   vencer_solicitud: "Venció la solicitud",
+  otorgar_autorizacion: "Otorgó una autorización (FX-THF-AP)",
+  revocar_autorizacion: "Revocó una autorización (FX-THF-AP)",
+  vencer_autorizacion: "Venció una autorización (FX-THF-AP)",
 };
 
 export const AUDIT_ENTITIES: Record<string, string> = {

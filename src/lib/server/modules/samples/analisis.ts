@@ -15,6 +15,8 @@ import { advanceState, anularOSolicitar, applyStageInventory, assertEditableAsyn
 import { ANALYSIS_METHODS, ANALYSIS_TYPES, CONFORMITY_OPTIONS } from "../../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toFloatOrNull, toIntOrNull } from "../helpers";
 import { ensureSupervisionColumns } from "../../supervision";
+import { exigirAutorizaciones, requisitosEquipos } from "../../autorizaciones";
+import { requisitosAnalisis, requisitosRevisionResultados } from "../../../shared/autorizaciones";
 
 /*
  * Etapa de analisis (ISO/IEC 17025 7.5, 7.7 y 7.8; diagrama de flujo del
@@ -380,6 +382,8 @@ export async function createAnalysis({ request, s }: RouteContext): Promise<Resp
   await ensureAnalysisSchema(s);
   const data = normalizePayload(await readJson(request));
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: !!(data.equipo_id || data.equipo_nombre), insumosJson: data.uso_inventario_json });
+  // Fase 4: autorizacion FX-THF-AP: analisis, metodo del tipo de analisis y equipo usado (si esta en el inventario).
+  await exigirAutorizaciones(s, user, [...requisitosAnalisis(data.tipo_analisis), ...(await requisitosEquipos(s, [data.equipo_id]))]);
   if (!data.folio_num) data.folio_num = await nextFolioNum(s, TABLE);
   const invalid = validate(data);
   if (invalid) return json({ message: invalid }, 400);
@@ -436,6 +440,8 @@ export async function updateAnalysis({ request, s, params }: RouteContext): Prom
   const payload = await readJson(request);
   const data = normalizePayload(payload);
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: !!(data.equipo_id || data.equipo_nombre), insumosJson: data.uso_inventario_json });
+  // Fase 4: autorizacion FX-THF-AP: analisis, metodo del tipo de analisis y equipo usado (si esta en el inventario).
+  await exigirAutorizaciones(s, user, [...requisitosAnalisis(data.tipo_analisis), ...(await requisitosEquipos(s, [data.equipo_id]))]);
   if (!data.folio_num) return json({ message: "El folio es obligatorio" }, 400);
   const invalid = validate(data);
   if (invalid) return json({ message: invalid }, 400);
@@ -507,6 +513,7 @@ export async function reviewAnalysis({ request, s, params }: RouteContext): Prom
   await assertEditableAsync(s, antes, TABLE, "revisar");
   if (String(antes?.estado) !== "registrado") return json({ message: "Solo se revisan analisis en estado registrado" }, 409);
   exigirSinSupervisionPendiente(antes, `El analisis ${folioLabel(TABLE, antes)}`, "revisar");
+  await exigirAutorizaciones(s, user, requisitosRevisionResultados(antes?.tipo_analisis, "revisar"));
   const payload = await readJson(request);
   // Segregacion (regla 1): quien elaboro el analisis no lo revisa, salvo excepcion aprobada por un segundo usuario.
   const yo = userIdFromClaims(user) as number;
@@ -532,6 +539,7 @@ export async function approveAnalysis({ request, s, params }: RouteContext): Pro
   await assertEditableAsync(s, antes, TABLE, "aprobar");
   if (String(antes?.estado) !== "revisado") return json({ message: "El analisis debe estar revisado antes de aprobarse" }, 409);
   exigirSinSupervisionPendiente(antes, `El analisis ${folioLabel(TABLE, antes)}`, "aprobar");
+  await exigirAutorizaciones(s, user, requisitosRevisionResultados(antes?.tipo_analisis, "aprobar"));
   const payload = await readJson(request);
   // Segregacion (regla 1): quien elaboro el analisis no lo aprueba (revisor y aprobador si pueden coincidir).
   const yo = userIdFromClaims(user) as number;

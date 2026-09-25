@@ -6,6 +6,7 @@
  */
 import "./lib/reauth-auto.mjs";
 import { readFileSync } from "node:fs";
+import { autorizarTodo } from "./lib/autorizar.mjs";
 const BASE = process.env.BASE || "http://localhost:3100/api";
 let token = "";
 let token2 = "";
@@ -55,6 +56,7 @@ for (let i = 0; i < 60; i += 1) {
     ],
   });
   const u = await api("POST", "/admin/usuarios", { nombre: "Revisora QA", email: "revisora@cicese.mx", activo: true, rol_id: rolRev.data?.id, departamento: "Calidad", password: "RevisoraQA2026!" });
+  await autorizarTodo(BASE, token, u.data?.id);
   check("crear usuario revisora", rolRev.status === 201 && u.status === 201, `rol ${rolRev.status} usuario ${u.status} ${JSON.stringify(u.data)}`);
   const r2 = await api("POST", "/auth/login", { email: "revisora@cicese.mx", password: "RevisoraQA2026!" });
   token2 = r2.data?.token || "";

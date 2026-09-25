@@ -62,7 +62,10 @@ export type AuditAction =
   | "aprobar_solicitud"
   | "rechazar_solicitud"
   | "cancelar_solicitud"
-  | "vencer_solicitud";
+  | "vencer_solicitud"
+  | "otorgar_autorizacion"
+  | "revocar_autorizacion"
+  | "vencer_autorizacion";
 
 export interface AuditEntry {
   accion: AuditAction;

@@ -24,6 +24,7 @@ import "./lib/reauth-auto.mjs";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import zlib from "node:zlib";
+import { autorizarTodo } from "./lib/autorizar.mjs";
 
 const Database = createRequire(import.meta.url)(process.env.BETTER_SQLITE3 || "better-sqlite3");
 const BASE = process.env.BASE || "http://localhost:3100/api";
@@ -223,6 +224,9 @@ if (!TRAS_REINICIO) {
   const equipoId = equipos[0]?.id;
   const reactivos = (await api("GET", "/inventory/reactivos?search=", undefined, QA)).data?.items || [];
   const reactivoId = reactivos.find((r) => /metanol/i.test(String(r.producto || r.nombre)))?.id || reactivos[0]?.id;
+  // Fase 4: el uso del equipo en una extraccion exige su autorizacion FX-THF-AP (la otorga QA, que tiene ensayos:A).
+  const luisId = ((await api("GET", "/admin/usuarios", undefined, QA)).data?.items || []).find((u) => u.email === "luis.castro@ficotox.local")?.id;
+  await api("POST", `/admin/usuarios/${luisId}/autorizaciones`, { tipo: "equipo", clave: String(equipoId), folio_fx_thf_ap: "FX-THF-AP-PRUEBAS", motivo: "Equipo usado en la prueba de alcances" }, QA);
   check("datos de apoyo del modulo de roles", !!RA && !!PA && !!EA && !!equipoId && !!reactivoId, `R=${RA} P=${PA} E=${EA} equipo=${equipoId} reactivo=${reactivoId}`);
 
   /* ---------- Por rol y modulo: permitido (no 403) / rechazado (403) ---------- */
@@ -375,6 +379,7 @@ if (!TRAS_REINICIO) {
   const temporalDe = (rol) => (rol.startsWith("Estudiante") ? { tipo_cuenta: "temporal", vigente_hasta: "2099-12-31", supervisor_id: usuarioIds["Coordinador/a del Área Técnica"], motivo_cuenta: "Estancia de prueba" } : {});
   const persona = async (email, rol) => {
     const r = await api("POST", "/admin/usuarios", { nombre: email.split("@")[0], email, activo: true, rol_id: rolId(rol), password: "PruebaRoles2026!", motivo: "Alta de prueba", ...temporalDe(rol) }, QA);
+    await autorizarTodo(BASE, QA, r.data?.id);
     const t = (await api("POST", "/auth/login", { email, password: "PruebaRoles2026!" })).data?.token;
     return { id: r.data?.id, token: t, status: r.status };
   };

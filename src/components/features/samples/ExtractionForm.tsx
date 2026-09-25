@@ -29,6 +29,8 @@ import { WeightTable, blancoRow, newWeightRow } from "./extraction/WeightTable";
 import type { ExtractionProtocol, ExtractionState, FixedField, ProtocolContext, WeightColumnPair, WeightRow } from "./extraction/types";
 import { SolicitudCallout, SupervisionCallout } from "./status";
 import { formatearHora } from "@/lib/shared/fechas";
+import { AvisoAutorizacion } from "./AvisoAutorizacion";
+import { requisitoEquipo, requisitosExtraccion } from "@/lib/shared/autorizaciones";
 
 /*
  * Formato de extraccion como pagina completa. El formulario es comun; el
@@ -746,6 +748,7 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
     >
       <SupervisionCallout item={item} />
       <SolicitudCallout item={item} />
+      {!readOnly ? <AvisoAutorizacion requisitos={[...requisitosExtraccion(protocol.tipo), ...rows.filter((row) => row.enCatalogo && /^\d+$/.test(row.ref)).map((row) => requisitoEquipo(row.ref, row.claveCatalogo || row.nombre))]} /> : null}
       {readOnly && item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}

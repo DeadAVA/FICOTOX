@@ -380,6 +380,23 @@ npm run test:reset-db # solo regenerar la base de prueba
   aprueba solo las solicitudes con un segundo usuario (Responsable General) salvo
   con el encabezado `X-Sin-Aprobar-Auto: 1`.
 
+## 8 sexies. Fase 4 — autorizaciones del personal FX-THF-AP (rama `fase-4-autorizaciones`)
+
+- Segunda capa además del rol: `autorizaciones_personal` (actividad | método |
+  equipo, con vigencia y folio FX-THF-AP; revocar llena columnas, nada se borra).
+- Catálogo y requisitos por formato: `src/lib/shared/autorizaciones.ts`
+  (`requisitosRecepcion`, `requisitosExtraccion`, `requisitosAnalisis`, ...).
+  Servidor: `src/lib/server/autorizaciones.ts` (`exigirAutorizaciones(s, user,
+  requisitos)` → 403 `no_autorizado`; `requisitosEquipos` solo valida equipos que
+  existen en `equipos`).
+- Para exigir una autorización nueva: agrega la clave al catálogo, una función
+  `requisitos...` y llama `exigirAutorizaciones` en el handler después del
+  permiso del rol y antes de escribir.
+- Otorgan/revocan `ensayos:A` o `calidad:A`, nunca a sí mismos; reauth y bitácora
+  (`otorgar_autorizacion`, `revocar_autorizacion`, `vencer_autorizacion`).
+- `AUTORIZACIONES_OBLIGATORIAS=false` desactiva la validación (solo carga inicial).
+  El seed da autorizaciones de ejemplo (folio `FX-THF-AP-DEMO`).
+
 ## 9. Pendientes conocidos
 
 - El `.env` local tiene `JWT_EXPIRES_HOURS=12` y `CORS_ORIGINS=*`, que anulan los

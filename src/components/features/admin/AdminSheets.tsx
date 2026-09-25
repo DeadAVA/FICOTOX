@@ -16,6 +16,8 @@ import { ACCIONES, ACCION_KEYS, ALCANCES, MODULOS, alcanceLabel, firmaFilas, typ
 import { REGLAS_COMBINACION } from "@/lib/shared/combinaciones-roles";
 import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { CampoIdentidad } from "@/components/session/Reautenticar";
+import { AutorizacionesUsuario } from "@/components/features/admin/AutorizacionesPanel";
+import { SegmentedTabs } from "@/components/ui/PageHeader";
 import { fmtDate, fmtDateTime } from "@/lib/client/format";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
@@ -58,7 +60,7 @@ const ACCION_AYUDA: Record<Accion, string> = {
 };
 
 export function RoleSheet({ open, role, initialPermisos, usuarios = [], readOnly = false, onClose }: { open: boolean; role: ApiRecord | null; initialPermisos: PermisoFila[]; usuarios?: ApiRecord[]; readOnly?: boolean; onClose: () => void }) {
-  const { token, can } = useSession();
+  const { token, can, roles: rolesSesion } = useSession();
   const prompt = usePrompt();
   const [nombre, setNombre] = useState(String(role?.nombre || ""));
   const [descripcion, setDescripcion] = useState(String(role?.descripcion || ""));
@@ -67,7 +69,9 @@ export function RoleSheet({ open, role, initialPermisos, usuarios = [], readOnly
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editing = !!role?.id;
-  const puedeEditar = !readOnly && can("usuarios", "G");
+  // Fase 3.1: nadie edita los permisos de un rol que tiene vigente (el servidor responde 409 rol_propio).
+  const rolPropio = editing && rolesSesion.some((rol) => Number(rol.id) === Number(role?.id));
+  const puedeEditar = !readOnly && !rolPropio && can("usuarios", "G");
 
   const toggle = (modulo: string, accion: string, checked: boolean) => setMatriz((prev) => ({ ...prev, [celda(modulo, accion)]: checked ? prev[celda(modulo, accion)] || "total" : null }));
   const setAlcance = (modulo: string, accion: string, alcance: string) => setMatriz((prev) => ({ ...prev, [celda(modulo, accion)]: alcance }));
@@ -129,6 +133,11 @@ export function RoleSheet({ open, role, initialPermisos, usuarios = [], readOnly
       }
     >
       <form id="role-form" onSubmit={handleSubmit} className="flex flex-col gap-6" noValidate>
+        {rolPropio && !readOnly && can("usuarios", "G") ? (
+          <Callout tone="warning" title="No puedes editar un rol que tienes asignado">
+            Sus permisos los debe cambiar otra persona con permiso de administrar usuarios.
+          </Callout>
+        ) : null}
         {error ? (
           <Callout tone="danger" title={/combinaci/i.test(error) ? "Combinación de roles prohibida" : "No se pudo guardar"}>
             {error}
@@ -280,6 +289,8 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
   const editing = !!item?.id;
   const puedeAdministrar = !readOnly && can("usuarios", "G");
   const esPropia = editing && Number(me?.id) === Number(item?.id);
+  // Fase 4: pestañas de la ficha (roles / autorizaciones FX-THF-AP).
+  const [pestana, setPestana] = useState<"roles" | "autorizaciones">("roles");
 
   useEffect(() => {
     if (!open || !token || !puedeAdministrar) return;
@@ -537,7 +548,27 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
       </form>
 
       {editing ? (
-        <section className="mt-6 flex flex-col gap-3" aria-label="Roles del usuario">
+        <SegmentedTabs
+          className="mt-6"
+          size="sm"
+          label="Ficha del usuario"
+          value={pestana}
+          onChange={setPestana}
+          options={[
+            { value: "roles", label: "Roles" },
+            { value: "autorizaciones", label: "Autorizaciones (FX-THF-AP)" },
+          ]}
+        />
+      ) : null}
+
+      {editing && pestana === "autorizaciones" ? (
+        <section className="mt-4 flex flex-col gap-3" aria-label="Autorizaciones del usuario">
+          <AutorizacionesUsuario usuarioId={Number(item!.id)} />
+        </section>
+      ) : null}
+
+      {editing && pestana === "roles" ? (
+        <section className="mt-4 flex flex-col gap-3" aria-label="Roles del usuario">
           <div>
             <h3 className="text-[15px] font-semibold text-ink">Roles</h3>
             <p className="text-[12.5px] text-ink-3">Los permisos son la unión de los roles vigentes. Nada se borra: revocar deja la asignación en el historial.</p>

@@ -91,7 +91,7 @@ export function evaluarSupervisionCaptura(superviso: unknown, ejecutores: Array<
 /* Regla 4: visto bueno del supervisor sobre lo capturado por otra persona. */
 export function evaluarVistoBueno(usuarioId: number, capturadoPor: number | null | undefined): Violacion | null {
   if (capturadoPor === null || capturadoPor === undefined || Number(capturadoPor) !== Number(usuarioId)) return null;
-  return { regla: 4, clave: "visto_bueno", mensaje: "Capturaste este registro; el visto bueno lo debe dar otra persona" };
+  return { regla: 4, clave: "visto_bueno", mensaje: "Capturaste o editaste este registro; el visto bueno lo debe dar otra persona" };
 }
 
 /* Regla 5: documentos SGC. */

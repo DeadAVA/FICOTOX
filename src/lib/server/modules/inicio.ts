@@ -5,6 +5,7 @@ import { cargarAutorizacion, permisoDe, requirePermission, soloEstado } from "..
 import type { Accion, ContextoAlcance, Modulo } from "../../shared/permisos";
 import { contarPorSupervisar } from "../supervision";
 import { porAutorizarDe } from "../solicitudes";
+import { autorizacionesPorVencer, permisoAdministrar } from "../autorizaciones";
 import { ACCIONES_CRITICAS } from "../../shared/acciones-criticas";
 import { vencimientosProximos } from "./admin";
 import { ensureConsumiblesSchema } from "./consumables";
@@ -340,6 +341,20 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
       count: vencen.length,
       href: administra ? "/administracion/accesos" : "/supervision",
       items: vencen.slice(0, MAX_ITEMS).map((v) => ({ label: String(v.nombre || v.email), sub: `${v.rol ? `Rol ${v.rol}` : "Cuenta"} vence el ${fmtDate(v.vigente_hasta)}`, href: administra ? "/administracion/accesos" : "/supervision" })),
+    });
+  }
+
+  // Fase 4: autorizaciones FX-THF-AP que vencen en 30 dias (las propias y, para quien las administra, las de todo el personal).
+  const porVencer = await autorizacionesPorVencer(s, auth, 30);
+  if (porVencer.length) {
+    const administraAut = !!permisoAdministrar(auth);
+    avisos.push({
+      key: "autorizaciones_vencen",
+      label: "Autorizaciones por vencer (30 días)",
+      tone: "warning",
+      count: porVencer.length,
+      href: administraAut ? "/administracion/usuarios" : "/",
+      items: porVencer.slice(0, MAX_ITEMS).map((a) => ({ label: a.propia ? `Tu autorización: ${a.etiqueta}` : `${a.persona} · ${a.etiqueta}`, sub: `Vence el ${fmtDate(a.vigente_hasta)}`, href: administraAut ? "/administracion/usuarios" : "/" })),
     });
   }
 

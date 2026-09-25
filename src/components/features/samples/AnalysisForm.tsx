@@ -26,6 +26,8 @@ import { SignDialog } from "./SignDialog";
 import { BotonSegregado, FolioChip, SegregacionCallout, SolicitudCallout, SupervisionCallout } from "./status";
 import { useAnulacion } from "./useAnulacion";
 import { formatearHora } from "@/lib/shared/fechas";
+import { AvisoAutorizacion } from "./AvisoAutorizacion";
+import { requisitosAnalisis, requisitosRevisionResultados } from "@/lib/shared/autorizaciones";
 
 /*
  * Registro de analisis: metodo, equipo, condiciones, resultados por muestra
@@ -490,6 +492,9 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       ) : null}
       <SupervisionCallout item={item} />
       <SolicitudCallout item={item} />
+      {!readOnly ? <AvisoAutorizacion requisitos={requisitosAnalisis(form.tipo)} /> : null}
+      {editing && estado === "registrado" && canReview ? <AvisoAutorizacion requisitos={requisitosRevisionResultados(form.tipo, "revisar")} accion="revisar este análisis" /> : null}
+      {editing && estado === "revisado" && canApprove ? <AvisoAutorizacion requisitos={requisitosRevisionResultados(form.tipo, "aprobar")} accion="aprobar este análisis" /> : null}
       <SegregacionCallout bloqueo={editing && estado === "registrado" && canReview ? segregacion.revisar : editing && estado === "revisado" && canApprove ? segregacion.aprobar : null} accion={estado === "revisado" ? "aprobar" : "revisar"} onSolicitar={() => solicitarExcepcion(estado === "revisado" ? "aprobar" : "revisar")} />
       {item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">

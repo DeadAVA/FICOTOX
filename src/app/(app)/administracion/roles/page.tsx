@@ -40,7 +40,7 @@ function RolesGuard() {
 }
 
 function RolesContent() {
-  const { token, can } = useSession();
+  const { token, can, roles: rolesSesion } = useSession();
   const confirm = useConfirm();
   const [search, setSearch] = useState("");
   const [sheet, setSheet] = useState<{ open: boolean; key: number; role: ApiRecord | null; permisos: PermisoFila[]; usuarios: ApiRecord[] }>({ open: false, key: 0, role: null, permisos: [], usuarios: [] });
@@ -87,7 +87,9 @@ function RolesContent() {
 
   const menuFor = (role: ApiRecord): MenuItem[] => {
     const list: MenuItem[] = [];
-    if (canAdmin) list.push({ label: "Editar", description: "Nombre, descripción y matriz de permisos", icon: <PencilSimple size={16} weight="duotone" />, tone: "brand", onSelect: () => openRole(Number(role.id)) });
+    const propio = rolesSesion.some((rol) => Number(rol.id) === Number(role.id));
+    if (canAdmin && propio) list.push({ label: "Ver permisos", description: "No puedes editar un rol que tienes asignado", icon: <Eye size={16} weight="duotone" />, tone: "brand", onSelect: () => openRole(Number(role.id)) });
+    else if (canAdmin) list.push({ label: "Editar", description: "Nombre, descripción y matriz de permisos", icon: <PencilSimple size={16} weight="duotone" />, tone: "brand", onSelect: () => openRole(Number(role.id)) });
     else list.push({ label: "Ver permisos", description: "Matriz de permisos y personas con el rol", icon: <Eye size={16} weight="duotone" />, tone: "brand", onSelect: () => openRole(Number(role.id)) });
     if (canAdmin && !role.es_sistemico) list.push({ label: "Eliminar rol", description: Number(role.total_usuarios || 0) > 0 ? "Solo si nunca se asignó" : "Queda en la bitácora", icon: <Trash size={16} weight="duotone" />, tone: "danger", disabled: Number(role.total_usuarios || 0) > 0, separatorBefore: list.length > 0, onSelect: () => deleteRole(role) });
     return list;

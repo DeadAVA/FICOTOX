@@ -13,6 +13,8 @@ import { Key, SignOut } from "@phosphor-icons/react";
 import { API_BASE_URL, sendJsonAuth } from "@/lib/client/api";
 import { fmtDate } from "@/lib/client/format";
 import { invalidate } from "@/lib/client/store";
+import { useAutorizaciones } from "@/lib/client/useAutorizaciones";
+import { ListaAutorizaciones } from "@/components/features/admin/AutorizacionesPanel";
 
 /*
  * "Mi cuenta": quien soy (nombre, correo, roles vigentes) y mi avatar. La persona elige
@@ -27,6 +29,7 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
   const [cargo, setCargo] = useState<string>(user?.cargo_predeterminado ? String(user.cargo_predeterminado) : "");
   const [savingCargo, setSavingCargo] = useState(false);
   const [cambiarClave, setCambiarClave] = useState(false);
+  const { items: autorizaciones } = useAutorizaciones();
 
   const guardarCargo = async (valor: string) => {
     setCargo(valor);
@@ -133,6 +136,13 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
             </Field>
           </section>
         ) : null}
+        <section className="flex flex-col gap-2" id="mis-autorizaciones">
+          <div>
+            <h3 className="title-3 text-ink">Mis autorizaciones</h3>
+            <p className="text-[13px] text-ink-3">Métodos, equipos y actividades para los que estás autorizada o autorizado en el formato FX-THF-AP. Las registra la coordinación.</p>
+          </div>
+          {autorizaciones ? <ListaAutorizaciones items={autorizaciones} /> : <p className="text-[13px] text-ink-3">Cargando…</p>}
+        </section>
         <section className="flex flex-col gap-2">
           <div>
             <h3 className="title-3 text-ink">Seguridad</h3>

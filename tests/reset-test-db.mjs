@@ -63,6 +63,33 @@ export function resetTestDb() {
     const qaId = Number(db.prepare("INSERT INTO usuarios (nombre, email, activo, id_rol, password_hash) VALUES (?, ?, 1, ?, ?)").run("QA Ficotox", QA_USER.email, rol.id, hash(QA_USER.password)).lastInsertRowid);
     db.prepare("INSERT INTO usuario_roles (usuario_id, rol_id, vigente_desde, vigente_hasta, motivo, asignado_por, asignado_en) VALUES (?, ?, '2000-01-01', NULL, 'Rol de pruebas automatizadas (solo base de prueba)', NULL, ?)").run(qaId, rol.id, new Date().toISOString());
 
+    // Fase 4: QA opera todos los formatos: todas las actividades y metodos del catalogo FX-THF-AP (solo base de prueba).
+    db.exec(`CREATE TABLE IF NOT EXISTS autorizaciones_personal (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, usuario_id INTEGER NOT NULL, tipo VARCHAR(20) NOT NULL, clave VARCHAR(60) NOT NULL,
+      vigente_desde VARCHAR(10) NOT NULL, vigente_hasta VARCHAR(10) DEFAULT NULL, folio_fx_thf_ap VARCHAR(80) DEFAULT NULL,
+      otorgada_por INTEGER DEFAULT NULL, otorgada_rol VARCHAR(120) DEFAULT NULL, otorgada_en VARCHAR(40) DEFAULT NULL, motivo TEXT,
+      revocada_en VARCHAR(40) DEFAULT NULL, revocada_por INTEGER DEFAULT NULL, motivo_revocacion TEXT, vencimiento_registrado_en VARCHAR(40) DEFAULT NULL
+    )`);
+    const autorizacionesQa = [
+      ...["recepcion", "procesamiento", "extraccion", "analisis", "revision_resultados", "aprobacion_resultados", "revision_informe", "autorizacion_informe"].map((clave) => ["actividad", clave]),
+      ...["ASP", "DSP", "PSP", "pigmentos", "plancton", "otro"].map((clave) => ["metodo", clave]),
+    ];
+    for (const [tipo, clave] of autorizacionesQa) {
+      db.prepare("INSERT INTO autorizaciones_personal (usuario_id, tipo, clave, vigente_desde, folio_fx_thf_ap, otorgada_rol, otorgada_en, motivo) VALUES (?, ?, ?, '2000-01-01', 'FX-THF-AP-QA', 'Base de prueba', ?, 'Usuario de pruebas automatizadas')").run(qaId, tipo, clave, new Date().toISOString());
+    }
+    /*
+     * Las suites anteriores prueban la matriz de roles con cada usuario de ejemplo:
+     * se completan sus autorizaciones con las que no les dio el seed (las del seed
+     * no se duplican; api-autorizaciones prueba esas y sus revocaciones).
+     */
+    const tiene = db.prepare("SELECT id FROM autorizaciones_personal WHERE usuario_id = ? AND tipo = ? AND clave = ? AND revocada_en IS NULL LIMIT 1");
+    for (const { id } of db.prepare("SELECT id FROM usuarios WHERE email LIKE '%@ficotox.local' AND id <> ?").all(qaId)) {
+      for (const [tipo, clave] of autorizacionesQa) {
+        if (tiene.get(id, tipo, clave)) continue;
+        db.prepare("INSERT INTO autorizaciones_personal (usuario_id, tipo, clave, vigente_desde, folio_fx_thf_ap, otorgada_rol, otorgada_en, motivo) VALUES (?, ?, ?, '2000-01-01', 'FX-THF-AP-QA', 'Base de prueba', ?, 'Matriz de roles de las pruebas')").run(id, tipo, clave, new Date().toISOString());
+      }
+    }
+
     const credenciales = {};
     for (const { id, email } of db.prepare("SELECT id, email FROM usuarios WHERE email LIKE '%@ficotox.local' AND email <> ?").all(QA_USER.email)) {
       credenciales[email] = `Prueba-${randomBytes(9).toString("base64url")}`;

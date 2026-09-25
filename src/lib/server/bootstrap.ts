@@ -1,5 +1,6 @@
 import { ensureAuditSchema } from "./audit";
 import { withSession } from "./db";
+import { ensureAutorizacionesSchema, registrarVencimientosAutorizaciones } from "./autorizaciones";
 import { ensureRbacSchema, migrarPermisosFase3, migrarRolesUnicos, registrarVencimientos } from "./rbac";
 import { ensureSolicitudesSchema, vencerSolicitudes } from "./solicitudes";
 import { ensureSeguridadSchema } from "./seguridad";
@@ -34,6 +35,7 @@ export function ensureInitialSchema(): Promise<void> {
       await ensureAuditSchema(s);
       await ensureSeguridadSchema(s);
       await ensureSolicitudesSchema(s);
+      await ensureAutorizacionesSchema(s);
       // Fase 1: usuarios.id_rol -> usuario_roles (una vez; queda en la bitacora).
       await migrarRolesUnicos(s);
       await migrarPermisosFase3(s);
@@ -72,7 +74,7 @@ export function barrerVencimientos(): Promise<void> {
   if (Date.now() - ultimoBarrido < 60_000) return Promise.resolve();
   ultimoBarrido = Date.now();
   barridoEnCurso = withSession(async (s) => {
-    const vencidos = (await registrarVencimientos(s)) + (await vencerSolicitudes(s));
+    const vencidos = (await registrarVencimientos(s)) + (await vencerSolicitudes(s)) + (await registrarVencimientosAutorizaciones(s));
     if (vencidos) await s.commit();
   })
     .catch((error: unknown) => {

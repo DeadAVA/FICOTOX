@@ -31,6 +31,8 @@ export interface AppConfig {
   REAUTH_TTL_MIN: number;
   /* Fase 3: dias que una solicitud de autorizacion espera al segundo usuario antes de vencer. */
   SOLICITUD_VENCE_DIAS: number;
+  /* Fase 4: validar autorizaciones del personal (FX-THF-AP) al guardar; false solo para cargar datos iniciales. */
+  AUTORIZACIONES_OBLIGATORIAS: boolean;
 }
 
 function envInt(name: string, fallback: number): number {
@@ -134,6 +136,7 @@ export function getConfig(): AppConfig {
     SESION_INACTIVIDAD_MIN: envInt("SESION_INACTIVIDAD_MIN", 30),
     REAUTH_TTL_MIN: envInt("REAUTH_TTL_MIN", 5),
     SOLICITUD_VENCE_DIAS: envInt("SOLICITUD_VENCE_DIAS", 7),
+    AUTORIZACIONES_OBLIGATORIAS: envBool("AUTORIZACIONES_OBLIGATORIAS", "true"),
   };
   return cached;
 }

@@ -15,6 +15,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { autorizarTodo } from "../lib/autorizar.mjs";
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright-core");
 
@@ -56,6 +57,7 @@ const PWD = "Seguridad-UI-2026";
 const alta = async (prefijo, rol) => {
   const email = `${prefijo}.${stamp}@cicese.mx`;
   const r = await api("POST", "/admin/usuarios", { nombre: `${prefijo} ui`, email, activo: true, rol_id: rolId(rol), password: PWD, motivo: "Alta de prueba UI" }, QA);
+  await autorizarTodo(API, QA, r.data?.id);
   return { email, id: r.data?.id };
 };
 const cargo = await alta("cargo", "Responsable General");

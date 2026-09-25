@@ -14,6 +14,8 @@
  *     con --actualizar-permisos.
  *   - Un usuario se busca por correo y no se duplica ni se cambia su contrasena;
  *     si no tiene su rol del catalogo vigente, se le asigna.
+ *   - Fase 4: autorizaciones de ejemplo (FX-THF-AP, folio "FX-THF-AP-DEMO") para
+ *     las personas de ejemplo que existan (AUTORIZACIONES_DEMO); no se duplican.
  *   - Fase 2: una persona con `"temporal": { "meses": 6, "supervisor": "correo" }`
  *     se da de alta como cuenta temporal (fin de vigencia a N meses y supervisor);
  *     su rol vence con la cuenta. El rol de estudiante / personal en formacion
@@ -149,7 +151,25 @@ function auditar(entry) {
 
 const hoy = new Date().toLocaleDateString("en-CA");
 const avatares = ["medusa", "pulpo", "tortuga", "ballena", "pez", "cangrejo", "estrella", "erizo", "concha", "mejillon", "diatomea", "dinoflagelado", "alga", "coral", "ola", "microscopio", "matraz", "faro"];
-const resumen = { rolesCreados: [], rolesCargados: [], rolesIguales: [], rolesDistintos: [], usuariosCreados: [], usuariosExistentes: [], asignaciones: [] };
+const resumen = { rolesCreados: [], rolesCargados: [], rolesIguales: [], rolesDistintos: [], usuariosCreados: [], usuariosExistentes: [], asignaciones: [], autorizaciones: [] };
+
+/*
+ * Fase 4: autorizaciones de ejemplo (FX-THF-AP). Las otorga Ricardo (Coord. Area
+ * Tecnica); las de Ricardo, Patricia (Responsable General). Los equipos no se
+ * siembran (el inventario esta vacio): se autorizan al darlos de alta.
+ */
+const FOLIO_DEMO = "FX-THF-AP-DEMO";
+const RICARDO = "ricardo.medina@ficotox.local";
+const PATRICIA = "patricia.luna@ficotox.local";
+const TODAS_ACTIVIDADES = ["recepcion", "procesamiento", "extraccion", "analisis", "revision_resultados", "aprobacion_resultados", "revision_informe", "autorizacion_informe"];
+const AUTORIZACIONES_DEMO = [
+  { email: "luis.castro@ficotox.local", actividades: ["procesamiento", "extraccion", "analisis"], metodos: ["ASP", "DSP"], otorga: RICARDO },
+  { email: "mariana.delgado@ficotox.local", actividades: ["recepcion", "procesamiento"], metodos: [], otorga: RICARDO },
+  { email: RICARDO, actividades: TODAS_ACTIVIDADES, metodos: ["ASP", "DSP"], otorga: PATRICIA },
+  { email: PATRICIA, actividades: ["revision_informe", "autorizacion_informe"], metodos: [], otorga: RICARDO },
+  // Vigencia igual a la de su cuenta temporal.
+  { email: "diego.salinas@ficotox.local", actividades: ["procesamiento"], metodos: [], otorga: RICARDO, comoCuenta: true },
+];
 
 const filasDe = (roleId) => db.prepare("SELECT modulo, accion, alcance FROM rol_acciones WHERE id_rol = ?").all(roleId);
 function guardarFilas(roleId, filas) {
@@ -232,6 +252,31 @@ const alta = db.transaction(() => {
     auditar({ accion: "asignar_rol", entidad: "usuarios", entidadId: usuario.id, referencia: email, detalle: { rol: persona.rol, rol_id: roleId, asignacion_id: Number(lastInsertRowid), vigente_desde: hoy, vigente_hasta: hasta, sin_solicitud: "script de alta (seed)" } });
     resumen.asignaciones.push(`${email} → ${persona.rol}`);
   }
+  // Fase 4: autorizaciones de ejemplo (misma tabla que crea el servidor).
+  db.exec(`CREATE TABLE IF NOT EXISTS autorizaciones_personal (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, usuario_id INTEGER NOT NULL, tipo VARCHAR(20) NOT NULL, clave VARCHAR(60) NOT NULL,
+    vigente_desde VARCHAR(10) NOT NULL, vigente_hasta VARCHAR(10) DEFAULT NULL, folio_fx_thf_ap VARCHAR(80) DEFAULT NULL,
+    otorgada_por INTEGER DEFAULT NULL, otorgada_rol VARCHAR(120) DEFAULT NULL, otorgada_en VARCHAR(40) DEFAULT NULL, motivo TEXT,
+    revocada_en VARCHAR(40) DEFAULT NULL, revocada_por INTEGER DEFAULT NULL, motivo_revocacion TEXT, vencimiento_registrado_en VARCHAR(40) DEFAULT NULL
+  )`);
+  const porCorreo = (email) => db.prepare("SELECT * FROM usuarios WHERE LOWER(email) = LOWER(?) LIMIT 1").get(email);
+  const rolDe = (email) => personas.find((p) => String(p.email).toLowerCase() === email)?.rol || null;
+  for (const demo of AUTORIZACIONES_DEMO) {
+    const persona = porCorreo(demo.email);
+    const otorga = porCorreo(demo.otorga);
+    if (!persona || !otorga) continue;
+    const hasta = demo.comoCuenta ? persona.vigente_hasta || null : null;
+    const pedidas = [...demo.actividades.map((clave) => ({ tipo: "actividad", clave })), ...demo.metodos.map((clave) => ({ tipo: "metodo", clave }))];
+    for (const { tipo, clave } of pedidas) {
+      if (db.prepare("SELECT id FROM autorizaciones_personal WHERE usuario_id = ? AND tipo = ? AND clave = ? AND revocada_en IS NULL LIMIT 1").get(persona.id, tipo, clave)) continue;
+      const motivo = "Autorizaciones de ejemplo (FX-THF-AP)";
+      const { lastInsertRowid } = db
+        .prepare("INSERT INTO autorizaciones_personal (usuario_id, tipo, clave, vigente_desde, vigente_hasta, folio_fx_thf_ap, otorgada_por, otorgada_rol, otorgada_en, motivo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        .run(persona.id, tipo, clave, hoy, hasta, FOLIO_DEMO, otorga.id, rolDe(demo.otorga), new Date().toISOString(), motivo);
+      auditar({ accion: "otorgar_autorizacion", entidad: "usuarios", entidadId: persona.id, referencia: persona.email, motivo, detalle: { autorizacion_id: Number(lastInsertRowid), tipo, clave, vigente_desde: hoy, vigente_hasta: hasta, folio_fx_thf_ap: FOLIO_DEMO, otorgada_por: demo.otorga, sin_reautenticacion: "script de alta (seed)" } });
+      resumen.autorizaciones.push(`${persona.email} → ${tipo} ${clave}`);
+    }
+  }
 });
 
 try {
@@ -252,5 +297,6 @@ if (resumen.rolesDistintos.length) console.log(`AVISO: roles con permisos distin
 lista("Usuarios creados", resumen.usuariosCreados);
 if (resumen.usuariosExistentes.length) console.log(`Usuarios que ya existían (sin cambios de contraseña): ${resumen.usuariosExistentes.length}`);
 lista("Roles asignados", resumen.asignaciones);
+lista("Autorizaciones FX-THF-AP de ejemplo", resumen.autorizaciones);
 console.log(roto === null ? "Bitacora: cadena de sellos integra." : `Bitacora: la cadena NO cuadra a partir de la entrada ${roto} (¿cambio SECRET_KEY o auditoria.key?).`);
 process.exit(roto === null ? 0 : 1);

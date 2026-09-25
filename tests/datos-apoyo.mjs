@@ -34,6 +34,17 @@ const login = await api("POST", "/auth/login", { email: "qa@ficotox.local", pass
 const T = login.token;
 
 const centrifuga = await api("POST", "/inventory/equipos", { nombre: "Centrifuga", estado: "operativo", fecha_prox_calibracion: "2026-05-22" }, T);
+// Fase 4: el equipo se autoriza al darlo de alta (FX-THF-AP). Lo otorga el Coord. del Area Tecnica al usuario QA (nadie se autoriza a si mismo).
+if (process.env.CREDENCIALES_ROLES) {
+  const { readFileSync } = await import("node:fs");
+  const credenciales = JSON.parse(readFileSync(process.env.CREDENCIALES_ROLES, "utf8"));
+  const coord = await api("POST", "/auth/login", { email: "ricardo.medina@ficotox.local", password: credenciales["ricardo.medina@ficotox.local"] });
+  const personas = (await api("GET", "/admin/usuarios", undefined, T)).items || [];
+  for (const email of ["qa@ficotox.local", "luis.castro@ficotox.local"]) {
+    const destino = personas.find((u) => u.email === email)?.id;
+    if (destino) await api("POST", `/admin/usuarios/${destino}/autorizaciones`, { tipo: "equipo", clave: String(centrifuga.id), folio_fx_thf_ap: "FX-THF-AP-PRUEBAS", motivo: "Equipo dado de alta para las pruebas" }, coord.token);
+  }
+}
 const metanol = await api("POST", "/inventory/reactivos", { tipo_reactivo: "alcoholes_solventes", nombre: "Metanol HPLC", producto: "Metanol HPLC", cantidad_actual: 8, unidad: "litros" }, T);
 const acetico = await api("POST", "/inventory/reactivos", { tipo_reactivo: "acidos", nombre: "Acido acetico", producto: "Acido acetico", cantidad_actual: 2.5, unidad: "litros" }, T);
 // La prueba de navegador da de baja y reactiva este reactivo.

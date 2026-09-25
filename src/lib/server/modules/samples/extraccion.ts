@@ -18,6 +18,8 @@ import { EXTRACTION_TYPES, claveForType, normalizeExtractionType, parseExtractio
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
 import { ensureEquiposSchema } from "../inventory";
 import { ensureSupervisionColumns } from "../../supervision";
+import { exigirAutorizaciones, requisitosEquipos } from "../../autorizaciones";
+import { requisitosExtraccion } from "../../../shared/autorizaciones";
 
 /*
  * Portado de modules/samples/extraccion.py del backend Flask original.
@@ -480,6 +482,8 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
     return json({ message: "Tipo de extraccion no valido" }, 400);
   }
   const data = normalizePayload(payload, tipo);
+  // Fase 4: autorizacion FX-THF-AP: extraccion, metodo del tipo (E-A ASP, E-D DSP) y cada equipo del inventario usado.
+  await exigirAutorizaciones(s, user, [...requisitosExtraccion(tipo), ...(await requisitosEquipos(s, (safeJsonLoad(data.equipos_json, []) as Array<{ equipo_id?: unknown }>).map((e) => e.equipo_id)))]);
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: (safeJsonLoad(data.equipos_json, []) as unknown[]).length > 0, insumosJson: data.uso_inventario_json });
   if (!data.folio_num) {
     data.folio_num = await nextFolioNum(s, TABLE, "tipo_registro = :tipo", { tipo });
@@ -552,6 +556,8 @@ export async function updateExtractionSample({ request, s, params }: RouteContex
     return json({ message: "Tipo de extraccion no valido" }, 400);
   }
   const data = normalizePayload(payload, tipo);
+  // Fase 4: autorizacion FX-THF-AP: extraccion, metodo del tipo (E-A ASP, E-D DSP) y cada equipo del inventario usado.
+  await exigirAutorizaciones(s, user, [...requisitosExtraccion(tipo), ...(await requisitosEquipos(s, (safeJsonLoad(data.equipos_json, []) as Array<{ equipo_id?: unknown }>).map((e) => e.equipo_id)))]);
   if (!data.folio_num) {
     return json({ message: "El folio de extraccion es obligatorio" }, 400);
   }

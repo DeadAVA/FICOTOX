@@ -176,11 +176,26 @@ Violación: 409 con código `segregacion` y la regla concreta. Las excepciones s
 
 Revocar roles, dar de baja cuentas, bloquear y acortar vigencias **no** requieren segundo usuario (reducir privilegios no debe esperar). En usuarios, `G` **no** implica A (Fase 3.1): solo quien tiene `usuarios:A` explícito (Responsable General) aprueba cambios de acceso; en los demás módulos G sigue implicando todas las acciones. Nadie puede editar los permisos de un rol que él mismo tiene vigente (409 `rol_propio`); los demás roles se editan como antes. Guardas: siempre queda al menos un usuario activo con `usuarios:G` vigente (y uno sin fecha de fin) y con `usuarios:A` vigente. El script de alta asigna roles sin solicitud y lo deja dicho en la bitácora.
 
+## 6 ter. Autorizaciones del personal FX-THF-AP (Fase 4)
+
+Segunda capa, además del rol: el rol da la acción en el módulo; la autorización FX-THF-AP dice sobre qué actividades, métodos y equipos puede trabajar la persona, con vigencia. El servidor valida a quien actúa (403 `no_autorizado` con lo que falta). Catálogo en `src/lib/shared/autorizaciones.ts`.
+
+| Formato / acción | Rol (permiso) | Autorización FX-THF-AP vigente |
+| --- | --- | --- |
+| Recepción (crear/editar) | muestras C/E | actividad `recepcion` |
+| Procesamiento | ensayos C/E | actividad `procesamiento` |
+| Extracción | ensayos C/E | `extraccion` + método (E-A → ASP, E-D → DSP) + cada equipo del inventario usado |
+| Análisis | ensayos C/E | `analisis` + método del tipo de análisis + equipo usado (si está en inventario) |
+| Revisar / aprobar análisis | ensayos R / A | `revision_resultados` / `aprobacion_resultados` + método |
+| Revisar / autorizar informe | informes R / A | `revision_informe` / `autorizacion_informe` |
+
+Otorgan y revocan (con motivo, reautenticación y bitácora): quien tiene `ensayos:A` o `calidad:A` (Coord. Área Técnica, Mejora Continua, Responsable General); no el Administrador técnico; nadie a sí mismo (409). `AUTORIZACIONES_OBLIGATORIAS=false` desactiva la validación solo para cargar datos iniciales.
+
 ## 7. Decisiones pendientes de validar con Mejora Continua
 
 1. **AN (anular con justificación)**: la matriz original no lo asignaba a ningún rol. Se propuso y se cargó: Coord. Área Técnica en muestras, ensayos, informes, equipos e inventario; Mejora Continua en documentos y calidad; Responsable General en todo excepto usuarios (anulaciones excepcionales). La aprobación de un segundo usuario llega en Fase 3.
 2. **Responsable General en usuarios**: la matriz dice "V/A"; desde la Fase 3 es V A y aprueba las asignaciones de rol, reactivaciones y ampliaciones de vigencia (solicitudes de segundo usuario).
-3. **A de informes de la Coord. Técnica**: deberá valer solo para personas autorizadas en FX-THF-AP (Fase 4).
+3. **A de informes de la Coord. Técnica** (resuelto en la Fase 4): la A de informes solo se ejerce con la autorización FX-THF-AP `autorizacion_informe` vigente (y R con `revision_informe`); ver 6 ter.
 4. **Interpretación de módulos**: muestras = recepción y custodia; ensayos = procesamiento, extracción y análisis (reconcilia la matriz con la sección 7).
 5. **Anclas de las reglas 1 y 2** (`usuarios:G` y `compras:G`) y la lectura de las celdas con paréntesis (sección 3).
 6. **Reportes de mantenimiento**: pasan del módulo documentos (apagado) a `equipos` (V para verlos, C con alcance `mantenimiento` para generarlos).

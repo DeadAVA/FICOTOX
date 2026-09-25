@@ -444,6 +444,17 @@ Mientras la solicitud esta pendiente, el registro muestra "... solicitada · pen
 
 Todas las fechas se muestran como dd/mm/aaaa y las horas en la hora de Ensenada, sin importar el idioma o la zona del navegador. En los campos de fecha escriba los numeros (las barras se ponen solas) o use el calendario (flechas, Inicio/Fin, RePag/AvPag, Enter, Escape).
 
+### 13.10 Autorizaciones del personal (FX-THF-AP)
+
+Ademas de su rol, cada persona solo puede operar las actividades, metodos y equipos para los que esta autorizada en el formato FX-THF-AP, con su vigencia. El rol dice que pantallas y acciones tiene; la autorizacion dice sobre que metodos y equipos puede trabajar.
+
+- **Que se autoriza**: actividades (recepcion de muestras, procesamiento, extraccion, analisis, revision de resultados, aprobacion de resultados, revision de informes, autorizacion de informes), metodos (ASP, DSP, PSP, pigmentos, plancton, otro) y equipos activos del inventario.
+- **Que pide cada formato**: recepcion pide la actividad de recepcion; procesamiento, la de procesamiento; extraccion, la de extraccion mas el metodo del tipo (E-A es ASP, E-D es DSP) y cada equipo del inventario que se use; analisis, la de analisis mas el metodo del tipo de analisis y el equipo usado; revisar o aprobar un analisis, la actividad correspondiente mas el metodo; revisar o autorizar un informe, la actividad correspondiente. Los equipos o insumos que no estan en el inventario no se validan.
+- **Quien las registra**: la Coordinacion del Area Tecnica, Mejora Continua o la Responsable General, desde **Administracion › Usuarios**, ficha de la persona, pestaña **Autorizaciones (FX-THF-AP)**. **Agregar** pide tipo, actividad/metodo/equipo, vigencia (desde y, si aplica, hasta), el folio del formato en papel y el motivo; **Revocar** pide el motivo. Ambas piden su contrasena y quedan en la bitacora. Nadie puede otorgarse ni revocarse autorizaciones a si mismo. Nada se borra: una autorizacion revocada o vencida sigue en la lista con su estado.
+- **Si le falta una**: al abrir el formato aparece un aviso con lo que le falta, y al guardar el sistema lo impide con un mensaje como "No tienes autorización vigente para extracción DSP" o "... para el equipo CE1". Pida a su coordinacion que la registre.
+- **Mis autorizaciones**: en **Mi cuenta** puede consultar (solo lectura) sus autorizaciones, su vigencia, folio y estado.
+- **Vencimientos**: el Inicio avisa de las autorizaciones que vencen en los proximos 30 dias, a la persona y a quien las administra. Al vencer, la autorizacion deja de valer sola y queda anotado en la bitacora.
+
 ## 14. Buenas practicas de uso
 
 - Capture folios y codigos internos de forma consistente.
@@ -470,7 +481,11 @@ Aunque pueda ver una seccion, sus roles pueden no tener las acciones C (crear), 
 
 ### El sistema no me deja aprobar o autorizar
 
-Revise que alguno de sus roles tenga R (revisar) o A (aprobar/autorizar) en Ensayos o Informes, y que usted no haya elaborado el registro (ni un analisis incluido en el informe): la separacion de funciones lo impide (ver 13.7). Un informe solo se autoriza cuando todos sus analisis estan aprobados.
+Revise que alguno de sus roles tenga R (revisar) o A (aprobar/autorizar) en Ensayos o Informes, y que usted no haya elaborado el registro (ni un analisis incluido en el informe): la separacion de funciones lo impide (ver 13.7). Un informe solo se autoriza cuando todos sus analisis estan aprobados. Ademas necesita la autorizacion FX-THF-AP vigente de esa actividad (y del metodo, en analisis); ver 13.10.
+
+### "No tienes autorización vigente para ..."
+
+Le falta la autorizacion FX-THF-AP de la actividad, el metodo o el equipo que indica el mensaje, o ya vencio o fue revocada. Consulte **Mi cuenta › Mis autorizaciones** y pida a la Coordinacion del Area Tecnica, a Mejora Continua o a la Responsable General que la registre (ver 13.10).
 
 ### El registro aparece en solo lectura
 

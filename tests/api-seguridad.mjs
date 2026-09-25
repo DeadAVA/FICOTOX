@@ -21,6 +21,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { autorizarTodo } from "./lib/autorizar.mjs";
 
 const Database = createRequire(import.meta.url)(process.env.BETTER_SQLITE3 || "better-sqlite3");
 const BASE = process.env.BASE || "http://localhost:3100/api";
@@ -90,6 +91,7 @@ let n = 0;
 const nuevo = async (prefijo, rol, extra = {}) => {
   const email = `${prefijo}.${Date.now()}${(n += 1)}@cicese.mx`;
   const r = await api("POST", "/admin/usuarios", { nombre: `${prefijo} prueba`, email, activo: true, rol_id: rolId(rol), password: PWD, motivo: "Alta de prueba de seguridad", ...extra }, QA);
+  await autorizarTodo(BASE, QA, r.data?.id);
   return { email, id: r.data?.id, status: r.status, data: r.data };
 };
 const temporal = (extra = {}) => ({ tipo_cuenta: "temporal", vigente_hasta: "2099-12-31", supervisor_id: ricardoId, motivo_cuenta: "Estancia de prueba", ...extra });

@@ -10,6 +10,7 @@ import { createRequire } from "node:module";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
+import { autorizarTodo } from "./lib/autorizar.mjs";
 
 const Database = createRequire(import.meta.url)(process.env.BETTER_SQLITE3 || "better-sqlite3");
 const BASE = process.env.BASE || "http://localhost:3100/api";
@@ -152,6 +153,7 @@ const cadena = async (prefijo, token = QA) => {
   // Persona con dos roles que otorgan revisar: la regla es por persona, no por cargo.
   const email = `dos.roles.${Date.now()}@cicese.mx`;
   const alta = await api("POST", "/admin/usuarios", { nombre: "Dos roles", email, activo: true, rol_id: rolId("Coordinador/a del Área Técnica"), password: "Dos-Roles-2026-x", motivo: "Persona con dos roles" }, QA);
+  await autorizarTodo(BASE, QA, alta.data?.id);
   await api("POST", `/solicitudes/${alta.data?.solicitud?.id}/aprobar`, { motivo: "Alta de prueba de segregacion" }, tP);
   const segunda = await api("POST", `/admin/usuarios/${alta.data?.id}/roles`, { rol_id: rolId("Coordinador/a de Investigación y Desarrollo"), motivo: "Segundo rol" }, QA);
   await api("POST", `/solicitudes/${segunda.data?.solicitud?.id}/aprobar`, { motivo: "Segundo rol de prueba" }, tP);

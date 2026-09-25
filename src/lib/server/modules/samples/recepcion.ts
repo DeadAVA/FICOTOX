@@ -11,6 +11,8 @@ import { anularOSolicitar, assertEditableAsync, conSolicitudes, deletionNotAllow
 import { ACCEPTANCE_DECISIONS, DISPOSAL_TYPES } from "../../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
 import { ensureSupervisionColumns } from "../../supervision";
+import { exigirAutorizaciones } from "../../autorizaciones";
+import { requisitosRecepcion } from "../../../shared/autorizaciones";
 
 /*
  * Portado de modules/samples/recepcion.py del backend Flask original.
@@ -298,6 +300,8 @@ export async function createReceptionSample({ request, s }: RouteContext): Promi
   await ensureSamplesRecepcionSchema(s);
 
   const data = normalizePayload(await readJson(request));
+  // Fase 4: autorizacion FX-THF-AP de quien captura.
+  await exigirAutorizaciones(s, user, requisitosRecepcion());
   if (!data.folio_num) {
     data.folio_num = await nextFolioNum(s, TABLE);
   }
@@ -360,6 +364,8 @@ export async function updateReceptionSample({ request, s, params }: RouteContext
   const supervision = marcaSupervision(permiso);
   await assertEditableAsync(s, antes, TABLE);
   const data = normalizePayload(await readJson(request));
+  // Fase 4: autorizacion FX-THF-AP de quien captura.
+  await exigirAutorizaciones(s, user, requisitosRecepcion());
   if (!data.folio_num) {
     return json({ message: "El folio es obligatorio" }, 400);
   }

@@ -24,6 +24,8 @@ import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { ANALYSIS_METHODS, ANALYSIS_TYPES, REPORT_DEFAULT_STATEMENTS, REPORT_DELIVERY_MEDIA, REPORT_STATES } from "@/lib/shared/sgc";
 import { CampoIdentidad } from "@/components/session/Reautenticar";
+import { AvisoAutorizacion } from "@/components/features/samples/AvisoAutorizacion";
+import { requisitosInforme } from "@/lib/shared/autorizaciones";
 
 /*
  * Informe de resultados (ISO/IEC 17025 7.8): se arma a partir de una
@@ -391,6 +393,8 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
       ) : null}
       <SupervisionCallout item={item} />
       <SolicitudCallout item={item} />
+      {editing && estado === "borrador" && canReview ? <AvisoAutorizacion requisitos={requisitosInforme("revisar")} accion="revisar este informe" /> : null}
+      {editing && estado === "en_revision" && canAuthorize ? <AvisoAutorizacion requisitos={requisitosInforme("autorizar")} accion="autorizar este informe" /> : null}
       <SegregacionCallout bloqueo={editing && estado === "borrador" && canReview ? segregacion.revisar : editing && estado === "en_revision" && canAuthorize ? segregacion.autorizar : null} accion={estado === "en_revision" ? "autorizar" : "revisar"} onSolicitar={() => solicitarExcepcion(estado === "en_revision" ? "autorizar" : "revisar")} />
       {item?.motivo_anulacion ? (
         <Callout tone="danger" title="Informe anulado">

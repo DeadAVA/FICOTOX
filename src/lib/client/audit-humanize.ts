@@ -104,6 +104,10 @@ export const ACTION_TONE: Record<string, AuditTone> = {
   rechazar_solicitud: "danger",
   cancelar_solicitud: "neutral",
   vencer_solicitud: "warning",
+  // Fase 4: autorizaciones del personal (FX-THF-AP).
+  otorgar_autorizacion: "success",
+  revocar_autorizacion: "danger",
+  vencer_autorizacion: "warning",
 };
 
 /*
@@ -722,6 +726,20 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
     case "vencer_solicitud":
       action = `venció la solicitud #${String(detalle.solicitud_id ?? "?")} (${TIPO_SOLICITUD_LABEL[String(detalle.tipo)] || String(detalle.accion || "")} ${obj}) sin resolverse`;
       break;
+    case "otorgar_autorizacion":
+    case "revocar_autorizacion":
+    case "vencer_autorizacion": {
+      const aut = detalle.autorizacion ? `la autorización "${String(detalle.autorizacion)}"` : "una autorización";
+      action =
+        accion === "otorgar_autorizacion"
+          ? `otorgó ${aut}${referencia ? ` a ${referencia}` : ""} (FX-THF-AP)`
+          : accion === "revocar_autorizacion"
+            ? `revocó ${aut}${referencia ? ` de ${referencia}` : ""} (FX-THF-AP)`
+            : `venció ${aut}${referencia ? ` de ${referencia}` : ""} (FX-THF-AP)`;
+      if (detalle.vigente_desde || detalle.vigente_hasta) facts.push(`Vigencia: desde ${detalle.vigente_desde ? humanValue("fecha", detalle.vigente_desde) : "—"}${detalle.vigente_hasta ? ` hasta ${humanValue("fecha", detalle.vigente_hasta)}` : " sin fecha de fin"}`);
+      if (detalle.folio_fx_thf_ap) facts.push(`Folio FX-THF-AP: ${String(detalle.folio_fx_thf_ap)}`);
+      break;
+    }
     case "entregar": {
       const to = detalle.a_quien ? ` a ${String(detalle.a_quien)}` : "";
       const medio = detalle.medio ? ` ${DELIVERY_PHRASE[String(detalle.medio)] || `por ${String(detalle.medio)}`}` : "";

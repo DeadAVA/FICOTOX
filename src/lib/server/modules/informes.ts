@@ -20,6 +20,8 @@ import { ANALYSIS_METHODS, ANALYSIS_TYPES, REPORT_DEFAULT_STATEMENTS, REPORT_DEL
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "./helpers";
 import { approvedAnalysesForReception, serializeAnalysis } from "./samples/analisis";
 import { ensureSupervisionColumns } from "../supervision";
+import { exigirAutorizaciones } from "../autorizaciones";
+import { requisitosInforme } from "../../shared/autorizaciones";
 
 /*
  * Informe de resultados (ISO/IEC 17025 7.8; FX-TCP-IR / FX-TCF-IR).
@@ -496,6 +498,7 @@ export async function reviewInforme({ request, s, params }: RouteContext): Promi
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
   if (String(antes.estado) !== "borrador") return json({ message: "Solo se revisan informes en borrador" }, 409);
   exigirSinSupervisionPendiente(antes, `El informe ${informeFolio(antes)}`, "revisar");
+  await exigirAutorizaciones(s, user, requisitosInforme("revisar"));
   await exigirSinSolicitudPendiente(s, TABLE, id, `El informe ${informeFolio(antes)}`, "revisar");
   const ids = safeJsonLoad<number[]>(String(antes.analisis_ids_json || "[]"), []);
   if (!ids.length) return json({ message: "El informe no incluye analisis" }, 400);
@@ -567,6 +570,7 @@ export async function authorizeInforme({ request, s, params }: RouteContext): Pr
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
   if (String(antes.estado) !== "en_revision") return json({ message: "El informe debe estar revisado antes de autorizarse" }, 409);
   exigirSinSupervisionPendiente(antes, `El informe ${informeFolio(antes)}`, "autorizar");
+  await exigirAutorizaciones(s, user, requisitosInforme("autorizar"));
   await exigirSinSolicitudPendiente(s, TABLE, id, `El informe ${informeFolio(antes)}`, "autorizar");
   const payload = await readJson(request);
   const ids = safeJsonLoad<number[]>(String(antes.analisis_ids_json || "[]"), []);

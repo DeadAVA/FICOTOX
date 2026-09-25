@@ -23,6 +23,8 @@ import { PersonSelect } from "./PersonSelect";
 import { SignaturePad } from "./SignaturePad";
 import { FolioChip, SampleStatus, SolicitudCallout, SupervisionCallout } from "./status";
 import { formatearHora } from "@/lib/shared/fechas";
+import { AvisoAutorizacion } from "./AvisoAutorizacion";
+import { requisitosRecepcion } from "@/lib/shared/autorizaciones";
 
 /*
  * Formato de recepcion de muestras (FX-TCF-GMR) como pagina completa, con
@@ -541,6 +543,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
     >
       <SupervisionCallout item={item} />
       <SolicitudCallout item={item} />
+      {!readOnly ? <AvisoAutorizacion requisitos={requisitosRecepcion()} /> : null}
       {readOnly && item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}

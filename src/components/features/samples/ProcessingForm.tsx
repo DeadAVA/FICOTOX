@@ -22,6 +22,8 @@ import { Callout, ChoiceCard, ChoiceGrid, FormCard, FormPage, FormTable, PersonC
 import { InsumoSearch, InventarioRows, collectInventarioRows, newInventarioRow } from "./InsumoSearch";
 import { SolicitudCallout, SupervisionCallout } from "./status";
 import { formatearHora } from "@/lib/shared/fechas";
+import { AvisoAutorizacion } from "./AvisoAutorizacion";
+import { requisitosProcesamiento } from "@/lib/shared/autorizaciones";
 
 /* Formato de procesamiento de muestras (FX-TCF-GMP) como pagina completa. */
 
@@ -500,6 +502,7 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
     >
       <SupervisionCallout item={item} />
       <SolicitudCallout item={item} />
+      {!readOnly ? <AvisoAutorizacion requisitos={requisitosProcesamiento()} /> : null}
       {readOnly && item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}
