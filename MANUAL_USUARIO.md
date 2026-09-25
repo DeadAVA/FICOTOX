@@ -522,6 +522,30 @@ En la recepcion (o en el menu de su fila) use **Imprimir etiqueta**. Se abre una
 - **Obsoleto sin reemplazo**: Mejora Continua lo pide con motivo y lo aprueba la Responsable General (solicitud).
 - **Lista maestra**: revisiones vigentes con clave, revision, vigencia, responsable y ubicacion; **Exportar CSV**. Las versiones anteriores se consultan en la ficha (solo lectura). El Estudiante solo ve los documentos vigentes que le fueron distribuidos.
 
+### 13.18 ¿Que puede hacer cada rol?
+
+Resumen del estado final (Fase 9). El detalle por modulo, accion y alcance esta en `docs/CATALOGO_PERMISOS.md`; ademas del rol, capturar y firmar trabajo tecnico exige la autorizacion FX-THF-AP vigente (13.10).
+
+| Rol | Tareas principales |
+| --- | --- |
+| Administrador técnico del sistema | Administra cuentas y roles (alta, baja, vigencias, bloqueos); no aprueba cambios de acceso ni otorga autorizaciones FX-THF-AP; consulta la bitacora y el estado de las muestras. |
+| Responsable General | Aprueba asignaciones de rol, reactivaciones y ampliaciones de vigencia; revisa y autoriza informes y los libera; aprueba documentos; anula con justificacion y aprueba solicitudes; otorga autorizaciones FX-THF-AP. |
+| Coordinador/a de Mejora Continua | Gestiona el SGC: acepta propuestas, hace la revision de calidad, publica y distribuye documentos; excepciones de segregacion; bitacora completa; otorga autorizaciones FX-THF-AP. |
+| Coordinador/a del Área Técnica | Asigna muestras; recibe, procesa, extrae, analiza, revisa y aprueba resultados; revisa, autoriza y libera informes; decide rechazos, desviaciones, cambios de folio y reaperturas; administra equipos e inventario; otorga autorizaciones FX-THF-AP. |
+| Coordinador/a de Investigación y Desarrollo | Captura y revisa ensayos e informes de sus proyectos; hace la revision tecnica de documentos; equipos e inventario. |
+| Técnico Analista | Trabaja las muestras asignadas: procesa, extrae, analiza y envia a revision; crea informes en borrador; registra uso de equipos y movimientos de inventario. |
+| Técnico Auxiliar | Registra recepciones y procesamientos; uso de equipos y movimientos de inventario. |
+| Administrador/a Auxiliar | Mantenimientos de equipos, inventario y compras; ve el estado de las muestras. |
+| Auditor Interno | Consulta todo (solo lectura), incluida la bitacora y su exportacion. |
+| Estudiante / personal en formación | Trabaja las muestras asignadas con supervision (todo queda pendiente del visto bueno de su supervisor); solo ve los documentos que le fueron distribuidos. |
+
+### 13.19 Notificaciones y exportacion
+
+- **Campana** (barra lateral): contador y panel con lo que te toca, calculado al momento: muestras asignadas a ti en los ultimos 7 dias; analisis e informes que puedes revisar, aprobar, autorizar o liberar; solicitudes **Por autorizar** y registros **Por supervisar**; documentos por leer y por revisar, aprobar o publicar; mantenimientos vencidos o proximos (si ves equipos); cuentas, roles y autorizaciones que vencen pronto (las tuyas, y las de otros si administras). Cada elemento abre su registro.
+- **Exportar la bitacora**: en **Auditoria**, **Exportar CSV** descarga lo que muestran los filtros aplicados (fecha, usuario, accion, modulo, referencia, motivo y los cambios en texto legible).
+- **Exportar el historial de un registro**: en el **Historial** de cada ficha, **Exportar** descarga su linea de tiempo en CSV.
+- Las exportaciones respetan tus permisos y alcances (lo que no puedes ver sale como "datos restringidos") y quedan en la bitacora.
+
 ## 14. Buenas practicas de uso
 
 - Capture folios y codigos internos de forma consistente.

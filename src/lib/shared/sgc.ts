@@ -367,6 +367,7 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   publicar: "Publicó (vigente)",
   confirmar_lectura: "Confirmó la lectura (leí y comprendí)",
   proponer: "Propuso un documento o cambio",
+  exportar: "Exportó (CSV)",
 };
 
 export const AUDIT_ENTITIES: Record<string, string> = {

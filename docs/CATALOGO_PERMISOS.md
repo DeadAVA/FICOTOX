@@ -1,6 +1,8 @@
-# Catálogo de permisos de FICOTOX (Fase 1)
+# Catálogo de permisos de FICOTOX
 
-Especificación de origen: "Roles y permisos FICOTOX" (FX-MO-2-1), sección 5, con las decisiones anotadas en la Fase 1. Fuente en el código:
+**Estado final vigente (Fase 9).** Refleja el sistema tras las fases 0–7 y 9 (la Fase 8 —incidencias, auditorías internas, compras y proyectos— no está implementada; sus alcances siguen diferidos). Pendientes y decisiones por validar consolidados en `docs/PENDIENTES.md`.
+
+Especificación de origen: "Roles y permisos FICOTOX" (FX-MO-2-1), sección 5, con las decisiones anotadas desde la Fase 1. Fuente en el código:
 
 | Qué | Dónde |
 | --- | --- |
@@ -15,7 +17,7 @@ Especificación de origen: "Roles y permisos FICOTOX" (FX-MO-2-1), sección 5, c
 | Módulo | Qué cubre hoy en la app |
 | --- | --- |
 | `usuarios` | Usuarios y roles (incluye asignar y revocar roles) |
-| `documentos` | Documentos SGC (sigue apagado por `FEATURES.documentos`) |
+| `documentos` | Documentos SGC (encendido en la Fase 7: flujo de control documental, lista maestra y distribución) |
 | `muestras` | Recepción, custodia y disposición final |
 | `ensayos` | Procesamiento, extracción y análisis (incluye revisar y aprobar análisis) |
 | `informes` | Informes de resultados |
@@ -87,13 +89,14 @@ Un permiso es `(rol, módulo, acción, alcance)`. `total` = sin límite.
 | `movimientos` | En inventario: solo movimientos y reposiciones; no el catálogo. |
 | `supervisado` | (Fase 2) Se permite crear y editar, pero lo capturado queda **pendiente del visto bueno** del supervisor de la cuenta: no sirve de origen de la etapa siguiente, no se cierra, revisa, aprueba ni autoriza, y un mantenimiento no se marca completado hasta el visto bueno. Lo mismo aplica a todo lo que capture una **cuenta temporal con supervisor**. Su V implícita es `total`. |
 | `asignado` | (Fase 5) Solo las muestras **asignadas** a la persona (o registradas por ella): la lista de recepciones se filtra y la ficha o la edición de otra responde 403 `no_asignado`. Su V implícita es `asignado`. |
+| `autorizados` | (Fases 7 y 9) En documentos: solo los documentos **vigentes que le fueron distribuidos**; sin versiones anteriores, sin propuestas; la descarga del archivo de otro documento responde 403 y el resumen solo cuenta los suyos. |
 
 ### Diferidos (se guardan; se aplican en fases posteriores)
 
 | Alcance | Fase |
 | --- | --- |
 | `proyecto` | 8 |
-| `tecnico`, `investigacion`, `autorizados`, `administrativo` | 7/8 |
+| `tecnico`, `investigacion`, `administrativo` | 8 / posterior |
 | `incidencias`, `auditoria` | 8 |
 | `limitado` | posterior |
 
@@ -102,11 +105,11 @@ Mientras no se apliquen se comportan como `total`, con dos excepciones (Fase 2, 
 - **usuarios**: cualquier alcance diferido se comporta como **solo V de la propia cuenta** (`propio`). Afecta al Administrador/a Auxiliar (`V (limitado)`).
 - **calidad**: cualquier alcance diferido se comporta como **sin acceso** (ni la acción ni su V implícita). Así `C (incidencias)` y `C E (auditoria)` no abren la bitácora: el Técnico Analista, el Técnico Auxiliar, el Administrador/a Auxiliar y el Estudiante no ven la bitácora (403); el Auditor Interno la sigue viendo por su `V` total.
 
-Revisión del resto de módulos: en documentos, muestras, ensayos, informes, equipos e inventario un diferido como `total` no expone datos que el rol no deba ver según la matriz (sus celdas ya incluyen V), por lo que se mantiene hasta su fase. La pantalla de roles muestra los diferidos con la etiqueta "se aplica en Fase X".
+Revisión del resto de módulos: en documentos, muestras, ensayos, informes, equipos e inventario un diferido como `total` no expone datos que el rol no deba ver según la matriz (sus celdas ya incluyen V), por lo que se mantiene hasta su fase. La pantalla de roles muestra los diferidos con la etiqueta "se aplica en Fase X". `asignado` (Fase 5) y `autorizados` (Fase 7) ya no son diferidos.
 
 ### Implicaciones y unión
 
-- La V implícita de C/E/R/A/AN conserva el alcance cuando este limita la vista (`propio`, `estado`, `bitacora` y los diferidos); para los alcances que solo limitan la operación (`recepcion`, `preparacion`, `borrador`, `uso`, `mantenimiento`, `movimientos`) la V implícita es `total`.
+- La V implícita de C/E/R/A/AN conserva el alcance cuando este limita la vista (`propio`, `estado`, `bitacora`, `asignado`, `autorizados` y los diferidos); para los alcances que solo limitan la operación (`recepcion`, `preparacion`, `borrador`, `uso`, `mantenimiento`, `movimientos`) la V implícita es `total`.
 - En una celda como "V C (borrador)" el alcance entre paréntesis se aplica a las acciones que limita: V `total`, C `borrador`. En "V E (asignado)" se aplica a ambas (V `asignado`, E `asignado`).
 - Permisos efectivos = unión de los roles **vigentes hoy** (no revocados, dentro de su vigencia, rol activo). Para un mismo módulo y acción vale cualquiera de los alcances; en `/api/auth/me` se informa el más amplio (`total` > diferido > aplicado).
 
@@ -218,11 +221,11 @@ Otorgan y revocan (con motivo, reautenticación y bitácora): quien tiene `ensay
 3. **A de informes de la Coord. Técnica** (resuelto en la Fase 4): la A de informes solo se ejerce con la autorización FX-THF-AP `autorizacion_informe` vigente (y R con `revision_informe`); ver 6 ter.
 4. **Interpretación de módulos**: muestras = recepción y custodia; ensayos = procesamiento, extracción y análisis (reconcilia la matriz con la sección 7).
 5. **Anclas de las reglas 1 y 2** (`usuarios:G` y `compras:G`) y la lectura de las celdas con paréntesis (sección 3).
-6. **Reportes de mantenimiento**: pasan del módulo documentos (apagado) a `equipos` (V para verlos, C con alcance `mantenimiento` para generarlos).
+6. **Reportes de mantenimiento**: pasan del módulo documentos (entonces apagado) a `equipos` (V para verlos, C con alcance `mantenimiento` para generarlos).
 7. **Uso de equipos e insumos al capturar**: se exige `equipos:C` / `inventario:C` además de `ensayos:C`.
 8. **Alcances diferidos en calidad** (resuelto en la Fase 2): en calidad un diferido es *sin acceso*, así que `C (incidencias)` ya no abre la bitácora. Cuando se implemente el registro de incidencias (Fase 8) se aplicará el alcance real.
 9. **Supervisión de cuentas temporales** (Fase 2): además del alcance `supervisado`, todo lo que captura una cuenta temporal con supervisor queda pendiente de visto bueno. Validar si una estancia temporal con rol de Técnico Analista debe quedar supervisada o no.
-10. **Segregación en documentos** (Fase 3): el modelo tiene un solo paso de revisión; la regla "revisor de calidad, revisor técnico y aprobador no pueden ser todos la misma persona" se aplica como revisor distinto del aprobador. Validar si se requieren dos revisiones (calidad y técnica) en la Fase 7. Además, como "enviar a revisión" registra al revisor, quien elaboró el documento no lo envía a revisión (lo envía otra persona con E); se rehace con el flujo completo de documentos.
+10. **Segregación en documentos** (Fase 3): el modelo tiene un solo paso de revisión; la regla "revisor de calidad, revisor técnico y aprobador no pueden ser todos la misma persona" se aplica como revisor distinto del aprobador. Resuelto en la Fase 7: revisión de calidad (documentos:G) y revisión técnica (documentos:R, si el documento la requiere) separadas; quien elabora envía a revisión; quien hizo la revisión de calidad no aprueba.
 11. **`usuarios:G` ya no implica A** (resuelto en la Fase 3.1): el Administrador técnico administra cuentas y roles, pero las asignaciones de rol, reactivaciones y ampliaciones de vigencia las aprueba solo quien tiene `usuarios:A` explícito (Responsable General). En los demás módulos G sigue implicando todo. La guarda de `usuarios:A` ahora sí aplica por separado.
 12. **Cambios de permisos de un rol ya asignado** (acotado en la Fase 3.1): quien tiene `usuarios:G` los hace sin segundo usuario (con motivo, reautenticación y bitácora), pero nunca sobre un rol que él mismo tiene vigente (409 `rol_propio`). Validar si además deben pasar por solicitud.
-13. **Regla 3 por nombre** (Fase 3): procesó/supervisó se comparan como texto firmado, no como cuentas. Se ligará a la cuenta con la asignación de muestras (Fase 5).
+13. **Regla 3 por cuenta** (resuelto en la Fase 5): procesó, extrajo, limpió y supervisó se eligen de las cuentas activas y la regla compara `usuario_id`; solo los registros antiguos con nombre escrito se comparan por nombre.

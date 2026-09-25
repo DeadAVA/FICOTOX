@@ -83,7 +83,8 @@ export type AuditAction =
   | "alerta_integridad"
   | "publicar"
   | "confirmar_lectura"
-  | "proponer";
+  | "proponer"
+  | "exportar";
 
 export interface AuditEntry {
   accion: AuditAction;

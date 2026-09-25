@@ -12,6 +12,7 @@ import { Avatar } from "@/components/ui/Primitives";
 import { isActivePath, isItemActive, visibleNav, type NavChild, type NavIcon, type NavItem } from "@/lib/client/nav";
 import { BrandLockup, BrandMark } from "./Brand";
 import { ABRIR_MIS_AUTORIZACIONES, AccountSheet, EVENTO_ABRIR_CUENTA } from "./AccountSheet";
+import { Campana } from "./Campana";
 import { CommandPalette } from "./CommandPalette";
 
 /*
@@ -226,6 +227,7 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
         </Link>
         {!collapsed ? (
           <div className="flex items-center gap-0.5">
+            <Campana />
             <Tooltip content={`Buscar (${isMac ? "⌘" : "Ctrl"} K)`} side="bottom">
               <button type="button" onClick={onSearch} className="press inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-3 hover:bg-surface-3 hover:text-ink" aria-label="Buscar">
                 <MagnifyingGlass size={17} />
@@ -245,7 +247,8 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
       </div>
 
       {collapsed ? (
-        <div className="px-2">
+        <div className="flex flex-col gap-0.5 px-2">
+          <Campana compacta />
           <Tooltip content={`Buscar (${isMac ? "⌘" : "Ctrl"} K)`} side="right">
             <button type="button" onClick={onSearch} className="press flex h-9 w-full items-center justify-center rounded-[9px] text-ink-3 hover:bg-surface-3 hover:text-ink" aria-label="Buscar">
               <MagnifyingGlass size={18} />

@@ -438,7 +438,13 @@ npm run test:reset-db # solo regenerar la base de prueba
 
 Módulo encendido (`FEATURES.documentos`); flujo borrador → revision_calidad → revision_tecnica → por_aprobar → aprobado → vigente → obsoleto en `src/lib/server/modules/documentos-sgc.ts` (registro, aprobar, lista maestra con `?formato=csv`, obsoletar por solicitud `obsoletar_documento`) y `documentos-flujo.ts` (revisiones, devolver, publicar con `distribucion_documento`, acuse de lectura, `propuestas_documento`, alcance "autorizados"); prueba en `tests/api-documentos.mjs`.
 
+## 8 decies. Fase 9 — cierre (rama `fase-9-cierre`)
+
+Campana de notificaciones calculada al vuelo en `GET /api/notificaciones` (`src/lib/server/modules/notificaciones.ts`); exportación CSV de la bitácora y del historial de un registro con `GET /api/audit?formato=csv` (mismos filtros y alcances; queda como acción `exportar`); pendientes consolidados en `docs/PENDIENTES.md`.
+
 ## 9. Pendientes conocidos
+
+Lista consolidada y vigente: `docs/PENDIENTES.md`. Lo que sigue es el registro histórico.
 
 - El `.env` local tiene `JWT_EXPIRES_HOURS=12` y `CORS_ORIGINS=*`, que anulan los
   nuevos valores por omisión (8 h, mismo origen): ajustarlos al desplegar.

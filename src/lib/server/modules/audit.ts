@@ -1,5 +1,7 @@
 import { requireUser } from "../auth";
-import { advertenciaLlaveBitacora, ensureAuditSchema, origenLlaveBitacora, verifyAuditChain } from "../audit";
+import { advertenciaLlaveBitacora, ensureAuditSchema, origenLlaveBitacora, registrarAuditoria, verifyAuditChain } from "../audit";
+import { AUDIT_ACTIONS, AUDIT_ENTITIES } from "../../shared/sgc";
+import { formatearFechaHora, hoyLocal } from "../../shared/fechas";
 import { type Row } from "../db";
 import { json, type RouteContext } from "../http";
 import { cargarAutorizacion, finDiaLocal, inicioDiaLocal, permisoDe, requirePermission, soloEstado, type Autorizacion } from "../rbac";
@@ -78,7 +80,11 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
   const search = searchParam(request, "search");
   const desde = searchParam(request, "desde");
   const hasta = searchParam(request, "hasta");
-  const limit = Math.min(Math.max(Number.parseInt(searchParam(request, "limit") || "200", 10) || 200, 1), 1000);
+  const csv = searchParam(request, "formato") === "csv";
+  const limit = Math.min(Math.max(Number.parseInt(searchParam(request, "limit") || (csv ? "5000" : "200"), 10) || 200, 1), csv ? 20000 : 1000);
+  // Fase 9: filtro por modulo (las entidades cuyo historial pertenece a ese modulo).
+  const moduloFiltro = searchParam(request, "modulo");
+  const entidadesModulo = moduloFiltro ? Object.entries(ENTITY_MODULE).filter(([, m]) => m === moduloFiltro).map(([e]) => e) : [];
 
   const rows = await s.query<Row>(
     `
@@ -92,6 +98,7 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
       AND (:search = '' OR referencia LIKE :search_like OR motivo LIKE :search_like)
       AND (:desde = '' OR fecha_hora >= :desde_ini)
       AND (:hasta = '' OR fecha_hora <= :hasta_fin)
+      ${moduloFiltro ? `AND entidad IN (${entidadesModulo.map((e) => `'${e}'`).join(", ") || "''"})` : ""}
     ORDER BY id DESC
     LIMIT ${limit}
     `,
@@ -109,7 +116,40 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
       hasta_fin: /^\d{4}-\d{2}-\d{2}$/.test(hasta) ? finDiaLocal(hasta) : hasta ? `${hasta}T23:59:59.999Z` : "",
     },
   );
-  return json({ items: rows.map((row) => recortar(serialize(row), datosVisibles(auth, row.entidad))), total: rows.length });
+  const items = rows.map((row) => recortar(serialize(row), datosVisibles(auth, row.entidad)));
+  if (csv) {
+    // Fase 9: exportacion para auditoria, con los mismos filtros y alcances; queda en la bitacora.
+    await registrarAuditoria(s, user, { accion: "exportar", entidad: entidad && entidadId ? entidad : "auditoria", entidadId: entidad && entidadId ? entidadId : null, referencia: entidad && entidadId ? `Historial ${AUDIT_ENTITIES[entidad] || entidad} #${entidadId}` : "Bitácora", detalle: { formato: "csv", filas: items.length, filtros: { entidad, entidad_id: entidadId, accion, usuario, search, desde, hasta, modulo: moduloFiltro } } });
+    await s.commit();
+    // Una celda que empieza con =, +, -, @, tab o retorno se neutraliza con ' (inyeccion de formulas en hojas de calculo).
+    const celda = (v: unknown) => {
+      const texto = String(v ?? "");
+      return `"${(/^[=+\-@\t\r]/.test(texto) ? `'${texto}` : texto).replace(/"/g, '""')}"`;
+    };
+    const lineas = [["Fecha y hora", "Usuario", "Correo", "Acción", "Módulo", "Registro", "Referencia", "Motivo", "Cambios"].map(celda).join(",")];
+    for (const item of items) {
+      const entidadItem = String(item.entidad || "");
+      lineas.push([formatearFechaHora(item.fecha_hora), item.usuario_nombre || "sistema", item.usuario_email, AUDIT_ACTIONS[String(item.accion)] || item.accion, ENTITY_MODULE[entidadItem] || AUDIT_ENTITIES[entidadItem] || entidadItem, `${AUDIT_ENTITIES[entidadItem] || entidadItem}${item.entidad_id ? ` #${item.entidad_id}` : ""}`, item.referencia, item.motivo, item.datos_restringidos ? "(datos restringidos por tu alcance)" : cambiosLegibles(item.cambios)].map(celda).join(","));
+    }
+    return new Response(`\uFEFF${lineas.join("\r\n")}\r\n`, { status: 200, headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="bitacora-${hoyLocal()}.csv"` } });
+  }
+  return json({ items, total: rows.length });
+}
+
+/* Cambios en texto legible: "campo: antes → despues; ..." y el detalle como "clave=valor". */
+function cambiosLegibles(cambios: unknown): string {
+  if (!cambios || typeof cambios !== "object") return "";
+  const texto = (v: unknown): string => (v === null || v === undefined || v === "" ? "—" : typeof v === "object" ? JSON.stringify(v).slice(0, 120) : String(v).slice(0, 120));
+  const partes: string[] = [];
+  for (const [campo, valor] of Object.entries(cambios as Record<string, unknown>)) {
+    if (campo === "_detalle" && valor && typeof valor === "object") {
+      for (const [k, v] of Object.entries(valor as Record<string, unknown>)) partes.push(`${k}=${texto(v)}`);
+    } else if (valor && typeof valor === "object" && ("antes" in (valor as object) || "despues" in (valor as object))) {
+      const par = valor as { antes?: unknown; despues?: unknown };
+      partes.push(`${campo}: ${texto(par.antes)} → ${texto(par.despues)}`);
+    } else partes.push(`${campo}: ${texto(valor)}`);
+  }
+  return partes.join("; ");
 }
 
 export async function getAuditEntry({ request, s, params }: RouteContext): Promise<Response> {

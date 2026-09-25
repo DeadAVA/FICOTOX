@@ -290,7 +290,11 @@ export async function listaMaestra({ request, s }: RouteContext): Promise<Respon
   const today = hoyLocal();
   // Fase 7: exportable a CSV (clave, version, estado, vigencia, responsable y ubicacion).
   if (searchParam(request, "formato") === "csv") {
-    const celda = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    // Una celda que empieza con =, +, -, @, tab o retorno se neutraliza con ' (inyeccion de formulas en hojas de calculo).
+    const celda = (v: unknown) => {
+      const texto = String(v ?? "");
+      return `"${(/^[=+\-@\t\r]/.test(texto) ? `'${texto}` : texto).replace(/"/g, '""')}"`;
+    };
     const lineas = [["Clave", "Revisión", "Título", "Estado", "Fecha de vigencia", "Próxima revisión", "Responsable (elaboró)", "Aprobó", "Ubicación"].map(celda).join(",")];
     for (const row of rows) {
       const elaboro = safeParse(row.elaboro_json);
@@ -308,15 +312,23 @@ export async function listaMaestra({ request, s }: RouteContext): Promise<Respon
 
 export async function documentosSummary({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "V");
+  const permiso = await requirePermission(s, user, "documentos", "V");
   await ensureDocumentosSgcSchema(s);
   const today = hoyLocal();
+  // Fase 9: estados del flujo de la Fase 7; con alcance "autorizados", solo los vigentes distribuidos.
+  if (soloAutorizados(permiso.auth)) {
+    const ids = await documentosDistribuidosA(s, permiso.auth.userId);
+    const vigentes = ids.length ? Number((await s.scalar(`SELECT COUNT(*) FROM ${TABLE} WHERE estado = 'vigente' AND id IN (${ids.join(", ")})`)) || 0) : 0;
+    return json({ vigentes, borrador: 0, en_revision: 0, por_aprobar: 0, aprobado: 0, obsoletos: 0, revision_vencida: 0 });
+  }
   const summary = await s.queryOne(
     `
     SELECT
       (SELECT COUNT(*) FROM ${TABLE} WHERE estado = 'vigente') AS vigentes,
       (SELECT COUNT(*) FROM ${TABLE} WHERE estado = 'borrador') AS borrador,
-      (SELECT COUNT(*) FROM ${TABLE} WHERE estado = 'en_revision') AS en_revision,
+      (SELECT COUNT(*) FROM ${TABLE} WHERE estado IN ('revision_calidad', 'revision_tecnica')) AS en_revision,
+      (SELECT COUNT(*) FROM ${TABLE} WHERE estado = 'por_aprobar') AS por_aprobar,
+      (SELECT COUNT(*) FROM ${TABLE} WHERE estado = 'aprobado') AS aprobado,
       (SELECT COUNT(*) FROM ${TABLE} WHERE estado = 'obsoleto') AS obsoletos,
       (SELECT COUNT(*) FROM ${TABLE} WHERE estado = 'vigente' AND fecha_proxima_revision IS NOT NULL AND fecha_proxima_revision < :today) AS revision_vencida
     `,
@@ -588,10 +600,12 @@ const MIME: Record<string, string> = {
 export async function getDocumentoArchivo({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "V");
+  const permiso = await requirePermission(s, user, "documentos", "V");
   await ensureDocumentosSgcSchema(s);
   const row = await snapshotRow(s, TABLE, id);
   if (!row || !row.archivo_nombre) return json({ message: "Archivo no encontrado" }, 404);
+  // Fase 9: con alcance "autorizados" solo se descargan documentos vigentes distribuidos a la persona.
+  if (soloAutorizados(permiso.auth) && (String(row.estado) !== "vigente" || !(await documentosDistribuidosA(s, permiso.auth.userId)).includes(id))) return json({ message: "Este documento no te fue distribuido" }, 403);
   const target = path.resolve(filesDir(), String(row.archivo_nombre));
   if (!target.startsWith(filesDir() + path.sep) || !fs.existsSync(target)) return json({ message: "Archivo no encontrado" }, 404);
   const data = await fs.promises.readFile(target);

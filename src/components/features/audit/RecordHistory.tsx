@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ArrowsClockwise } from "@phosphor-icons/react";
+import { ArrowsClockwise, DownloadSimple } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { EmptyState, Skeleton } from "@/components/ui/Primitives";
 import { SegmentedTabs } from "@/components/ui/PageHeader";
 import { Badge, type Tone } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
+import { descargarCsv } from "@/lib/client/files";
 import type { ApiRecord } from "@/lib/client/types";
 import { ETIQUETA_ESTADO_SOLICITUD, type EstadoSolicitud } from "@/lib/shared/acciones-criticas";
 import { formatearFechaHora } from "@/lib/shared/fechas";
@@ -83,9 +84,15 @@ export function RecordHistory({ entidad, entidadId, compact = false }: { entidad
             { value: "solicitudes", label: "Solicitudes", count: solicitudes?.length || 0, tone: pendientes ? "warning" : "neutral" },
           ]}
         />
-        <Button variant="ghost" size="sm" icon={<ArrowsClockwise size={14} />} onClick={load}>
-          Actualizar
-        </Button>
+        <div className="flex items-center gap-1">
+          {/* Fase 9: la linea de tiempo del registro en CSV (queda en la bitacora como exportacion). */}
+          <Button variant="ghost" size="sm" icon={<DownloadSimple size={14} />} onClick={() => descargarCsv(`${API_BASE_URL}/audit?formato=csv&entidad=${encodeURIComponent(entidad)}&entidad_id=${encodeURIComponent(String(entidadId))}`, token, `historial-${entidad}-${entidadId}.csv`)}>
+            Exportar
+          </Button>
+          <Button variant="ghost" size="sm" icon={<ArrowsClockwise size={14} />} onClick={load}>
+            Actualizar
+          </Button>
+        </div>
       </div>
       {tab === "bitacora" ? (
         items.length ? (

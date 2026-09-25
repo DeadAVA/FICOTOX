@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ArrowSquareOut, CaretDown, ShieldCheck, ShieldWarning } from "@phosphor-icons/react";
+import { ArrowSquareOut, CaretDown, DownloadSimple, ShieldCheck, ShieldWarning } from "@phosphor-icons/react";
 import { ChangeList } from "@/components/features/audit/AuditTimeline";
 import { Callout } from "@/components/features/samples/FormLayout";
 import { PageBody } from "@/components/shell/AppShell";
@@ -24,6 +24,19 @@ import { useDebouncedValue } from "@/lib/client/hooks";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { AUDIT_ACTIONS, AUDIT_ENTITIES } from "@/lib/shared/sgc";
+import { descargarCsv } from "@/lib/client/files";
+import { hoyLocal } from "@/lib/shared/fechas";
+
+/* Modulos para filtrar y exportar la bitacora (Fase 9). */
+const MODULOS_EXPORT = [
+  { value: "muestras", label: "Muestras" },
+  { value: "ensayos", label: "Ensayos" },
+  { value: "informes", label: "Informes" },
+  { value: "documentos", label: "Documentos" },
+  { value: "inventario", label: "Inventario" },
+  { value: "equipos", label: "Equipos" },
+  { value: "usuarios", label: "Usuarios" },
+];
 
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
@@ -66,6 +79,8 @@ function AuditoriaContent() {
   const [usuario, setUsuario] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
+  const [modulo, setModulo] = useState("");
+  const [exportando, setExportando] = useState(false);
   const [open, setOpen] = useState<Set<number>>(new Set());
   const [integridad, setIntegridad] = useState<Integridad | null>(null);
   const [verificando, setVerificando] = useState(false);
@@ -75,11 +90,11 @@ function AuditoriaContent() {
   const resource = useResource<{ items: ApiRecord[]; summary: ApiRecord }>(
     "auditoria",
     async () => {
-      const query = new URLSearchParams({ search: debounced.trim(), entidad, accion, usuario: debouncedUsuario.trim(), desde, hasta, limit: "300" });
+      const query = new URLSearchParams({ search: debounced.trim(), entidad, accion, usuario: debouncedUsuario.trim(), desde, hasta, modulo, limit: "300" });
       const [list, summary] = await Promise.all([getJsonAuth(`${API_BASE_URL}/audit?${query.toString()}`, token), getJsonAuth(`${API_BASE_URL}/audit/summary`, token).catch(() => ({}) as ApiRecord)]);
       return { items: (list.items || []) as ApiRecord[], summary: summary as ApiRecord };
     },
-    { enabled: !!token, deps: [debounced, entidad, accion, debouncedUsuario, desde, hasta] },
+    { enabled: !!token, deps: [debounced, entidad, accion, debouncedUsuario, desde, hasta, modulo] },
   );
   const items = resource.data?.items;
   const summary = resource.data?.summary || {};
@@ -95,7 +110,16 @@ function AuditoriaContent() {
   const groups: FilterGroup[] = [
     { key: "entidad", label: "Entidad", value: entidad, defaultValue: "", onChange: setEntidad, options: [{ value: "", label: "Todas" }, ...Object.entries(AUDIT_ENTITIES).map(([value, label]) => ({ value, label }))] },
     { key: "accion", label: "Acción", value: accion, defaultValue: "", onChange: setAccion, options: [{ value: "", label: "Todas" }, ...Object.entries(AUDIT_ACTIONS).map(([value, label]) => ({ value, label }))] },
+    { key: "modulo", label: "Módulo", value: modulo, defaultValue: "", onChange: setModulo, options: [{ value: "", label: "Todos" }, ...MODULOS_EXPORT] },
   ];
+
+  // Fase 9: exporta a CSV lo filtrado en pantalla (el servidor aplica permisos y alcances y lo deja en la bitácora).
+  const exportar = async () => {
+    setExportando(true);
+    const query = new URLSearchParams({ formato: "csv", search: debounced.trim(), entidad, accion, usuario: debouncedUsuario.trim(), desde, hasta, modulo });
+    await descargarCsv(`${API_BASE_URL}/audit?${query.toString()}`, token, `bitacora-${hoyLocal()}.csv`);
+    setExportando(false);
+  };
 
   // Al abrir se verifica en silencio para mostrar los avisos sobre la llave de la bitacora.
   useEffect(() => {
@@ -135,6 +159,9 @@ function AuditoriaContent() {
             ) : null}
             <Button variant="secondary" icon={integridad && !integridad.ok ? <ShieldWarning size={16} /> : <ShieldCheck size={16} />} loading={verificando} onClick={verificar}>
               Verificar integridad
+            </Button>
+            <Button variant="secondary" icon={<DownloadSimple size={16} />} loading={exportando} onClick={exportar}>
+              Exportar CSV
             </Button>
           </>
         }

@@ -130,6 +130,8 @@ export const ACTION_TONE: Record<string, AuditTone> = {
   publicar: "success",
   confirmar_lectura: "success",
   proponer: "brand",
+  // Fase 9: exportacion para auditoria.
+  exportar: "neutral",
 };
 
 /*
@@ -806,6 +808,11 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
     case "proponer":
       action = `${detalle.tipo === "cambio" ? "solicitó un cambio" : "propuso un documento"}: ${obj}`;
       break;
+    case "exportar": {
+      const n = Number(detalle.filas || 0);
+      action = `${String(referencia || "").startsWith("Historial") ? "exportó el historial" : "exportó la bitácora"} (${n} ${n === 1 ? "fila" : "filas"}, CSV)`;
+      break;
+    }
     case "liberar":
       action = `liberó ${obj}`;
       if (detalle.sha256) facts.push(`PDF final SHA-256 ${String(detalle.sha256).slice(0, 16)}…`);

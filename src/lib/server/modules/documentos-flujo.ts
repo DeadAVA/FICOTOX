@@ -235,7 +235,9 @@ export async function proponerDocumento({ request, s }: RouteContext): Promise<R
 /* GET /api/documentos-sgc/propuestas */
 export async function listarPropuestas({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "V");
+  const permiso = await requirePermission(s, user, "documentos", "V");
+  // Fase 9: quien solo ve documentos distribuidos ("autorizados") no ve las propuestas.
+  if (soloAutorizados(permiso.auth)) throw new HttpError(403, { message: "Las propuestas no están disponibles con tu alcance de documentos" });
   await ensureDocumentosFlujoSchema(s);
   const filas = await s.query<Row>(
     `SELECT p.*, u.nombre AS propuesto_por_nombre, a.nombre AS asignado_nombre, d.clave AS documento_clave FROM ${PROPUESTAS} p
