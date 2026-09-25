@@ -33,8 +33,8 @@ body, .markdown, .prose { font-family: var(--fx-sans); color: var(--fx-texto); }
 .fx-list { margin: 0; padding-left: 1.3rem; font-size: 1.3rem; line-height: 1.5; }
 .fx-list li { margin: 0.35rem 0; }
 .fx-list li::marker { color: var(--fx-oceano); }
-.fx-ol { margin: 0; padding-left: 2rem; font-size: 1.25rem; line-height: 1.45; }
-.fx-ol li { margin: 0.45rem 0; padding-left: 0.3rem; }
+.fx-ol { margin: 0; padding-left: 2.4rem; font-size: 1.45rem; line-height: 1.45; }
+.fx-ol li { margin: 0.8rem 0; padding-left: 0.4rem; }
 .fx-ol li::marker { font-family: var(--fx-mono); color: var(--fx-oceano); font-weight: 700; }
 
 /* Roles */
@@ -61,37 +61,73 @@ body, .markdown, .prose { font-family: var(--fx-sans); color: var(--fx-texto); }
 .fx-panel-t { font-weight: 700; font-size: 1.35rem; margin-bottom: 0.6rem; color: var(--fx-oceano-osc); }
 
 /* Flujo de informe */
-.fx-steps { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+.fx-steps { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.35rem; }
 .fx-step { background: var(--fx-oceano-claro); border: 1px solid var(--fx-oceano); color: var(--fx-oceano-osc);
-  border-radius: 999px; padding: 0.35rem 1rem; font-weight: 600; font-size: 1.05rem; }
+  border-radius: 999px; padding: 0.3rem 0.8rem; font-weight: 600; font-size: 0.98rem; }
 .fx-step:last-child { background: var(--fx-oceano); color: #fff; }
 .fx-arrow { color: var(--fx-oceano); font-weight: 700; }
-
-/* Tabla de cobertura */
-.fx-table table { width: 100%; border-collapse: collapse; font-size: 1.1rem; }
-.fx-table th { text-align: left; color: var(--fx-gris); font-weight: 600; border-bottom: 2px solid var(--fx-oceano); padding: 0.45rem 0.6rem; }
-.fx-table td { border-bottom: 1px solid var(--fx-borde); padding: 0.55rem 0.6rem; vertical-align: top; line-height: 1.35; }
-.fx-table td:first-child, .fx-table th:first-child { text-align: center; width: 2.5rem; }
-
-/* Preguntas */
-.fx-qs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem 1.2rem; padding-top: 0.6rem; }
-.fx-q { border-left: 3px solid var(--fx-oceano); padding: 0.15rem 0 0.15rem 0.7rem; }
-.fx-q-t { font-size: 1.02rem; font-weight: 600; line-height: 1.3; }
-.fx-hoy { font-size: 0.9rem; color: var(--fx-gris); margin-top: 0.15rem; line-height: 1.3; }
 
 /* Ajustes del modo diapositivas: contenido alineado arriba y viñetas visibles. */
 .mo-slide-content { margin: 34px 44px auto !important; width: calc(100% - 88px); }
 .fx-list, .fx-col ul, .fx-panel ul { list-style: disc !important; }
 .fx-ol { list-style: decimal !important; }
 .fx-list li, .fx-col li, .fx-ol li { display: list-item; }
-.fx-qs, .fx-q, .fx-q-t, .fx-hoy, .fx-col, .fx-card, .fx-panel, .fx-table { font-family: var(--fx-sans) !important; }
-.fx-q-t { font-size: 1.12rem; }
-.fx-hoy { font-size: 0.98rem; }
-.fx-qs { gap: 0.8rem 1.6rem; }
-.fx-table table, .fx-table th, .fx-table td { text-align: left !important; }
-.fx-table td:first-child, .fx-table th:first-child { text-align: center !important; }
-.fx-table table { font-size: 1.2rem; }
-.fx-stats { zoom: 1.35; }
+.fx-col, .fx-card, .fx-panel { font-family: var(--fx-sans) !important; }
 .fx-col li { font-size: 1.12rem !important; line-height: 1.4 !important; margin: 0.25rem 0 !important; }
-.fx-q-t { font-size: 1.18rem; }
-.fx-hoy { font-size: 1rem; }
+
+/* Lista compacta para la columna angosta junto a una captura */
+.fx-list-sm { font-size: 1.15rem; line-height: 1.45; }
+.fx-list-sm li { margin: 0.5rem 0; }
+
+/* Cifras de la introducción */
+.fx-cifras { display: grid; gap: 0.6rem; font-family: var(--fx-sans); }
+.fx-cifras div { border-left: 4px solid var(--fx-oceano); padding: 0.2rem 0 0.2rem 0.8rem; }
+.fx-cifras b { display: block; font-size: 1.2rem; color: var(--fx-oceano-osc); }
+.fx-cifras span { font-size: 0.98rem; color: var(--fx-gris); }
+
+/* Flujo vertical de una muestra */
+.fx-flujo { list-style: none !important; counter-reset: paso; margin: 0; padding: 0; font-family: var(--fx-sans); }
+.fx-flujo li { counter-increment: paso; position: relative; display: flex !important; align-items: center;
+  gap: 0.7rem; padding: 0.24rem 0; font-size: 1.08rem; font-weight: 600; color: var(--fx-oceano-osc); }
+.fx-flujo li::before { content: counter(paso); flex: 0 0 1.7rem; height: 1.7rem; border-radius: 999px;
+  background: var(--fx-oceano-claro); border: 1px solid var(--fx-oceano); color: var(--fx-oceano-osc);
+  font: 700 0.8rem/1.6rem var(--fx-mono); text-align: center; position: relative; z-index: 1; }
+.fx-flujo li:not(:last-child)::after { content: ""; position: absolute; left: 0.85rem; top: 1.5rem; bottom: -0.55rem;
+  width: 1px; background: var(--fx-oceano); }
+.fx-nota { font-size: 1.05rem; line-height: 1.45; color: var(--fx-texto); margin: 1rem 0 0; }
+
+/* Ficha de rol (Puede / No puede, apiladas) */
+.fx-ficha { display: grid; gap: 0.7rem; font-family: var(--fx-sans); }
+.fx-ficha .fx-col { height: auto; padding: 0.6rem 0.9rem; }
+.fx-ficha .fx-col li { font-size: 1rem !important; line-height: 1.35 !important; margin: 0.15rem 0 !important; }
+.fx-ficha .fx-col-t { font-size: 1rem; margin-bottom: 0.2rem; }
+.fx-pend { background: #fdf6e7; border: 1px solid #ecd9a8; border-radius: 8px; padding: 0.5rem 0.8rem;
+  font-size: 0.95rem; line-height: 1.35; color: #6b4e12; }
+
+/* Caso de ejemplo (auditoría) */
+.fx-caso { background: var(--fx-oceano-claro); border-left: 4px solid var(--fx-oceano); border-radius: 8px;
+  padding: 0.7rem 0.9rem; font-size: 1.02rem; line-height: 1.45; font-family: var(--fx-sans); }
+
+/* Capturas: ocupan su columna sin salirse de la diapositiva y conservan su proporción.
+   --fx-ar = ancho/alto de la imagen; --fx-resta = alto reservado para encabezado, pie y márgenes. */
+.fx-fig { margin: 0 0 0 auto; width: min(100%, calc((100vh - var(--fx-resta, 300px)) * var(--fx-ar, 1.6)));
+  font-family: var(--fx-sans); }
+.fx-fig img { display: block; width: 100%; height: auto; border: 1px solid var(--fx-borde); border-radius: 10px;
+  box-shadow: 0 6px 22px rgba(15, 60, 75, 0.12); background: #fff; }
+.fx-fig figcaption { margin-top: 0.45rem; font-size: 0.92rem; color: var(--fx-gris); text-align: right; }
+.fx-fig figcaption span { color: var(--fx-oceano); }
+
+/* Zoom sin JavaScript: <details> abierto = el <summary> cubre la pantalla con la imagen. */
+.fx-zoom { display: block; margin: 0; }
+.fx-zoom > summary { display: block; list-style: none; cursor: zoom-in; position: relative; outline: none; }
+.fx-zoom > summary::-webkit-details-marker { display: none; }
+.fx-zoom > summary::marker { content: ""; }
+.fx-zoom > summary::after { content: "⤢"; position: absolute; right: 10px; bottom: 10px; width: 30px; height: 30px;
+  border-radius: 8px; background: rgba(11, 79, 97, 0.85); color: #fff; font: 700 18px/30px var(--fx-sans);
+  text-align: center; opacity: 0.8; }
+.fx-zoom > summary:hover::after { opacity: 1; }
+.fx-zoom[open] > summary { position: fixed; inset: 0; z-index: 10000; background: rgba(8, 24, 30, 0.92);
+  display: flex; align-items: center; justify-content: center; padding: 1.5vh 1.5vw; cursor: zoom-out; }
+.fx-zoom[open] > summary img { width: auto; height: auto; max-width: 100%; max-height: 100%; border: none;
+  border-radius: 6px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); }
+.fx-zoom[open] > summary::after { content: "✕"; right: 18px; top: 18px; bottom: auto; }
