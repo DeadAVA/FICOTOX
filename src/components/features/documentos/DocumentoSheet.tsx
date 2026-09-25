@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, Field, FormGrid, Input, Select, Textarea } from "@/components/ui/Field";
+import { DateInput } from "@/components/ui/DateInput";
 import { Sheet } from "@/components/ui/Overlay";
 import { API_BASE_URL, sendFormAuth } from "@/lib/client/api";
 import { toDateOnly } from "@/lib/client/format";
@@ -141,13 +142,13 @@ export function DocumentoSheet({ open, item, onClose }: { open: boolean; item: A
         </Field>
         <FormGrid cols={3}>
           <Field label="Fecha de emisión" htmlFor="d-emision">
-            <Input id="d-emision" type="date" value={form.fechaEmision} onChange={set("fechaEmision")} />
+            <DateInput id="d-emision" value={form.fechaEmision} onChange={(value) => setForm((prev) => ({ ...prev, fechaEmision: value }))} />
           </Field>
           <Field label="Vigente desde" htmlFor="d-vig" hint="Se fija al aprobar si se deja vacío.">
-            <Input id="d-vig" type="date" value={form.fechaVigencia} onChange={set("fechaVigencia")} />
+            <DateInput id="d-vig" value={form.fechaVigencia} onChange={(value) => setForm((prev) => ({ ...prev, fechaVigencia: value }))} />
           </Field>
           <Field label="Próxima revisión" htmlFor="d-prox" hint="Por defecto, 3 años después de la emisión.">
-            <Input id="d-prox" type="date" value={form.fechaProximaRevision} onChange={set("fechaProximaRevision")} />
+            <DateInput id="d-prox" value={form.fechaProximaRevision} onChange={(value) => setForm((prev) => ({ ...prev, fechaProximaRevision: value }))} />
           </Field>
         </FormGrid>
         <FormGrid>

@@ -6,6 +6,8 @@ import { consumeConsumible, consumeReactivo, restoreInventoryUsage } from "./inv
 import { addColumnIfMissing } from "./schema";
 import { requirePermission, type Autorizacion } from "./rbac";
 import { exigirSinSupervisionPendiente } from "./supervision";
+import { crearSolicitud, exigirSinSolicitudPendiente, pendientesDe, serializarSolicitud, type Solicitud } from "./solicitudes";
+import { ESTADOS_BORRADOR } from "../shared/acciones-criticas";
 
 /*
  * Reglas comunes del flujo de muestras (ISO/IEC 17025 7.4, 7.5 y la
@@ -123,6 +125,101 @@ export function assertEditable(row: Row | null | undefined, table: SampleTable):
   }
 }
 
+/*
+ * Fase 3: un registro con una solicitud de autorizacion pendiente (anulacion,
+ * restauracion) no se edita, revisa, aprueba ni sirve de origen.
+ */
+export async function assertEditableAsync(s: Session, row: Row | null | undefined, table: SampleTable, que = "editar"): Promise<void> {
+  assertEditable(row, table);
+  await exigirSinSolicitudPendiente(s, table, Number(row!.id), `El registro ${folioLabel(table, row)}`, que);
+}
+
+/* Agrega a cada fila la solicitud pendiente (si la hay) para las listas y fichas. */
+export async function conSolicitudes<T extends Row>(s: Session, table: SampleTable, rows: T[]): Promise<Array<T & { solicitud_pendiente: Record<string, unknown> | null }>> {
+  const pendientes = await pendientesDe(s, table, rows.map((r) => Number(r.id)));
+  return rows.map((r) => {
+    const p = pendientes.get(String(r.id));
+    return { ...r, solicitud_pendiente: p ? serializarSolicitud(p) : null };
+  });
+}
+
+/*
+ * Inventario a reponer y dependientes que bloquean la anulacion de cada etapa.
+ * Se usa al anular directamente y al ejecutar una solicitud aprobada.
+ */
+export function opcionesAnulacion(s: Session, table: SampleTable, id: number): { movimientosPrefix?: string; bloqueaSi: () => Promise<string | null> } {
+  switch (table) {
+    case "muestras_recepcion":
+      return {
+        bloqueaSi: async () => {
+          const activos = Number((await s.scalar("SELECT COUNT(*) FROM muestras_procesamiento WHERE recepcion_id = :id AND estado <> 'anulada'", { id })) || 0);
+          return activos ? `La recepcion tiene ${activos} procesamiento(s) vigente(s); anulalos primero` : null;
+        },
+      };
+    case "muestras_procesamiento":
+      return {
+        movimientosPrefix: `PROC-${id}-INS-`,
+        bloqueaSi: async () => {
+          const activas = Number((await s.scalar("SELECT COUNT(*) FROM muestras_extraccion WHERE procesamiento_id = :id AND estado <> 'anulada'", { id })) || 0);
+          return activas ? `El procesamiento tiene ${activas} extraccion(es) vigente(s); anulalas primero` : null;
+        },
+      };
+    case "muestras_extraccion":
+      return {
+        movimientosPrefix: `EXT-${id}-INS-`,
+        bloqueaSi: async () => {
+          const activos = Number((await s.scalar("SELECT COUNT(*) FROM muestras_analisis WHERE extraccion_id = :id AND estado <> 'anulado'", { id })) || 0);
+          return activos ? `La extraccion tiene ${activos} analisis vigente(s); anulalos primero` : null;
+        },
+      };
+    case "muestras_analisis":
+      return {
+        movimientosPrefix: `ANA-${id}-INS-`,
+        bloqueaSi: async () => {
+          const informes = await s.query<{ folio_num: number; analisis_ids_json: string }>("SELECT folio_num, analisis_ids_json FROM informes WHERE estado IN ('autorizado', 'entregado')").catch(() => []);
+          const usado = informes.find((inf) => {
+            try {
+              return (JSON.parse(String(inf.analisis_ids_json || "[]")) as number[]).includes(id);
+            } catch {
+              return false;
+            }
+          });
+          return usado ? `El analisis esta incluido en el informe IR ${String(usado.folio_num).padStart(7, "0")} autorizado; anula o enmienda el informe primero` : null;
+        },
+      };
+  }
+}
+
+/*
+ * Anular con segundo usuario (Fase 3): en borrador/registrado se anula de
+ * inmediato; en cualquier otro estado (aceptada, en proceso, revisado,
+ * aprobado...) se crea una solicitud que ejecuta quien la apruebe.
+ */
+export async function anularOSolicitar(s: Session, user: CurrentUser, table: SampleTable, id: number, motivo: string, actuo: Actuo): Promise<{ row?: Row; solicitud?: Solicitud }> {
+  if (motivo.length < 5) throw new HttpError(400, { message: "Indica el motivo de la anulacion (al menos 5 caracteres)" });
+  const antes = await snapshotRow(s, table, id);
+  if (!antes) throw new HttpError(404, { message: "Registro no encontrado" });
+  if (isAnulado(table, antes)) throw new HttpError(409, { message: "El registro ya esta anulado" });
+  const opciones = opcionesAnulacion(s, table, id);
+  if (ESTADOS_BORRADOR.has(String(antes.estado || ""))) return { row: await anularRegistro(s, user, table, id, motivo, { ...opciones, actuo }) };
+  const bloqueo = await opciones.bloqueaSi();
+  if (bloqueo) throw new HttpError(409, { message: bloqueo });
+  const solicitud = await crearSolicitud(s, user, { tipo: "anular_registro", entidad: table, entidadId: id, referencia: folioLabel(table, antes), accion: "anular", datos: { estado: antes.estado }, motivo, cargo: actuo.cargo });
+  return { solicitud };
+}
+
+/* Restaurar con segundo usuario: inmediato si antes de anularse estaba en borrador/registrado. */
+export async function restaurarOSolicitar(s: Session, user: CurrentUser, table: SampleTable, id: number, motivo: string, actuo: Actuo): Promise<{ row?: Row; solicitud?: Solicitud }> {
+  if (motivo.length < 5) throw new HttpError(400, { message: "Indica el motivo de la restauracion (al menos 5 caracteres)" });
+  const antes = await snapshotRow(s, table, id);
+  if (!antes) throw new HttpError(404, { message: "Registro no encontrado" });
+  if (!isAnulado(table, antes)) throw new HttpError(409, { message: "El registro no esta anulado" });
+  const previo = String(antes.estado_previo || (table === "muestras_analisis" ? "registrado" : "registrada"));
+  if (ESTADOS_BORRADOR.has(previo)) return { row: await restaurarRegistro(s, user, table, id, motivo, actuo) };
+  const solicitud = await crearSolicitud(s, user, { tipo: "restaurar_registro", entidad: table, entidadId: id, referencia: folioLabel(table, antes), accion: "restaurar", datos: { estado_previo: previo }, motivo, cargo: actuo.cargo });
+  return { solicitud };
+}
+
 /* Antes de crear la siguiente etapa a partir de este registro (o de restaurar una que depende de el). */
 export async function assertOrigin(s: Session, table: SampleTable, id: number | null | undefined, options: { requireAccepted?: boolean; requerido?: string } = {}): Promise<Row | null> {
   // Fase 2: cada etapa exige su origen (procesamiento <- recepcion aceptada, extraccion <- procesamiento...).
@@ -132,8 +229,9 @@ export async function assertOrigin(s: Session, table: SampleTable, id: number | 
   }
   const row = await snapshotRow(s, table, id);
   if (!row) throw new HttpError(404, { message: `No existe la ${LABEL[table]} de origen` });
-  // Lo pendiente del visto bueno de un supervisor no sirve de origen.
+  // Lo pendiente del visto bueno de un supervisor, o de una autorizacion, no sirve de origen.
   exigirSinSupervisionPendiente(row, `La ${LABEL[table]} ${folioLabel(table, row)}`, "continuar a partir de ella");
+  await exigirSinSolicitudPendiente(s, table, id, `La ${LABEL[table]} ${folioLabel(table, row)}`, "continuar a partir de ella");
   const estado = String(row.estado || "");
   if (isAnulado(table, row)) throw new HttpError(409, { message: `La ${LABEL[table]} ${folioLabel(table, row)} esta anulada; no se puede continuar a partir de ella` });
   if (estado === "rechazada") throw new HttpError(409, { message: `La ${LABEL[table]} ${folioLabel(table, row)} fue rechazada; no se puede continuar a partir de ella` });
@@ -172,7 +270,7 @@ export async function anularRegistro(
   table: SampleTable,
   id: number,
   motivo: string,
-  options: { movimientosPrefix?: string; bloqueaSi?: () => Promise<string | null>; actuo?: Actuo } = {},
+  options: { movimientosPrefix?: string; bloqueaSi?: () => Promise<string | null>; actuo?: Actuo; detalle?: Record<string, unknown> } = {},
 ): Promise<Row> {
   if (motivo.length < 5) throw new HttpError(400, { message: "Indica el motivo de la anulacion (al menos 5 caracteres)" });
   const antes = await snapshotRow(s, table, id);
@@ -200,7 +298,7 @@ export async function anularRegistro(
     motivo,
     antes,
     despues,
-    detalle: repuestos || options.actuo ? { ...(repuestos ? { movimientos_repuestos: repuestos } : {}), ...(options.actuo ? { actuo_como: options.actuo } : {}) } : null,
+    detalle: repuestos || options.actuo || options.detalle ? { ...(repuestos ? { movimientos_repuestos: repuestos } : {}), ...(options.actuo ? { actuo_como: options.actuo } : {}), ...(options.detalle || {}) } : null,
   });
   return despues || antes;
 }
@@ -209,7 +307,7 @@ export async function anularRegistro(
  * Restaurar un registro anulado (queda en auditoria con motivo). Exige que la
  * etapa de origen siga vigente. El inventario no se vuelve a descontar solo.
  */
-export async function restaurarRegistro(s: Session, user: CurrentUser, table: SampleTable, id: number, motivo: string, actuo?: Actuo): Promise<Row> {
+export async function restaurarRegistro(s: Session, user: CurrentUser, table: SampleTable, id: number, motivo: string, actuo?: Actuo, detalle?: Record<string, unknown>): Promise<Row> {
   if (motivo.length < 5) throw new HttpError(400, { message: "Indica el motivo de la restauracion (al menos 5 caracteres)" });
   const antes = await snapshotRow(s, table, id);
   if (!antes) throw new HttpError(404, { message: "Registro no encontrado" });
@@ -222,7 +320,7 @@ export async function restaurarRegistro(s: Session, user: CurrentUser, table: Sa
   const estado = String(antes.estado_previo || (table === "muestras_analisis" ? "registrado" : "registrada"));
   await s.execute(`UPDATE ${table} SET estado = :estado, estado_previo = NULL, anulado_en = NULL, anulado_por = NULL, anulado_rol_id = NULL, anulado_cargo = NULL, motivo_anulacion = NULL WHERE id = :id`, { estado, id });
   const despues = await snapshotRow(s, table, id);
-  await registrarAuditoria(s, user, { accion: "restaurar", entidad: table, entidadId: id, referencia: folioLabel(table, antes), motivo, antes, despues, detalle: actuo ? { actuo_como: actuo } : null });
+  await registrarAuditoria(s, user, { accion: "restaurar", entidad: table, entidadId: id, referencia: folioLabel(table, antes), motivo, antes, despues, detalle: actuo || detalle ? { ...(actuo ? { actuo_como: actuo } : {}), ...(detalle || {}) } : null });
   return despues || antes;
 }
 

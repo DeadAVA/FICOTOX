@@ -125,8 +125,10 @@ const temporal = (extra = {}) => ({ tipo_cuenta: "temporal", vigente_hasta: "209
   await api("POST", `/admin/usuarios/${persona.id}/roles`, { rol_id: rolId("Coordinador/a del Área Técnica"), motivo: "Segundo rol de prueba" }, QA);
   const t = await token(persona.email, PWD);
   const A = conExt.data?.id;
-  await api("POST", `/samples/analysis/${A}/revisar`, {}, QA);
-  await api("POST", `/samples/analysis/${A}/aprobar`, {}, QA);
+  // Fase 3: el analisis de QA lo revisa y aprueba otra persona.
+  const tRev = await token(RICARDO);
+  await api("POST", `/samples/analysis/${A}/revisar`, {}, tRev);
+  await api("POST", `/samples/analysis/${A}/aprobar`, {}, tRev);
   const inf = await api("POST", "/informes", { recepcion_id: R, analisis_ids: [A], cliente: { nombre: "Cliente cargo" } }, QA);
   const sinCargo = await api("POST", `/informes/${inf.data?.id}/revisar`, {}, t);
   const rolRG = rolId("Responsable General");
@@ -305,17 +307,19 @@ const temporal = (extra = {}) => ({ tipo_cuenta: "temporal", vigente_hasta: "209
   const P = (await api("POST", "/samples/processing", procesamiento(R, "SEG-RE"), QA)).data?.id;
   const E = (await api("POST", "/samples/extraction", extraccion(P, "SEG-RE"), QA)).data?.id;
   const A = (await api("POST", "/samples/analysis", analisis(E, "SEG-RE"), QA)).data?.id;
-  await api("POST", `/samples/analysis/${A}/revisar`, {}, QA);
-  const aprobarSin = await api("POST", `/samples/analysis/${A}/aprobar`, {}, QA, SIN_AUTO);
+  // Fase 3: lo revisa y aprueba otra persona (Ricardo); QA lo elaboro.
+  const tR = await token(RICARDO);
+  await api("POST", `/samples/analysis/${A}/revisar`, {}, tR);
+  const aprobarSin = await api("POST", `/samples/analysis/${A}/aprobar`, {}, tR, SIN_AUTO);
   const anularSin = await api("POST", `/samples/extraction/${E}/anular`, { motivo: "Prueba sin token" }, QA, SIN_AUTO);
   check("aprobar sin token -> 401 reauth_required (accion ensayos:A)", aprobarSin.status === 401 && aprobarSin.data?.codigo === "reauth_required" && aprobarSin.data?.accion === "ensayos:A", `${aprobarSin.status} ${aprobarSin.data?.accion}`);
   check("anular sin token -> 401 reauth_required (accion ensayos:AN)", anularSin.status === 401 && anularSin.data?.accion === "ensayos:AN", `${anularSin.status}`);
   const mala = await api("POST", "/auth/reauth", { accion: "ensayos:A", password: "incorrecta-000" }, QA);
   check("reautenticacion con contrasena incorrecta -> 401", mala.status === 401 && !mala.data?.token);
-  const tokA = await reauth(QA, "ensayos:A", QA_PWD);
-  const otraAccion = await api("POST", `/samples/extraction/${E}/anular`, { motivo: "Token de otra accion" }, QA, { ...SIN_AUTO, "X-Reauth": tokA });
+  const tokA = await reauth(tR, "ensayos:A", credenciales[RICARDO]);
+  const otraAccion = await api("POST", `/samples/extraction/${E}/anular`, { motivo: "Token de otra accion" }, tR, { ...SIN_AUTO, "X-Reauth": tokA });
   check("token de otra accion -> 401 reauth_invalido", otraAccion.status === 401 && otraAccion.data?.codigo === "reauth_invalido", `${otraAccion.status} ${otraAccion.data?.message}`);
-  const aprobar = await api("POST", `/samples/analysis/${A}/aprobar`, {}, QA, { ...SIN_AUTO, "X-Reauth": tokA });
+  const aprobar = await api("POST", `/samples/analysis/${A}/aprobar`, {}, tR, { ...SIN_AUTO, "X-Reauth": tokA });
   check("con token valido la aprobacion procede", aprobar.status === 200, `${aprobar.status} ${aprobar.data?.message}`);
   const tokAN = await reauth(QA, "ensayos:AN", QA_PWD);
   const A2 = (await api("POST", "/samples/analysis", analisis(E, "SEG-RE2"), QA)).data?.id;

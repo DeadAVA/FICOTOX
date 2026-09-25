@@ -28,6 +28,9 @@ import {
 import { ensureUsuariosSchema, normalizeUserPayload } from "../users";
 import { hashPassword, validatePasswordStrength } from "../password";
 import { exigirReauth } from "../seguridad";
+import { crearSolicitud, datosDe, detalleSolicitud, respuestaSolicitud, serializarSolicitud, type ContextoEjecucion, type Solicitud } from "../solicitudes";
+import { ACCIONES_CRITICAS } from "../../shared/acciones-criticas";
+import { formatearFecha, formatearFechaHora, sumarDias } from "../../shared/fechas";
 import { randomBytes } from "node:crypto";
 
 /*
@@ -40,13 +43,16 @@ import { randomBytes } from "node:crypto";
 
 const MOTIVO_MIN = 5;
 
+/* Dominios de correo admitidos (ALLOWED_EMAIL_DOMAINS); lista vacia = cualquiera. */
 function emailDomainAllowed(email: string): boolean {
-  const allowedDomain = getConfig().MICROSOFT_ALLOWED_DOMAIN.toLowerCase();
-  return !!email && email.endsWith(`@${allowedDomain}`);
+  const dominios = getConfig().ALLOWED_EMAIL_DOMAINS;
+  if (!email) return false;
+  if (!dominios.length) return true;
+  return dominios.some((d) => email.toLowerCase().endsWith(`@${d}`));
 }
 
 function domainErrorMessage(): string {
-  return `Solo puedes dar de alta correos @${getConfig().MICROSOFT_ALLOWED_DOMAIN}`;
+  return `Solo puedes dar de alta correos de ${getConfig().ALLOWED_EMAIL_DOMAINS.map((d) => `@${d}`).join(", ")}`;
 }
 
 function motivoDe(payload: Record<string, unknown>, campo = "motivo"): string {
@@ -228,7 +234,7 @@ export async function deleteRole({ request, s, params }: RouteContext): Promise<
 /* ---------- Usuarios ---------- */
 
 const USUARIO_SELECT = `
-  SELECT u.id, u.nombre, u.email, u.activo, u.departamento, u.auth_provider, u.microsoft_oid, u.avatar,
+  SELECT u.id, u.nombre, u.email, u.activo, u.departamento, u.avatar,
          u.creado_en, u.ultimo_acceso,
          CASE WHEN u.password_hash IS NULL THEN 0 ELSE 1 END AS tiene_password,
          u.tipo_cuenta, u.vigente_desde, u.vigente_hasta, u.supervisor_id, sup.nombre AS supervisor_nombre,
@@ -301,8 +307,8 @@ function validateUsuarioPayload(payload: Record<string, unknown>, options: { pas
   const password = String(payload.password || "");
   if (!data.nombre) return { error: json({ message: "El nombre es obligatorio" }, 400) };
   if (!data.email) return { error: json({ message: "El email es obligatorio" }, 400) };
-  // El dominio se exige al dar de alta o cambiar el correo; una cuenta existente
-  // (p. ej. las locales @ficotox.local creadas por el script de roles) se puede editar.
+  // El dominio se exige al dar de alta o cambiar el correo; una cuenta existente que
+  // conserva su correo se puede editar aunque el dominio ya no este en la lista.
   const emailSinCambio = !!options.currentEmail && String(options.currentEmail).toLowerCase() === String(data.email).toLowerCase();
   if (!emailSinCambio && !emailDomainAllowed(data.email)) return { error: json({ message: domainErrorMessage() }, 400) };
   if (options.passwordRequired && !password) return { error: json({ message: "La contraseña es obligatoria" }, 400) };
@@ -372,7 +378,20 @@ function cambioDeCuenta(antes: Row, cuenta: DatosCuenta): Record<string, { antes
 }
 
 /* Alta de una asignacion de rol (con reglas de combinacion y bitacora). */
-async function asignarRol(s: Session, actor: CurrentUser, usuario: Row, payload: Record<string, unknown>, motivoPorOmision?: string): Promise<number> {
+/* Datos validados de una asignacion de rol (aun sin guardar). */
+interface AsignacionPreparada {
+  rol: { id: number; nombre: string; clave: string | null };
+  desde: string;
+  hasta: string | null;
+  motivo: string;
+}
+
+/*
+ * Valida una asignacion de rol (rol activo, vigencia dentro de la cuenta,
+ * estudiante solo temporal, sin duplicar, combinaciones prohibidas). Se usa al
+ * solicitarla y otra vez al ejecutarla, porque el estado pudo cambiar.
+ */
+async function prepararAsignacion(s: Session, usuario: Row, payload: Record<string, unknown>, motivoPorOmision?: string): Promise<AsignacionPreparada> {
   const rolId = Number.parseInt(String(payload.rol_id ?? payload.id_rol ?? ""), 10);
   const rol = Number.isFinite(rolId) ? await s.queryOne<{ id: number; nombre: string; clave: string | null; activo: number }>("SELECT id, nombre, clave, activo FROM roles WHERE id = :id", { id: rolId }) : null;
   if (!rol) throw new HttpError(400, { message: "Selecciona un rol que exista" });
@@ -396,20 +415,89 @@ async function asignarRol(s: Session, actor: CurrentUser, usuario: Row, payload:
   const filas = (await filasDeRoles(s, [rol.id])).get(rol.id) || [];
   const violaciones = evaluarCombinacion([...actuales, { id: rol.id, nombre: rol.nombre, clave: rol.clave, filas }]);
   if (violaciones.length) throw new HttpError(409, { message: mensajeViolaciones(violaciones), codigo: "COMBINACION_PROHIBIDA", violaciones });
+  return { rol: { id: rol.id, nombre: rol.nombre, clave: rol.clave }, desde, hasta, motivo };
+}
 
+/* Alta de la asignacion (la ejecuta quien aprueba la solicitud, con constancia del solicitante). */
+async function insertarAsignacion(s: Session, actor: CurrentUser, usuario: Row, prep: AsignacionPreparada, detalle: Record<string, unknown> = {}): Promise<number> {
   const result = await s.execute(
     "INSERT INTO usuario_roles (usuario_id, rol_id, vigente_desde, vigente_hasta, motivo, asignado_por, asignado_en) VALUES (:usuario_id, :rol_id, :desde, :hasta, :motivo, :por, :en)",
-    { usuario_id: usuario.id, rol_id: rol.id, desde, hasta, motivo, por: userIdFromClaims(actor), en: new Date().toISOString() },
+    { usuario_id: usuario.id, rol_id: prep.rol.id, desde: prep.desde, hasta: prep.hasta, motivo: prep.motivo, por: userIdFromClaims(actor), en: new Date().toISOString() },
   );
   await registrarAuditoria(s, actor, {
     accion: "asignar_rol",
     entidad: "usuarios",
     entidadId: Number(usuario.id),
     referencia: String(usuario.email),
-    motivo,
-    detalle: { rol: rol.nombre, rol_id: rol.id, asignacion_id: result.lastrowid, vigente_desde: desde, vigente_hasta: hasta },
+    motivo: prep.motivo,
+    detalle: { rol: prep.rol.nombre, rol_id: prep.rol.id, asignacion_id: result.lastrowid, vigente_desde: prep.desde, vigente_hasta: prep.hasta, ...detalle },
   });
   return result.lastrowid as number;
+}
+
+/*
+ * Fase 3: asignar un rol es una accion critica (seccion 10): se valida, se crea
+ * la solicitud y la ejecuta quien tenga usuarios:A (Responsable General).
+ */
+async function solicitarAsignacion(s: Session, actor: CurrentUser, usuario: Row, payload: Record<string, unknown>, motivoPorOmision?: string, cargo?: string | null): Promise<Solicitud> {
+  const prep = await prepararAsignacion(s, usuario, payload, motivoPorOmision);
+  return crearSolicitud(s, actor, {
+    tipo: "asignar_rol",
+    entidad: "usuarios",
+    entidadId: Number(usuario.id),
+    referencia: String(usuario.email),
+    accion: "asignar_rol",
+    datos: { rol_id: prep.rol.id, rol: prep.rol.nombre, vigente_desde: prep.desde, vigente_hasta: prep.hasta, motivo: prep.motivo },
+    motivo: prep.motivo,
+    cargo,
+  });
+}
+
+/* Ejecutor de la solicitud "asignar_rol" (se vuelve a validar al aprobar). */
+export async function ejecutarAsignacionRol(ctx: ContextoEjecucion): Promise<Record<string, unknown>> {
+  await ensureUsuariosSchema(ctx.s);
+  const usuario = await snapshotRow(ctx.s, "usuarios", Number(ctx.solicitud.entidad_id));
+  if (!usuario) throw new HttpError(404, { message: "La cuenta de la solicitud ya no existe" });
+  const prep = await prepararAsignacion(ctx.s, usuario, { rol_id: ctx.datos.rol_id, vigente_desde: ctx.datos.vigente_desde, vigente_hasta: ctx.datos.vigente_hasta, motivo: ctx.datos.motivo });
+  const id = await insertarAsignacion(ctx.s, ctx.user, usuario, prep, detalleSolicitud(ctx.solicitud));
+  return { asignacion_id: id, rol: prep.rol.nombre };
+}
+
+/* Ejecutor de "reactivar_cuenta". */
+export async function ejecutarReactivacion(ctx: ContextoEjecucion): Promise<Record<string, unknown>> {
+  await ensureUsuariosSchema(ctx.s);
+  const userId = Number(ctx.solicitud.entidad_id);
+  const antes = await snapshotRow(ctx.s, "usuarios", userId);
+  if (!antes) throw new HttpError(404, { message: "La cuenta de la solicitud ya no existe" });
+  if (Number(antes.activo ?? 1) === 1) throw new HttpError(409, { message: "La cuenta ya está activa" });
+  await ctx.s.execute("UPDATE usuarios SET activo = 1 WHERE id = :id", { id: userId });
+  const despues = await snapshotRow(ctx.s, "usuarios", userId);
+  await registrarAuditoria(ctx.s, ctx.user, { accion: "reactivar", entidad: "usuarios", entidadId: userId, referencia: String(antes.email), motivo: ctx.solicitud.motivo, antes, despues, detalle: detalleSolicitud(ctx.solicitud) });
+  return { activo: true };
+}
+
+/* Ejecutor de "ampliar_vigencia" (los roles no se extienden solos; se reasignan). */
+export async function ejecutarAmpliacionVigencia(ctx: ContextoEjecucion): Promise<Record<string, unknown>> {
+  await ensureUsuariosSchema(ctx.s);
+  const userId = Number(ctx.solicitud.entidad_id);
+  const antes = await snapshotRow(ctx.s, "usuarios", userId);
+  if (!antes) throw new HttpError(404, { message: "La cuenta de la solicitud ya no existe" });
+  const tipo = String(ctx.datos.tipo_cuenta || antes.tipo_cuenta || "permanente") === "temporal" ? "temporal" : "permanente";
+  const hasta = ctx.datos.vigente_hasta ? fechaValida(ctx.datos.vigente_hasta) : null;
+  await validarCuenta(ctx.s, { tipo_cuenta: tipo, vigente_desde: (antes.vigente_desde as string | null) || null, vigente_hasta: hasta, supervisor_id: antes.supervisor_id === null || antes.supervisor_id === undefined ? null : Number(antes.supervisor_id) }, userId);
+  await ctx.s.execute("UPDATE usuarios SET tipo_cuenta = :tipo, vigente_hasta = :hasta, motivo_ultimo_cambio = :motivo WHERE id = :id", { tipo, hasta, motivo: ctx.solicitud.motivo, id: userId });
+  const despues = await snapshotRow(ctx.s, "usuarios", userId);
+  await registrarAuditoria(ctx.s, ctx.user, {
+    accion: "cambiar_vigencia",
+    entidad: "usuarios",
+    entidadId: userId,
+    referencia: String(antes.email),
+    motivo: ctx.solicitud.motivo,
+    antes,
+    despues,
+    detalle: { cambios: { vigente_hasta: { antes: antes.vigente_hasta ?? null, despues: hasta }, ...(tipo !== String(antes.tipo_cuenta || "permanente") ? { tipo_cuenta: { antes: antes.tipo_cuenta || "permanente", despues: tipo } } : {}) }, roles_acotados: 0, ...detalleSolicitud(ctx.solicitud) },
+  });
+  return { vigente_hasta: hasta, tipo_cuenta: tipo };
 }
 
 export async function createUsuario({ request, s }: RouteContext): Promise<Response> {
@@ -431,8 +519,8 @@ export async function createUsuario({ request, s }: RouteContext): Promise<Respo
   let insertedId: number;
   try {
     const result = await s.execute(
-      `INSERT INTO usuarios (nombre, email, activo, id_rol, departamento, auth_provider, password_hash, avatar, tipo_cuenta, vigente_desde, vigente_hasta, supervisor_id, motivo_ultimo_cambio)
-       VALUES (:nombre, :email, :activo, :id_rol, :departamento, 'local', :password_hash, :avatar, :tipo_cuenta, :vigente_desde, :vigente_hasta, :supervisor_id, :motivo_cuenta)`,
+      `INSERT INTO usuarios (nombre, email, activo, id_rol, departamento, password_hash, avatar, tipo_cuenta, vigente_desde, vigente_hasta, supervisor_id, motivo_ultimo_cambio)
+       VALUES (:nombre, :email, :activo, :id_rol, :departamento, :password_hash, :avatar, :tipo_cuenta, :vigente_desde, :vigente_hasta, :supervisor_id, :motivo_cuenta)`,
       // Cada cuenta nace con un avatar al azar del catalogo; la persona puede cambiarlo en "Mi cuenta".
       { ...data, ...cuenta, id_rol: rolInicial, password_hash: validated.passwordHash, avatar: data.avatar ?? randomAvatar(), motivo_cuenta: motivoDe(payload, "motivo_cuenta") || null },
     );
@@ -446,9 +534,10 @@ export async function createUsuario({ request, s }: RouteContext): Promise<Respo
   }
   const nuevo = (await snapshotRow(s, "usuarios", insertedId))!;
   await registrarAuditoria(s, user, { accion: "crear", entidad: "usuarios", entidadId: insertedId, referencia: String(data.email), despues: nuevo });
-  await asignarRol(s, user, nuevo, { ...payload, rol_id: rolInicial }, "Alta de usuario");
+  // Fase 3: el rol inicial tambien lo aprueba un segundo usuario con usuarios:A; mientras, la cuenta no tiene roles.
+  const solicitud = await solicitarAsignacion(s, user, nuevo, { ...payload, rol_id: rolInicial }, "Alta de usuario");
   await s.commit();
-  return json({ message: "Usuario creado", id: insertedId }, 201);
+  return json({ message: `Usuario creado; su rol inicial queda pendiente de la autorización de un segundo usuario (solicitud #${solicitud.id})`, id: insertedId, solicitud: serializarSolicitud(solicitud) }, 201);
 }
 
 export async function updateUsuario({ request, s, params }: RouteContext): Promise<Response> {
@@ -464,16 +553,32 @@ export async function updateUsuario({ request, s, params }: RouteContext): Promi
   const data = validated.data;
   const cuenta = datosCuenta(payload, antesUsuario);
   await validarCuenta(s, cuenta, userId);
-  const cambiosCuenta = cambioDeCuenta(antesUsuario, cuenta);
-  const cambiaCuenta = Object.keys(cambiosCuenta).length > 0;
+  let cambiosCuenta = cambioDeCuenta(antesUsuario, cuenta);
+  let cambiaCuenta = Object.keys(cambiosCuenta).length > 0;
   const motivoCuenta = motivoDe(payload, "motivo_cuenta") || motivoDe(payload);
   if (cambiaCuenta) {
     exigirMotivo(motivoCuenta, "del cambio de vigencia o supervisor");
     if (cuenta.tipo_cuenta !== "temporal" && (await tieneRolEstudiante(s, userId))) throw new HttpError(400, { message: "Una cuenta con el rol de estudiante / personal en formación debe ser temporal" });
   }
   const seDaDeBaja = Number(antesUsuario.activo ?? 1) === 1 && !data.activo;
-  // Reactivar una cuenta dada de baja tambien es critico (le devuelve el acceso).
+  // Reactivar una cuenta dada de baja tambien es critico (le devuelve el acceso): segundo usuario (Fase 3).
   const seReactiva = Number(antesUsuario.activo ?? 1) === 0 && !!data.activo;
+  /*
+   * Ampliar la vigencia de una cuenta temporal (fecha de fin posterior, sin fin,
+   * o pasarla a permanente) tambien requiere segundo usuario: se guarda todo lo
+   * demas y la ampliacion queda en solicitud.
+   */
+  const hastaAntes = (antesUsuario.vigente_hasta as string | null) || null;
+  const eraTemporal = String(antesUsuario.tipo_cuenta || "permanente") === "temporal";
+  const amplia = eraTemporal && (cuenta.tipo_cuenta === "permanente" || (hastaAntes && (!cuenta.vigente_hasta || cuenta.vigente_hasta > hastaAntes)));
+  const ampliacion = amplia ? { tipo_cuenta: cuenta.tipo_cuenta, vigente_hasta: cuenta.vigente_hasta } : null;
+  if (amplia) {
+    cuenta.tipo_cuenta = "temporal";
+    cuenta.vigente_hasta = hastaAntes;
+    // Lo que se guarda ahora es solo lo que no es ampliacion (p. ej. el supervisor).
+    cambiosCuenta = cambioDeCuenta(antesUsuario, cuenta);
+    cambiaCuenta = Object.keys(cambiosCuenta).length > 0;
+  }
   // Fijar la contrasena de otra persona equivale a restablecerla: reautenticacion y cambio obligatorio.
   const otraPersona = String(user.sub) !== String(userId);
   // La propia contrasena solo se cambia en "Mi cuenta" (pide la actual); aqui no.
@@ -483,7 +588,9 @@ export async function updateUsuario({ request, s, params }: RouteContext): Promi
    * es la del cambio mas critico que incluye (vigencia, baja, reactivacion o contrasena).
    */
   const accionCritica = cambiaCuenta ? "usuarios:vigencia" : seDaDeBaja ? "usuarios:baja" : seReactiva ? "usuarios:reactivar" : validated.passwordHash && otraPersona ? "usuarios:password" : null;
-  if (accionCritica) await exigirReauth(s, request, user, accionCritica);
+  // Pedir la ampliacion de vigencia tambien exige confirmar la identidad (aunque no haya otro cambio de cuenta).
+  const accionFinal = accionCritica || (ampliacion ? "usuarios:vigencia" : null);
+  if (accionFinal) await exigirReauth(s, request, user, accionFinal);
   const adminsAntes = await countActiveAdministrators(s);
   try {
     // Los roles no se cambian aqui: se asignan y revocan con motivo (asignarRolUsuario / revocarRolUsuario).
@@ -502,6 +609,8 @@ export async function updateUsuario({ request, s, params }: RouteContext): Promi
       {
         ...data,
         ...cuenta,
+        // La reactivacion no se aplica aqui: la ejecuta quien apruebe la solicitud.
+        activo: seReactiva ? 0 : data.activo,
         avatar: data.avatar ?? null,
         avatar_set: data.avatar === undefined ? 0 : 1,
         password_hash: validated.passwordHash,
@@ -556,10 +665,20 @@ export async function updateUsuario({ request, s, params }: RouteContext): Promi
   await assertAdministratorRemains(s, adminsAntes);
   const despues = await snapshotRow(s, "usuarios", userId);
   await registrarAuditoria(s, user, { accion: "editar", entidad: "usuarios", entidadId: userId, referencia: String(data.email), antes: antesUsuario, despues, detalle: validated.passwordHash ? { contrasena: "cambiada" } : null });
+  let solicitud: Solicitud | null = null;
+  if (seReactiva) {
+    solicitud = await crearSolicitud(s, user, { tipo: "reactivar_cuenta", entidad: "usuarios", entidadId: userId, referencia: String(data.email), accion: "reactivar", motivo: motivoDe(payload) || motivoCuenta || "Reactivación de la cuenta" });
+  } else if (ampliacion) {
+    solicitud = await crearSolicitud(s, user, { tipo: "ampliar_vigencia", entidad: "usuarios", entidadId: userId, referencia: String(data.email), accion: "ampliar_vigencia", datos: ampliacion, motivo: motivoCuenta });
+  }
   if (cambiaCuenta) {
     await registrarAuditoria(s, user, { accion: "cambiar_vigencia", entidad: "usuarios", entidadId: userId, referencia: String(data.email), motivo: motivoCuenta, detalle: { cambios: cambiosCuenta, roles_acotados: rolesAjustados.length } });
   }
   await s.commit();
+  if (solicitud) {
+    const def = ACCIONES_CRITICAS[solicitud.tipo];
+    return json({ message: `Datos guardados. ${def.pendiente}: queda pendiente de la autorización de un segundo usuario (solicitud #${solicitud.id})`, solicitud: serializarSolicitud(solicitud), codigo: "solicitud_creada", roles_acotados: rolesAjustados.length, roles_ajustados: rolesAjustados }, 202);
+  }
   return json({ message: rolesAjustados.length ? `Usuario actualizado; ${rolesAjustados.length} rol(es) se ajustaron a la vigencia de la cuenta` : "Usuario actualizado", roles_acotados: rolesAjustados.length, roles_ajustados: rolesAjustados });
 }
 
@@ -626,7 +745,7 @@ export async function restablecerPassword({ request, s, params }: RouteContext):
   await exigirReauth(s, request, user, "usuarios:password");
   const temporal = passwordTemporal();
   // Obliga a cambiarla al entrar y cierra las sesiones abiertas.
-  await s.execute("UPDATE usuarios SET password_hash = :hash, debe_cambiar_password = 1, token_version = COALESCE(token_version, 0) + 1, auth_provider = COALESCE(auth_provider, 'local') WHERE id = :id", { hash: hashPassword(temporal), id: userId });
+  await s.execute("UPDATE usuarios SET password_hash = :hash, debe_cambiar_password = 1, token_version = COALESCE(token_version, 0) + 1 WHERE id = :id", { hash: hashPassword(temporal), id: userId });
   // La contrasena temporal se entrega una sola vez en la respuesta; nunca se escribe en la bitacora.
   await registrarAuditoria(s, user, { accion: "restablecer_password", entidad: "usuarios", entidadId: userId, referencia: String(usuario.email), motivo, detalle: { cambio_obligatorio: true, sesiones: "cerradas" } });
   await s.commit();
@@ -649,9 +768,9 @@ export async function asignarRolUsuario({ request, s, params }: RouteContext): P
   if (!usuario) return json({ message: "Usuario no encontrado" }, 404);
   const payload = await readJson(request);
   await exigirReauth(s, request, user, "usuarios:roles");
-  const id = await asignarRol(s, user, usuario, payload);
+  const solicitud = await solicitarAsignacion(s, user, usuario, payload);
   await s.commit();
-  return json({ message: "Rol asignado", id }, 201);
+  return respuestaSolicitud(solicitud, `la asignación del rol "${String(datosDe(solicitud).rol)}" a ${usuario.email}`);
 }
 
 export async function revocarRolUsuario({ request, s, params }: RouteContext): Promise<Response> {
@@ -690,7 +809,6 @@ export async function revocarRolUsuario({ request, s, params }: RouteContext): P
 
 const ACCIONES_ACCESO = ["bloquear", "desbloquear", "asignar_rol", "revocar_rol", "vencer_rol", "acotar_rol", "cambiar_vigencia", "restablecer_password", "baja", "reactivar", "cerrar_sesiones", "crear"];
 
-const sumarDias = (fecha: string, dias: number) => new Date(Date.parse(`${fecha}T00:00:00Z`) + dias * 86_400_000).toISOString().slice(0, 10);
 
 function csvCelda(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
@@ -782,11 +900,12 @@ export async function revisionAccesos({ request, s }: RouteContext): Promise<Res
       seccion === "eventos"
         ? csv(
             ["fecha_hora", "accion", "referencia", "rol", "motivo", "realizado_por"],
-            eventosItems.map((e) => [e.fecha_hora, e.accion, e.referencia, e.rol, e.motivo, e.por]),
+            eventosItems.map((e) => [formatearFechaHora(e.fecha_hora, ""), e.accion, e.referencia, e.rol, e.motivo, e.por]),
           )
         : csv(
             ["nombre", "email", "activa", "tipo_cuenta", "vigente_desde", "vigente_hasta", "vigente_hoy", "supervisor", "bloqueada_hasta", "ultimo_acceso", "roles"],
-            cuentas.map((c) => [c.nombre, c.email, c.activo ? "si" : "no", c.tipo_cuenta, c.vigente_desde, c.vigente_hasta, c.cuenta_vigente ? "si" : "no", c.supervisor_nombre, c.bloqueado_hasta, c.ultimo_acceso, c.roles.map((r) => `${r.rol}${r.vigente_hasta ? ` (hasta ${r.vigente_hasta})` : ""}${r.estado === "futuro" ? " [por comenzar]" : ""}`).join(" | ")]),
+            // Fase 3: fechas dd/mm/aaaa y horas en la zona del laboratorio, igual que en pantalla.
+            cuentas.map((c) => [c.nombre, c.email, c.activo ? "si" : "no", c.tipo_cuenta, formatearFecha(c.vigente_desde, ""), formatearFecha(c.vigente_hasta, ""), c.cuenta_vigente ? "si" : "no", c.supervisor_nombre, formatearFechaHora(c.bloqueado_hasta, ""), formatearFechaHora(c.ultimo_acceso, ""), c.roles.map((r) => `${r.rol}${r.vigente_hasta ? ` (hasta ${formatearFecha(r.vigente_hasta)})` : ""}${r.estado === "futuro" ? " [por comenzar]" : ""}`).join(" | ")]),
           );
     return new Response(cuerpo, {
       headers: {

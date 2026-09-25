@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Field, FormGrid, Input, Select, Textarea } from "@/components/ui/Field";
+import { DateInput } from "@/components/ui/DateInput";
 import { Sheet } from "@/components/ui/Overlay";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { toDateOnly } from "@/lib/client/format";
@@ -129,7 +130,7 @@ export function EquipoSheet({ open, item, onClose }: { open: boolean; item: ApiR
             </Select>
           </Field>
           <Field label="Próxima calibración" htmlFor="e-calibracion">
-            <Input id="e-calibracion" type="date" value={form.calibracion} onChange={set("calibracion")} />
+            <DateInput id="e-calibracion" value={form.calibracion} onChange={(value) => setForm((prev) => ({ ...prev, calibracion: value }))} />
           </Field>
           <Field label="Estado" htmlFor="e-estado" required>
             <Select id="e-estado" value={form.estado} onChange={set("estado")}>
@@ -276,14 +277,14 @@ export function MantenimientoSheet({ open, item, onClose }: { open: boolean; ite
             </Select>
           </Field>
           <Field label="Fecha programada" htmlFor="m-fecha" required>
-            <Input id="m-fecha" type="date" value={form.fechaProgramada} onChange={set("fechaProgramada")} invalid={!!error && !form.fechaProgramada} />
+            <DateInput id="m-fecha" value={form.fechaProgramada} onChange={(value) => setForm((prev) => ({ ...prev, fechaProgramada: value }))} invalid={!!error && !form.fechaProgramada} />
           </Field>
           <Field label="Fecha realizado" htmlFor="m-realizado" required={form.estado === "completado"}>
-            <Input id="m-realizado" type="date" value={form.fechaRealizado} onChange={set("fechaRealizado")} invalid={!!error && form.estado === "completado" && !form.fechaRealizado} />
+            <DateInput id="m-realizado" value={form.fechaRealizado} onChange={(value) => setForm((prev) => ({ ...prev, fechaRealizado: value }))} invalid={!!error && form.estado === "completado" && !form.fechaRealizado} />
           </Field>
           {form.tipo === "calibracion" && form.estado === "completado" ? (
             <Field label="Próxima calibración" htmlFor="m-proxima" hint="Se anota en la ficha del equipo." className="sm:col-span-2">
-              <Input id="m-proxima" type="date" value={form.proximaCalibracion} onChange={set("proximaCalibracion")} />
+              <DateInput id="m-proxima" value={form.proximaCalibracion} onChange={(value) => setForm((prev) => ({ ...prev, proximaCalibracion: value }))} />
             </Field>
           ) : null}
           <Field label="Técnico o proveedor" htmlFor="m-tecnico">

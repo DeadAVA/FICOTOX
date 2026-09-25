@@ -3,7 +3,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { API_BASE_URL, getJsonAuth, postJson, registrarAvisoSesion, sendJsonAuth } from "@/lib/client/api";
-import { logoutMicrosoft } from "@/lib/client/msal";
 import { resetSearchIndex } from "@/lib/client/search-index";
 import { clearSession, getStoredPermissions, getStoredToken, setSession, setStoredPermissions } from "@/lib/client/session";
 import type { ApiRecord, AuthConfig, ModuleAction, PermissionsMap, RolSesion, SessionUser } from "@/lib/client/types";
@@ -50,7 +49,7 @@ export interface SessionValue {
 /* Mensaje para la pantalla de acceso cuando el servidor cerro la sesion. */
 export const AVISO_LOGIN_KEY = "ficotox.aviso-login";
 
-const DEFAULT_AUTH_CONFIG: AuthConfig = { microsoft: { enabled: false }, manualLoginEnabled: true };
+const DEFAULT_AUTH_CONFIG: AuthConfig = {};
 
 const SessionContext = createContext<SessionValue | null>(null);
 
@@ -152,7 +151,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     lockedRef.current = false;
     setLocked(false);
     leave();
-    logoutMicrosoft();
     router.replace("/login");
   }, [leave, router]);
 

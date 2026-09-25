@@ -49,7 +49,7 @@ reales del laboratorio; **la implementación debe ser fiel a ellos**):
   parámetros `:nombre`, y **cada consulta debe funcionar en los dos motores**
   (ojo: `||` es concatenación en SQLite pero OR lógico en MySQL → usar `CONCAT`).
 - Sesión: JWT con `jose`. Contraseña local con scrypt (`src/lib/server/password.ts`).
-  También hay login con Microsoft Entra ID.
+  Desde la Fase 3 el acceso es solo con usuario y contraseña del sistema (se retiró Microsoft Entra ID).
 - **Permisos (Fase 1)**: `requirePermission(s, user, modulo, accion, contexto?)`
   (`src/lib/server/rbac.ts`). Módulos: `usuarios, documentos, muestras, ensayos,
   informes, equipos, inventario, calidad, compras` (ya no existe `aprobaciones`).
@@ -130,13 +130,10 @@ Son decisiones explícitas del usuario o correcciones de auditoría ya validadas
 4. **Insumo fijo que no existe en inventario** (NaOH 2.5 M, HCl 2.5 M, soluciones
    preparadas): se avisa y se guarda sin descuento; solo el stock insuficiente
    bloquea.
-5. **Regla de dos personas apagada** (`TWO_PERSON_RULE = false` en
-   `src/lib/shared/features.ts`, decisión de Axel 2026-09-11): cualquier persona
-   con R/A (ensayos, informes) revisa/aprueba/autoriza aunque haya capturado. El
-   código de la excepción (`permitir_misma_persona` + motivo) sigue ahí por si se
-   vuelve a encender. El **cargo** de quien firma es el **rol con el que actúa**
-   (Fase 1; ya no `user.rol`); si varios roles vigentes lo permiten, la UI pide
-   "Actuar como" (`ActuarComoProvider`). No se captura a mano.
+5. **Separación de funciones siempre activa** (Fase 3; `src/lib/shared/segregacion.ts`):
+   quien elabora no revisa ni aprueba lo suyo, por persona. Las excepciones solo por
+   solicitud de segundo usuario (`excepcion_segregacion`). Ya no existen
+   `TWO_PERSON_RULE` ni `permitir_misma_persona`.
 6. **Permisos**: un permiso ausente en un rol significa "no concedido".
    `ensureRbacSchema` **no crea roles ni rellena permisos** (Fase 0: se quitó el
    rol "Super Admin" y el relleno por nombre de rol / `es_sistemico` / módulo
@@ -365,12 +362,30 @@ npm run test:reset-db # solo regenerar la base de prueba
   `npm test -- --solo=ui/seguridad.mjs` corre una sola suite. El servidor de
   pruebas usa `TRUST_PROXY=true` y los valores por omisión de sesión y CORS.
 
+## 8 quinquies. Fase 3 — segregación, segundo usuario y login local (2026-09-24, rama `fase-3-segregacion`)
+
+- Git: `fase-2-seguridad` se integró a `main` por fast-forward (local, sin push).
+- Se retiró Microsoft Entra ID (login, reautenticación, MSAL, `/api/auth/microsoft`,
+  variables `MICROSOFT_*` y `LOCAL_LOGIN_ENABLED`); columnas `microsoft_*` y
+  `auth_provider` eliminadas (estaban vacías). `ALLOWED_EMAIL_DOMAINS` sustituye al
+  dominio de Microsoft.
+- Separación de funciones (6 reglas) y solicitudes de autorización de un segundo
+  usuario (`solicitudes_autorizacion`, `/api/solicitudes`, página `/solicitudes`,
+  aviso "Por autorizar"); Responsable General con usuarios V A.
+- Fechas: `src/lib/shared/fechas.ts` (fechas solas como texto, instantes en
+  America/Tijuana) y `DateInput` dd/mm/aaaa.
+- Pruebas: `tests/api-segregacion.mjs`, `tests/api-fechas.mjs` (servidor en
+  Tijuana y luego en UTC), `tests/fechas.mjs` (TZ=UTC y TZ=America/Tijuana),
+  `tests/ui/fechas.mjs`, `tests/ui/segregacion.mjs`. `tests/lib/reauth-auto.mjs`
+  aprueba solo las solicitudes con un segundo usuario (Responsable General) salvo
+  con el encabezado `X-Sin-Aprobar-Auto: 1`.
+
 ## 9. Pendientes conocidos
 
 - El `.env` local tiene `JWT_EXPIRES_HOURS=12` y `CORS_ORIGINS=*`, que anulan los
   nuevos valores por omisión (8 h, mismo origen): ajustarlos al desplegar.
-- Regla de dos personas y segundo usuario en anulaciones (Fase 3), FX-THF-AP
-  (Fase 4), asignación de muestras (Fase 5).
+- FX-THF-AP (Fase 4), asignación de muestras y estados nuevos (Fase 5), estado
+  Liberado y envío por correo (Fase 6), flujo completo de Documentos (Fase 7).
 
 
 1. **Confirmar con la coordinación técnica** los límites regulatorios precargados

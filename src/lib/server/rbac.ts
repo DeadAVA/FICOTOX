@@ -1,4 +1,5 @@
 import { isSqlite, type Row, type Session } from "./db";
+import { finDiaLocal, hoyLocal, inicioDiaLocal } from "../shared/fechas";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "./schema";
 import { HttpError } from "./http";
 import type { CurrentUser } from "./auth";
@@ -52,15 +53,11 @@ export function toBit(value: unknown): number {
  * filtros por fecha de la bitacora y de la revision de accesos comparan el dia
  * local del laboratorio, no el dia UTC.
  */
-export function inicioDiaLocal(fecha: string): string {
-  return new Date(`${fecha}T00:00:00`).toISOString();
-}
-export function finDiaLocal(fecha: string): string {
-  return new Date(`${fecha}T23:59:59.999`).toISOString();
-}
+export { inicioDiaLocal, finDiaLocal };
 
+/* Hoy en la zona del laboratorio (America/Tijuana), sin importar la zona del servidor (Fase 3). */
 export function hoy(): string {
-  return new Date().toLocaleDateString("en-CA");
+  return hoyLocal();
 }
 
 export async function ensureRbacSchema(s: Session): Promise<void> {
@@ -228,6 +225,8 @@ export async function ensureRbacSchema(s: Session): Promise<void> {
 /*
  * Migracion de usuarios.id_rol (un rol por persona) a usuario_roles. Idempotente:
  * solo toma a quien todavia no tiene ninguna asignacion. Queda en la bitacora.
+ * Fase 3: no toca cuentas cuyos roles ya pasaron por el flujo nuevo (rol inicial
+ * pendiente o rechazado, roles asignados o revocados): id_rol es solo historico.
  * Corre en el arranque, despues de asegurar usuarios y auditoria.
  */
 export async function migrarRolesUnicos(s: Session): Promise<number> {
@@ -239,6 +238,11 @@ export async function migrarRolesUnicos(s: Session): Promise<number> {
     LEFT JOIN roles r ON r.id = u.id_rol
     WHERE u.id_rol IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM usuario_roles ur WHERE ur.usuario_id = u.id)
+      AND NOT EXISTS (
+        SELECT 1 FROM auditoria a
+        WHERE a.entidad = 'usuarios' AND a.entidad_id = CAST(u.id AS CHAR)
+          AND a.accion IN ('solicitar', 'asignar_rol', 'revocar_rol', 'acotar_rol')
+      )
     `,
   );
   const fecha = new Date().toISOString();
@@ -352,7 +356,6 @@ export interface CuentaSesion {
   supervisor_id: number | null;
   cargo_predeterminado: number | null;
   debe_cambiar_password: boolean;
-  auth_provider: string | null;
 }
 
 export const MENSAJE_CUENTA_NO_VIGENTE = "Tu acceso no está vigente; contacta al administrador";
@@ -377,7 +380,7 @@ export async function cargarAutorizacion(s: Session, user: CurrentUser | null, o
   const userId = Number.parseInt(String(user.sub || ""), 10);
   if (!Number.isFinite(userId)) throw new HttpError(401, { message: "Token invalido" });
   const fila = await s.queryOne<Row>(
-    "SELECT email, nombre, activo, tipo_cuenta, vigente_desde, vigente_hasta, supervisor_id, cargo_predeterminado, debe_cambiar_password, token_version, auth_provider FROM usuarios WHERE id = :id",
+    "SELECT email, nombre, activo, tipo_cuenta, vigente_desde, vigente_hasta, supervisor_id, cargo_predeterminado, debe_cambiar_password, token_version FROM usuarios WHERE id = :id",
     { id: userId },
   );
   if (!fila) throw new HttpError(401, { message: "La cuenta ya no existe", codigo: "sesion_revocada" });
@@ -400,7 +403,6 @@ export async function cargarAutorizacion(s: Session, user: CurrentUser | null, o
       supervisor_id: fila.supervisor_id === null || fila.supervisor_id === undefined ? null : Number(fila.supervisor_id),
       cargo_predeterminado: fila.cargo_predeterminado === null || fila.cargo_predeterminado === undefined ? null : Number(fila.cargo_predeterminado),
       debe_cambiar_password: debeCambiar,
-      auth_provider: (fila.auth_provider as string | null) || null,
     },
   };
 }
@@ -514,6 +516,8 @@ export async function getPermissionsForUser(s: Session, user: CurrentUser | null
 export interface ConteoAdministradores {
   vigentes: number;
   permanentes: number;
+  /* Fase 3: usuarios activos con usuarios:A vigente (aprueban los cambios de acceso). */
+  aprobadores: number;
 }
 
 export async function countActiveAdministrators(s: Session): Promise<ConteoAdministradores> {
@@ -532,14 +536,16 @@ export async function countActiveAdministrators(s: Session): Promise<ConteoAdmin
   const filas = await filasDeRoles(s, rows.map((r) => Number(r.rol_id)));
   const vigentes = new Set<number>();
   const permanentes = new Set<number>();
+  const aprobadores = new Set<number>();
   for (const row of rows) {
     const efectivos = expandirPermisos(filas.get(Number(row.rol_id)) || []);
+    if (esTotal(efectivos.usuarios?.A)) aprobadores.add(Number(row.usuario_id));
     if (!esTotal(efectivos.usuarios?.G)) continue;
     vigentes.add(Number(row.usuario_id));
     // Permanente: ni el rol ni la cuenta tienen fecha de fin.
     if (!row.vigente_hasta && !row.cuenta_hasta && String(row.tipo_cuenta || "permanente") !== "temporal") permanentes.add(Number(row.usuario_id));
   }
-  return { vigentes: vigentes.size, permanentes: permanentes.size };
+  return { vigentes: vigentes.size, permanentes: permanentes.size, aprobadores: aprobadores.size };
 }
 
 /*
@@ -560,6 +566,31 @@ export async function assertAdministratorRemains(s: Session, before: ConteoAdmin
       message: "El cambio dejaria solo administradores con fecha de fin de vigencia: al vencer, nadie podria administrar usuarios y roles. Debe quedar al menos una persona activa con usuarios:G sin fecha de fin",
     });
   }
+  // Fase 3: sin nadie con usuarios:A nadie podria aprobar asignaciones de rol, reactivaciones ni ampliaciones.
+  if (before.aprobadores > 0 && after.aprobadores === 0) {
+    throw new HttpError(409, {
+      message: "El cambio dejaria el sistema sin ningun usuario activo con permiso de aprobar cambios de acceso (usuarios:A vigente)",
+    });
+  }
+}
+
+/*
+ * Migracion Fase 3: el Responsable General aprueba los cambios de acceso
+ * (usuarios = V A en la matriz). Si el rol existe y no tiene usuarios:A, se le
+ * agrega una sola vez, con constancia en la bitacora.
+ */
+export async function migrarPermisosFase3(s: Session): Promise<boolean> {
+  const rol = await s.queryOne<{ id: number; nombre: string }>("SELECT id, nombre FROM roles WHERE clave = 'responsable_general'");
+  if (!rol) return false;
+  // Se aplica una sola vez: si ya quedo en la bitacora, no se repite (un administrador puede quitarlo despues).
+  const aplicada = await s.scalar("SELECT id FROM auditoria WHERE entidad = 'roles' AND accion = 'editar' AND motivo LIKE 'Migración Fase 3:%' LIMIT 1");
+  if (aplicada) return false;
+  const tiene = await s.scalar("SELECT id FROM rol_acciones WHERE id_rol = :id AND modulo = 'usuarios' AND accion = 'A'", { id: rol.id });
+  const antes = (await filasDeRoles(s, [rol.id])).get(rol.id) || [];
+  if (!tiene) await s.execute("INSERT INTO rol_acciones (id_rol, modulo, accion, alcance) VALUES (:id, 'usuarios', 'A', 'total')", { id: rol.id });
+  const despues = (await filasDeRoles(s, [rol.id])).get(rol.id) || [];
+  await registrarAuditoria(s, null, { accion: "editar", entidad: "roles", entidadId: rol.id, referencia: rol.nombre, motivo: "Migración Fase 3: el Responsable General aprueba los cambios de acceso (usuarios: V A)", antes: { permisos: antes }, despues: { permisos: despues } });
+  return true;
 }
 
 /* ---------- Combinaciones prohibidas ---------- */

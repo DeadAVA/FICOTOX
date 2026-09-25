@@ -198,6 +198,13 @@ function getMysqlPool(): MysqlPool {
     multipleStatements: false,
     connectionLimit: 10,
     charset: "utf8mb4",
+    // Fase 3: los TIMESTAMP (CURRENT_TIMESTAMP) se guardan y leen en UTC, igual que en SQLite;
+    // la interfaz los muestra en America/Tijuana (src/lib/shared/fechas.ts).
+    timezone: "Z",
+  });
+  // Cada conexion nueva trabaja en UTC, sin importar la zona del servidor MySQL.
+  (mysqlPool as unknown as { pool: { on: (evento: string, fn: (conn: { query: (sql: string) => void }) => void) => void } }).pool.on("connection", (conn) => {
+    conn.query("SET time_zone = '+00:00'");
   });
   return mysqlPool;
 }

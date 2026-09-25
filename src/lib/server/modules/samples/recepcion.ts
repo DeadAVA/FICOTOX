@@ -1,12 +1,13 @@
 import { requireUser, userIdFromClaims } from "../../auth";
 import { registrarAuditoria, snapshotRow } from "../../audit";
 import { isSqlite, type Row, type Session } from "../../db";
-import { intParam, json, readJson, type RouteContext } from "../../http";
+import { HttpError, intParam, json, readJson, type RouteContext } from "../../http";
 import { cargoActuante, requirePermission, soloEstado } from "../../rbac";
 import { exigirReauth } from "../../seguridad";
+import { exigirSinSolicitudPendiente, respuestaSolicitud } from "../../solicitudes";
 import { aplicarSupervision, exigirSinSupervisionPendiente, filtroSupervision, marcaSupervision } from "../../supervision";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../../schema";
-import { anularRegistro, assertEditable, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, folioLabel, isFolioConflict, nextFolioNum, readMotivo, restaurarRegistro } from "../../samples-flow";
+import { anularOSolicitar, assertEditableAsync, conSolicitudes, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, folioLabel, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
 import { ACCEPTANCE_DECISIONS, DISPOSAL_TYPES } from "../../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
 import { ensureSupervisionColumns } from "../../supervision";
@@ -222,6 +223,8 @@ function resolveState(stored: Row | null, data: ReceptionData): string {
   // Estados avanzados por el sistema (en_proceso, informada, cerrada) no se retroceden desde el formato.
   if (["en_proceso", "completada", "analizada", "informada", "cerrada"].includes(current)) return current;
   if (data.decision_aceptacion) return "aceptada";
+  // Fase 3: una decision ya registrada no se quita editando (volveria a "registrada" y se anularia sin segundo usuario).
+  if (current === "aceptada" || current === "rechazada") throw new HttpError(409, { message: "La decisión de aceptación ya quedó registrada; se puede cambiar, pero no quitar", codigo: "decision_registrada" });
   return "registrada";
 }
 
@@ -261,7 +264,7 @@ export async function listReceptionSamples({ request, s }: RouteContext): Promis
     { search, search_like: `%${search}%`, incluir_anuladas: includeAnuladas ? 1 : 0, ...supFiltro.params },
   );
   return json({
-    items: rows.map((row) => {
+    items: (await conSolicitudes(s, TABLE, rows)).map((row) => {
       if (soloEstado(permiso)) return vistaEstado(row);
       const item: Row = { ...row, analisis: safeJsonLoad(row.analisis_json, {}) };
       delete item.analisis_json;
@@ -284,7 +287,7 @@ export async function getReceptionSample({ request, s, params }: RouteContext): 
   if (soloEstado(permiso)) return json({ item: vistaEstado(row) });
   // Etapas derivadas, para mostrar la cadena completa desde la recepcion.
   const procesamientos = await s.query("SELECT id, folio_num, estado FROM muestras_procesamiento WHERE recepcion_id = :id ORDER BY folio_num", { id: sampleId });
-  return json({ item: { ...serializeRow(row), procesamientos } });
+  return json({ item: { ...(await conSolicitudes(s, TABLE, [serializeRow(row)]))[0], procesamientos } });
 }
 
 export async function createReceptionSample({ request, s }: RouteContext): Promise<Response> {
@@ -355,7 +358,7 @@ export async function updateReceptionSample({ request, s, params }: RouteContext
   const permiso = await requirePermission(s, user, "muestras", "E", { objeto: "recepcion", borrador: String(antes?.estado || "registrada") === "registrada" });
   const actuo = cargoActuante(request, permiso);
   const supervision = marcaSupervision(permiso);
-  assertEditable(antes, TABLE);
+  await assertEditableAsync(s, antes, TABLE);
   const data = normalizePayload(await readJson(request));
   if (!data.folio_num) {
     return json({ message: "El folio es obligatorio" }, 400);
@@ -430,15 +433,10 @@ export async function anularReceptionSample({ request, s, params }: RouteContext
   await ensureSamplesRecepcionSchema(s);
   const motivo = await readMotivo(request);
   await exigirReauth(s, request, user, "muestras:AN");
-  const row = await anularRegistro(s, user, TABLE, sampleId, motivo, {
-    actuo,
-    bloqueaSi: async () => {
-      const activos = Number((await s.scalar("SELECT COUNT(*) FROM muestras_procesamiento WHERE recepcion_id = :id AND estado <> 'anulada'", { id: sampleId })) || 0);
-      return activos ? `La recepcion tiene ${activos} procesamiento(s) vigente(s); anulalos primero` : null;
-    },
-  });
+  const { row, solicitud } = await anularOSolicitar(s, user, TABLE, sampleId, motivo, actuo);
   await s.commit();
-  return json({ message: "Recepcion anulada", item: serializeRow(row) });
+  if (solicitud) return respuestaSolicitud(solicitud, `la anulación de la recepción ${solicitud.referencia}`);
+  return json({ message: "Recepcion anulada", item: serializeRow(row!) });
 }
 
 export async function restaurarReceptionSample({ request, s, params }: RouteContext): Promise<Response> {
@@ -447,9 +445,10 @@ export async function restaurarReceptionSample({ request, s, params }: RouteCont
   const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "AN"));
   await ensureSamplesRecepcionSchema(s);
   await exigirReauth(s, request, user, "muestras:AN");
-  const row = await restaurarRegistro(s, user, TABLE, sampleId, await readMotivo(request), actuo);
+  const { row, solicitud } = await restaurarOSolicitar(s, user, TABLE, sampleId, await readMotivo(request), actuo);
   await s.commit();
-  return json({ message: "Recepcion restaurada", item: serializeRow(row) });
+  if (solicitud) return respuestaSolicitud(solicitud, `la restauración de la recepción ${solicitud.referencia}`);
+  return json({ message: "Recepcion restaurada", item: serializeRow(row!) });
 }
 
 const DISPOSALS = new Set(DISPOSAL_TYPES.map((item) => item.value));
@@ -466,6 +465,7 @@ export async function registrarDisposicion({ request, s, params }: RouteContext)
   // Una muestra rechazada tambien se dispone (p. ej. se devuelve al cliente); una cerrada o anulada ya no.
   if (["cerrada", "anulada"].includes(String(antes.estado))) return json({ message: `La recepcion ${folioLabel(TABLE, antes)} ya esta ${antes.estado}; no admite otra disposicion` }, 409);
   exigirSinSupervisionPendiente(antes, `La recepcion ${folioLabel(TABLE, antes)}`, "cerrar");
+  await exigirSinSolicitudPendiente(s, TABLE, sampleId, `La recepcion ${folioLabel(TABLE, antes)}`, "cerrar");
   const payload = await readJson(request);
   const tipo = String(payload.tipo || "").trim();
   if (!DISPOSALS.has(tipo)) return json({ message: "Selecciona el tipo de disposicion final" }, 400);

@@ -48,6 +48,9 @@ export const normalizeImportInteger = (value: unknown): number | null => {
   return parseIntOrNull(clean);
 };
 
+/* Dia de un Date de Excel/navegador segun sus getters locales (asi lo creo la hoja, a medianoche local). */
+const diaLocalDe = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 export const normalizeImportDate = (value: unknown): string | null => {
   const normalized = normalizeImportCell(value);
   if (!normalized) {
@@ -68,9 +71,10 @@ export const normalizeImportDate = (value: unknown): string | null => {
       return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     }
   }
+  // Texto libre ("7 sep 2026"): el navegador lo interpreta como medianoche local; se toma ese dia, no el UTC.
   const parsed = new Date(normalized);
   if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
+    return diaLocalDe(parsed);
   }
   return null;
 };
@@ -310,7 +314,7 @@ export const workbookToConsumableRows = async (file: File): Promise<ConsumablesW
     const matrix = jsonRows.map((row) =>
       row.map((cell) => {
         if (cell === null || cell === undefined) return "";
-        if (cell instanceof Date) return cell.toISOString().slice(0, 10);
+        if (cell instanceof Date) return diaLocalDe(cell);
         return String(cell);
       }),
     );

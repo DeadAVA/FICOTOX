@@ -1,13 +1,15 @@
 import { requireUser, userIdFromClaims } from "../../auth";
 import { registrarAuditoria, snapshotRow } from "../../audit";
 import { isSqlite, type Row, type Session } from "../../db";
-import { intParam, json, readJson, type RouteContext } from "../../http";
+import { HttpError, intParam, json, readJson, type RouteContext } from "../../http";
 import { restoreInventoryUsage } from "../../inventory-usage";
 import { cargoActuante, requirePermission } from "../../rbac";
 import { exigirReauth } from "../../seguridad";
+import { evaluarSupervisionCaptura } from "../../../shared/segregacion";
+import { respuestaSolicitud } from "../../solicitudes";
 import { aplicarSupervision, filtroSupervision, marcaSupervision } from "../../supervision";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../../schema";
-import { advanceState, anularRegistro, applyStageInventory, assertEditable, assertOrigin, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarRegistro } from "../../samples-flow";
+import { advanceState, anularOSolicitar, applyStageInventory, assertEditableAsync, assertOrigin, conSolicitudes, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
 import { ensureSupervisionColumns } from "../../supervision";
 
@@ -114,6 +116,12 @@ const ORIGEN_REQUERIDO = "El procesamiento debe partir de una recepción de mues
 
 type ProcessingData = ReturnType<typeof normalizePayload>;
 
+/* Regla 3 de segregacion: quien firma "superviso" no es quien proceso. */
+function exigirSupervisorDistinto(data: { nombre_quien_proceso: string | null; nombre_quien_superviso: string | null }): void {
+  const violacion = evaluarSupervisionCaptura(data.nombre_quien_superviso, [{ etiqueta: "procesó la muestra", nombre: data.nombre_quien_proceso }]);
+  if (violacion) throw new HttpError(409, { message: violacion.mensaje, codigo: "segregacion", regla: violacion.regla, clave: violacion.clave });
+}
+
 function normalizePayload(raw: Record<string, unknown>) {
   const payload = raw || {};
   return {
@@ -206,7 +214,7 @@ export async function listProcessingSamples({ request, s }: RouteContext): Promi
     { search, search_like: `%${search}%`, incluir_anuladas: includeAnuladas ? 1 : 0, ...supFiltro.params },
   );
   return json({
-    items: rows.map((row) => {
+    items: (await conSolicitudes(s, TABLE, rows)).map((row) => {
       const item: Row = { ...row, tipo_organismo: safeJsonLoad(row.tipo_organismo_json, []) };
       delete item.tipo_organismo_json;
       return item;
@@ -243,7 +251,7 @@ export async function getProcessingSample({ request, s, params }: RouteContext):
   if (!row) {
     return json({ message: "Registro no encontrado" }, 404);
   }
-  return json({ item: serializeRow(row) });
+  return json({ item: (await conSolicitudes(s, TABLE, [serializeRow(row)]))[0] });
 }
 
 export async function createProcessingSample({ request, s }: RouteContext): Promise<Response> {
@@ -257,6 +265,7 @@ export async function createProcessingSample({ request, s }: RouteContext): Prom
   if (!data.folio_num) {
     data.folio_num = await nextFolioNum(s, TABLE);
   }
+  exigirSupervisorDistinto(data);
   // Solo se procesa una muestra recibida, aceptada y vigente.
   await assertOrigin(s, "muestras_recepcion", data.recepcion_id, { requireAccepted: true, requerido: ORIGEN_REQUERIDO });
   const supervision = marcaSupervision(permiso);
@@ -321,12 +330,13 @@ export async function updateProcessingSample({ request, s, params }: RouteContex
   const antes = await snapshotRow(s, TABLE, processingId);
   const permiso = await requirePermission(s, user, "ensayos", "E", { objeto: "procesamiento", borrador: String(antes?.estado || "registrada") === "registrada" });
   const actuo = cargoActuante(request, permiso);
-  assertEditable(antes, TABLE);
+  await assertEditableAsync(s, antes, TABLE);
   const data = normalizePayload(await readJson(request));
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: false, insumosJson: data.uso_inventario_json });
   if (!data.folio_num) {
     return json({ message: "El folio de procesamiento es obligatorio" }, 400);
   }
+  exigirSupervisorDistinto(data);
   // El origen se valida tambien al editar (no se puede quitar ni cambiar por uno invalido).
   await assertOrigin(s, "muestras_recepcion", data.recepcion_id, { requireAccepted: true, requerido: ORIGEN_REQUERIDO });
   const supervision = marcaSupervision(permiso);
@@ -403,16 +413,10 @@ export async function anularProcessingSample({ request, s, params }: RouteContex
   await ensureSamplesProcesamientoSchema(s);
   const motivo = await readMotivo(request);
   await exigirReauth(s, request, user, "ensayos:AN");
-  const row = await anularRegistro(s, user, TABLE, processingId, motivo, {
-    actuo,
-    movimientosPrefix: `PROC-${processingId}-INS-`,
-    bloqueaSi: async () => {
-      const activas = Number((await s.scalar("SELECT COUNT(*) FROM muestras_extraccion WHERE procesamiento_id = :id AND estado <> 'anulada'", { id: processingId })) || 0);
-      return activas ? `El procesamiento tiene ${activas} extraccion(es) vigente(s); anulalas primero` : null;
-    },
-  });
+  const { row, solicitud } = await anularOSolicitar(s, user, TABLE, processingId, motivo, actuo);
   await s.commit();
-  return json({ message: "Procesamiento anulado; el inventario descontado fue repuesto", item: serializeRow(row) });
+  if (solicitud) return respuestaSolicitud(solicitud, `la anulación del procesamiento ${solicitud.referencia}`);
+  return json({ message: "Procesamiento anulado; el inventario descontado fue repuesto", item: serializeRow(row!) });
 }
 
 export async function restaurarProcessingSample({ request, s, params }: RouteContext): Promise<Response> {
@@ -421,7 +425,8 @@ export async function restaurarProcessingSample({ request, s, params }: RouteCon
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "AN"));
   await ensureSamplesProcesamientoSchema(s);
   await exigirReauth(s, request, user, "ensayos:AN");
-  const row = await restaurarRegistro(s, user, TABLE, processingId, await readMotivo(request), actuo);
+  const { row, solicitud } = await restaurarOSolicitar(s, user, TABLE, processingId, await readMotivo(request), actuo);
   await s.commit();
-  return json({ message: "Procesamiento restaurado. El inventario no se vuelve a descontar: revisa los insumos y guarda de nuevo si aplica", item: serializeRow(row) });
+  if (solicitud) return respuestaSolicitud(solicitud, `la restauración del procesamiento ${solicitud.referencia}`);
+  return json({ message: "Procesamiento restaurado. El inventario no se vuelve a descontar: revisa los insumos y guarda de nuevo si aplica", item: serializeRow(row!) });
 }

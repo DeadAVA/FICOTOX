@@ -81,7 +81,11 @@ function enlacesEsperados(modulos) {
   const propio = modulos.includes("usuarios:propio");
   const out = new Set(["/", "/ayuda"]);
   if (set.has("muestras")) out.add("/muestras/recepcion");
-  if (set.has("muestras") || set.has("ensayos")) out.add("/supervision");
+  if (set.has("muestras") || set.has("ensayos")) {
+    out.add("/supervision");
+    // Fase 3: bandeja "Por autorizar" (solicitudes de segundo usuario).
+    out.add("/solicitudes");
+  }
   if (set.has("ensayos")) ["/muestras/procesamiento", "/muestras/extraccion", "/muestras/analisis"].forEach((h) => out.add(h));
   if (set.has("informes")) out.add("/informes");
   if (set.has("inventario")) ["/inventario/reactivos", "/inventario/consumibles", "/movimientos"].forEach((h) => out.add(h));

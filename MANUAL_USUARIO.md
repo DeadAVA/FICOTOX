@@ -17,7 +17,6 @@ El sistema esta orientado al seguimiento de actividades de laboratorio bajo un f
 
 1. Abra el sistema en el navegador (`http://localhost:3000` en desarrollo o la direccion que le indique el laboratorio).
 2. Capture su correo institucional y su contrasena y presione **Entrar**.
-3. Si la autenticacion Microsoft esta habilitada, tambien vera el boton **Continuar con Microsoft**.
 4. Al iniciar sesion correctamente, el sistema mostrara la pantalla de **Inicio**.
 
 Si no puede ingresar, contacte al administrador del sistema para validar que su usuario este dado de alta, activo, con al menos un rol vigente y con contrasena definida. Si entra pero solo ve el mensaje "Sin permisos asignados", su cuenta no tiene roles vigentes: pida a la administracion que le asigne uno.
@@ -26,7 +25,7 @@ Si no puede ingresar, contacte al administrador del sistema para validar que su 
 
 - **Intentos fallidos**: despues de 5 intentos fallidos en 15 minutos la cuenta se bloquea 15 minutos (tambien cuentan las confirmaciones de contrasena fallidas). El mensaje es siempre "Correo o contraseña incorrectos...". La administracion puede desbloquearla antes.
 - **Inactividad**: tras 30 minutos sin usar el sistema, la sesion se cierra. Un minuto antes aparece el aviso **"Tu sesión está por cerrarse"** con el boton **Seguir trabajando**. Si se cierra, vera **"Sesión cerrada por inactividad"**: escriba su contrasena y presione **Volver a entrar**; lo que estaba capturando sigue ahi. En todo caso la sesion dura como maximo 8 horas.
-- **Confirmar identidad**: las acciones criticas (aprobar, autorizar, entregar, anular, restaurar, dar de baja, cancelar, cerrar una muestra, dar visto bueno y los cambios de usuarios) piden su contrasena en el mismo dialogo donde escribe el motivo o firma. Si una accion no la pidio, aparece el dialogo **"Confirma tu identidad"** sin salir del formulario. Quien entra con Microsoft confirma en la ventana de Microsoft.
+- **Confirmar identidad**: las acciones criticas (aprobar, autorizar, entregar, anular, restaurar, dar de baja, cancelar, cerrar una muestra, dar visto bueno y los cambios de usuarios) piden su contrasena en el mismo dialogo donde escribe el motivo o firma. Si una accion no la pidio, aparece el dialogo **"Confirma tu identidad"** sin salir del formulario. 
 - **Cuenta fuera de vigencia**: si su cuenta aun no inicia o ya termino, vera "Tu acceso no está vigente; contacta al administrador". Si vence con la sesion abierta, el sistema lo regresa a la pantalla de acceso.
 - **Mi cuenta** (menu de usuario, abajo a la izquierda): **Cambiar contraseña** (minimo 10 caracteres, distinta de su correo y de su nombre; cierra sus otras sesiones), **Cargo predeterminado** (si tiene varios roles) y **Cerrar sesión en todos los dispositivos**.
 - Si la administracion restablece su contrasena, al entrar con la contrasena temporal debera elegir una nueva antes de continuar.
@@ -272,7 +271,7 @@ El registro de analisis (folio **A**) captura lo que se midio en el extracto y l
 Revision y aprobacion (requieren los permisos **Ensayos: R** y **Ensayos: A**):
 
 - **Marcar revisado**: quien tenga permiso de revisar ensayos revisa el registro y firma. El cargo que aparece junto a la firma es el del rol con el que actua (si tiene varios roles que lo permiten, el sistema le pregunta cual).
-- **Aprobar**: cualquier persona con permiso de aprobar ensayos puede aprobar, incluso si registro o reviso el mismo analisis (la regla de dos personas esta apagada por decision del laboratorio). Cada paso queda en la bitacora con quien lo hizo y cuando.
+- **Aprobar**: lo aprueba una persona con permiso de aprobar ensayos que **no** lo elaboro (revisor y aprobador pueden ser la misma persona). Si usted lo capturo o lo edito, el boton aparece deshabilitado con la explicacion (ver 13.7).
 - Un analisis revisado que se edita vuelve a **Registrado** (hay que indicar el motivo del cambio) y debe revisarse de nuevo. Un analisis aprobado es de solo lectura; si esta mal, se anula y se captura otro.
 - Al aprobar, la extraccion pasa a **Analizada** y el procesamiento a **Completada**.
 
@@ -282,7 +281,7 @@ La seccion **Informes** emite el informe de resultados para el cliente (folio **
 
 1. Presione **Nuevo informe** y elija la recepcion. Se cargan el cliente, los items ensayados y los **analisis aprobados** de esa recepcion; marque los que se incluyen.
 2. Revise las declaraciones (alcance de los resultados, regla de decision, desviaciones del metodo, descargo cuando la muestra se acepto con desviacion, opiniones e interpretaciones) y presione **Crear borrador**. Con **Vista previa PDF** puede ver como quedara.
-3. **Marcar revisado** (Informes: R) y luego **Autorizar** (Informes: A; con firma obligatoria). Puede hacerlo la misma persona que elaboro o reviso: el sistema no exige que sean personas distintas. El cargo que aparece en el informe es el del rol con el que actuo cada persona. Al autorizar, los resultados quedan **congelados** en el informe, se genera el PDF definitivo con su huella SHA-256 y la recepcion pasa a **Informada**.
+3. **Marcar revisado** (Informes: R) y luego **Autorizar** (Informes: A; con firma obligatoria). No puede hacerlo quien elaboro el informe ni quien elaboro alguno de sus analisis (ver 13.7); revisor y autorizador si pueden ser la misma persona. El cargo que aparece en el informe es el del rol con el que actuo cada persona. Al autorizar, los resultados quedan **congelados** en el informe, se genera el PDF definitivo con su huella SHA-256 y la recepcion pasa a **Informada**.
 4. **Registrar entrega**: fecha, medio (correo, impreso, entrega en mano...) y a quien se entrego.
 5. Si hay que corregir un informe ya autorizado o entregado, use **Enmienda**: se crea la version siguiente (v2, v3...) en borrador que sustituye a la anterior y la indica en el PDF. Al autorizar la enmienda, el informe original pasa a **Sustituido** y su PDF se regenera con la leyenda "sin validez" (se conserva para el expediente). **Anular** marca el PDF como sin validez.
 
@@ -377,7 +376,7 @@ La seccion **Usuarios** permite administrar cuentas de acceso y sus roles. Quien
 
 1. En la barra lateral, grupo **Administracion**, elija **Usuarios**.
 2. Presione **Nuevo usuario**.
-3. Capture nombre, correo electronico, **rol inicial**, departamento, contrasena inicial (minimo 10 caracteres) y estado.
+3. Capture nombre, correo electronico (de un dominio permitido), **rol inicial** (queda pendiente hasta que lo aprueba la Responsable General), departamento, contrasena inicial (minimo 10 caracteres) y estado.
 4. En **Vigencia de la cuenta** elija **Permanente** o **Temporal**. Una cuenta temporal (estancias, estudiantes) requiere **fecha de fin** y **supervisor**: una persona activa, con cuenta permanente y con permiso de revisar o aprobar ensayos o muestras. El rol de estudiante / personal en formacion solo se asigna a cuentas temporales.
 5. Escriba su contrasena para confirmar y presione **Crear usuario**.
 
@@ -414,6 +413,37 @@ En **Administracion › Revisión de accesos** se consultan, para la revision pe
 
 Lo que captura una persona supervisada (cuenta temporal con supervisor, o un permiso con alcance "supervisado") queda **"Pendiente de visto bueno"**: no puede usarse como origen de la etapa siguiente, cerrarse, revisarse, aprobarse ni autorizarse hasta que su supervisor lo apruebe. El supervisor lo ve en el Inicio (aviso **Por supervisar**) y en **Muestras › Por supervisar**, donde puede **Dar visto bueno** (con su contrasena) o **Regresar** con observaciones. Lo regresado aparece a quien lo capturo en **Regresados a ti**; al corregirlo vuelve a quedar pendiente.
 
+### 13.7 Separacion de funciones
+
+El sistema no deja que una persona valide su propio trabajo (ISO/IEC 17025):
+
+- Quien elaboro un analisis (lo capturo o lo edito) no lo revisa ni lo aprueba.
+- Quien elaboro un informe, o cualquiera de los analisis que incluye, no lo revisa ni lo autoriza.
+- En procesamiento y extraccion, quien firma como supervisor no puede ser quien proceso, extrajo o hizo la limpieza.
+- El supervisor no da visto bueno a lo que el mismo capturo.
+- En documentos, quien elaboro no revisa ni aprueba, y quien reviso no aprueba.
+
+Tener varios roles o cambiar de cargo no cambia la regla. Cuando no puede hacer una accion por esta razon, el boton aparece deshabilitado con la explicacion. Si de verdad no hay otra persona disponible, use **Solicitar excepción…**: escriba el motivo y su contrasena; la excepcion la aprueba la Responsable General o Mejora Continua, y queda registrada en la ficha, en la bitacora y, en un informe, en el PDF ("Revisión autorizada por excepción, solicitud #N"). Mientras espera, el registro no se bloquea: si otra persona lo revisa o aprueba antes, puede cancelar su solicitud en **Por autorizar**.
+
+### 13.8 Solicitudes de autorizacion (segundo usuario) y bandeja "Por autorizar"
+
+Algunas acciones criticas no se ejecutan al pedirlas: quedan como **solicitud** hasta que las aprueba una segunda persona autorizada:
+
+| Accion | La aprueba |
+| --- | --- |
+| Anular o restaurar una recepcion, procesamiento, extraccion o analisis que ya no esta en borrador | Quien tiene "anular" en ese modulo |
+| Anular un informe autorizado o entregado | Quien tiene "anular" en informes |
+| Excepcion de separacion de funciones | Responsable General / Mejora Continua |
+| Asignar un rol (tambien el rol inicial de una cuenta nueva) | Responsable General |
+| Reactivar una cuenta dada de baja | Responsable General |
+| Ampliar la vigencia de una cuenta temporal | Responsable General |
+
+Mientras la solicitud esta pendiente, el registro muestra "... solicitada · pendiente de autorización" y no se puede editar ni usar para la etapa siguiente. Quien la pidio puede **Cancelar solicitud**. Quien puede aprobarla la ve en el Inicio (aviso **Por autorizar**) y en **Muestras › Por autorizar**, donde puede **Aprobar** (con motivo y su contrasena; la accion se ejecuta en ese momento) o **Rechazar** (con motivo). Nadie aprueba su propia solicitud. Las solicitudes vencen a los 7 dias sin respuesta. La pestaña **Solicitudes** del historial de cada registro muestra todas las que tuvo. Revocar un rol, dar de baja una cuenta, bloquearla o acortar su vigencia siguen siendo inmediatos.
+
+### 13.9 Fechas
+
+Todas las fechas se muestran como dd/mm/aaaa y las horas en la hora de Ensenada, sin importar el idioma o la zona del navegador. En los campos de fecha escriba los numeros (las barras se ponen solas) o use el calendario (flechas, Inicio/Fin, RePag/AvPag, Enter, Escape).
+
 ## 14. Buenas practicas de uso
 
 - Capture folios y codigos internos de forma consistente.
@@ -440,7 +470,7 @@ Aunque pueda ver una seccion, sus roles pueden no tener las acciones C (crear), 
 
 ### El sistema no me deja aprobar o autorizar
 
-Revise que alguno de sus roles tenga R (revisar) o A (aprobar/autorizar) en Ensayos o Informes; con esos permisos cualquier persona puede revisar, aprobar y autorizar, aunque haya capturado el registro. Un informe solo se autoriza cuando todos sus analisis estan aprobados.
+Revise que alguno de sus roles tenga R (revisar) o A (aprobar/autorizar) en Ensayos o Informes, y que usted no haya elaborado el registro (ni un analisis incluido en el informe): la separacion de funciones lo impide (ver 13.7). Un informe solo se autoriza cuando todos sus analisis estan aprobados.
 
 ### El registro aparece en solo lectura
 

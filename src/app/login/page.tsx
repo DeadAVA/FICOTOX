@@ -2,29 +2,28 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Eye, EyeSlash, WindowsLogo } from "@phosphor-icons/react";
+import { ArrowRight, Eye, EyeSlash } from "@phosphor-icons/react";
 import { BrandMark } from "@/components/shell/Brand";
 import { AVISO_LOGIN_KEY, useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
-import { loginWithMicrosoft } from "@/lib/client/msal";
 import { firstAllowedRoute } from "@/lib/client/nav";
 
 /*
- * Acceso. Blanco, una sola columna y sin tarjeta: la marca animada, el nombre
+ * Acceso con usuario y contrasena del sistema (Fase 3: sin proveedores
+ * externos). Blanco, una sola columna y sin tarjeta: la marca animada, el nombre
  * del sistema y los dos campos. El fondo lleva dos luces océano casi
  * imperceptibles a la deriva; los elementos entran escalonados.
  */
 
 export default function LoginPage() {
   const router = useRouter();
-  const { status, permissions, authConfig, loginWithEmail, acceptLogin } = useSession();
+  const { status, permissions, loginWithEmail } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [msBusy, setMsBusy] = useState(false);
   // Fase 2: por que se cerro la sesion (revocada, cuenta fuera de vigencia...).
   const [aviso, setAviso] = useState<string | null>(null);
   useEffect(() => {
@@ -58,21 +57,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleMicrosoft = async () => {
-    setError(null);
-    setMsBusy(true);
-    try {
-      const data = await loginWithMicrosoft(authConfig);
-      if (data) acceptLogin(data);
-      else setMsBusy(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo iniciar sesión con Microsoft");
-      setMsBusy(false);
-    }
-  };
-
-  const manualEnabled = authConfig.manualLoginEnabled !== false;
-  const microsoftEnabled = !!authConfig.microsoft?.enabled;
   const fieldClass = "h-12 rounded-[12px] border-line bg-white text-[15px] shadow-[0_1px_2px_rgba(16,32,43,0.04)] hover:border-line-strong focus:bg-white";
 
   return (
@@ -94,8 +78,7 @@ export default function LoginPage() {
           </p>
         ) : null}
 
-        {manualEnabled ? (
-          <form onSubmit={handleSubmit} className="mt-10 flex w-full flex-col gap-4" noValidate>
+        <form onSubmit={handleSubmit} className="mt-10 flex w-full flex-col gap-4" noValidate>
             <Field label="Correo institucional" htmlFor="login-email">
               <Input id="login-email" type="email" autoComplete="email" inputMode="email" placeholder="nombre@cicese.mx" value={email} onChange={(event) => setEmail(event.target.value)} required autoFocus className={fieldClass} />
             </Field>
@@ -125,29 +108,6 @@ export default function LoginPage() {
               Entrar
             </Button>
           </form>
-        ) : null}
-
-        {microsoftEnabled ? (
-          <div className={`w-full ${manualEnabled ? "mt-5" : "mt-10"}`}>
-            {manualEnabled ? (
-              <div className="mb-5 flex items-center gap-3 text-[12px] text-ink-4">
-                <span className="h-px flex-1 bg-line" />
-                o
-                <span className="h-px flex-1 bg-line" />
-              </div>
-            ) : null}
-            <Button type="button" variant="secondary" size="lg" block loading={msBusy} onClick={handleMicrosoft} icon={<WindowsLogo size={18} weight="fill" />} className="h-12 rounded-[12px] border border-line bg-white shadow-none hover:bg-surface-2">
-              Continuar con Microsoft
-            </Button>
-            {!manualEnabled && error ? (
-              <p role="alert" className="mt-4 rounded-[10px] bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
-                {error}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-
-        {!manualEnabled && !microsoftEnabled ? <p className="mt-10 text-center text-[13.5px] text-ink-3">El acceso está desactivado. Contacta a la administración del sistema.</p> : null}
       </section>
 
       <footer className="absolute bottom-6 left-0 right-0 px-6 text-center text-[12px] leading-relaxed text-ink-4">

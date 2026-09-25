@@ -7,7 +7,8 @@ import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
-import { Field, Input, Select } from "@/components/ui/Field";
+import { Field, Select } from "@/components/ui/Field";
+import { DateInput } from "@/components/ui/DateInput";
 import { PageHeader, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, Stat, TableSkeleton } from "@/components/ui/Primitives";
 import { Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
@@ -15,6 +16,7 @@ import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { fmt, fmtDate } from "@/lib/client/format";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
+import { formatearFechaHora, hoyLocal, sumarDias } from "@/lib/shared/fechas";
 
 /*
  * Revision de accesos (Fase 2; FX-MO-2-1, seccion 11): revision periodica de
@@ -38,12 +40,9 @@ const ACCION_LABEL: Record<string, string> = {
   crear: "Alta",
 };
 
-const hace30 = () => new Date(Date.now() - 30 * 86_400_000).toLocaleDateString("en-CA");
-const hoy = () => new Date().toLocaleDateString("en-CA");
-const hora = (value: unknown) => {
-  const fecha = new Date(String(value || ""));
-  return Number.isNaN(fecha.getTime()) ? "-" : fecha.toLocaleString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-};
+const hace30 = () => sumarDias(hoyLocal(), -30);
+const hoy = () => hoyLocal();
+const hora = (value: unknown) => formatearFechaHora(value, "-");
 
 export default function AccesosPage() {
   return (
@@ -111,10 +110,10 @@ function AccesosContent() {
     <div className="flex flex-col gap-8">
       <Toolbar>
         <Field label="Periodo desde" htmlFor="acc-desde">
-          <Input id="acc-desde" type="date" value={desde} onChange={(event) => setDesde(event.target.value)} small />
+          <DateInput id="acc-desde" value={desde} onChange={(value) => setDesde(value)} small />
         </Field>
         <Field label="hasta" htmlFor="acc-hasta">
-          <Input id="acc-hasta" type="date" value={hasta} onChange={(event) => setHasta(event.target.value)} small />
+          <DateInput id="acc-hasta" value={hasta} onChange={(value) => setHasta(value)} small />
         </Field>
         <Field label="Vencimientos en" htmlFor="acc-dias">
           <Select id="acc-dias" value={dias} onChange={(event) => setDias(event.target.value)}>

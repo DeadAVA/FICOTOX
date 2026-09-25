@@ -1,4 +1,3 @@
-import { createRemoteJWKSet, jwtVerify, errors as joseErrors, type JWTPayload } from "jose";
 import { isAvatarKey } from "../../shared/avatars";
 import { createAccessToken, requireUser, type CurrentUser } from "../auth";
 import { registrarAuditoria } from "../audit";
@@ -6,22 +5,17 @@ import { getConfig } from "../config";
 import { isOperationalError, type Row, type Session } from "../db";
 import { HttpError, json, readJson, type RouteContext } from "../http";
 import { cargarAutorizacion, cuentaVigente, ensureRbacSchema, filasDeRoles, hoy, MENSAJE_CUENTA_NO_VIGENTE } from "../rbac";
-import { emitirReauth, estadoAcceso, ipDe, MENSAJE_ACCESO_FALLIDO, registrarIntento, consumirIdToken } from "../seguridad";
+import { emitirReauth, estadoAcceso, ipDe, MENSAJE_ACCESO_FALLIDO, registrarIntento } from "../seguridad";
 import { hashPassword, validatePasswordStrength } from "../password";
 import { expandirPermisos, mapaPermisos, permite } from "../../shared/permisos";
 import { ensureUsuariosSchema } from "../users";
 import { verifyPassword } from "../password";
 
-/* Portado de modules/auth/endpoints.py del backend Flask original. */
-
-function domainAllowed(email: string): boolean {
-  const allowedDomain = getConfig().MICROSOFT_ALLOWED_DOMAIN.toLowerCase();
-  return !!email && email.toLowerCase().endsWith(`@${allowedDomain}`);
-}
+/* Acceso con usuario y contrasena del sistema (Fase 3: se retiro el proveedor externo de identidad). */
 
 const USER_QUERY = `
   SELECT u.id, u.nombre, u.email, u.activo, u.password_hash, u.avatar, u.token_version, u.vigente_desde, u.vigente_hasta,
-         u.bloqueado_hasta, u.intentos_desde, u.debe_cambiar_password, u.auth_provider
+         u.bloqueado_hasta, u.intentos_desde, u.debe_cambiar_password
   FROM usuarios u
   WHERE LOWER(u.email) = LOWER(:email)
   LIMIT 1
@@ -59,7 +53,7 @@ async function issueSession(s: Session, row: Row): Promise<Response> {
 /* Usuario, roles vigentes, cuenta y permisos efectivos { modulo: { accion: alcance } }. */
 async function perfilSesion(s: Session, user: CurrentUser) {
   const auth = await cargarAutorizacion(s, user, { permitirCambioPendiente: true });
-  const row = await s.queryOne<{ nombre: string; email: string; avatar: string | null; tiene_password: number }>("SELECT nombre, email, avatar, CASE WHEN password_hash IS NULL THEN 0 ELSE 1 END AS tiene_password FROM usuarios WHERE id = :id", { id: auth.userId });
+  const row = await s.queryOne<{ nombre: string; email: string; avatar: string | null }>("SELECT nombre, email, avatar FROM usuarios WHERE id = :id", { id: auth.userId });
   const roles = auth.roles.map((r) => ({ id: r.id, nombre: r.nombre, clave: r.clave, vigente_desde: r.vigente_desde, vigente_hasta: r.vigente_hasta ?? null, permisos: mapaPermisos(expandirPermisos(r.filas)) }));
   return {
     user: {
@@ -73,9 +67,6 @@ async function perfilSesion(s: Session, user: CurrentUser) {
       supervisor_id: auth.cuenta.supervisor_id,
       cargo_predeterminado: auth.cuenta.cargo_predeterminado,
       debe_cambiar_password: auth.cuenta.debe_cambiar_password,
-      auth_provider: auth.cuenta.auth_provider,
-      /* Sin contrasena local (solo Microsoft): la reautenticacion se hace con Microsoft. */
-      tiene_password: !!Number(row?.tiene_password || 0),
     },
     roles,
     permissions: mapaPermisos(auth.efectivos),
@@ -83,120 +74,13 @@ async function perfilSesion(s: Session, user: CurrentUser) {
   };
 }
 
-function buildMicrosoftAuthority(): string {
-  return `https://login.microsoftonline.com/${getConfig().MICROSOFT_TENANT_ID}/v2.0`;
-}
-
-async function validateMicrosoftIdToken(idToken: string): Promise<JWTPayload> {
-  const authority = buildMicrosoftAuthority();
-  const jwks = createRemoteJWKSet(new URL(`${authority}/discovery/v2.0/keys`));
-  const { payload } = await jwtVerify(idToken, jwks, {
-    algorithms: ["RS256"],
-    audience: getConfig().MICROSOFT_CLIENT_ID,
-    issuer: authority,
-    requiredClaims: ["aud", "exp", "iat", "iss", "sub"],
-  });
-  return payload;
-}
-
-function emailFromClaims(claims: JWTPayload): string {
-  for (const key of ["preferred_username", "email", "upn", "unique_name"]) {
-    const value = String(claims[key] || "").trim().toLowerCase();
-    if (value.includes("@")) return value;
-  }
-  return "";
-}
-
+/* Configuracion publica del acceso: solo usuario y contrasena del sistema (Fase 3). */
 export async function authConfig(): Promise<Response> {
   const config = getConfig();
   return json({
-    microsoft: {
-      enabled: config.MICROSOFT_AUTH_ENABLED,
-      clientId: config.MICROSOFT_CLIENT_ID,
-      tenantId: config.MICROSOFT_TENANT_ID,
-      authority: config.MICROSOFT_AUTH_ENABLED ? buildMicrosoftAuthority() : "",
-      allowedDomain: config.MICROSOFT_ALLOWED_DOMAIN,
-    },
-    manualLoginEnabled: config.LOCAL_LOGIN_ENABLED,
+    dominios_permitidos: config.ALLOWED_EMAIL_DOMAINS,
     sesion: { inactividad_min: config.SESION_INACTIVIDAD_MIN, expira_horas: config.JWT_EXPIRES_HOURS },
   });
-}
-
-export async function loginWithMicrosoft({ request, s }: RouteContext): Promise<Response> {
-  const config = getConfig();
-  if (!config.MICROSOFT_AUTH_ENABLED) {
-    return json({ message: "Microsoft Entra ID no esta configurado" }, 503);
-  }
-
-  const payload = await readJson(request);
-  const idToken = String(payload.id_token || "").trim();
-  if (!idToken) {
-    return json({ message: "Token de Microsoft requerido" }, 400);
-  }
-
-  let claims: JWTPayload;
-  try {
-    claims = await validateMicrosoftIdToken(idToken);
-  } catch (error) {
-    if (error instanceof joseErrors.JOSEError) {
-      return json({ message: "No se pudo validar la sesion de Microsoft" }, 401);
-    }
-    return json({ message: "No se pudo validar Microsoft Entra ID" }, 503);
-  }
-
-  const email = emailFromClaims(claims);
-  if (!domainAllowed(email)) {
-    await registrarAuditoria(s, null, { accion: "login_fallido", entidad: "sesion", referencia: email.slice(0, 160), detalle: { proveedor: "microsoft", motivo: "dominio no permitido" } });
-    await s.commit();
-    return json({ message: `Solo se permiten cuentas @${config.MICROSOFT_ALLOWED_DOMAIN}` }, 403);
-  }
-
-  let row: Row | null;
-  try {
-    await ensureUsuariosSchema(s);
-    row = await getUserByEmail(s, email);
-  } catch (error) {
-    if (isOperationalError(error)) {
-      return json({ message: "No se pudo conectar a la base de datos local. Revisa DATABASE_URL o el archivo SQLite." }, 503);
-    }
-    throw error;
-  }
-
-  if (!row) {
-    await registrarAuditoria(s, null, { accion: "login_fallido", entidad: "sesion", referencia: email.slice(0, 160), detalle: { proveedor: "microsoft", existe_usuario: false } });
-    await s.commit();
-    return json({ message: "Tu cuenta pertenece a CICESE, pero todavia no esta dada de alta en FICOTOX." }, 403);
-  }
-
-  // Microsoft ya verifico la contrasena: solo cuenta el bloqueo de la cuenta (no el de la IP).
-  const acceso = await estadoAcceso(s, email, ipDe(request));
-  if (acceso.bloqueadaHasta) {
-    return json({ message: MENSAJE_ACCESO_FALLIDO }, 401);
-  }
-
-  const name = String(claims.name || row.nombre || email.split("@", 1)[0]).trim().slice(0, 100);
-  await s.execute(
-    `
-    UPDATE usuarios
-    SET nombre = :nombre,
-        auth_provider = 'microsoft',
-        microsoft_oid = :microsoft_oid,
-        microsoft_tid = :microsoft_tid,
-        microsoft_preferred_username = :preferred_username
-    WHERE id = :user_id
-    `,
-    {
-      nombre: name,
-      microsoft_oid: claims.oid ?? null,
-      microsoft_tid: claims.tid ?? null,
-      preferred_username: claims.preferred_username ?? null,
-      user_id: row.id,
-    },
-  );
-  await registrarAuditoria(s, { sub: String(row.id), nombre: name, email }, { accion: "login", entidad: "sesion", entidadId: row.id as number, referencia: email.slice(0, 160), detalle: { proveedor: "microsoft" } });
-  await s.commit();
-  row = await getUserByEmail(s, email);
-  return issueSession(s, row as Row);
 }
 
 export async function loginWithEmail({ request, s }: RouteContext): Promise<Response> {
@@ -209,9 +93,6 @@ export async function loginWithEmail({ request, s }: RouteContext): Promise<Resp
   }
   if (!password) {
     return json({ message: "La contraseña es obligatoria" }, 400);
-  }
-  if (!getConfig().LOCAL_LOGIN_ENABLED) {
-    return json({ message: "El acceso local esta desactivado" }, 403);
   }
 
   let row: Row | null;
@@ -327,10 +208,9 @@ export async function updateMyAvatar({ request, s }: RouteContext): Promise<Resp
 /* ---------- Fase 2: reautenticacion, contrasena, sesiones y cargo ---------- */
 
 /*
- * Reautenticacion para una accion critica: contrasena (cuentas locales) o un
- * id_token de Microsoft reciente (prompt=login, auth_time de hace menos de
- * REAUTH_TTL_MIN). Devuelve un token de un solo uso ligado a la persona y a la
- * accion. Los fallos cuentan para el bloqueo de la cuenta.
+ * Reautenticacion para una accion critica: la contrasena del sistema. Devuelve
+ * un token de un solo uso ligado a la persona y a la accion. Los fallos cuentan
+ * para el bloqueo de la cuenta.
  */
 export async function reautenticar({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
@@ -340,21 +220,7 @@ export async function reautenticar({ request, s }: RouteContext): Promise<Respon
   if (!/^[a-z_]+:[A-Za-z_]+$/.test(accion)) return json({ message: "Indica la acción que vas a confirmar" }, 400);
   const row = await s.queryOne<Row>(USER_QUERY, { email: auth.cuenta.email });
   const ip = ipDe(request);
-  let valido = false;
-  const idToken = String(payload.id_token || "").trim();
-  if (idToken) {
-    try {
-      const claims = await validateMicrosoftIdToken(idToken);
-      const authTime = Number(claims.auth_time || 0);
-      const reciente = authTime * 1000 > Date.now() - getConfig().REAUTH_TTL_MIN * 60_000;
-      // Cada id_token sirve una sola vez (no se emiten varios tokens con una sola autenticacion).
-      valido = emailFromClaims(claims) === auth.cuenta.email.toLowerCase() && reciente && (await consumirIdToken(s, idToken, auth.userId));
-    } catch {
-      valido = false;
-    }
-  } else {
-    valido = verifyPassword(String(payload.password || ""), (row?.password_hash as string | null) || null);
-  }
+  const valido = verifyPassword(String(payload.password || ""), (row?.password_hash as string | null) || null);
   if (!valido) {
     const bloqueo = await registrarIntento(s, { email: auth.cuenta.email, ip, tipo: "reauth", exito: false, usuario: row });
     await s.commit();
@@ -371,7 +237,7 @@ export async function cambiarPassword({ request, s }: RouteContext): Promise<Res
   const auth = await cargarAutorizacion(s, user, { permitirCambioPendiente: true });
   const payload = await readJson(request);
   const row = await s.queryOne<Row>(USER_QUERY, { email: auth.cuenta.email });
-  if (!row?.password_hash) return json({ message: "Tu cuenta entra con Microsoft: la contraseña se cambia allí" }, 400);
+  if (!row?.password_hash) return json({ message: "Tu cuenta no tiene contraseña definida; pide a la administración que la restablezca" }, 400);
   const actual = String(payload.actual || "");
   const nueva = String(payload.nueva || "");
   if (!verifyPassword(actual, row.password_hash as string)) {

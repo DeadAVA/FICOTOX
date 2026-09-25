@@ -13,6 +13,7 @@ import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
+import { DateInput } from "@/components/ui/DateInput";
 import { ActionMenu, Dialog, Sheet, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { FilterChips, FilterMenu, type FilterGroup, type FilterToggle } from "@/components/ui/FilterMenu";
 import { PageHeader, SearchInput, SegmentedTabs, Toolbar } from "@/components/ui/PageHeader";
@@ -20,7 +21,7 @@ import { Badge, EmptyState, ErrorState, TableSkeleton, type Tone } from "@/compo
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { openProtectedFile } from "@/lib/client/files";
-import { fmt, fmtDate, normalizeText } from "@/lib/client/format";
+import { fmt, fmtDate, normalizeText, todayIso } from "@/lib/client/format";
 import { useInitialParam, useOpenState, useParamChange, useUrlTrigger } from "@/lib/client/hooks";
 import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate, useResource } from "@/lib/client/store";
@@ -89,7 +90,7 @@ function DocumentosContent() {
   const rows = useMemo(() => {
     const base = vista === "maestra" ? resource.data?.maestra || [] : resource.data?.docs || [];
     const term = normalizeText(search);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIso();
     const vencido = (d: ApiRecord) => !!d.fecha_proxima_revision && String(d.fecha_proxima_revision).slice(0, 10) < today;
     return base.filter((d) => (!term || normalizeText(`${d.clave} ${d.titulo} ${d.descripcion || ""}`).includes(term)) && (!tipo || d.tipo === tipo) && (!estado || d.estado === estado) && (!soloVencidos || vencido(d)));
   }, [resource.data, vista, search, tipo, estado, soloVencidos]);
@@ -382,7 +383,7 @@ function DocumentosContent() {
               <Input id="ap-cargo" maxLength={120} value={aprobar.cargo} onChange={(event) => setAprobar({ ...aprobar, cargo: event.target.value })} placeholder="Ej. Director General" />
             </Field>
             <Field label="Vigente desde" htmlFor="ap-vig" hint="Si se deja vacío, hoy.">
-              <Input id="ap-vig" type="date" value={aprobar.vigencia} onChange={(event) => setAprobar({ ...aprobar, vigencia: event.target.value })} />
+              <DateInput id="ap-vig" value={aprobar.vigencia} onChange={(value) => setAprobar({ ...aprobar, vigencia: value })} />
             </Field>
             <CampoIdentidad value={claveAprobar} onChange={setClaveAprobar} id="ap-password" />
           </div>

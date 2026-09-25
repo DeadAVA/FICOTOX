@@ -18,6 +18,7 @@ import { fmt, fmtDate, todayIso } from "@/lib/client/format";
 import { useDebouncedValue, useInitialParam, useOpenState, useParamChange, useUrlTrigger } from "@/lib/client/hooks";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
+import { sumarDias } from "@/lib/shared/fechas";
 
 export default function MantenimientoPage() {
   return (
@@ -61,11 +62,7 @@ function MantenimientoContent() {
 
   // Mismas reglas que los contadores del Inicio: vencido = estado "vencido" o pendiente con fecha pasada;
   // próximo = pendiente con fecha en los siguientes 30 días. Las fechas se fijan al montar.
-  const [dates] = useState(() => {
-    const in30 = new Date();
-    in30.setDate(in30.getDate() + 30);
-    return { today: todayIso(), in30: `${in30.getFullYear()}-${String(in30.getMonth() + 1).padStart(2, "0")}-${String(in30.getDate()).padStart(2, "0")}` };
-  });
+  const [dates] = useState(() => ({ today: todayIso(), in30: sumarDias(todayIso(), 30) }));
   const rules = useMemo(() => {
     const dateOf = (item: ApiRecord) => String(item.fecha_programada || "").slice(0, 10);
     const isPendiente = (item: ApiRecord) => ["programado", "en_proceso"].includes(String(item.estado));

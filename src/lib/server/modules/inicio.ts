@@ -1,9 +1,11 @@
 import { requireUser } from "../auth";
-import { isSqlite, type Row } from "../db";
+import { type Row } from "../db";
 import { json, type RouteContext } from "../http";
 import { cargarAutorizacion, permisoDe, requirePermission, soloEstado } from "../rbac";
 import type { Accion, ContextoAlcance, Modulo } from "../../shared/permisos";
 import { contarPorSupervisar } from "../supervision";
+import { porAutorizarDe } from "../solicitudes";
+import { ACCIONES_CRITICAS } from "../../shared/acciones-criticas";
 import { vencimientosProximos } from "./admin";
 import { ensureConsumiblesSchema } from "./consumables";
 import { ensureInformesSchema } from "./informes";
@@ -12,6 +14,7 @@ import { ensureAnalysisSchema } from "./samples/analisis";
 import { ensureSamplesExtraccionSchema } from "./samples/extraccion";
 import { ensureSamplesProcesamientoSchema } from "./samples/procesamiento";
 import { ensureSamplesRecepcionSchema } from "./samples/recepcion";
+import { diasDesde, formatearFecha, hoyLocal, sumarDias } from "../../shared/fechas";
 
 /*
  * Datos del Inicio.
@@ -65,19 +68,10 @@ const safeJson = <T,>(raw: unknown, fallback: T): T => {
   }
 };
 
-const fmtDate = (value: unknown): string | null => {
-  const raw = String(value || "").slice(0, 10);
-  if (!raw) return null;
-  const [y, m, d] = raw.split("-");
-  return y && m && d ? `${d}/${m}/${y}` : raw;
-};
+const fmtDate = (value: unknown): string | null => (value ? formatearFecha(value) : null);
 
-const daysSince = (iso: string | null): number => {
-  if (!iso) return 0;
-  const then = new Date(`${String(iso).slice(0, 10)}T00:00:00`);
-  if (Number.isNaN(then.getTime())) return 0;
-  return Math.max(0, Math.floor((Date.now() - then.getTime()) / 86_400_000));
-};
+/* Dias transcurridos por dia local del laboratorio. */
+const daysSince = (iso: string | null): number => diasDesde(iso);
 
 export async function inicioEnCurso({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
@@ -274,14 +268,16 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
   await ensureAnalysisSchema(s);
   await ensureInformesSchema(s);
 
-  const today = isSqlite() ? "date('now')" : "CURDATE()";
-  const in30 = isSqlite() ? "date('now', '+30 days')" : "DATE_ADD(CURDATE(), INTERVAL 30 DAY)";
+  // Dia local del laboratorio como parametro (date('now')/CURDATE() darian el dia UTC del servidor).
+  const today = ":hoy";
+  const in30 = ":en30";
+  const fechas = { hoy: hoyLocal(), en30: sumarDias(hoyLocal(), 30) };
   const nombreReactivo = "COALESCE(NULLIF(producto, ''), NULLIF(nombre, ''), NULLIF(item_name, ''), 'Reactivo')";
 
   /* Cada aviso: la cuenta completa (COUNT) y solo los primeros seis elementos para el detalle. */
   const MAX_ITEMS = 6;
   const fetch = async (from: string, select: string, order: string): Promise<{ count: number; rows: Row[] }> => {
-    const [count, rows] = await Promise.all([s.scalar(`SELECT COUNT(*) ${from}`), s.query(`SELECT ${select} ${from} ORDER BY ${order} LIMIT ${MAX_ITEMS}`)]);
+    const [count, rows] = await Promise.all([s.scalar(`SELECT COUNT(*) ${from}`, fechas), s.query(`SELECT ${select} ${from} ORDER BY ${order} LIMIT ${MAX_ITEMS}`, fechas)]);
     return { count: Number(count || 0), rows };
   };
   const [mantVencidos, mantProximos, equiposCal, reactivosBajos, consumiblesBajos, analisisPendientes, informesRevision, informesEntrega] = await Promise.all([
@@ -317,6 +313,18 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
     build("mant_proximos", "Mantenimientos en los próximos 30 días", "info", "/inventario/mantenimiento?filtro=proximo", mantProximos, (m) => ({ label: String(m.equipo || "Equipo"), sub: `${TIPO_MANT[String(m.tipo)] || m.tipo || "Mantenimiento"} · ${fmtDate(m.fecha_programada)}`, href: "/inventario/mantenimiento?filtro=proximo" })),
   ].filter((a) => a.count > 0 && !!permisoDe(auth, MODULO_AVISO[a.key], "V"));
 
+  // Fase 3: solicitudes de autorizacion que puedo aprobar como segundo usuario.
+  const porAutorizar = await porAutorizarDe(s, auth);
+  if (porAutorizar.length) {
+    avisos.unshift({
+      key: "por_autorizar",
+      label: "Por autorizar",
+      tone: "warning",
+      count: porAutorizar.length,
+      href: "/solicitudes",
+      items: porAutorizar.slice(0, MAX_ITEMS).map((sol) => ({ label: `${ACCIONES_CRITICAS[sol.tipo]?.etiqueta || sol.tipo} · ${sol.referencia || ""}`.trim(), sub: `Solicitud #${sol.id} · vence ${fmtDate(sol.vence_en)}`, href: "/solicitudes" })),
+    });
+  }
   // Fase 2: lo que me toca supervisar y los accesos que vencen pronto.
   const porSupervisar = await contarPorSupervisar(s, auth.userId);
   if (porSupervisar.length) {

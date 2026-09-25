@@ -1,13 +1,16 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { requireUser, userIdFromClaims } from "../auth";
+import { requireUser, userIdFromClaims, type CurrentUser } from "../auth";
 import { registrarAuditoria, snapshotRow } from "../audit";
 import { getConfig } from "../config";
 import { isIntegrityError, isSqlite, type Row, type Session } from "../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
 import { requirePermission } from "../rbac";
 import { exigirReauth } from "../seguridad";
+import { detalleExcepcion, elaboradoresDe, ensureExcepcionesColumn, excepcionesDe, exigirSegregacion } from "../segregacion";
+import { evaluarDocumento, type Violacion } from "../../shared/segregacion";
+import { hoyLocal } from "../../shared/fechas";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
 import { readMotivo } from "../samples-flow";
 import { DOCUMENT_AREAS, DOCUMENT_KEY_RE, DOCUMENT_REVIEW_YEARS, DOCUMENT_TYPES, parseDocumentKey } from "../../shared/sgc";
@@ -100,6 +103,7 @@ export async function ensureDocumentosSgcSchema(s: Session): Promise<void> {
       `,
   );
   await addColumnIfMissing(s, TABLE, "archivo_sha256", "VARCHAR(64) DEFAULT NULL");
+  await ensureExcepcionesColumn(s, "documentos_sgc");
   markSchemaReady("documentos_sgc");
 }
 
@@ -112,6 +116,7 @@ function filesDir(): string {
 const ALLOWED_EXT = new Set([".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".txt"]);
 
 export function serializeDocumento(row: Row): Row {
+  row = { ...row, excepciones: excepcionesDe(row), excepciones_json: undefined };
   const item: Row = { ...row };
   for (const key of ["elaboro", "reviso", "aprobo"]) {
     item[key] = safeParse(item[`${key}_json`]);
@@ -264,7 +269,7 @@ export async function listaMaestra({ request, s }: RouteContext): Promise<Respon
     ORDER BY d.area, d.tipo, d.clave
     `,
   );
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyLocal();
   return json({
     items: rows.map((row) => ({ ...serializeDocumento(row), revision_vencida: !!row.fecha_proxima_revision && String(row.fecha_proxima_revision) < today })),
     total: rows.length,
@@ -276,7 +281,7 @@ export async function documentosSummary({ request, s }: RouteContext): Promise<R
   const user = await requireUser(request);
   await requirePermission(s, user, "documentos", "V");
   await ensureDocumentosSgcSchema(s);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyLocal();
   const summary = await s.queryOne(
     `
     SELECT
@@ -391,12 +396,32 @@ export async function enviarRevision({ request, s, params }: RouteContext): Prom
   if (String(antes.estado) !== "borrador") return json({ message: "Solo los borradores se envian a revision" }, 409);
   if (!antes.archivo_nombre && !antes.es_externo) return json({ message: "Adjunta el archivo del documento antes de enviarlo a revision" }, 400);
   const payload = await readJson(request);
+  // Segregacion (regla 5): quien elaboro el documento no lo revisa.
+  const yo = userIdFromClaims(user) as number;
+  const excepcion = exigirSegregacion(evaluarDocumento(yo, await elaboradoresDe(s, TABLE, id, antes.creado_por), null, "revisar"), antes, yo, "revisar");
   const reviso = persona(payload.reviso ?? safeParse(antes.reviso_json), { nombre: String(user.nombre || "") });
-  await s.execute(`UPDATE ${TABLE} SET estado = 'en_revision', reviso_json = :reviso, actualizado_por = :usuario WHERE id = :id`, { reviso: JSON.stringify({ ...reviso, fecha: reviso.fecha || new Date().toISOString().slice(0, 10) }), usuario: userIdFromClaims(user), id });
+  await s.execute(`UPDATE ${TABLE} SET estado = 'en_revision', reviso_json = :reviso, actualizado_por = :usuario WHERE id = :id`, { reviso: JSON.stringify({ ...reviso, fecha: reviso.fecha || hoyLocal(), usuario_id: yo }), usuario: yo, id });
   const despues = await snapshotRow(s, TABLE, id);
-  await registrarAuditoria(s, user, { accion: "revisar", entidad: TABLE, entidadId: id, referencia: docRef(despues), antes, despues });
+  await registrarAuditoria(s, user, { accion: "revisar", entidad: TABLE, entidadId: id, referencia: docRef(despues), antes, despues, detalle: excepcion ? detalleExcepcion(excepcion) : null });
   await s.commit();
   return json({ message: "Documento enviado a revision", item: serializeDocumento(despues!) });
+}
+
+/*
+ * Excepcion de segregacion (Fase 3): solo la pide quien podria revisar (enviar a
+ * revision) o aprobar el documento (permiso y estado) y la segregacion se lo impide.
+ */
+export async function violacionParaExcepcionDocumento(s: Session, user: CurrentUser, id: number, accion: string): Promise<{ violacion: Violacion | null; row: Row }> {
+  if (accion !== "revisar" && accion !== "aprobar") throw new HttpError(400, { message: "En un documento la excepción aplica a revisar o aprobar" });
+  if (accion === "revisar") await requirePermission(s, user, "documentos", "E", { objeto: "documento", borrador: true });
+  else await requirePermission(s, user, "documentos", "A");
+  await ensureDocumentosSgcSchema(s);
+  const row = await snapshotRow(s, TABLE, id);
+  if (!row) throw new HttpError(404, { message: "Documento no encontrado" });
+  const estado = accion === "revisar" ? "borrador" : "en_revision";
+  if (String(row.estado) !== estado) throw new HttpError(409, { message: `El documento no está ${accion === "revisar" ? "en borrador" : "en revisión"}; no hay nada que ${accion}` });
+  const revisorId = accion === "aprobar" ? Number((safeParse(row.reviso_json) as { usuario_id?: unknown } | null)?.usuario_id) || null : null;
+  return { violacion: evaluarDocumento(userIdFromClaims(user) as number, await elaboradoresDe(s, TABLE, id, row.creado_por), revisorId, accion), row };
 }
 
 /* Aprobacion: la revision queda vigente y la anterior vigente pasa a obsoleta. */
@@ -410,8 +435,12 @@ export async function aprobarDocumento({ request, s, params }: RouteContext): Pr
   if (String(antes.estado) !== "en_revision") return json({ message: "Solo se aprueban documentos en revision; envialo a revision primero" }, 409);
   if (!antes.archivo_nombre && !Number(antes.es_externo)) return json({ message: "El documento no tiene archivo adjunto; no puede quedar vigente sin el" }, 409);
   const payload = await readJson(request);
+  // Segregacion (regla 5): ni quien elaboro ni quien reviso aprueban el documento.
+  const yo = userIdFromClaims(user) as number;
+  const revisorId = Number((safeParse(antes.reviso_json) as { usuario_id?: unknown } | null)?.usuario_id) || null;
+  const excepcion = exigirSegregacion(evaluarDocumento(yo, await elaboradoresDe(s, TABLE, id, antes.creado_por), revisorId, "aprobar"), antes, yo, "aprobar");
   await exigirReauth(s, request, user, "documentos:A");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyLocal();
   const vigencia = strippedOrNull(payload.fecha_vigencia, 10) || (antes.fecha_vigencia as string | null) || today;
   const aprobo = { ...persona(payload.aprobo, { nombre: String(user.nombre || user.email || "") }), fecha: strippedOrNull((payload.aprobo as Record<string, unknown> | undefined)?.fecha, 10) || today, usuario_id: userIdFromClaims(user) };
   const previas = await s.query<{ id: number; revision: number }>(`SELECT id, revision FROM ${TABLE} WHERE clave = :clave AND estado = 'vigente' AND id <> :id`, { clave: antes.clave, id });
@@ -425,7 +454,7 @@ export async function aprobarDocumento({ request, s, params }: RouteContext): Pr
     { aprobo: JSON.stringify(aprobo), vigencia, proxima: addYears(vigencia, DOCUMENT_REVIEW_YEARS), usuario: userIdFromClaims(user), id },
   );
   const despues = await snapshotRow(s, TABLE, id);
-  await registrarAuditoria(s, user, { accion: "aprobar", entidad: TABLE, entidadId: id, referencia: docRef(despues), antes, despues, detalle: { revisiones_obsoletas: previas.map((p) => p.revision) } });
+  await registrarAuditoria(s, user, { accion: "aprobar", entidad: TABLE, entidadId: id, referencia: docRef(despues), antes, despues, detalle: { revisiones_obsoletas: previas.map((p) => p.revision), ...detalleExcepcion(excepcion) } });
   await s.commit();
   return json({ message: previas.length ? `Documento aprobado y vigente; la revision anterior queda obsoleta` : "Documento aprobado y vigente", item: serializeDocumento(despues!) });
 }

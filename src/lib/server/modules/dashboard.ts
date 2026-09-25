@@ -1,5 +1,5 @@
 import { requireUser } from "../auth";
-import { isOperationalError, isSqlite } from "../db";
+import { isOperationalError } from "../db";
 import { json, type RouteContext } from "../http";
 import { ensureMovimientosSchema } from "../inventory-usage";
 import { cargarAutorizacion, permisoDe, recortarPorModulo } from "../rbac";
@@ -8,6 +8,7 @@ import { ensureEquiposSchema, ensureMantenimientosSchema, ensureReactivosSchema 
 import { ensureSamplesExtraccionSchema } from "./samples/extraccion";
 import { ensureSamplesProcesamientoSchema } from "./samples/procesamiento";
 import { ensureSamplesRecepcionSchema } from "./samples/recepcion";
+import { hoyLocal, sumarDias } from "../../shared/fechas";
 
 /* Portado de modules/dashboard/endpoints.py del backend Flask original. */
 
@@ -25,10 +26,10 @@ export async function dashboardOverview({ request, s }: RouteContext): Promise<R
     await ensureSamplesProcesamientoSchema(s);
     await ensureSamplesExtraccionSchema(s);
 
-    const maintenanceDateFilter = isSqlite()
-      ? "date('now') AND date('now', '+30 days')"
-      : "CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)";
-    const overdueDateFilter = isSqlite() ? "date('now')" : "CURDATE()";
+    // Dia local del laboratorio como parametro (date('now')/CURDATE() darian el dia UTC del servidor).
+    const maintenanceDateFilter = ":hoy AND :en30";
+    const overdueDateFilter = ":hoy";
+    const fechas = { hoy: hoyLocal(), en30: sumarDias(hoyLocal(), 30) };
 
     const counters = await s.queryOne(
       `
@@ -82,6 +83,7 @@ export async function dashboardOverview({ request, s }: RouteContext): Promise<R
       `
         .replace("__DATE_RANGE__", maintenanceDateFilter)
         .replace("__TODAY__", overdueDateFilter),
+      fechas,
     );
 
     const recentMovements = await s.query(

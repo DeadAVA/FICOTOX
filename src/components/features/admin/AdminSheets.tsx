@@ -8,6 +8,7 @@ import { useSession } from "@/components/session/SessionProvider";
 import { AvatarPicker } from "@/components/ui/AvatarPicker";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, Field, FormGrid, Input, Select, Switch, Textarea } from "@/components/ui/Field";
+import { DateInput } from "@/components/ui/DateInput";
 import { Sheet, usePrompt } from "@/components/ui/Overlay";
 import { Badge } from "@/components/ui/Primitives";
 import { HIDDEN_MODULES } from "@/lib/shared/features";
@@ -15,9 +16,10 @@ import { ACCIONES, ACCION_KEYS, ALCANCES, MODULOS, alcanceLabel, firmaFilas, typ
 import { REGLAS_COMBINACION } from "@/lib/shared/combinaciones-roles";
 import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { CampoIdentidad } from "@/components/session/Reautenticar";
-import { fmtDate } from "@/lib/client/format";
+import { fmtDate, fmtDateTime } from "@/lib/client/format";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
+import { hoyLocal } from "@/lib/shared/fechas";
 
 /* ---------- Roles: matriz modulos x acciones con alcance por celda (Fase 1) ---------- */
 
@@ -246,8 +248,6 @@ const ESTADO_ASIGNACION: Record<string, { label: string; tone: "success" | "bran
   revocado: { label: "Revocado", tone: "danger" },
 };
 
-const hoyLocal = () => new Date().toLocaleDateString("en-CA");
-
 export function UserSheet({ open, item, readOnly = false, onClose }: { open: boolean; item: ApiRecord | null; readOnly?: boolean; onClose: () => void }) {
   const { token, can, authConfig, user: me } = useSession();
   const prompt = usePrompt();
@@ -264,6 +264,8 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
   const [asignaciones, setAsignaciones] = useState<ApiRecord[]>((item?.asignaciones || []) as ApiRecord[]);
   const [nueva, setNueva] = useState({ rol_id: "", desde: hoyLocal(), hasta: "", motivo: "" });
   const [asignando, setAsignando] = useState(false);
+  // Fase 3: nota de la ultima asignacion que quedo pendiente de un segundo usuario.
+  const [pendiente, setPendiente] = useState<string | null>(null);
   // Fase 2: vigencia de la cuenta y supervisor (temporal => fin y supervisor obligatorios).
   const [tipoCuenta, setTipoCuenta] = useState<string>(String(item?.tipo_cuenta || "permanente"));
   const [cuentaDesde, setCuentaDesde] = useState(String(item?.vigente_desde || ""));
@@ -306,7 +308,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
     setAsignaciones(((data.item || {}).asignaciones || []) as ApiRecord[]);
   };
 
-  const allowedDomain = authConfig.microsoft?.allowedDomain || "cicese.mx";
+  const dominios = authConfig.dominios_permitidos || [];
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -324,8 +326,8 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
       return;
     }
     const emailCambio = !editing || String(item?.email || "").toLowerCase() !== String(payload.email).toLowerCase();
-    if (emailCambio && !String(payload.email).toLowerCase().endsWith(`@${allowedDomain}`)) {
-      setError(`Solo se aceptan correos @${allowedDomain}`);
+    if (emailCambio && dominios.length && !dominios.some((d) => String(payload.email).toLowerCase().endsWith(`@${d}`))) {
+      setError(`Solo se aceptan correos de ${dominios.map((d) => `@${d}`).join(", ")}`);
       return;
     }
     if (!editing) {
@@ -367,14 +369,11 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
     setSubmitting(true);
     setError(null);
     try {
-      if (editing) {
-        await sendJsonAuth("PUT", `${API_BASE_URL}/admin/usuarios/${item!.id}`, token, payload);
-        toast.success("Usuario actualizado");
-      } else {
-        await sendJsonAuth("POST", `${API_BASE_URL}/admin/usuarios`, token, payload);
-        toast.success("Usuario creado");
-      }
-      invalidate("usuarios", "roles");
+      // Fase 3: el rol inicial, la reactivacion y la ampliacion de vigencia los aprueba un segundo usuario (respuesta con `solicitud`).
+      const data = await sendJsonAuth(editing ? "PUT" : "POST", editing ? `${API_BASE_URL}/admin/usuarios/${item!.id}` : `${API_BASE_URL}/admin/usuarios`, token, payload);
+      if (data.solicitud) toast.info(String(data.message || "Pendiente de autorización de un segundo usuario"), { duration: 8000 });
+      else toast.success(editing ? "Usuario actualizado" : "Usuario creado");
+      invalidate("usuarios", "roles", "solicitudes");
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar el usuario");
@@ -389,11 +388,15 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
     armarReauth(clave ? { password: clave } : null);
     setAsignando(true);
     try {
-      await sendJsonAuth("POST", `${API_BASE_URL}/admin/usuarios/${item!.id}/roles`, token, { rol_id: Number(nueva.rol_id), vigente_desde: nueva.desde || null, vigente_hasta: nueva.hasta || null, motivo: nueva.motivo.trim() });
-      toast.success("Rol asignado");
+      const data = await sendJsonAuth("POST", `${API_BASE_URL}/admin/usuarios/${item!.id}/roles`, token, { rol_id: Number(nueva.rol_id), vigente_desde: nueva.desde || null, vigente_hasta: nueva.hasta || null, motivo: nueva.motivo.trim() });
+      // Fase 3: la asignacion queda pendiente de la autorizacion de un segundo usuario (usuarios:A).
+      if (data.solicitud) {
+        toast.info(String(data.message || "Asignación pendiente de autorización"), { duration: 8000 });
+        setPendiente(`Pendiente de autorización de un segundo usuario (solicitud #${String((data.solicitud as ApiRecord).id)})`);
+      } else toast.success("Rol asignado");
       setNueva({ rol_id: "", desde: hoyLocal(), hasta: "", motivo: "" });
       await recargar();
-      invalidate("usuarios", "roles");
+      invalidate("usuarios", "roles", "solicitudes");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo asignar el rol");
     } finally {
@@ -446,7 +449,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
             <Field label="Nombre" htmlFor="u-nombre">
               <Input id="u-nombre" maxLength={100} value={nombre} onChange={(event) => setNombre(event.target.value)} autoFocus={!editing} />
             </Field>
-            <Field label="Correo" htmlFor="u-email" required hint={editing ? undefined : `Debe ser @${allowedDomain}`}>
+            <Field label="Correo" htmlFor="u-email" required hint={editing || !dominios.length ? undefined : `Debe ser de ${dominios.map((d) => `@${d}`).join(", ")}`}>
               <Input id="u-email" type="email" maxLength={100} value={email} onChange={(event) => setEmail(event.target.value)} invalid={!!error && !email.trim()} />
             </Field>
             {!editing ? (
@@ -517,10 +520,10 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
                 </Select>
               </Field>
               <Field label="Vigente desde" htmlFor="u-cuenta-desde" hint="Opcional">
-                <Input id="u-cuenta-desde" type="date" value={cuentaDesde} onChange={(event) => setCuentaDesde(event.target.value)} />
+                <DateInput id="u-cuenta-desde" value={cuentaDesde} onChange={(value) => setCuentaDesde(value)} />
               </Field>
               <Field label="Vigente hasta" htmlFor="u-cuenta-hasta" required={tipoCuenta === "temporal"} hint={tipoCuenta === "temporal" ? undefined : "Opcional"}>
-                <Input id="u-cuenta-hasta" type="date" value={cuentaHasta} onChange={(event) => setCuentaHasta(event.target.value)} />
+                <DateInput id="u-cuenta-hasta" value={cuentaHasta} onChange={(value) => setCuentaHasta(value)} />
               </Field>
               {cambiaCuenta ? (
                 <Field label="Motivo del cambio de vigencia o supervisor" htmlFor="u-motivo-cuenta" required hint="Queda en la bitácora." className="sm:col-span-2">
@@ -561,7 +564,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
                       {a.motivo ? <span className="text-[12.5px] text-ink-2">Motivo: {a.motivo}</span> : null}
                       {a.revocado_en ? (
                         <span className="text-[12.5px] text-danger">
-                          Revocado el {fmtDate(a.revocado_en)}
+                          Revocado el {fmtDateTime(a.revocado_en)}
                           {a.revocado_por_nombre ? ` por ${a.revocado_por_nombre}` : ""}
                           {a.motivo_revocacion ? ` · ${a.motivo_revocacion}` : ""}
                         </span>
@@ -583,7 +586,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
           {puedeAdministrar && esPropia ? <Callout tone="info">Nadie puede asignarse ni revocarse roles a sí mismo: pide a otra persona con administración de usuarios que lo haga.</Callout> : null}
 
           {puedeAdministrar && !esPropia ? (
-            <Panel title="Asignar rol" description="La asignación se valida contra las combinaciones prohibidas y queda en la bitácora con su motivo.">
+            <Panel title="Asignar rol" description="La asignación se valida contra las combinaciones prohibidas y la aprueba un segundo usuario con A en usuarios (Responsable General); queda en la bitácora con su motivo.">
               <FormGrid>
                 <Field label="Rol" htmlFor="u-asignar-rol" required>
                   <Select id="u-asignar-rol" value={nueva.rol_id} onChange={(event) => setNueva((prev) => ({ ...prev, rol_id: event.target.value }))}>
@@ -599,17 +602,18 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
                   <Input id="u-asignar-motivo" maxLength={300} value={nueva.motivo} onChange={(event) => setNueva((prev) => ({ ...prev, motivo: event.target.value }))} placeholder="Ej. Cambio de funciones" />
                 </Field>
                 <Field label="Vigente desde" htmlFor="u-asignar-desde">
-                  <Input id="u-asignar-desde" type="date" value={nueva.desde} onChange={(event) => setNueva((prev) => ({ ...prev, desde: event.target.value }))} />
+                  <DateInput id="u-asignar-desde" value={nueva.desde} onChange={(value) => setNueva((prev) => ({ ...prev, desde: value }))} />
                 </Field>
                 <Field label="Vigente hasta" htmlFor="u-asignar-hasta" hint="Opcional">
-                  <Input id="u-asignar-hasta" type="date" value={nueva.hasta} onChange={(event) => setNueva((prev) => ({ ...prev, hasta: event.target.value }))} />
+                  <DateInput id="u-asignar-hasta" value={nueva.hasta} onChange={(value) => setNueva((prev) => ({ ...prev, hasta: value }))} />
                 </Field>
               </FormGrid>
               {!guardadoCritico ? <CampoIdentidad value={clave} onChange={setClave} id="u-clave-asignar" /> : null}
-              <div>
+              <div className="flex flex-wrap items-center gap-3">
                 <Button icon={<Plus size={14} weight="bold" />} onClick={asignar} loading={asignando}>
                   Asignar rol
                 </Button>
+                {pendiente ? <span className="text-[12.5px] text-warning-text">{pendiente}</span> : null}
               </div>
             </Panel>
           ) : null}

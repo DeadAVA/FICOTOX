@@ -6,7 +6,7 @@ FICOTOX es una aplicacion web para gestion operativa de laboratorio.
 
 Incluye:
 - Gestion de usuarios, roles y permisos.
-- Autenticacion local y autenticacion Microsoft Entra ID (opcional).
+- Autenticacion con usuario y contrasena del sistema (Fase 3: sin Microsoft Entra ID).
 - Gestion de inventario (reactivos, consumibles, equipos, mantenimientos).
 - Gestion de muestras (recepcion, procesamiento, extraccion).
 - Registro de movimientos y trazabilidad.
@@ -81,11 +81,7 @@ Variables importantes (mismos nombres que antes):
 - `JWT_EXPIRES_HOURS`
 - `DATABASE_URL`
 - `SQLITE_PATH`
-- `LOCAL_LOGIN_ENABLED`
-- `MICROSOFT_AUTH_ENABLED`
-- `MICROSOFT_CLIENT_ID`
-- `MICROSOFT_TENANT_ID`
-- `MICROSOFT_ALLOWED_DOMAIN`
+- `ALLOWED_EMAIL_DOMAINS`
 - `CORS_ORIGINS`
 - `HOST`, `PORT`, `FICOTOX_OPEN_BROWSER` (lanzador standalone)
 
@@ -93,7 +89,7 @@ Variables importantes (mismos nombres que antes):
 
 Cada modulo esta en `src/lib/server/modules/` y sus rutas en `src/app/api/<modulo>/`.
 
-- `auth`: login local, login Microsoft, JWT, usuario actual.
+- `auth`: login local, JWT, usuario actual, reautenticacion.
 - `admin`: usuarios, roles y permisos.
 - `dashboard`: metricas y resumenes.
 - `inventory`: reactivos, equipos, mantenimientos, movimientos y resumen de inventario.
@@ -123,7 +119,7 @@ Cada modulo esta en `src/lib/server/modules/` y sus rutas en `src/app/api/<modul
 ## 5. Interfaz
 
 Interfaz React con TypeScript y Tailwind CSS en `src/components/` y `src/app/(app)/` (ver `docs/DISENO_UI.md`):
-- `app/login/page.tsx`: acceso con correo y contrasena (Microsoft opcional).
+- `app/login/page.tsx`: acceso con correo y contrasena.
 - `app/(app)/layout.tsx`: guardia de sesion y shell con navegacion superior.
 - `components/shell/`: barra lateral por grupos, menu de usuario, panel movil, buscador del Inicio y paleta de comandos (⌘K / Ctrl+K), ambos sobre el mismo motor de busqueda.
 - `components/session/`: sesion, permisos (`can(modulo, accion)`) y `RequireModule`.
@@ -167,7 +163,6 @@ Se usan funciones `ensure*Schema()` en cada request para:
 
 - JWT (HS256) para endpoints protegidos; mismos claims y secreto que antes, por lo que los tokens existentes siguen siendo validos.
 - Login local por correo y contrasena (scrypt) segun configuracion.
-- Login Microsoft Entra ID opcional (validacion de tenant, audience y dominio con las claves JWKS de Microsoft).
 
 ### 7.2 Autorizacion
 

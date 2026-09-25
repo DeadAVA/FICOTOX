@@ -6,6 +6,7 @@ import { FileCsv, X } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Field, FormGrid, Input } from "@/components/ui/Field";
+import { DateInput } from "@/components/ui/DateInput";
 import { Sheet } from "@/components/ui/Overlay";
 import { Badge } from "@/components/ui/Primitives";
 import { Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
@@ -108,7 +109,7 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
             <Input id="c-catalogo" maxLength={150} value={form.catalogo} onChange={set("catalogo")} mono />
           </Field>
           <Field label="Fecha de ingreso" htmlFor="c-fecha">
-            <Input id="c-fecha" type="date" value={form.fechaIngreso} onChange={set("fechaIngreso")} />
+            <DateInput id="c-fecha" value={form.fechaIngreso} onChange={(value) => setForm((prev) => ({ ...prev, fechaIngreso: value }))} />
           </Field>
           <Field label="Tamaño / capacidad" htmlFor="c-tamano">
             <Input id="c-tamano" maxLength={100} value={form.tamano} onChange={set("tamano")} />

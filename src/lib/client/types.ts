@@ -18,8 +18,6 @@ export interface SessionUser {
   supervisor_id?: number | null;
   cargo_predeterminado?: number | null;
   debe_cambiar_password?: boolean;
-  auth_provider?: string | null;
-  tiene_password?: boolean;
 }
 
 /* Permisos efectivos { modulo: { accion: alcance } } (Fase 1; src/lib/shared/permisos.ts). */
@@ -36,16 +34,11 @@ export interface RolSesion {
   permisos: PermisosMapa;
 }
 
+/* Configuracion publica del acceso (GET /api/auth/config). Solo usuario y contrasena del sistema. */
 export interface AuthConfig {
-  microsoft: {
-    enabled?: boolean;
-    clientId?: string;
-    tenantId?: string;
-    authority?: string;
-    allowedDomain?: string;
-  };
-  manualLoginEnabled?: boolean;
-  /* Fase 2: cierre por inactividad (minutos). */
+  /* Dominios de correo admitidos al dar de alta cuentas (vacio = cualquiera). */
+  dominios_permitidos?: string[];
+  /* Fase 2: cierre por inactividad (minutos) y duracion maxima de la sesion (horas). */
   sesion?: { inactividad_min?: number; expira_horas?: number };
 }
 

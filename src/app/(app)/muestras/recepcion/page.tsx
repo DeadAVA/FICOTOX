@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ArrowCounterClockwise, ArrowSquareOut, Flask, PencilSimple, Plus, Prohibit, TestTube } from "@phosphor-icons/react";
-import { FolioChip, SampleStatus, SupervisionBadge } from "@/components/features/samples/status";
+import { FolioChip, SampleStatus, SolicitudBadge, SupervisionBadge } from "@/components/features/samples/status";
 import { useAnulacion } from "@/components/features/samples/useAnulacion";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
@@ -189,6 +189,7 @@ function RecepcionList() {
                     <Td>
                       <SampleStatus status={item.estado} />
                       <SupervisionBadge estado={item.supervision_estado} />
+                      <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} />
                     </Td>
                     <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
                       <ActionMenu items={menuFor(item)} header={`${formatSampleFolio(item)} · ${item.id_interno || "lote"}`} />

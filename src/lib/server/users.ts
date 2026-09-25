@@ -1,7 +1,7 @@
 import { isSqlite, type Session } from "./db";
 import { ensureRbacSchema, toBit } from "./rbac";
 import { isAvatarKey } from "../shared/avatars";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "./schema";
+import { addColumnIfMissing, dropColumnIfExists, getTableColumns, markSchemaReady, schemaReady } from "./schema";
 
 /* Portado de utils/users.py del backend Flask original. */
 
@@ -25,10 +25,6 @@ export async function ensureUsuariosSchema(s: Session): Promise<void> {
         activo INTEGER DEFAULT 1,
         id_rol INTEGER NOT NULL,
         departamento VARCHAR(100) DEFAULT NULL,
-        auth_provider VARCHAR(30) DEFAULT NULL,
-        microsoft_oid VARCHAR(80) DEFAULT NULL,
-        microsoft_tid VARCHAR(80) DEFAULT NULL,
-        microsoft_preferred_username VARCHAR(150) DEFAULT NULL,
         creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         ultimo_acceso TIMESTAMP DEFAULT NULL
       )
@@ -41,16 +37,11 @@ export async function ensureUsuariosSchema(s: Session): Promise<void> {
         activo TINYINT(1) DEFAULT 1,
         id_rol INT NOT NULL,
         departamento VARCHAR(100) DEFAULT NULL,
-        auth_provider VARCHAR(30) DEFAULT NULL,
-        microsoft_oid VARCHAR(80) DEFAULT NULL,
-        microsoft_tid VARCHAR(80) DEFAULT NULL,
-        microsoft_preferred_username VARCHAR(150) DEFAULT NULL,
         creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
         ultimo_acceso TIMESTAMP NULL DEFAULT NULL,
         PRIMARY KEY (id),
         UNIQUE KEY email (email),
         KEY id_rol (id_rol),
-        KEY idx_usuarios_microsoft_oid (microsoft_oid),
         CONSTRAINT usuarios_ibfk_1 FOREIGN KEY (id_rol) REFERENCES roles(id) ON DELETE RESTRICT
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
       `,
@@ -58,10 +49,6 @@ export async function ensureUsuariosSchema(s: Session): Promise<void> {
   for (const [columnName, columnDefinition] of [
     ["departamento", "VARCHAR(100) DEFAULT NULL"],
     ["activo", "TINYINT(1) DEFAULT 1"],
-    ["auth_provider", "VARCHAR(30) DEFAULT NULL"],
-    ["microsoft_oid", "VARCHAR(80) DEFAULT NULL"],
-    ["microsoft_tid", "VARCHAR(80) DEFAULT NULL"],
-    ["microsoft_preferred_username", "VARCHAR(150) DEFAULT NULL"],
     ["creado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP"],
     ["ultimo_acceso", "TIMESTAMP NULL DEFAULT NULL"],
     ["password_hash", "VARCHAR(255) DEFAULT NULL"],
@@ -84,7 +71,28 @@ export async function ensureUsuariosSchema(s: Session): Promise<void> {
   ] as Array<[string, string]>) {
     await addColumnIfMissing(s, "usuarios", columnName, columnDefinition);
   }
+  await retirarColumnasProveedorExterno(s);
   markSchemaReady("usuarios");
+}
+
+/*
+ * Fase 3: se retiro el acceso con un proveedor externo de identidad. Sus
+ * columnas se eliminan solo si nunca se usaron (todas vacias y auth_provider
+ * NULL o 'local'); si tienen datos se conservan sin uso y se avisa en el log.
+ */
+const COLUMNAS_PROVEEDOR = ["auth_provider", "microsoft_oid", "microsoft_tid", "microsoft_preferred_username"];
+export async function retirarColumnasProveedorExterno(s: Session): Promise<{ eliminadas: string[]; conservadas: string[] }> {
+  const columnas = await getTableColumns(s, "usuarios");
+  const presentes = COLUMNAS_PROVEEDOR.filter((c) => columnas.has(c));
+  if (!presentes.length) return { eliminadas: [], conservadas: [] };
+  const condiciones = presentes.map((c) => (c === "auth_provider" ? "(auth_provider IS NOT NULL AND auth_provider <> '' AND auth_provider <> 'local')" : `(${c} IS NOT NULL AND ${c} <> '')`));
+  const conDatos = Number((await s.scalar(`SELECT COUNT(*) FROM usuarios WHERE ${condiciones.join(" OR ")}`)) || 0);
+  if (conDatos > 0) {
+    console.warn(`[usuarios] ${conDatos} cuenta(s) tienen datos del proveedor externo retirado; las columnas ${presentes.join(", ")} se conservan sin uso.`);
+    return { eliminadas: [], conservadas: presentes };
+  }
+  for (const columna of presentes) await dropColumnIfExists(s, "usuarios", columna);
+  return { eliminadas: presentes, conservadas: [] };
 }
 
 export interface UserPayload {

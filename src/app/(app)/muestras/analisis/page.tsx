@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { ArrowCounterClockwise, ArrowSquareOut, PencilSimple, Plus, Prohibit, TestTube } from "@phosphor-icons/react";
-import { FolioChip, StateBadge, SupervisionBadge } from "@/components/features/samples/status";
+import { FolioChip, StateBadge, SolicitudBadge, SupervisionBadge } from "@/components/features/samples/status";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
 import { useAnulacion } from "@/components/features/samples/useAnulacion";
@@ -175,6 +175,7 @@ function AnalisisList() {
                     <Td>
                       <StateBadge kind="analisis" status={item.estado} />
                       <SupervisionBadge estado={item.supervision_estado} />
+                      <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} />
                     </Td>
                     <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
                       <ActionMenu items={menuFor(item)} header={`${folioA(item)} · ${tipo?.short || ""}`} />

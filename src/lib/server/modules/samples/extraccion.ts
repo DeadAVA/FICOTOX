@@ -4,14 +4,16 @@ import { requireUser, userIdFromClaims } from "../../auth";
 import { registrarAuditoria, snapshotRow } from "../../audit";
 import { getConfig } from "../../config";
 import { isSqlite, type Row, type Session } from "../../db";
-import { intParam, json, readJson, type RouteContext } from "../../http";
+import { HttpError, intParam, json, readJson, type RouteContext } from "../../http";
 import { restoreInventoryUsage } from "../../inventory-usage";
 import { cargoActuante, requirePermission } from "../../rbac";
 import { exigirReauth } from "../../seguridad";
+import { evaluarSupervisionCaptura } from "../../../shared/segregacion";
+import { respuestaSolicitud } from "../../solicitudes";
 import { aplicarSupervision, filtroSupervision, marcaSupervision } from "../../supervision";
 import { recordBitacoraFolios } from "../inventory";
 import { addColumnIfMissing, getTableColumns, markSchemaReady, schemaReady } from "../../schema";
-import { advanceState, anularRegistro, applyStageInventory, assertEditable, assertOrigin, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarRegistro } from "../../samples-flow";
+import { advanceState, anularOSolicitar, applyStageInventory, assertEditableAsync, assertOrigin, conSolicitudes, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
 import { EXTRACTION_TYPES, claveForType, normalizeExtractionType, parseExtractionFolioSearch, type ExtractionType } from "../../../shared/extraction";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
 import { ensureEquiposSchema } from "../inventory";
@@ -150,6 +152,15 @@ const MYSQL_CREATE = `
 let folioPerTypeVerified = false;
 
 const ORIGEN_REQUERIDO = "La extracción debe partir de un procesamiento de muestra";
+
+/* Regla 3 de segregacion: quien firma "superviso" no es quien extrajo ni quien hizo la limpieza. */
+function exigirSupervisorDistinto(data: { nombre_quien_extrajo: string | null; nombre_quien_limpieza: string | null; nombre_quien_superviso: string | null }): void {
+  const violacion = evaluarSupervisionCaptura(data.nombre_quien_superviso, [
+    { etiqueta: "realizó la extracción", nombre: data.nombre_quien_extrajo },
+    { etiqueta: "realizó la limpieza", nombre: data.nombre_quien_limpieza },
+  ]);
+  if (violacion) throw new HttpError(409, { message: violacion.mensaje, codigo: "segregacion", regla: violacion.regla, clave: violacion.clave });
+}
 
 export async function ensureSamplesExtraccionSchema(s: Session): Promise<void> {
   if (schemaReady("muestras_extraccion")) return;
@@ -425,7 +436,7 @@ export async function listExtractionSamples({ request, s }: RouteContext): Promi
       ...supFiltro.params,
     },
   );
-  return json({ items: rows, total: rows.length });
+  return json({ items: await conSolicitudes(s, TABLE, rows), total: rows.length });
 }
 
 export async function getExtractionSample({ request, s, params }: RouteContext): Promise<Response> {
@@ -454,7 +465,7 @@ export async function getExtractionSample({ request, s, params }: RouteContext):
   if (!row) {
     return json({ message: "Registro no encontrado" }, 404);
   }
-  return json({ item: serializeRow(row) });
+  return json({ item: (await conSolicitudes(s, TABLE, [serializeRow(row)]))[0] });
 }
 
 export async function createExtractionSample({ request, s }: RouteContext): Promise<Response> {
@@ -473,6 +484,7 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
   if (!data.folio_num) {
     data.folio_num = await nextFolioNum(s, TABLE, "tipo_registro = :tipo", { tipo });
   }
+  exigirSupervisorDistinto(data);
   // Solo se extrae a partir de un procesamiento vigente.
   await assertOrigin(s, "muestras_procesamiento", data.procesamiento_id, { requerido: ORIGEN_REQUERIDO });
   const supervision = marcaSupervision(permiso);
@@ -533,7 +545,7 @@ export async function updateExtractionSample({ request, s, params }: RouteContex
   const antes = await snapshotRow(s, TABLE, extractionId);
   const permiso = await requirePermission(s, user, "ensayos", "E", { objeto: "extraccion", borrador: String(antes?.estado || "registrada") === "registrada" });
   const actuo = cargoActuante(request, permiso);
-  assertEditable(antes, TABLE);
+  await assertEditableAsync(s, antes, TABLE);
   const payload = await readJson(request);
   const tipo = await resolveType(s, payload, extractionId);
   if (!tipo) {
@@ -543,6 +555,7 @@ export async function updateExtractionSample({ request, s, params }: RouteContex
   if (!data.folio_num) {
     return json({ message: "El folio de extraccion es obligatorio" }, 400);
   }
+  exigirSupervisorDistinto(data);
   // El origen se valida tambien al editar.
   await assertOrigin(s, "muestras_procesamiento", data.procesamiento_id, { requerido: ORIGEN_REQUERIDO });
   const supervision = marcaSupervision(permiso);
@@ -617,16 +630,10 @@ export async function anularExtractionSample({ request, s, params }: RouteContex
   await ensureSamplesExtraccionSchema(s);
   const motivo = await readMotivo(request);
   await exigirReauth(s, request, user, "ensayos:AN");
-  const row = await anularRegistro(s, user, TABLE, extractionId, motivo, {
-    actuo,
-    movimientosPrefix: `EXT-${extractionId}-INS-`,
-    bloqueaSi: async () => {
-      const activos = Number((await s.scalar("SELECT COUNT(*) FROM muestras_analisis WHERE extraccion_id = :id AND estado <> 'anulado'", { id: extractionId })) || 0);
-      return activos ? `La extraccion tiene ${activos} analisis vigente(s); anulalos primero` : null;
-    },
-  });
+  const { row, solicitud } = await anularOSolicitar(s, user, TABLE, extractionId, motivo, actuo);
   await s.commit();
-  return json({ message: "Extraccion anulada; el inventario descontado fue repuesto", item: serializeRow(row) });
+  if (solicitud) return respuestaSolicitud(solicitud, `la anulación de la extracción ${solicitud.referencia}`);
+  return json({ message: "Extraccion anulada; el inventario descontado fue repuesto", item: serializeRow(row!) });
 }
 
 export async function restaurarExtractionSample({ request, s, params }: RouteContext): Promise<Response> {
@@ -635,7 +642,8 @@ export async function restaurarExtractionSample({ request, s, params }: RouteCon
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "AN"));
   await ensureSamplesExtraccionSchema(s);
   await exigirReauth(s, request, user, "ensayos:AN");
-  const row = await restaurarRegistro(s, user, TABLE, extractionId, await readMotivo(request), actuo);
+  const { row, solicitud } = await restaurarOSolicitar(s, user, TABLE, extractionId, await readMotivo(request), actuo);
   await s.commit();
-  return json({ message: "Extraccion restaurada. El inventario no se vuelve a descontar: revisa los insumos y guarda de nuevo si aplica", item: serializeRow(row) });
+  if (solicitud) return respuestaSolicitud(solicitud, `la restauración de la extracción ${solicitud.referencia}`);
+  return json({ message: "Extraccion restaurada. El inventario no se vuelve a descontar: revisa los insumos y guarda de nuevo si aplica", item: serializeRow(row!) });
 }

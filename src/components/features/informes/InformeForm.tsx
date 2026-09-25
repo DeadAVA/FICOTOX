@@ -6,18 +6,19 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowsClockwise, FilePdf, FloppyDisk, PaperPlaneTilt, Prohibit, SealCheck, Truck } from "@phosphor-icons/react";
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
-import { FolioChip, SupervisionCallout } from "@/components/features/samples/status";
+import { BotonSegregado, FolioChip, SegregacionCallout, SolicitudCallout, SupervisionCallout } from "@/components/features/samples/status";
 import { SignDialog } from "@/components/features/samples/SignDialog";
 import { Callout, FlowSteps, FormCard, FormPage, FormTable, PersonCard, ReadValue, SignoffCard, formTd, formTh, missingMessage, missingSections, openFormSection, type FormSectionDef } from "@/components/features/samples/FormLayout";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Checkbox, Field, FormGrid, Input, Select, Textarea } from "@/components/ui/Field";
+import { DateInput } from "@/components/ui/DateInput";
 import { ActionMenu, Dialog, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { Badge, EmptyState } from "@/components/ui/Primitives";
 import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { openProtectedFile } from "@/lib/client/files";
-import { fmtDate, isoDate, parseIntOrNull } from "@/lib/client/format";
+import { fmtDate, isoDate, parseIntOrNull, todayIso } from "@/lib/client/format";
 import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
@@ -60,7 +61,7 @@ const defaultForm = (): InformeState => ({
   desviaciones: "",
   descargo: "",
   opiniones: "",
-  fechaEmision: isoDate(new Date()),
+  fechaEmision: todayIso(),
   elaboradoNombre: formatActiveUserSignature(),
   elaboradoFirma: "",
   observaciones: "",
@@ -80,7 +81,7 @@ const formFromItem = (item: ApiRecord): InformeState => {
     desviaciones: str(decl.desviaciones),
     descargo: str(decl.descargo),
     opiniones: str(decl.opiniones),
-    fechaEmision: isoDate(item.fecha_emision) || isoDate(new Date()),
+    fechaEmision: isoDate(item.fecha_emision) || todayIso(),
     elaboradoNombre: str(item.elaborado_nombre),
     elaboradoFirma: str(item.elaborado_firma),
     observaciones: str(item.observaciones),
@@ -116,13 +117,14 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
   const [error, setError] = useState<string | null>(null);
   const [sign, setSign] = useState<"revisar" | "autorizar" | null>(null);
   const [signing, setSigning] = useState(false);
-  const [entrega, setEntrega] = useState<{ open: boolean; fecha: string; medio: string; aQuien: string; observaciones: string }>({ open: false, fecha: isoDate(new Date()), medio: "correo", aQuien: "", observaciones: "" });
+  const [entrega, setEntrega] = useState<{ open: boolean; fecha: string; medio: string; aQuien: string; observaciones: string }>({ open: false, fecha: todayIso(), medio: "correo", aQuien: "", observaciones: "" });
   const [claveEntrega, setClaveEntrega] = useState("");
   const editing = !!item?.id;
   const estado = String(item?.estado || "borrador");
   // E solo en borrador (Fase 1): en revisión o después se corrige por enmienda o anulación.
   const canEdit = editing ? can("informes", "E", { objeto: "informe", borrador: true }) && estado === "borrador" : can("informes", "C", { objeto: "informe", borrador: true });
-  const draft = !editing || canEdit;
+  // Con una solicitud de autorizacion pendiente (Fase 3) el informe no se edita.
+  const draft = !editing || (canEdit && !item?.solicitud_pendiente);
   const patch = (changes: Partial<InformeState>) => setForm((prev) => ({ ...prev, ...changes }));
 
   const loadRecepcion = async (id: number, keepSelection = false) => {
@@ -215,16 +217,8 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
     setSigning(true);
     try {
       const body: Record<string, unknown> = { firma: data.firma || null };
-      try {
-        await sendJsonAuth("POST", `${API_BASE_URL}/informes/${item.id}/${sign}`, token, body);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "";
-        if (/persona distinta|misma_persona/i.test(message)) {
-          const motivo = await prompt({ title: sign === "revisar" ? "Elaboraste este informe y vas a revisarlo" : "Revisaste y vas a autorizar el mismo informe", description: "Debe hacerlo otra persona. Si no hay nadie más disponible, indica el motivo para registrar la excepción.", confirmLabel: sign === "revisar" ? "Revisar con excepción" : "Autorizar con excepción" });
-          if (!motivo) throw err;
-          await sendJsonAuth("POST", `${API_BASE_URL}/informes/${item.id}/${sign}`, token, { ...body, permitir_misma_persona: true, motivo });
-        } else throw err;
-      }
+      // Segregacion de funciones (Fase 3): el servidor rechaza con 409 "segregacion"; la excepcion se pide aparte.
+      await sendJsonAuth("POST", `${API_BASE_URL}/informes/${item.id}/${sign}`, token, body);
       toast.success(sign === "revisar" ? "Informe revisado" : "Informe autorizado; PDF generado");
       invalidate("informes", "muestras", "dashboard");
       setSign(null);
@@ -258,9 +252,11 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
     const motivo = await prompt({ critico: true, title: `Anular informe ${item.folio}`, description: "El informe queda anulado y su PDF marcado como sin validez. Para corregirlo emite una enmienda.", confirmLabel: "Anular", tone: "danger" });
     if (!motivo) return;
     try {
-      await sendJsonAuth("POST", `${API_BASE_URL}/informes/${item.id}/anular`, token, { motivo });
-      toast.success("Informe anulado");
-      invalidate("informes", "dashboard");
+      const data = await sendJsonAuth("POST", `${API_BASE_URL}/informes/${item.id}/anular`, token, { motivo });
+      // Autorizado o entregado: queda en solicitud de un segundo usuario (Fase 3).
+      if (data.solicitud) toast.info(String(data.message || "Anulación solicitada"));
+      else toast.success("Informe anulado");
+      invalidate("informes", "dashboard", "solicitudes");
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo anular");
@@ -289,6 +285,27 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
   const toggleAnalisis = (id: number, checked: boolean) => patch({ analisisIds: checked ? Array.from(new Set([...form.analisisIds, id])) : form.analisisIds.filter((v) => v !== id) });
   const canReview = can("informes", "R");
   const canAuthorize = can("informes", "A");
+  // Segregacion (Fase 3): por que la persona actual no puede revisar o autorizar este informe (null = puede).
+  const segregacion = (item?.segregacion || {}) as { revisar?: string | null; autorizar?: string | null };
+  const excepciones = (item?.excepciones || []) as Array<{ solicitud_id: number; accion: string }>;
+  const excepcionDe = (accion: string) => excepciones.find((e) => e.accion === accion);
+  const solicitarExcepcion = async (accion: "revisar" | "autorizar") => {
+    if (!item) return;
+    const motivo = await prompt({
+      critico: true,
+      title: `Solicitar excepción para ${accion} ${folioLabel}`,
+      description: `${segregacion[accion] || "La regla de dos personas te lo impide"}. Por falta de personal puedes pedir una excepción: la aprueba quien tiene A en calidad y queda declarada en el informe y en el PDF.`,
+      confirmLabel: "Solicitar excepción",
+    });
+    if (!motivo) return;
+    try {
+      const data = await sendJsonAuth("POST", `${API_BASE_URL}/solicitudes`, token, { tipo: "excepcion_segregacion", entidad: "informes", entidad_id: item.id, accion, motivo });
+      toast.info(String(data.message || "Excepción solicitada"));
+      invalidate("solicitudes");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo solicitar la excepción");
+    }
+  };
   const resultadosCongelados = (item?.resultados || []) as ApiRecord[];
   const entregaInfo = (item?.entrega || null) as ApiRecord | null;
   const folioLabel = editing ? `${item!.folio} · v${item!.version}` : "Nuevo informe";
@@ -336,14 +353,18 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
           </Button>
           {moreItems.length ? <ActionMenu items={moreItems} label="Más acciones" header={editing ? String(item!.folio) : undefined} /> : null}
           {editing && estado === "borrador" && canReview ? (
-            <Button variant="soft" icon={<PaperPlaneTilt size={16} />} onClick={() => setSign("revisar")}>
-              Marcar revisado
-            </Button>
+            <BotonSegregado bloqueo={segregacion.revisar} onSolicitar={() => solicitarExcepcion("revisar")}>
+              <Button variant="soft" icon={<PaperPlaneTilt size={16} />} onClick={() => setSign("revisar")} disabled={!!segregacion.revisar}>
+                Marcar revisado
+              </Button>
+            </BotonSegregado>
           ) : null}
           {editing && estado === "en_revision" && canAuthorize ? (
-            <Button variant="soft" icon={<SealCheck size={16} />} onClick={() => setSign("autorizar")}>
-              Autorizar
-            </Button>
+            <BotonSegregado bloqueo={segregacion.autorizar} onSolicitar={() => solicitarExcepcion("autorizar")}>
+              <Button variant="soft" icon={<SealCheck size={16} />} onClick={() => setSign("autorizar")} disabled={!!segregacion.autorizar}>
+                Autorizar
+              </Button>
+            </BotonSegregado>
           ) : null}
           {editing && estado === "autorizado" && canAuthorize ? (
             <Button icon={<Truck size={16} />} onClick={() => setEntrega({ ...entrega, open: true })}>
@@ -369,6 +390,8 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
         </Callout>
       ) : null}
       <SupervisionCallout item={item} />
+      <SolicitudCallout item={item} />
+      <SegregacionCallout bloqueo={editing && estado === "borrador" && canReview ? segregacion.revisar : editing && estado === "en_revision" && canAuthorize ? segregacion.autorizar : null} accion={estado === "en_revision" ? "autorizar" : "revisar"} onSolicitar={() => solicitarExcepcion(estado === "en_revision" ? "autorizar" : "revisar")} />
       {item?.motivo_anulacion ? (
         <Callout tone="danger" title="Informe anulado">
           Motivo: {String(item.motivo_anulacion)}
@@ -399,7 +422,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
             </Select>
           </Field>
           <Field label="Fecha de emisión" htmlFor="i-fecha" hint="Se fija al autorizar si se deja vacía.">
-            <Input id="i-fecha" type="date" value={form.fechaEmision} onChange={(event) => patch({ fechaEmision: event.target.value })} readOnly={!draft} />
+            <DateInput id="i-fecha" value={form.fechaEmision} onChange={(value) => patch({ fechaEmision: value })} readOnly={!draft} />
           </Field>
           {recepcionInfo ? (
             <div className="flex flex-col gap-1 self-end pb-1 text-[13px] text-ink-2">
@@ -542,8 +565,8 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
         <div className="flex flex-col gap-4">
           <PersonCard title="Elaboró" requires="informes" name={form.elaboradoNombre} onName={(v) => patch({ elaboradoNombre: v })} cargo={item?.elaborado_cargo ? String(item.elaborado_cargo) : undefined} signature={form.elaboradoFirma} onSignature={(v) => patch({ elaboradoFirma: v })} />
           <div className="grid gap-3 sm:grid-cols-2">
-            <SignoffCard title="Revisó" name={item?.revisado_nombre} cargo={item?.revisado_cargo} at={item?.revisado_en} hint={editing ? "Se firma con “Marcar revisado”." : "Después de crear el borrador."} />
-            <SignoffCard title="Autorizó" name={item?.autorizado_nombre} cargo={item?.autorizado_cargo} at={item?.autorizado_en} hint={editing ? "Se firma con “Autorizar” tras la revisión." : "Después de la revisión."}>
+            <SignoffCard title="Revisó" name={item?.revisado_nombre} cargo={item?.revisado_cargo} at={item?.revisado_en} note={excepcionDe("revisar") ? `Revisión autorizada por excepción, solicitud #${excepcionDe("revisar")!.solicitud_id}` : null} hint={editing ? "Se firma con “Marcar revisado”." : "Después de crear el borrador."} />
+            <SignoffCard title="Autorizó" name={item?.autorizado_nombre} cargo={item?.autorizado_cargo} at={item?.autorizado_en} note={excepcionDe("autorizar") ? `Autorización autorizada por excepción, solicitud #${excepcionDe("autorizar")!.solicitud_id}` : null} hint={editing ? "Se firma con “Autorizar” tras la revisión." : "Después de la revisión."}>
               {item?.pdf_sha256 ? <p className="code mt-1 text-[11px] text-ink-4">SHA-256 {String(item.pdf_sha256).slice(0, 16)}…</p> : null}
             </SignoffCard>
           </div>
@@ -588,7 +611,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
         <div className="flex flex-col gap-4">
           <FormGrid>
             <Field label="Fecha" htmlFor="e-fecha" required>
-              <Input id="e-fecha" type="date" value={entrega.fecha} onChange={(event) => setEntrega({ ...entrega, fecha: event.target.value })} />
+              <DateInput id="e-fecha" value={entrega.fecha} onChange={(value) => setEntrega({ ...entrega, fecha: value })} />
             </Field>
             <Field label="Medio" htmlFor="e-medio" required>
               <Select id="e-medio" value={entrega.medio} onChange={(event) => setEntrega({ ...entrega, medio: event.target.value })}>

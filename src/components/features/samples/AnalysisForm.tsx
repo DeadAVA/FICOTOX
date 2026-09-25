@@ -10,10 +10,11 @@ import { useSession } from "@/components/session/SessionProvider";
 import { Button, IconButton } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Field, FormGrid, Input, Select, Textarea, controlClassSm } from "@/components/ui/Field";
+import { DateInput } from "@/components/ui/DateInput";
 import { EmptyState } from "@/components/ui/Primitives";
 import { ActionMenu, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
-import { fmtDate, isoDate, parseFloatOrNull, parseIntOrNull } from "@/lib/client/format";
+import { fmtDate, isoDate, parseFloatOrNull, parseIntOrNull, todayIso } from "@/lib/client/format";
 import { findInsumoOption, findUniqueOperativeEquipo, loadInsumoOptions, nextBitacoraFolio } from "@/lib/client/insumos";
 import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
@@ -22,8 +23,9 @@ import { ANALYSIS_METHODS, ANALYSIS_STATES, ANALYSIS_TYPES, CONFORMITY_OPTIONS }
 import { Callout, ChoiceCard, ChoiceGrid, FieldGroup, FlowSteps, FormCard, FormPage, Panel, PersonCard, SignoffCard, missingMessage, missingSections, openFormSection, type FormSectionDef } from "./FormLayout";
 import { InsumoSearch, InventarioRows, collectInventarioRows, newInventarioRow } from "./InsumoSearch";
 import { SignDialog } from "./SignDialog";
-import { FolioChip, SupervisionCallout } from "./status";
+import { BotonSegregado, FolioChip, SegregacionCallout, SolicitudCallout, SupervisionCallout } from "./status";
 import { useAnulacion } from "./useAnulacion";
+import { formatearHora } from "@/lib/shared/fechas";
 
 /*
  * Registro de analisis: metodo, equipo, condiciones, resultados por muestra
@@ -91,8 +93,8 @@ const defaultForm = (): AnalysisFormState => ({
   metodoReferencia: "",
   extraccionId: "",
   recepcionId: "",
-  fecha: isoDate(new Date()),
-  horaInicio: new Date().toTimeString().slice(0, 5),
+  fecha: todayIso(),
+  horaInicio: formatearHora(new Date()),
   horaFin: "",
   equipo: "",
   equipoFolioBitacora: "",
@@ -191,7 +193,8 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
   const estado = String(item?.estado || "registrado");
   // E solo mientras el análisis está registrado (Fase 1): revisado y aprobado se leen, no se editan.
   const canEdit = editing ? can("ensayos", "E", { objeto: "analisis", borrador: estado === "registrado" }) && estado === "registrado" : can("ensayos", "C", { objeto: "analisis", borrador: true });
-  const readOnly = editing && (["aprobado", "revisado", "anulado", "anulada"].includes(estado) || !canEdit);
+  // Con una solicitud de autorizacion pendiente (Fase 3) el registro no se edita.
+  const readOnly = editing && (["aprobado", "revisado", "anulado", "anulada"].includes(estado) || !canEdit || !!item?.solicitud_pendiente);
   const patch = (changes: Partial<AnalysisFormState>) => setForm((prev) => ({ ...prev, ...changes }));
   const meta = ANALYSIS_TYPES.find((t) => t.value === form.tipo);
   const requiereExtraccion = !!meta?.requiere_extraccion;
@@ -374,24 +377,9 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
     if (!sign || !item) return;
     setSigning(true);
     try {
-      let body: Record<string, unknown> = { firma: data.firma || null, observaciones: data.observaciones || null };
-      const path = `${API_BASE_URL}/samples/analysis/${item.id}/${sign}`;
-      try {
-        await sendJsonAuth("POST", path, token, body);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "";
-        if (/persona distinta|misma_persona/i.test(message)) {
-          // Regla de dos personas: el servidor rechaza si quien capturo revisa, o quien reviso aprueba.
-          const ok = await prompt({
-            title: sign === "revisar" ? "Registraste este análisis y vas a revisarlo" : "Revisaste y vas a aprobar el mismo análisis",
-            description: `${sign === "revisar" ? "La revisión" : "La aprobación"} debe hacerla otra persona. Si no hay nadie más disponible, indica el motivo para registrar la excepción.`,
-            confirmLabel: sign === "revisar" ? "Revisar con excepción" : "Aprobar con excepción",
-          });
-          if (!ok) throw err;
-          body = { ...body, permitir_misma_persona: true, motivo: ok };
-          await sendJsonAuth("POST", path, token, body);
-        } else throw err;
-      }
+      const body: Record<string, unknown> = { firma: data.firma || null, observaciones: data.observaciones || null };
+      // Segregacion de funciones (Fase 3): el servidor rechaza con 409 "segregacion"; la excepcion se pide aparte.
+      await sendJsonAuth("POST", `${API_BASE_URL}/samples/analysis/${item.id}/${sign}`, token, body);
       toast.success(sign === "revisar" ? "Análisis revisado" : "Análisis aprobado");
       invalidate("muestras", "dashboard");
       setSign(null);
@@ -407,6 +395,27 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
   const ext = extracciones.find((e) => String(e.id) === form.extraccionId);
   const canReview = can("ensayos", "R");
   const canApprove = can("ensayos", "A");
+  // Segregacion (Fase 3): por que la persona actual no puede revisar o aprobar este analisis (null = puede).
+  const segregacion = (item?.segregacion || {}) as { revisar?: string | null; aprobar?: string | null };
+  const excepciones = (item?.excepciones || []) as Array<{ solicitud_id: number; accion: string }>;
+  const excepcionDe = (accion: string) => excepciones.find((e) => e.accion === accion);
+  const solicitarExcepcion = async (accion: "revisar" | "aprobar") => {
+    if (!item) return;
+    const motivo = await prompt({
+      critico: true,
+      title: `Solicitar excepción para ${accion} ${folioLabel}`,
+      description: `${segregacion[accion] || "La regla de dos personas te lo impide"}. Por falta de personal puedes pedir una excepción: la aprueba quien tiene A en calidad y queda registrada en el análisis y en la bitácora.`,
+      confirmLabel: "Solicitar excepción",
+    });
+    if (!motivo) return;
+    try {
+      const data = await sendJsonAuth("POST", `${API_BASE_URL}/solicitudes`, token, { tipo: "excepcion_segregacion", entidad: "muestras_analisis", entidad_id: item.id, accion, motivo });
+      toast.info(String(data.message || "Excepción solicitada"));
+      invalidate("solicitudes");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo solicitar la excepción");
+    }
+  };
   const folioLabel = `A ${form.folio ? String(form.folio).padStart(7, "0") : "—"}`;
   const resultadosOk = form.resultados.length > 0 && form.resultados.every((r) => r.id_muestra.trim() && (r.resultado.trim() || r.resultado_texto.trim()));
 
@@ -453,14 +462,18 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
           </Button>
           {moreItems.length ? <ActionMenu items={moreItems} label="Más acciones" header={folioLabel} /> : null}
           {editing && estado === "registrado" && canReview ? (
-            <Button variant="soft" icon={<CheckCircle size={16} />} onClick={() => setSign("revisar")}>
-              Marcar revisado
-            </Button>
+            <BotonSegregado bloqueo={segregacion.revisar} onSolicitar={() => solicitarExcepcion("revisar")}>
+              <Button variant="soft" icon={<CheckCircle size={16} />} onClick={() => setSign("revisar")} disabled={!!segregacion.revisar}>
+                Marcar revisado
+              </Button>
+            </BotonSegregado>
           ) : null}
           {editing && estado === "revisado" && canApprove ? (
-            <Button variant="soft" icon={<SealCheck size={16} />} onClick={() => setSign("aprobar")}>
-              Aprobar
-            </Button>
+            <BotonSegregado bloqueo={segregacion.aprobar} onSolicitar={() => solicitarExcepcion("aprobar")}>
+              <Button variant="soft" icon={<SealCheck size={16} />} onClick={() => setSign("aprobar")} disabled={!!segregacion.aprobar}>
+                Aprobar
+              </Button>
+            </BotonSegregado>
           ) : null}
           {!readOnly ? (
             <Button onClick={handleSave} loading={submitting} icon={<FloppyDisk size={16} />}>
@@ -476,6 +489,8 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
         </div>
       ) : null}
       <SupervisionCallout item={item} />
+      <SolicitudCallout item={item} />
+      <SegregacionCallout bloqueo={editing && estado === "registrado" && canReview ? segregacion.revisar : editing && estado === "revisado" && canApprove ? segregacion.aprobar : null} accion={estado === "revisado" ? "aprobar" : "revisar"} onSolicitar={() => solicitarExcepcion(estado === "revisado" ? "aprobar" : "revisar")} />
       {item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}
@@ -490,7 +505,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
             <Input id="a-folio" type="number" min="1" inputMode="numeric" value={form.folio} onChange={(event) => patch({ folio: event.target.value })} mono />
           </Field>
           <Field label="Fecha" htmlFor="a-fecha" required>
-            <Input id="a-fecha" type="date" value={form.fecha} onChange={(event) => patch({ fecha: event.target.value })} />
+            <DateInput id="a-fecha" value={form.fecha} onChange={(value) => patch({ fecha: value })} />
           </Field>
           <Field label="Hora de inicio" htmlFor="a-hi">
             <Input id="a-hi" type="time" value={form.horaInicio} onChange={(event) => patch({ horaInicio: event.target.value })} />
@@ -701,7 +716,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
             <FormGrid cols={3}>
               <Field label="Del inventario" className="sm:col-span-3 lg:col-span-1"><InsumoSearch tipo="reactivo" value={form.mrRef} onChange={(ref, label) => patch({ mrRef: ref, mrNombre: label || form.mrNombre })} placeholder="Buscar CRM" size="sm" /></Field>
               <Field label="Lote" htmlFor="a-mr-lote"><Input id="a-mr-lote" maxLength={80} value={form.mrLote} onChange={(event) => patch({ mrLote: event.target.value })} readOnly={readOnly} /></Field>
-              <Field label="Caducidad" htmlFor="a-mr-cad"><Input id="a-mr-cad" type="date" value={form.mrCaducidad} onChange={(event) => patch({ mrCaducidad: event.target.value })} readOnly={readOnly} /></Field>
+              <Field label="Caducidad" htmlFor="a-mr-cad"><DateInput id="a-mr-cad" value={form.mrCaducidad} onChange={(value) => patch({ mrCaducidad: value })} readOnly={readOnly} /></Field>
               <Field label="Valor esperado" htmlFor="a-mr-esp"><Input id="a-mr-esp" maxLength={60} value={form.mrEsperado} onChange={(event) => patch({ mrEsperado: event.target.value })} readOnly={readOnly} /></Field>
               <Field label="Valor obtenido" htmlFor="a-mr-obt"><Input id="a-mr-obt" maxLength={60} value={form.mrObtenido} onChange={(event) => patch({ mrObtenido: event.target.value })} readOnly={readOnly} /></Field>
               <Field label="Criterio" htmlFor="a-mr-ok"><Select id="a-mr-ok" value={form.mrAceptable} onChange={(event) => patch({ mrAceptable: event.target.value })} disabled={readOnly}><option value="">—</option>{ACEPTABLE.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
@@ -735,8 +750,8 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
 
       <FormCard id="sec-revision" title="Revisión y aprobación" description="Una segunda persona revisa; otra distinta aprueba. Solo los análisis aprobados pueden reportarse.">
         <div className="grid gap-3 sm:grid-cols-2">
-          <SignoffCard title="Revisó" name={item?.revisado_nombre} cargo={item?.revisado_cargo} at={item?.revisado_en} note={item?.revision_observaciones} hint={editing ? "Se firma con “Marcar revisado”." : "Después de registrar el análisis."} />
-          <SignoffCard title="Aprobó" name={item?.aprobado_nombre} cargo={item?.aprobado_cargo} at={item?.aprobado_en} hint={editing ? "Se firma con “Aprobar” tras la revisión." : "Después de la revisión."} />
+          <SignoffCard title="Revisó" name={item?.revisado_nombre} cargo={item?.revisado_cargo} at={item?.revisado_en} note={[item?.revision_observaciones, excepcionDe("revisar") ? `Revisión autorizada por excepción, solicitud #${excepcionDe("revisar")!.solicitud_id}` : null].filter(Boolean).join(" · ") || null} hint={editing ? "Se firma con “Marcar revisado”." : "Después de registrar el análisis."} />
+          <SignoffCard title="Aprobó" name={item?.aprobado_nombre} cargo={item?.aprobado_cargo} at={item?.aprobado_en} note={excepcionDe("aprobar") ? `Aprobación autorizada por excepción, solicitud #${excepcionDe("aprobar")!.solicitud_id}` : null} hint={editing ? "Se firma con “Aprobar” tras la revisión." : "Después de la revisión."} />
         </div>
         {editing && estado === "registrado" && !canReview ? <Callout tone="info" className="mt-4">Una persona con permiso de revisar ensayos debe revisar este análisis.</Callout> : null}
       </FormCard>

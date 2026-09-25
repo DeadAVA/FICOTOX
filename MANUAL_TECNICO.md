@@ -8,7 +8,7 @@ FICOTOX es una aplicacion web para gestion de laboratorio. Esta compuesta por:
 
 - Una aplicacion Next.js (App Router) que sirve la interfaz React y la API REST (`/api/*`).
 - Base de datos SQLite por defecto, con soporte opcional para MySQL/MariaDB.
-- Autenticacion local por correo y autenticacion Microsoft Entra ID opcional.
+- Autenticacion solo con usuario (correo) y contrasena del sistema (Fase 3: se retiro Microsoft Entra ID).
 - Control de acceso por roles y permisos.
 
 ## 2. Estructura del proyecto
@@ -28,7 +28,7 @@ ficotox/
       layout.tsx             # fuentes (next/font), globals.css, providers y toasts
       globals.css            # Tailwind v4 + tokens del sistema de diseño (@theme)
       providers.tsx          # SessionProvider, TooltipProvider, ConfirmProvider
-      login/page.tsx         # acceso con correo y contrasena (Microsoft opcional)
+      login/page.tsx         # acceso con correo y contrasena
       (app)/layout.tsx       # guardia de sesion + shell (barra lateral)
       (app)/page.tsx         # Inicio
       (app)/muestras/**      # listas por etapa y formatos nueva/[id]
@@ -69,7 +69,7 @@ ficotox/
 - Node.js LTS (22.13+ o 24).
 - Next.js 16 (App Router, Turbopack), React 19, TypeScript.
 - `better-sqlite3` (SQLite) y `mysql2` (MySQL/MariaDB).
-- `jose` para JWT y validacion de tokens de Microsoft (JWKS).
+- `jose` para firmar y verificar el JWT de la sesion.
 
 ### Interfaz
 
@@ -77,7 +77,7 @@ ficotox/
 - Radix UI (`radix-ui`) para dialogos, hojas laterales, menus y tooltips accesibles; `cmdk` para la paleta de comandos; `sonner` para notificaciones.
 - Iconos Phosphor (`@phosphor-icons/react`); una sola familia tipografica: la del sistema (SF Pro en Apple) con Inter como respaldo, y Geist Mono de respaldo para la monoespaciada, ambas servidas con `next/font`.
 - SheetJS para lectura de archivos Excel en navegador (`public/vendor/xlsx`).
-- `@azure/msal-browser` para login Microsoft (carga bajo demanda).
+- Sin dependencias de proveedores externos de identidad (Fase 3).
 
 ### Base de datos
 
@@ -155,11 +155,8 @@ Se leen desde `.env` en la raiz. `FICOTOX_ENV_FILE` permite indicar otro archivo
 | `SUPERVISAR_CUENTAS_TEMPORALES` | Lo que captura una cuenta temporal con supervisor queda pendiente de visto bueno (decision pendiente de validar) | `true` |
 | `DATABASE_URL` | URL de base externa (`mysql://usuario:password@host:3306/ficotox`) | No definida |
 | `SQLITE_PATH` | Ruta de SQLite local | `instance/ficotox.sqlite3` |
-| `LOCAL_LOGIN_ENABLED` | Activa login local por correo | `true` |
-| `MICROSOFT_AUTH_ENABLED` | Activa login Microsoft si hay client/tenant | `true` |
-| `MICROSOFT_CLIENT_ID` | Client ID de Microsoft Entra ID | Vacio |
-| `MICROSOFT_TENANT_ID` | Tenant ID de Microsoft Entra ID | Vacio |
-| `MICROSOFT_ALLOWED_DOMAIN` | Dominio permitido para Microsoft | `cicese.mx` |
+| `ALLOWED_EMAIL_DOMAINS` | Dominios de correo admitidos al dar de alta o cambiar el correo de una cuenta (lista separada por comas; vacio = cualquiera). Una cuenta que conserva su correo se edita aunque el dominio ya no este en la lista | Vacio |
+| `SOLICITUD_VENCE_DIAS` | Dias que una solicitud de autorizacion espera al segundo usuario antes de vencer | `7` |
 | `CORS_ORIGINS` | Origenes permitidos por CORS (lista separada por comas o `*`); vacio = solo el mismo origen | Vacio (mismo origen) |
 | `HOST` / `PORT` | Host y puerto del lanzador standalone | `0.0.0.0` / `5000` |
 | `FICOTOX_OPEN_BROWSER` | Abrir navegador al iniciar el lanzador | `true` |
@@ -173,8 +170,7 @@ SECRET_KEY=<64 caracteres aleatorios; openssl rand -hex 32>
 JWT_SECRET=<otros 64 caracteres aleatorios>
 JWT_EXPIRES_HOURS=8
 SESION_INACTIVIDAD_MIN=30
-LOCAL_LOGIN_ENABLED=true
-MICROSOFT_AUTH_ENABLED=false
+ALLOWED_EMAIL_DOMAINS=cicese.mx,ficotox.local
 SQLITE_PATH=instance/ficotox.sqlite3
 CORS_ORIGINS=
 ```
@@ -185,8 +181,7 @@ Ejemplo MySQL/MariaDB:
 DATABASE_URL=mysql://usuario:password@localhost:3306/ficotox
 SECRET_KEY=<64 caracteres aleatorios>
 JWT_SECRET=<otros 64 caracteres aleatorios>
-LOCAL_LOGIN_ENABLED=true
-MICROSOFT_AUTH_ENABLED=false
+ALLOWED_EMAIL_DOMAINS=cicese.mx,ficotox.local
 ```
 
 ## 7. Modulos de la API
@@ -200,14 +195,13 @@ src/lib/server/modules/auth.ts
 src/lib/server/auth.ts
 ```
 
-- Configuracion de autenticacion, login local por correo, login Microsoft Entra ID, emision de JWT y usuario actual.
+- Configuracion publica del acceso, login con correo y contrasena del sistema, emision de JWT y usuario actual. (Fase 3: se eliminaron el login y la reautenticacion con Microsoft Entra ID, la dependencia `@azure/msal-browser`, `/api/auth/microsoft`, la validacion JWKS y las variables `MICROSOFT_*` y `LOCAL_LOGIN_ENABLED`.)
 
 ```text
 GET  /api/auth/config
 POST /api/auth/login
-POST /api/auth/microsoft
 GET  /api/auth/me
-POST /api/auth/reauth          { accion, password | id_token } -> { token, expira_en } (un solo uso, REAUTH_TTL_MIN)
+POST /api/auth/reauth          { accion, password } -> { token, expira_en } (un solo uso, REAUTH_TTL_MIN)
 POST /api/auth/password        { actual, nueva } -> sesion nueva (las demas se cierran)
 POST /api/auth/logout-all      cerrar sesion en todos los dispositivos (token_version + 1)
 PUT  /api/auth/me/cargo        { rol_id | null } cargo predeterminado
@@ -249,7 +243,7 @@ GET    /api/admin/accesos?desde&hasta&dias             revision de accesos; &for
 - **Siempre queda un administrador**: un cambio (revocar, desactivar, dar de baja, editar permisos o desactivar un rol) que deje en cero a los usuarios activos con `usuarios:G` vigente, o que deje solo administradores con fecha de fin, responde **409** y no se aplica (`countActiveAdministrators` / `assertAdministratorRemains` en `rbac.ts`).
 - **Combinaciones prohibidas**: al asignar un rol y al editar los permisos de un rol se evaluan las reglas de `src/lib/shared/combinaciones-roles.ts` (409 `COMBINACION_PROHIBIDA`; en la edicion de rol, con la lista de personas afectadas).
 - Nadie se asigna ni se revoca roles a si mismo (403). Un rol con `es_sistemico = 1` ("Administrador técnico del sistema") no se elimina (403).
-- El correo de una cuenta nueva (o un correo que cambia) debe ser del dominio `MICROSOFT_ALLOWED_DOMAIN`; una cuenta existente que conserva su correo se puede editar aunque sea de otro dominio (p. ej. las cuentas locales `@ficotox.local`).
+- El correo de una cuenta nueva (o un correo que cambia) debe ser de un dominio de `ALLOWED_EMAIL_DOMAINS` (vacio = cualquiera); una cuenta existente que conserva su correo se puede editar aunque su dominio ya no este en la lista.
 
 ### 7.3 `dashboard`
 
@@ -346,7 +340,7 @@ GET    /api/samples/analysis/<id>
 POST   /api/samples/analysis                   # cadena derivada de la extraccion
 PUT    /api/samples/analysis/<id>              # ensayos:E solo en "registrado"; revisado o aprobado -> 409 (se anula y se registra otro)
 POST   /api/samples/analysis/<id>/revisar      # ensayos:R (cargo: X-Actuar-Como si hay varios roles)
-POST   /api/samples/analysis/<id>/aprobar      # ensayos:A (regla de dos personas apagada)
+POST   /api/samples/analysis/<id>/aprobar      # ensayos:A (segregacion: quien lo elaboro no lo revisa ni aprueba)
 POST   /api/samples/analysis/<id>/anular       # 409 si esta en un informe autorizado
 POST   /api/samples/analysis/<id>/restaurar
 ```
@@ -495,8 +489,8 @@ Codigo: `src/lib/server/seguridad.ts` (intentos, bloqueo, reautenticacion), `rba
 - **Fechas de filtros**: los filtros por dia de la bitacora y de la revision de accesos usan el dia local del servidor (`inicioDiaLocal`/`finDiaLocal` en `rbac.ts`), aunque `fecha_hora` se guarda en UTC.
 - **Validacion por peticion** (`cargarAutorizacion`): la cuenta existe, esta activa, dentro de su vigencia (`vigente_desde/hasta`) y el claim `tv` del JWT coincide con `usuarios.token_version`. Si no: 401 `sesion_revocada` o `cuenta_no_vigente` ("Tu acceso no está vigente; contacta al administrador"). Con `debe_cambiar_password` solo se permiten `/auth/me` y `/auth/password` (403 `cambiar_password`).
 - **`token_version`** sube con: cerrar sesion en todos los dispositivos, baja de la cuenta, cambio o restablecimiento de contrasena y bloqueo. Todo token anterior deja de valer.
-- **Bloqueo** (tabla `intentos_acceso`): `LOGIN_MAX_INTENTOS` fallos (login o reautenticacion) en `LOGIN_VENTANA_MIN` bloquean la cuenta `LOGIN_BLOQUEO_MIN` (`usuarios.bloqueado_hasta`); `LOGIN_IP_MAX_INTENTOS` fallos desde una IP la bloquean (429 `ip_bloqueada`). El mensaje es el mismo exista o no la cuenta (los correos inexistentes tambien se bloquean por correo). `usuarios:G` desbloquea con motivo. Reactivar una cuenta dada de baja tambien exige reautenticacion; un guardado de usuario con varios cambios criticos pide una sola. Eventos `login_fallido`, `reauth_fallida`, `bloquear`, `desbloquear`. Un intento rechazado por un bloqueo vigente (de la cuenta o de la IP) **no cuenta** como fallo: un bloqueo de IP no bloquea cuentas ajenas ni se prolonga solo. Microsoft solo respeta el bloqueo de la cuenta. **IP**: con el lanzador de produccion (`scripts/start-ficotox.mjs`) y sin proxy, `scripts/ip-real.mjs` (precargado con `--import`) sobrescribe `X-Forwarded-For` con la direccion del socket, asi que cada equipo cuenta por separado y el cliente no puede elegir su IP. Detras de un proxy propio usa `TRUST_PROXY=true` para que la IP sea la que fija el proxy. Con `next dev`/`next start` directos, Next solo rellena el encabezado si falta: un cliente podria falsificarlo (eludir el limite por IP o bloquear otra IP; el bloqueo por cuenta no cambia), por eso en produccion se usa el lanzador o un proxy.
-- **Reautenticacion** (tabla `reautenticaciones`, solo el hash SHA-256 del token): `exigirReauth(s, request, user, "modulo:accion")` en toda accion A y AN (anular, restaurar, dar de baja, cancelar, cerrar muestra, aprobar, autorizar, entregar), reactivar (G), visto bueno y en usuarios (asignar/revocar roles, alta de cuenta, cambiar vigencia o supervisor, permisos de un rol, desbloquear, restablecer o fijar la contrasena de otra persona, baja). Sin encabezado `X-Reauth`: 401 `reauth_required` con la `accion`; token vencido, usado, de otra persona o de otra accion: 401 `reauth_invalido`. El token se marca usado dentro de la transaccion (si el handler falla, el rollback lo libera). Con Microsoft: MSAL `prompt=login` (pidiendo la claim `auth_time` como esencial) y el servidor exige `auth_time` dentro de `REAUTH_TTL_MIN` y que el `id_token` no se haya usado antes (tabla `reauth_idtokens`, solo su hash). Si el registro de la aplicacion en Entra ID no emite `auth_time` en el `id_token`, agregala como *optional claim* del token de identidad; sin ella la reautenticacion con Microsoft se rechaza. En la interfaz la contrasena se pide en el mismo dialogo de confirmacion (`usePrompt({ critico: true })`, `SignDialog critico`); si no, `ReautenticarProvider` la pide sin salir del formulario.
+- **Bloqueo** (tabla `intentos_acceso`): `LOGIN_MAX_INTENTOS` fallos (login o reautenticacion) en `LOGIN_VENTANA_MIN` bloquean la cuenta `LOGIN_BLOQUEO_MIN` (`usuarios.bloqueado_hasta`); `LOGIN_IP_MAX_INTENTOS` fallos desde una IP la bloquean (429 `ip_bloqueada`). El mensaje es el mismo exista o no la cuenta (los correos inexistentes tambien se bloquean por correo). `usuarios:G` desbloquea con motivo. Reactivar una cuenta dada de baja tambien exige reautenticacion; un guardado de usuario con varios cambios criticos pide una sola. Eventos `login_fallido`, `reauth_fallida`, `bloquear`, `desbloquear`. Un intento rechazado por un bloqueo vigente (de la cuenta o de la IP) **no cuenta** como fallo: un bloqueo de IP no bloquea cuentas ajenas ni se prolonga solo. **IP**: con el lanzador de produccion (`scripts/start-ficotox.mjs`) y sin proxy, `scripts/ip-real.mjs` (precargado con `--import`) sobrescribe `X-Forwarded-For` con la direccion del socket, asi que cada equipo cuenta por separado y el cliente no puede elegir su IP. Detras de un proxy propio usa `TRUST_PROXY=true` para que la IP sea la que fija el proxy. Con `next dev`/`next start` directos, Next solo rellena el encabezado si falta: un cliente podria falsificarlo (eludir el limite por IP o bloquear otra IP; el bloqueo por cuenta no cambia), por eso en produccion se usa el lanzador o un proxy.
+- **Reautenticacion** (tabla `reautenticaciones`, solo el hash SHA-256 del token): `exigirReauth(s, request, user, "modulo:accion")` en toda accion A y AN (anular, restaurar, dar de baja, cancelar, cerrar muestra, aprobar, autorizar, entregar), reactivar (G), visto bueno y en usuarios (asignar/revocar roles, alta de cuenta, cambiar vigencia o supervisor, permisos de un rol, desbloquear, restablecer o fijar la contrasena de otra persona, baja). Sin encabezado `X-Reauth`: 401 `reauth_required` con la `accion`; token vencido, usado, de otra persona o de otra accion: 401 `reauth_invalido`. El token se marca usado dentro de la transaccion (si el handler falla, el rollback lo libera). (Fase 3: solo con la contrasena del sistema.) En la interfaz la contrasena se pide en el mismo dialogo de confirmacion (`usePrompt({ critico: true })`, `SignDialog critico`); si no, `ReautenticarProvider` la pide sin salir del formulario.
 - **Sesiones**: JWT de `JWT_EXPIRES_HOURS` (8 h). Riesgo aceptado: el cierre por inactividad es del navegador; un token copiado sigue valiendo en el servidor hasta que expira (8 h) o sube `token_version` (cerrar en todos los dispositivos, baja, contrasena, bloqueo). Cierre por inactividad en el cliente (`SESION_INACTIVIDAD_MIN`, aviso 1 min antes, actividad compartida entre pestanas): se descarta el token y la pagina queda bajo una pantalla de bloqueo; al volver a entrar se conserva lo capturado.
 - **Contrasenas**: minimo 10 caracteres, distinta del correo, de su parte local y del nombre. Restablecer genera una temporal y obliga a cambiarla. Nunca se escriben contrasenas ni hashes en la bitacora (`password_hash` es campo volatil).
 - **Alcance `supervisado`** (`supervision.ts`): lo que crea o edita una persona cuya operacion solo cubre `supervisado`, o cuya cuenta es temporal con supervisor, queda `supervision_estado = 'pendiente'` con el `supervisor_id` de su cuenta. Mientras esta pendiente o regresado no sirve de origen de la etapa siguiente, no se cierra, no se revisa, aprueba ni autoriza, y un mantenimiento no se marca completado (409 `supervision_pendiente`). Solo el supervisor asignado da el visto bueno (reautenticacion) o lo regresa con observaciones; ambos quedan en la bitacora. Tablas: las 4 del flujo de muestras, `informes`, `equipos`, `mantenimientos`, `reactivos`, `consumibles`.
@@ -504,9 +498,27 @@ Codigo: `src/lib/server/seguridad.ts` (intentos, bloqueo, reautenticacion), `rba
 - **Secretos**: en produccion (`NODE_ENV=production`) `src/instrumentation.ts` (que importa `instrumentation-node.ts` solo en el runtime Node.js) y `scripts/start-ficotox.mjs` detienen el arranque si `JWT_SECRET` falta, es un valor por defecto o mide menos de 32 caracteres.
 - **CORS**: sin `CORS_ORIGINS` solo se atiende el mismo origen (sin encabezados CORS).
 
-### 9.3 Microsoft Entra ID
+### 9.3 Separacion de funciones y segundo usuario (Fase 3)
 
-El login Microsoft valida el `id_token` con las claves JWKS del tenant (`jose`), `audience` contra `MICROSOFT_CLIENT_ID`, `issuer` contra el tenant, el dominio permitido y la existencia del usuario en `usuarios`.
+Codigo: `src/lib/shared/segregacion.ts` (catalogo versionado de reglas), `src/lib/server/segregacion.ts` (quien elaboro, segun la bitacora; 409 `segregacion`), `src/lib/shared/acciones-criticas.ts` (catalogo de acciones criticas), `src/lib/server/solicitudes.ts` (tabla `solicitudes_autorizacion`, bandeja, aprobar/rechazar/cancelar/vencer) y `src/lib/server/solicitudes-ejecutar.ts` (lo que se ejecuta al aprobar cada tipo).
+
+- **Reglas de segregacion** (se evaluan en el servidor por persona, sin importar cuantos roles tenga ni con que cargo actue). "Elaboro" = quien creo el registro y cualquiera que haya editado su contenido (`crear`/`editar` en su bitacora, mas `creado_por`/`elaborado_por`).
+  1. Analisis: quien lo elaboro no lo revisa ni lo aprueba (revisor y aprobador pueden ser la misma persona).
+  2. Informe: quien lo elaboro, o elaboro cualquiera de sus analisis, no lo revisa ni lo autoriza.
+  3. Procesamiento y extraccion: el nombre firmado como "supervisó" no puede ser el de quien proceso, extrajo o hizo la limpieza (se comparan sin acentos ni mayusculas).
+  4. Supervision: el supervisor no da visto bueno a lo que el mismo capturo.
+  5. Documentos SGC: quien elaboro no revisa ni aprueba; quien reviso no aprueba (el modelo tiene un solo paso de revision, asi que "revisor de calidad, revisor tecnico y aprobador no todos la misma persona" se aplica como revisor distinto del aprobador).
+  6. Segundo usuario: quien solicita una accion critica no la aprueba.
+  Al violarse: 409 `{ codigo: "segregacion", regla, message }`. Las fichas de analisis e informe traen `segregacion: { revisar, aprobar|autorizar }` para que la interfaz deshabilite los botones con la explicacion. Se eliminaron `TWO_PERSON_RULE`, `samePersonException` y `permitir_misma_persona`.
+- **Excepcion de segregacion**: `POST /api/solicitudes { tipo: "excepcion_segregacion", entidad, entidad_id, accion, motivo }` (analisis, informes, documentos). Solo la pide quien tiene el permiso de esa accion, con el registro en el estado donde aplica y a quien la segregacion se la impide de verdad (si no, 403 o 409 `excepcion_innecesaria`); una pendiente no bloquea el registro (otra persona puede revisarlo o aprobarlo) y hay una sola por persona y accion. La aprueba quien tiene A en calidad; al aprobarse queda en `excepciones_json` del registro para esa persona y esa accion, en la bitacora de la accion (`excepcion_segregacion`) y, en un informe, en el PDF ("Revisión autorizada por excepción, solicitud #N").
+- **Acciones criticas** (no se ejecutan: crean una solicitud, 202 `solicitud_creada`): anular o restaurar una recepcion, procesamiento, extraccion o analisis que ya no esta en borrador/registrado (AN del mismo modulo); anular un informe autorizado o entregado (AN en informes); excepcion de segregacion (A en calidad); asignar un rol, incluido el rol inicial de una cuenta nueva (A en usuarios); reactivar una cuenta; ampliar la vigencia de una cuenta temporal (A en usuarios). Revocar roles, dar de baja cuentas, bloquear y acortar vigencias son inmediatos. En borrador/registrado anular sigue siendo inmediato. Para que no se evite, una recepcion aceptada o rechazada no vuelve a "registrada" quitando la decision al editarla (409 `decision_registrada`), y la migracion de la Fase 1 (`migrarRolesUnicos`) no toca cuentas cuyos roles ya pasaron por solicitudes (un rol inicial pendiente o rechazado no se asigna al reiniciar).
+- **Flujo**: la solicitud se crea con reautenticacion del solicitante; una sola pendiente por registro, sin contar las excepciones de segregacion (en cuentas de usuario, una por tipo y, en asignar rol, una por rol); nadie aprueba su propia solicitud ni un cambio de acceso sobre su propia cuenta; un informe con solicitud pendiente no se entrega ni se enmienda, y un analisis con solicitud pendiente no se incluye, revisa ni autoriza en un informe; mientras esta pendiente el registro no se edita, no se revisa/aprueba y no sirve de origen (409 `solicitud_pendiente`). Un segundo usuario con el permiso de la accion la aprueba (`POST /api/solicitudes/<id>/aprobar { motivo }`, reautenticacion `solicitudes:aprobar`) y el servidor ejecuta la accion en la misma transaccion, con la bitacora enlazada (`solicitud_id`, `solicitado_por`); o la rechaza (`/rechazar`). El solicitante la cancela (`/cancelar`). Resolver es atomico: si otra persona la resolvio al mismo tiempo (el `UPDATE ... WHERE estado = 'pendiente'` no afecta filas) se responde 409 y no se ejecuta dos veces. Vencen a los `SOLICITUD_VENCE_DIAS` dias: una vencida deja de bloquear en cuanto pasa el plazo y se marca `vencida` en el barrido del bootstrap o al intentar resolverla. Nada se borra. Eventos: `solicitar`, `aprobar_solicitud`, `rechazar_solicitud`, `cancelar_solicitud`, `vencer_solicitud`.
+- **Bandeja**: `GET /api/solicitudes` (pendientes que la persona puede aprobar y las suyas; `estado=todas` para historial; `entidad`+`entidad_id` para la pestana "Solicitudes" del historial de un registro). Aviso "Por autorizar" en el Inicio y pagina `/solicitudes`.
+- **Cambios de acceso**: el Responsable General tiene usuarios = V A (migracion `migrarPermisosFase3` al arrancar, una sola vez: si ya esta en la bitacora no se repite, asi que un administrador puede quitarlo despues). `usuarios:G` implica A. Guardas: nunca queda el sistema sin usuarios:G vigente (y uno sin fecha de fin) ni sin usuarios:A vigente (como G implica A, la guarda de G ya garantiza la de A; se conserva como defensa). El script de alta (seed) asigna roles sin solicitud y lo deja dicho en la bitacora (`sin_solicitud`).
+
+### 9.4 Fechas (Fase 3)
+
+Todas las fechas pasan por `src/lib/shared/fechas.ts`. Una fecha sin hora ("AAAA-MM-DD": recepcion, emision, vigencias, caducidad) es texto y se formatea sin `Date` (`formatearFecha` -> dd/mm/aaaa). Una fecha con hora (ISO o TIMESTAMP de la base, en UTC) se muestra en America/Tijuana (`formatearFechaHora`). "Hoy", vencimientos, "hace N dias" y los filtros por dia (`inicioDiaLocal`/`finDiaLocal`) usan el dia del laboratorio, sin importar la zona del servidor o del navegador. Los campos de fecha usan `src/components/ui/DateInput.tsx` (dd/mm/aaaa siempre, calendario con teclado) en lugar de `<input type="date">`.
 
 ### 9.5 Llave de la bitacora
 
@@ -657,15 +669,15 @@ INSERT INTO rol_acciones (id_rol, modulo, accion, alcance) VALUES
   (@rol, 'usuarios', 'G', 'total'), (@rol, 'documentos', 'V', 'tecnico'), (@rol, 'muestras', 'V', 'estado'),
   (@rol, 'equipos', 'V', 'total'), (@rol, 'calidad', 'V', 'bitacora');
 -- hash: node -e 'import("./src/lib/server/password.ts").then(m=>console.log(m.hashPassword(process.argv[1])))' 'contraseña'
-INSERT INTO usuarios (nombre, email, activo, id_rol, auth_provider, password_hash)
-VALUES ('Nombre Apellido', 'correo@cicese.mx', 1, @rol, 'local', '<hash scrypt$...>');
+INSERT INTO usuarios (nombre, email, activo, id_rol, password_hash)
+VALUES ('Nombre Apellido', 'correo@cicese.mx', 1, @rol, '<hash scrypt$...>');
 INSERT INTO usuario_roles (usuario_id, rol_id, vigente_desde, motivo, asignado_en)
 VALUES (LAST_INSERT_ID(), @rol, CURDATE(), 'Alta manual del primer administrador', NOW());
 ```
 
 Esas altas no quedan en la bitacora (se hicieron fuera de la aplicacion); anotarlas en el registro de la instalacion. El resto de los roles de `scripts/roles-catalogo.json` se da de alta desde Administracion > Roles, con bitacora. Soporte MySQL en el script: sigue fuera de alcance (documentado).
 
-Las cuentas del catalogo son locales (`@ficotox.local`); no pueden entrar con Microsoft. Para dar de alta personal real, usar correos `@cicese.mx` desde Administracion > Usuarios.
+Las cuentas del catalogo son locales (`@ficotox.local`). Para dar de alta personal real, usar correos `@cicese.mx` desde Administracion > Usuarios.
 
 ## 16. Convenciones de desarrollo
 
@@ -699,11 +711,7 @@ Las cuentas del catalogo son locales (`@ficotox.local`); no pueden entrar con Mi
 
 ### Login local no funciona
 
-- `LOCAL_LOGIN_ENABLED=true`, usuario existente, activo, con rol y permisos.
-
-### Login Microsoft no funciona
-
-- `MICROSOFT_AUTH_ENABLED=true`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_TENANT_ID`, dominio permitido, usuario registrado, conectividad a JWKS de Microsoft.
+- Usuario existente, activo, dentro de su vigencia, con rol y permisos, y sin bloqueo por intentos.
 
 ### Un usuario no ve un modulo
 
@@ -735,3 +743,9 @@ rg -n "export const (GET|POST|PUT|DELETE)" src/app/api
 - SQLite es adecuado para uso local; produccion multiusuario deberia usar MySQL/MariaDB.
 - Los secretos por defecto solo deben usarse en desarrollo.
 - `better-sqlite3` requiere Node.js LTS con binarios precompilados.
+- Fase 3 (limites aceptados de la separacion de funciones):
+  - La regla 3 compara nombres escritos ("procesó" / "supervisó"), no cuentas de usuario: dos personas con el mismo nombre o una firma escrita distinta la burlan. Se resolvera cuando la firma quede ligada a la cuenta (asignacion de muestras, Fase 5).
+  - Quien tiene `usuarios:G` puede cambiar los permisos de un rol ya asignado sin segundo usuario (queda en la bitacora con motivo y reautenticacion). Riesgo aceptado para una fase posterior.
+  - La guarda de `usuarios:A` no se puede disparar de extremo a extremo mientras G implique A (la de G salta antes); se conserva como defensa si se separan.
+  - Documentos SGC (modulo apagado hasta la Fase 7): enviar a revision cuenta como revisar, y "revisor distinto del aprobador" es mas estricto que el texto de la norma; se revisa junto con el flujo completo de documentos.
+- MySQL: cada conexion fija `time_zone = '+00:00'` (`src/lib/server/db.ts`) para que los TIMESTAMP se guarden y lean en UTC, como en SQLite.

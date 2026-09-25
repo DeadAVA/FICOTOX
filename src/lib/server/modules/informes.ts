@@ -9,12 +9,16 @@ import { HttpError, intParam, json, readJson, type RouteContext } from "../http"
 import { renderInformePdf, type InformeAnalisis, type InformeRender } from "../informe-pdf";
 import { cargoActuante, requirePermission } from "../rbac";
 import { exigirReauth } from "../seguridad";
+import { crearSolicitud, exigirSinSolicitudPendiente, pendientesDe, respuestaSolicitud, serializarSolicitud } from "../solicitudes";
+import { detalleExcepcion, elaboradoresDe, ensureExcepcionesColumn, excepcionesDe, exigirSegregacion } from "../segregacion";
+import { evaluarInforme, excepcionPara, type Violacion } from "../../shared/segregacion";
+import { hoyLocal } from "../../shared/fechas";
 import { aplicarSupervision, exigirSinSupervisionPendiente, filtroSupervision, marcaSupervision } from "../supervision";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
 import { advanceState, ensureAnulacionColumns, nextFolioNum, readMotivo } from "../samples-flow";
 import { ANALYSIS_METHODS, ANALYSIS_TYPES, REPORT_DEFAULT_STATEMENTS, REPORT_DELIVERY_MEDIA } from "../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "./helpers";
-import { approvedAnalysesForReception, samePersonException, serializeAnalysis } from "./samples/analisis";
+import { approvedAnalysesForReception, serializeAnalysis } from "./samples/analisis";
 import { ensureSupervisionColumns } from "../supervision";
 
 /*
@@ -126,6 +130,7 @@ export async function ensureInformesSchema(s: Session): Promise<void> {
   await addColumnIfMissing(s, TABLE, "autorizado_rol_id", "INT DEFAULT NULL");
   await ensureAnulacionColumns(s, TABLE);
   await ensureSupervisionColumns(s, "informes");
+  await ensureExcepcionesColumn(s, "informes");
   markSchemaReady("informes");
 }
 
@@ -141,6 +146,8 @@ export function informeFolio(row: Row | null | undefined): string {
 
 export function serializeInforme(row: Row): Row {
   const item: Row = { ...row };
+  item.excepciones = excepcionesDe(row);
+  delete item.excepciones_json;
   for (const [key, fallback] of [
     ["cliente", {}],
     ["muestras", []],
@@ -236,6 +243,17 @@ async function loadRecepcion(s: Session, id: number | null): Promise<Row> {
   return row;
 }
 
+/*
+ * Fase 3: un analisis con una solicitud pendiente (p. ej. su anulacion) no se
+ * incluye, revisa ni autoriza en un informe hasta que la solicitud se resuelva.
+ */
+async function exigirAnalisisSinSolicitud(s: Session, ids: number[], que: string): Promise<void> {
+  for (const analisisId of ids) {
+    const fila = await s.queryOne<Row>("SELECT folio_num FROM muestras_analisis WHERE id = :id", { id: analisisId });
+    await exigirSinSolicitudPendiente(s, "muestras_analisis", analisisId, `El analisis A ${String(fila?.folio_num || 0).padStart(7, "0")}`, que);
+  }
+}
+
 async function loadAnalyses(s: Session, ids: number[]): Promise<Row[]> {
   if (!ids.length) return [];
   const placeholders = ids.map((_, i) => `:id${i}`).join(", ");
@@ -305,9 +323,10 @@ export async function listInformes({ request, s }: RouteContext): Promise<Respon
     `,
     { search, search_like: `%${search}%`, estado, recepcion_id: recepcionId, incluir_anulados: includeAnulados ? 1 : 0, ...supFiltro.params },
   );
+  const pendientes = await pendientesDe(s, TABLE, rows.map((r) => Number(r.id)));
   return json({
     items: rows.map((row) => {
-      const item: Row = { ...row, folio: informeFolio(row), cliente: safeJsonLoad(row.cliente_json, {}), analisis: safeJsonLoad<number[]>(row.analisis_ids_json, []).length, entrega: safeJsonLoad(row.entrega_json, null) };
+      const item: Row = { ...row, folio: informeFolio(row), solicitud_pendiente: pendientes.has(String(row.id)) ? serializarSolicitud(pendientes.get(String(row.id))!) : null, cliente: safeJsonLoad(row.cliente_json, {}), analisis: safeJsonLoad<number[]>(row.analisis_ids_json, []).length, entrega: safeJsonLoad(row.entrega_json, null) };
       delete item.cliente_json;
       delete item.analisis_ids_json;
       delete item.entrega_json;
@@ -325,6 +344,16 @@ export async function getInforme({ request, s, params }: RouteContext): Promise<
   const row = await snapshotRow(s, TABLE, id);
   if (!row) return json({ message: "Informe no encontrado" }, 404);
   const item = serializeInforme(row);
+  // Fase 3: solicitud pendiente y, para la persona que consulta, si la segregacion le impide revisar o autorizar.
+  const pendiente = (await pendientesDe(s, TABLE, [id])).get(String(id));
+  item.solicitud_pendiente = pendiente ? serializarSolicitud(pendiente) : null;
+  const yo = userIdFromClaims(user) as number;
+  const idsInc = safeJsonLoad<number[]>(String(row.analisis_ids_json || "[]"), []);
+  const bloqueo = async (accion: "revisar" | "autorizar") => {
+    const v = await violacionInforme(s, yo, row, idsInc, accion);
+    return v && !excepcionPara(excepcionesDe(row), yo, accion) ? v.mensaje : null;
+  };
+  item.segregacion = { revisar: await bloqueo("revisar"), autorizar: await bloqueo("autorizar") };
   // En borrador los analisis se leen en vivo; autorizado, del congelado.
   if (["borrador", "en_revision"].includes(String(row.estado))) {
     const analyses = await loadAnalyses(s, item.analisis_ids as number[]);
@@ -363,6 +392,7 @@ export async function createInforme({ request, s }: RouteContext): Promise<Respo
   const recepcion = await loadRecepcion(s, data.recepcion_id);
   const analyses = await loadAnalyses(s, data.analisis_ids);
   if (analyses.some((a) => Number(a.recepcion_id) !== Number(recepcion.id))) return json({ message: "Todos los analisis deben pertenecer a la recepcion del informe" }, 400);
+  await exigirAnalisisSinSolicitud(s, data.analisis_ids, "incluirse en un informe");
   const folio = data.folio_num || (await nextFolioNum(s, TABLE));
   const userId = userIdFromClaims(user);
   const supervision = marcaSupervision(permiso);
@@ -413,10 +443,12 @@ export async function updateInforme({ request, s, params }: RouteContext): Promi
   const actuo = cargoActuante(request, permiso);
   await ensureInformesSchema(s);
   const antes = assertDraft(await snapshotRow(s, TABLE, id));
+  await exigirSinSolicitudPendiente(s, TABLE, id, `El informe ${informeFolio(antes)}`, "editar");
   const data = normalizePayload(await readJson(request));
   const recepcion = await loadRecepcion(s, data.recepcion_id || Number(antes.recepcion_id));
   const analyses = await loadAnalyses(s, data.analisis_ids);
   if (analyses.some((a) => Number(a.recepcion_id) !== Number(recepcion.id))) return json({ message: "Todos los analisis deben pertenecer a la recepcion del informe" }, 400);
+  await exigirAnalisisSinSolicitud(s, data.analisis_ids, "incluirse en un informe");
   await s.execute(
     `
     UPDATE ${TABLE} SET recepcion_id = :recepcion_id, cliente_json = :cliente_json, muestras_json = :muestras_json, analisis_ids_json = :analisis_ids_json,
@@ -464,18 +496,20 @@ export async function reviewInforme({ request, s, params }: RouteContext): Promi
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
   if (String(antes.estado) !== "borrador") return json({ message: "Solo se revisan informes en borrador" }, 409);
   exigirSinSupervisionPendiente(antes, `El informe ${informeFolio(antes)}`, "revisar");
+  await exigirSinSolicitudPendiente(s, TABLE, id, `El informe ${informeFolio(antes)}`, "revisar");
   const ids = safeJsonLoad<number[]>(String(antes.analisis_ids_json || "[]"), []);
   if (!ids.length) return json({ message: "El informe no incluye analisis" }, 400);
+  await exigirAnalisisSinSolicitud(s, ids, "revisarse en un informe");
   const payload = await readJson(request);
-  // Quien elaboro el informe no lo revisa, salvo excepcion con motivo.
-  const excepcion = await samePersonException(antes.elaborado_por, user, payload, "La revision debe hacerla una persona distinta de quien elaboro el informe");
-  if (excepcion instanceof Response) return excepcion;
+  // Segregacion (regla 2): quien elaboro el informe, o alguno de sus analisis, no lo revisa.
+  const yo = userIdFromClaims(user) as number;
+  const excepcion = exigirSegregacion(await violacionInforme(s, yo, antes, ids, "revisar"), antes, yo, "revisar");
   await s.execute(
     `UPDATE ${TABLE} SET estado = 'en_revision', revisado_por = :usuario, revisado_nombre = :nombre, revisado_cargo = :cargo, revisado_rol_id = :rol_id, revisado_en = :fecha, revisado_firma = :firma, actualizado_por = :usuario WHERE id = :id`,
     { usuario: userIdFromClaims(user), nombre: String(user.nombre || user.email || "").slice(0, 180), cargo: actuo.cargo, rol_id: actuo.rol_id, fecha: new Date().toISOString(), firma: strippedOrNull(payload.firma), id },
   );
   const despues = await snapshotRow(s, TABLE, id);
-  await registrarAuditoria(s, user, { accion: "revisar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, motivo: excepcion || strippedOrNull(payload.observaciones), detalle: { actuo_como: actuo, ...(excepcion ? { excepcion: "misma persona elaboro y reviso" } : {}) } });
+  await registrarAuditoria(s, user, { accion: "revisar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, motivo: strippedOrNull(payload.observaciones), detalle: { actuo_como: actuo, ...detalleExcepcion(excepcion) } });
   await s.commit();
   return json({ message: "Informe revisado; listo para autorizar", item: serializeInforme(despues!) });
 }
@@ -491,7 +525,7 @@ async function buildRender(s: Session, row: Row, analyses: Row[]): Promise<Infor
     version: Number(row.version || 1),
     sustituye: sustituye ? `${informeFolio(sustituye)} v${sustituye.version}` : null,
     motivo_enmienda: (row.motivo_enmienda as string | null) || null,
-    fecha_emision: String(row.fecha_emision || new Date().toISOString().slice(0, 10)),
+    fecha_emision: String(row.fecha_emision || hoyLocal()),
     cliente,
     recepcion: { folio: `R ${String(recepcion?.folio_num || 0).padStart(7, "0")}`, fecha_recepcion: (recepcion?.fecha_recepcion as string | null) || null, fecha_muestra: (recepcion?.fecha_muestra as string | null) || null, medio: (recepcion?.medio_recepcion as string | null) || null },
     muestras: safeJsonLoad(String(row.muestras_json || "[]"), []),
@@ -503,6 +537,8 @@ async function buildRender(s: Session, row: Row, analyses: Row[]): Promise<Infor
       autorizado: { nombre: (row.autorizado_nombre as string | null) || null, cargo: (row.autorizado_cargo as string | null) || null, fecha: (row.autorizado_en as string | null) || null, firma: (row.autorizado_firma as string | null) || null },
     },
     anulado: String(row.estado) === "anulado",
+    // Fase 3: revision o autorizacion hechas por excepcion de segregacion aprobada por un segundo usuario.
+    excepciones: excepcionesDe(row).map((e) => `${e.accion === "revisar" ? "Revisión" : "Autorización"} autorizada por excepción, solicitud #${e.solicitud_id}`),
     sustituido_por: sustituidoPor ? `${informeFolio(sustituidoPor)} v${sustituidoPor.version}` : null,
   };
 }
@@ -531,19 +567,21 @@ export async function authorizeInforme({ request, s, params }: RouteContext): Pr
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
   if (String(antes.estado) !== "en_revision") return json({ message: "El informe debe estar revisado antes de autorizarse" }, 409);
   exigirSinSupervisionPendiente(antes, `El informe ${informeFolio(antes)}`, "autorizar");
+  await exigirSinSolicitudPendiente(s, TABLE, id, `El informe ${informeFolio(antes)}`, "autorizar");
   const payload = await readJson(request);
-  await exigirReauth(s, request, user, "informes:A");
-  // Quien reviso no autoriza, salvo excepcion con motivo.
-  const excepcion = await samePersonException(antes.revisado_por, user, payload, "La autorizacion debe hacerla una persona distinta de quien reviso");
-  if (excepcion instanceof Response) return excepcion;
   const ids = safeJsonLoad<number[]>(String(antes.analisis_ids_json || "[]"), []);
+  // Segregacion (regla 2): quien elaboro el informe, o alguno de sus analisis, no lo autoriza.
+  const yo = userIdFromClaims(user) as number;
+  const excepcion = exigirSegregacion(await violacionInforme(s, yo, antes, ids, "autorizar"), antes, yo, "autorizar");
+  await exigirReauth(s, request, user, "informes:A");
   const analyses = await loadAnalyses(s, ids);
   if (!analyses.length) return json({ message: "El informe no incluye analisis" }, 400);
+  await exigirAnalisisSinSolicitud(s, ids, "autorizarse en un informe");
   const noAprobados = analyses.filter((a) => String(a.estado) !== "aprobado");
   if (noAprobados.length) return json({ message: `Hay analisis sin aprobar: ${noAprobados.map((a) => `A ${String(a.folio_num).padStart(7, "0")}`).join(", ")}` }, 409);
 
   const now = new Date().toISOString();
-  const fechaEmision = strippedOrNull(payload.fecha_emision, 10) || String(antes.fecha_emision || now.slice(0, 10));
+  const fechaEmision = strippedOrNull(payload.fecha_emision, 10) || String(antes.fecha_emision || hoyLocal());
   await s.execute(
     `UPDATE ${TABLE} SET estado = 'autorizado', resultados_json = :resultados_json, fecha_emision = :fecha_emision, autorizado_por = :usuario, autorizado_nombre = :nombre, autorizado_cargo = :cargo, autorizado_rol_id = :rol_id, autorizado_en = :fecha, autorizado_firma = :firma, actualizado_por = :usuario WHERE id = :id`,
     { resultados_json: jsonText(snapshotAnalyses(analyses)), fecha_emision: fechaEmision, usuario: userIdFromClaims(user), nombre: String(user.nombre || user.email || "").slice(0, 180), cargo: actuo.cargo, rol_id: actuo.rol_id, fecha: now, firma: strippedOrNull(payload.firma), id },
@@ -558,7 +596,7 @@ export async function authorizeInforme({ request, s, params }: RouteContext): Pr
   // 7.8.8: el informe enmendado deja de ser valido y su PDF lo declara.
   if (row.sustituye_a) await marcarSustituido(s, user, Number(row.sustituye_a), row);
   const despues = await snapshotRow(s, TABLE, id);
-  await registrarAuditoria(s, user, { accion: "autorizar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, motivo: excepcion, detalle: { pdf: filename, sha256: sha, actuo_como: actuo, ...(excepcion ? { excepcion: "misma persona reviso y autorizo" } : {}) } });
+  await registrarAuditoria(s, user, { accion: "autorizar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, detalle: { pdf: filename, sha256: sha, actuo_como: actuo, ...detalleExcepcion(excepcion) } });
   await s.commit();
   return json({ message: "Informe autorizado; PDF generado", item: serializeInforme(despues!) });
 }
@@ -572,6 +610,7 @@ export async function deliverInforme({ request, s, params }: RouteContext): Prom
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
   if (String(antes.estado) !== "autorizado") return json({ message: "Solo se entregan informes autorizados" }, 409);
+  await exigirSinSolicitudPendiente(s, TABLE, id, `El informe ${informeFolio(antes)}`, "entregar");
   const payload = await readJson(request);
   const medio = String(payload.medio || "").trim();
   const fecha = strippedOrNull(payload.fecha, 10);
@@ -598,6 +637,23 @@ export async function anularInforme({ request, s, params }: RouteContext): Promi
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
   if (String(antes.estado) === "anulado") return json({ message: "El informe ya esta anulado" }, 409);
   await exigirReauth(s, request, user, "informes:AN");
+  // Fase 3: anular un informe autorizado o entregado requiere la aprobacion de un segundo usuario.
+  if (["autorizado", "entregado", "sustituido"].includes(String(antes.estado))) {
+    const solicitud = await crearSolicitud(s, user, { tipo: "anular_informe", entidad: TABLE, entidadId: id, referencia: informeFolio(antes), accion: "anular", datos: { estado: antes.estado }, motivo, cargo: actuo.cargo });
+    await s.commit();
+    return respuestaSolicitud(solicitud, `la anulación del informe ${informeFolio(antes)}`);
+  }
+  const despues = await ejecutarAnulacionInforme(s, user, id, motivo, actuo);
+  await s.commit();
+  return json({ message: "Informe anulado", item: serializeInforme(despues) });
+}
+
+/* Anula el informe (directo desde borrador/revision, o al aprobarse la solicitud). */
+export async function ejecutarAnulacionInforme(s: Session, user: CurrentUser, id: number, motivo: string, actuo: { rol_id: number; cargo: string }, detalle: Record<string, unknown> = {}): Promise<Row> {
+  await ensureInformesSchema(s);
+  const antes = await snapshotRow(s, TABLE, id);
+  if (!antes) throw new HttpError(404, { message: "Informe no encontrado" });
+  if (String(antes.estado) === "anulado") throw new HttpError(409, { message: "El informe ya esta anulado" });
   await s.execute(`UPDATE ${TABLE} SET estado_previo = :previo, estado = 'anulado', anulado_en = :fecha, anulado_por = :usuario, anulado_rol_id = :rol_id, anulado_cargo = :cargo, motivo_anulacion = :motivo WHERE id = :id`, { previo: String(antes.estado), fecha: new Date().toISOString(), usuario: userIdFromClaims(user), rol_id: actuo.rol_id, cargo: actuo.cargo, motivo, id });
   const despues = (await snapshotRow(s, TABLE, id))!;
   if (despues.archivo_pdf) {
@@ -606,9 +662,39 @@ export async function anularInforme({ request, s, params }: RouteContext): Promi
     await fs.promises.writeFile(path.join(informesDir(), String(despues.archivo_pdf)), pdf);
     await s.execute(`UPDATE ${TABLE} SET pdf_sha256 = :sha WHERE id = :id`, { sha: createHash("sha256").update(pdf).digest("hex"), id });
   }
-  await registrarAuditoria(s, user, { accion: "anular", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), motivo, antes, despues, detalle: { actuo_como: actuo } });
-  await s.commit();
-  return json({ message: "Informe anulado", item: serializeInforme((await snapshotRow(s, TABLE, id))!) });
+  await registrarAuditoria(s, user, { accion: "anular", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), motivo, antes, despues, detalle: { actuo_como: actuo, ...detalle } });
+  return (await snapshotRow(s, TABLE, id))!;
+}
+
+/*
+ * Excepcion de segregacion (Fase 3): solo la pide quien podria revisar o
+ * autorizar el informe (permiso y estado) y la segregacion se lo impide de verdad.
+ */
+export async function violacionParaExcepcionInforme(s: Session, user: CurrentUser, id: number, accion: string): Promise<{ violacion: Violacion | null; row: Row }> {
+  if (accion !== "revisar" && accion !== "autorizar") throw new HttpError(400, { message: "En un informe la excepción aplica a revisar o autorizar" });
+  await requirePermission(s, user, "informes", accion === "revisar" ? "R" : "A");
+  await ensureInformesSchema(s);
+  const row = await snapshotRow(s, TABLE, id);
+  if (!row) throw new HttpError(404, { message: "Informe no encontrado" });
+  const estado = accion === "revisar" ? "borrador" : "en_revision";
+  if (String(row.estado) !== estado) throw new HttpError(409, { message: `El informe ${informeFolio(row)} no está ${accion === "revisar" ? "en borrador" : "en revisión"}; no hay nada que ${accion}` });
+  const ids = safeJsonLoad<number[]>(String(row.analisis_ids_json || "[]"), []);
+  return { violacion: await violacionInforme(s, userIdFromClaims(user) as number, row, ids, accion), row };
+}
+
+/*
+ * Regla 2 de segregacion: elaboradores del informe (creador, elaborado_por y
+ * quien lo edito) y de cada analisis incluido, segun la bitacora.
+ */
+async function violacionInforme(s: Session, usuarioId: number, informe: Row, analisisIds: number[], accion: "revisar" | "autorizar") {
+  const elaboradores = await elaboradoresDe(s, TABLE, Number(informe.id), informe.creado_por, informe.elaborado_por);
+  const porAnalisis: Array<{ folio: string; elaboradores: Set<number> }> = [];
+  for (const analisisId of analisisIds) {
+    const fila = await s.queryOne<Row>("SELECT id, folio_num, creado_por FROM muestras_analisis WHERE id = :id", { id: analisisId });
+    if (!fila) continue;
+    porAnalisis.push({ folio: `A ${String(fila.folio_num || 0).padStart(7, "0")}`, elaboradores: await elaboradoresDe(s, "muestras_analisis", analisisId, fila.creado_por) });
+  }
+  return evaluarInforme(usuarioId, elaboradores, porAnalisis, accion);
 }
 
 /* Enmienda (7.8.8): nuevo informe en borrador, misma numeracion, version +1, que declara al que sustituye. */
@@ -621,6 +707,7 @@ export async function amendInforme({ request, s, params }: RouteContext): Promis
   const original = await snapshotRow(s, TABLE, id);
   if (!original) return json({ message: "Informe no encontrado" }, 404);
   if (!["autorizado", "entregado", "anulado"].includes(String(original.estado))) return json({ message: "Solo se enmiendan informes autorizados, entregados o anulados; los borradores se editan" }, 409);
+  await exigirSinSolicitudPendiente(s, TABLE, id, `El informe ${informeFolio(original)}`, "enmendar");
   const motivo = await readMotivo(request);
   if (motivo.length < 5) return json({ message: "Indica el motivo de la enmienda (al menos 5 caracteres)" }, 400);
   const existente = await s.queryOne(`SELECT id FROM ${TABLE} WHERE sustituye_a = :id AND estado <> 'anulado'`, { id });

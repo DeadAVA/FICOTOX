@@ -1,4 +1,5 @@
 /* Ronda SGC (navegador): recepcion con aceptacion, anular/restaurar, analisis revisar/aprobar, informe autorizar+PDF+entrega, documentos SGC, auditoria, baja de inventario. */
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -12,11 +13,16 @@ const check = (name, ok, detail = "") => {
   results.push({ name, ok });
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
 };
-const today = new Date().toISOString().slice(0, 10);
+const today = new Date().toLocaleDateString("en-CA");
 const stamp = Date.now().toString().slice(-5);
 
 const browser = await chromium.launch({ executablePath, headless: true });
 const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
+/* Fase 3: segunda persona (Coord. del Area Tecnica) para revisar y aprobar lo que QA elabora. */
+const credenciales = JSON.parse(readFileSync(process.env.CREDENCIALES_ROLES, "utf8"));
+const RICARDO = "ricardo.medina@ficotox.local";
+const page2 = await browser.newPage({ viewport: { width: 1360, height: 900 } });
+page2.setDefaultTimeout(60_000);
 page.setDefaultTimeout(60_000);
 const consoleErrors = [];
 page.on("console", (msg) => {
@@ -70,14 +76,14 @@ const setFilterToggle = async (label, on) => {
   if (((await toggle.getAttribute("aria-checked")) === "true") !== on) await toggle.click();
   await page.keyboard.press("Escape");
 };
-const drawSignature = async (label) => {
-  const canvas = page.locator(`canvas[aria-label="${label}"]`);
+const drawSignature = async (label, p = page) => {
+  const canvas = p.locator(`canvas[aria-label="${label}"]`);
   const box = await canvas.boundingBox();
-  await page.mouse.move(box.x + 30, box.y + 60);
-  await page.mouse.down();
-  await page.mouse.move(box.x + 120, box.y + 90, { steps: 8 });
-  await page.mouse.move(box.x + 220, box.y + 50, { steps: 8 });
-  await page.mouse.up();
+  await p.mouse.move(box.x + 30, box.y + 60);
+  await p.mouse.down();
+  await p.mouse.move(box.x + 120, box.y + 90, { steps: 8 });
+  await p.mouse.move(box.x + 220, box.y + 50, { steps: 8 });
+  await p.mouse.up();
 };
 const dialogButton = (name) => page.getByRole("dialog").getByRole("button", { name, exact: true });
 
@@ -142,11 +148,24 @@ try {
   await row.waitFor();
   check("recepción aparece con decisión Aceptada", (await row.textContent()).includes("Aceptada"), `folio ${folio}`);
 
-  /* ---------- Anular y restaurar ---------- */
+  /* ---------- Anular y restaurar (Fase 3: una recepción aceptada requiere un segundo usuario) ---------- */
+  // La aprobación de la solicitud la da la Responsable General por la API (el flujo en pantalla se prueba en ui/segregacion.mjs).
+  const aprobarComoRG = async (texto) => {
+    const rg = "patricia.luna@ficotox.local";
+    const tk = (await (await fetch(`${BASE}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: rg, password: credenciales[rg] }) })).json()).token;
+    const lista = await (await fetch(`${BASE}/api/solicitudes`, { headers: { Authorization: `Bearer ${tk}` } })).json();
+    const sol = (lista.items || []).find((i) => i.puedo_aprobar && String(i.referencia || "").includes(texto));
+    const re = await (await fetch(`${BASE}/api/auth/reauth`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tk}` }, body: JSON.stringify({ accion: "solicitudes:aprobar", password: credenciales[rg] }) })).json();
+    const r = await fetch(`${BASE}/api/solicitudes/${sol?.id}/aprobar`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tk}`, "X-Reauth": re.token }, body: JSON.stringify({ motivo: "Aprobada en la prueba de navegador" }) });
+    return r.status;
+  };
   await row.getByRole("button", { name: "Acciones" }).click();
   await page.getByRole("menuitem", { name: /Anular recepción/ }).click();
   await fillPrompt("Prueba UI: registro duplicado", "Anular");
-  await page.getByText(/anulad/i).first().waitFor();
+  await page.getByText(/pendiente de autorización/i).first().waitFor();
+  check("anular una recepción aceptada queda pendiente de autorización", true);
+  check("la Responsable General aprueba la anulación", (await aprobarComoRG(`R ${String(folio).padStart(7, "0")}`)) === 200);
+  await page.reload();
   await setFilterToggle("Mostrar anuladas", true);
   // La lista se recarga sola tras anular: se espera a la fila ya marcada como anulada.
   const anulada = page.locator("tbody tr").filter({ hasText: `UI-${stamp}` }).filter({ hasText: "Anulada" }).first();
@@ -155,6 +174,9 @@ try {
   await anulada.getByRole("button", { name: "Acciones" }).click();
   await page.getByRole("menuitem", { name: /Restaurar recepción/ }).click();
   await fillPrompt("Prueba UI: se anuló por error", "Restaurar");
+  await page.getByText(/pendiente de autorización/i).first().waitFor();
+  check("la Responsable General aprueba la restauración", (await aprobarComoRG(`R ${String(folio).padStart(7, "0")}`)) === 200);
+  await page.reload();
   await setFilterToggle("Mostrar anuladas", false);
   const restaurada = page.locator("tbody tr").filter({ hasText: `UI-${stamp}` }).filter({ hasNotText: "Anulada" }).first();
   await restaurada.waitFor();
@@ -206,21 +228,32 @@ try {
   await rowA.waitFor();
   check("análisis en la lista con estado Registrado", (await rowA.textContent()).includes("Registrado"), `folio A ${folioA}`);
   await rowA.click();
-  await page.getByRole("button", { name: "Marcar revisado" }).click();
-  await dialogButton("Marcar revisado").click();
-  await page.waitForURL((url) => url.pathname === "/muestras/analisis");
-  const rowA2 = page.locator("tbody tr").filter({ hasText: new RegExp(`A\\s*${folioA.padStart(7, "0")}`) }).first();
+  // Fase 3 (segregación): quien lo elaboró ve el botón deshabilitado con la explicación.
+  await page.getByText("Separación de funciones").first().waitFor();
+  check("QA no puede revisar su propio análisis (botón deshabilitado con explicación)", await page.getByRole("button", { name: "Marcar revisado" }).isDisabled());
+  const analisisUrl = page.url();
+  // La revisa y aprueba otra persona.
+  await page2.goto(`${BASE}/login`);
+  await page2.fill("#login-email", RICARDO);
+  await page2.fill("#login-password", credenciales[RICARDO]);
+  await page2.click("button[type=submit]");
+  await page2.waitForURL((url) => !url.pathname.startsWith("/login"));
+  await page2.goto(analisisUrl);
+  await page2.getByRole("button", { name: "Marcar revisado" }).click();
+  await page2.getByRole("dialog").getByRole("button", { name: "Marcar revisado", exact: true }).click();
+  await page2.waitForURL((url) => url.pathname === "/muestras/analisis");
+  const rowA2 = page2.locator("tbody tr").filter({ hasText: new RegExp(`A\\s*${folioA.padStart(7, "0")}`) }).first();
   await rowA2.waitFor();
-  check("análisis revisado", (await rowA2.textContent()).includes("Revisado"));
+  check("análisis revisado por otra persona", (await rowA2.textContent()).includes("Revisado"));
   await rowA2.click();
-  await page.getByRole("button", { name: "Aprobar", exact: true }).click();
-  await fillPassword("#sign-password");
-  await dialogButton("Aprobar").click();
-  await page.waitForURL((url) => url.pathname === "/muestras/analisis");
-  const rowA3 = page.locator("tbody tr").filter({ hasText: new RegExp(`A\\s*${folioA.padStart(7, "0")}`) }).first();
+  await page2.getByRole("button", { name: "Aprobar", exact: true }).click();
+  await page2.locator("#sign-password").fill(credenciales[RICARDO]);
+  await page2.getByRole("dialog").getByRole("button", { name: "Aprobar", exact: true }).click();
+  await page2.waitForURL((url) => url.pathname === "/muestras/analisis");
+  const rowA3 = page2.locator("tbody tr").filter({ hasText: new RegExp(`A\\s*${folioA.padStart(7, "0")}`) }).first();
   await rowA3.waitFor();
-  check("análisis aprobado por la misma persona (regla de dos personas apagada)", (await rowA3.textContent()).includes("Aprobado"));
-  await rowA3.click();
+  check("análisis aprobado por la misma persona que lo revisó (distinta de quien lo elaboró)", (await rowA3.textContent()).includes("Aprobado"));
+  await page.goto(analisisUrl);
   // En solo lectura no hay botón de guardar y el formato abre completo.
   await page.getByRole("button", { name: "Volver" }).waitFor();
   await page.locator("#a-metodo").waitFor();
@@ -240,17 +273,28 @@ try {
   await page.waitForURL((url) => /^\/informes\/\d+$/.test(url.pathname));
   const informeId = page.url().split("/").pop();
   check("informe creado en borrador", true, `id=${informeId}`);
-  await page.getByRole("button", { name: "Marcar revisado" }).click();
-  check("el diálogo de firma no pide cargo (sale del rol)", (await page.locator("#sign-cargo").count()) === 0);
-  await dialogButton("Marcar revisado").click();
-  await page.getByText("En revisión").first().waitFor();
+  check("QA elaboró el informe: no puede revisarlo (botón deshabilitado)", await page.getByRole("button", { name: "Marcar revisado" }).isDisabled());
+  // Revisa y autoriza otra persona (no elaboró el informe ni el análisis).
+  await page2.goto(`${BASE}/informes/${informeId}`);
+  await page2.getByRole("button", { name: "Marcar revisado" }).click();
+  check("el diálogo de firma no pide cargo (sale del rol)", (await page2.locator("#sign-cargo").count()) === 0);
+  await page2.getByRole("dialog").getByRole("button", { name: "Marcar revisado", exact: true }).click();
+  await page2.getByText("En revisión").first().waitFor();
   check("informe en revisión", true);
-  await page.getByRole("button", { name: "Autorizar", exact: true }).click();
-  await drawSignature("Firma: Autorizar informe");
-  await fillPassword("#sign-password");
-  await dialogButton("Autorizar").click();
-  await page.getByText("Autorizado").first().waitFor();
+  await page2.getByRole("button", { name: "Autorizar", exact: true }).click();
+  await drawSignature("Firma: Autorizar informe", page2);
+  await page2.locator("#sign-password").fill(credenciales[RICARDO]);
+  await page2.getByRole("dialog").getByRole("button", { name: "Autorizar", exact: true }).click();
+  // El paso "Autorizado" del indicador siempre existe: se espera el aviso de exito (o el error).
+  const toast = page2.locator("[data-sonner-toast]").filter({ hasText: /autoriz|No se pudo|separación|Elaboraste/i }).last();
+  await toast.waitFor({ timeout: 20_000 }).catch(async () => {
+    await page2.screenshot({ path: path.join(path.dirname(new URL(import.meta.url).pathname), "fail2.png"), fullPage: true });
+  });
+  const avisoAut = (await toast.count()) ? await toast.textContent() : "sin aviso";
+  check("la autorización se registra", /Informe autorizado/.test(String(avisoAut)), avisoAut);
   check("informe autorizado", true);
+  await page.goto(`${BASE}/informes/${informeId}`);
+  await page.getByRole("button", { name: "Registrar entrega" }).waitFor();
   const pdf = await page.evaluate(async ([id, tk]) => {
     const r = await fetch(`/api/informes/${id}/pdf`, { headers: { Authorization: `Bearer ${tk}` } });
     return { status: r.status, type: r.headers.get("content-type"), size: (await r.arrayBuffer()).byteLength };

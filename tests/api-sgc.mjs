@@ -5,9 +5,11 @@
  * server apuntando a la COPIA de prueba de la base.
  */
 import "./lib/reauth-auto.mjs";
+import { readFileSync } from "node:fs";
 const BASE = process.env.BASE || "http://localhost:3100/api";
 let token = "";
 let token2 = "";
+let token3 = "";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
@@ -49,7 +51,7 @@ for (let i = 0; i < 60; i += 1) {
     permisos: [
       { modulo: "ensayos", accion: "R" }, { modulo: "ensayos", accion: "A" },
       { modulo: "informes", accion: "R" }, { modulo: "informes", accion: "A" },
-      { modulo: "documentos", accion: "A" }, { modulo: "muestras", accion: "V" },
+      { modulo: "documentos", accion: "E" }, { modulo: "documentos", accion: "A" }, { modulo: "muestras", accion: "V" },
     ],
   });
   const u = await api("POST", "/admin/usuarios", { nombre: "Revisora QA", email: "revisora@cicese.mx", activo: true, rol_id: rolRev.data?.id, departamento: "Calidad", password: "RevisoraQA2026!" });
@@ -57,6 +59,11 @@ for (let i = 0; i < 60; i += 1) {
   const r2 = await api("POST", "/auth/login", { email: "revisora@cicese.mx", password: "RevisoraQA2026!" });
   token2 = r2.data?.token || "";
   check("login revisora", r2.status === 200 && !!token2, `status ${r2.status}`);
+  // Tercera persona (Mejora Continua, documentos:G): aprueba documentos que no elaboro ni reviso.
+  const cred = JSON.parse(readFileSync(process.env.CREDENCIALES_ROLES, "utf8"));
+  const r3 = await api("POST", "/auth/login", { email: "ana.torres@ficotox.local", password: cred["ana.torres@ficotox.local"] });
+  token3 = r3.data?.token || "";
+  check("login Mejora Continua (tercera persona)", r3.status === 200 && !!token3, `status ${r3.status}`);
 }
 
 // ---------- Recepcion con aceptacion ----------
@@ -147,11 +154,11 @@ let analisisId = null;
   check("analisis deriva procesamiento y recepcion desde la extraccion", item?.procesamiento_id === procesamientoId && item?.recepcion_id === recepcionId && item?.equipo_nombre === "Centrifuga", `p=${item?.procesamiento_id} r=${item?.recepcion_id} eq=${item?.equipo_nombre}`);
   const aprobarSinRevisar = await api("POST", `/samples/analysis/${analisisId}/aprobar`, {});
   check("aprobar sin revisar -> 409", aprobarSinRevisar.status === 409, `status ${aprobarSinRevisar.status}`);
-  // Regla de dos personas apagada (TWO_PERSON_RULE=false): quien tiene el permiso revisa y aprueba, sin motivo de excepcion.
+  // Fase 3: la revisa y aprueba otra persona (la revisora); revisor y aprobador pueden coincidir.
   const rev = await api("POST", `/samples/analysis/${analisisId}/revisar`, { observaciones: "Controles dentro de criterio" }, { token: token2 });
   check("revisar analisis -> revisado", rev.status === 200 && rev.data?.item?.estado === "revisado", `status ${rev.status} ${rev.data?.message}`);
   const apr = await api("POST", `/samples/analysis/${analisisId}/aprobar`, {}, { token: token2 });
-  check("aprobar por la misma persona que reviso -> aprobado (sin excepcion)", apr.status === 200 && apr.data?.item?.estado === "aprobado", `status ${apr.status} ${apr.data?.message}`);
+  check("aprobar por la misma persona que reviso (distinta de quien elaboro) -> aprobado", apr.status === 200 && apr.data?.item?.estado === "aprobado", `status ${apr.status} ${apr.data?.message}`);
   const e = (await api("GET", `/samples/extraction/${extraccionId}`)).data?.item;
   const p = (await api("GET", `/samples/processing/${procesamientoId}`)).data?.item;
   const rAna = (await api("GET", `/samples/reception/${recepcionId}`)).data?.item;
@@ -174,10 +181,12 @@ let informeId = null;
   check("autorizar sin revisar -> 409", autSinRev.status === 409, `status ${autSinRev.status}`);
   const preview = await api("GET", `/informes/${informeId}/pdf`);
   check("vista previa PDF del borrador", preview.status === 200 && preview.type.includes("pdf") && preview.data?.byteLength > 1000, `status ${preview.status} ${preview.type} bytes=${preview.data?.byteLength}`);
-  // Sin cargo en el payload: el servidor toma el rol de quien firma.
-  const rev = await api("POST", `/informes/${informeId}/revisar`, {});
-  check("revisar informe (misma persona que elaboro, regla apagada) con cargo = rol", rev.status === 200 && rev.data?.item?.estado === "en_revision" && !!rev.data?.item?.revisado_cargo, `status ${rev.status} cargo=${rev.data?.item?.revisado_cargo}`);
-  const aut = await api("POST", `/informes/${informeId}/autorizar`, {});
+  // Sin cargo en el payload: el servidor toma el rol de quien firma. Quien elaboro (QA) no revisa: 409 segregacion.
+  const revPropio = await api("POST", `/informes/${informeId}/revisar`, {});
+  check("revisar informe propio -> 409 segregacion", revPropio.status === 409 && revPropio.data?.codigo === "segregacion", `status ${revPropio.status} ${revPropio.data?.message}`);
+  const rev = await api("POST", `/informes/${informeId}/revisar`, {}, { token: token2 });
+  check("revisar informe (otra persona) con cargo = rol", rev.status === 200 && rev.data?.item?.estado === "en_revision" && !!rev.data?.item?.revisado_cargo, `status ${rev.status} cargo=${rev.data?.item?.revisado_cargo}`);
+  const aut = await api("POST", `/informes/${informeId}/autorizar`, {}, { token: token2 });
   check("autorizar informe -> autorizado con PDF y sha256", aut.status === 200 && aut.data?.item?.estado === "autorizado" && !!aut.data?.item?.archivo_pdf && String(aut.data?.item?.pdf_sha256 || "").length === 64, `status ${aut.status} ${aut.data?.message} pdf=${aut.data?.item?.archivo_pdf}`);
   const r = (await api("GET", `/samples/reception/${recepcionId}`)).data?.item;
   check("recepcion avanza a informada", r?.estado === "informada", `estado=${r?.estado}`);
@@ -197,7 +206,7 @@ let informeId = null;
   check("enmienda de un borrador -> 409", enmBorrador.status === 409, `status ${enmBorrador.status}`);
   const shaV1 = (await api("GET", `/informes/${informeId}`)).data?.item?.pdf_sha256;
   await api("POST", `/informes/${enm.data?.id}/revisar`, { cargo: "Coordinadora técnica" }, { token: token2 });
-  const autV2 = await api("POST", `/informes/${enm.data?.id}/autorizar`, { cargo: "Directora" });
+  const autV2 = await api("POST", `/informes/${enm.data?.id}/autorizar`, { cargo: "Directora" }, { token: token2 });
   const v1 = (await api("GET", `/informes/${informeId}`)).data?.item;
   check("autorizar la enmienda deja el original 'sustituido' con PDF regenerado", autV2.status === 200 && v1?.estado === "sustituido" && !!v1?.pdf_sha256 && v1.pdf_sha256 !== shaV1, `status ${autV2.status} v1=${v1?.estado} sha cambio=${v1?.pdf_sha256 !== shaV1}`);
   const entV1 = await api("POST", `/informes/${informeId}/entregar`, { fecha: "2026-09-12", medio: "correo", a_quien: "Juan Pérez" });
@@ -351,9 +360,14 @@ let docId = null;
   check("clave con tipo invalido no se salva con el tipo del cuerpo -> 400", claveTipo.status === 400, `status ${claveTipo.status} ${claveTipo.data?.message}`);
   const revArbitraria = await api("POST", "/documentos-sgc", { clave: "FX-GCP-CD", titulo: "Otra revision a mano", revision: 7 });
   check("segunda alta de una clave con revision en curso -> 409", revArbitraria.status === 409, `status ${revArbitraria.status} ${revArbitraria.data?.message}`);
-  const rev = await api("POST", `/documentos-sgc/${docId}/enviar-revision`, { reviso: { nombre: "Daniela C.", cargo: "Coordinadora Técnica" } });
+  // Fase 3 (regla 5): quien elaboro no revisa; revisor y aprobador son personas distintas.
+  const revPropia = await api("POST", `/documentos-sgc/${docId}/enviar-revision`, { reviso: { nombre: "Daniela C.", cargo: "Coordinadora Técnica" } });
+  check("revisar documento propio -> 409 segregacion", revPropia.status === 409 && revPropia.data?.codigo === "segregacion", `status ${revPropia.status} ${revPropia.data?.message}`);
+  const rev = await api("POST", `/documentos-sgc/${docId}/enviar-revision`, { reviso: { nombre: "Daniela C.", cargo: "Coordinadora Técnica" } }, { token: token2 });
   check("enviar a revision", rev.status === 200 && rev.data?.item?.estado === "en_revision", `status ${rev.status} ${rev.data?.message}`);
-  const apr = await api("POST", `/documentos-sgc/${docId}/aprobar`, { aprobo: { nombre: "Ernesto G.", cargo: "Director General" }, fecha_vigencia: "2026-09-15" }, { token: token2 });
+  const aprRevisor = await api("POST", `/documentos-sgc/${docId}/aprobar`, { aprobo: { nombre: "Ernesto G.", cargo: "Director General" }, fecha_vigencia: "2026-09-15" }, { token: token2 });
+  check("aprobar el documento que revisaste -> 409 segregacion", aprRevisor.status === 409 && aprRevisor.data?.codigo === "segregacion", `status ${aprRevisor.status} ${aprRevisor.data?.message}`);
+  const apr = await api("POST", `/documentos-sgc/${docId}/aprobar`, { aprobo: { nombre: "Ernesto G.", cargo: "Director General" }, fecha_vigencia: "2026-09-15" }, { token: token3 });
   check("aprobar -> vigente", apr.status === 200 && apr.data?.item?.estado === "vigente", `status ${apr.status} ${apr.data?.message}`);
   const editVig = await api("PUT", `/documentos-sgc/${docId}`, { titulo: "otro" });
   check("editar vigente -> 409", editVig.status === 409, `status ${editVig.status}`);
@@ -371,8 +385,8 @@ let docId = null;
   form2.set("archivo", new File([Buffer.from("%PDF-1.4\n%rev2\n")], "FX-GCP-CD-2.pdf", { type: "application/pdf" }));
   const upd = await api("PUT", `/documentos-sgc/${nuevaId}`, form2, { form: true });
   check("adjuntar archivo a la revision 2", upd.status === 200, `status ${upd.status} ${upd.data?.message}`);
-  await api("POST", `/documentos-sgc/${nuevaId}/enviar-revision`, {});
-  const apr2 = await api("POST", `/documentos-sgc/${nuevaId}/aprobar`, {}, { token: token2 });
+  await api("POST", `/documentos-sgc/${nuevaId}/enviar-revision`, {}, { token: token2 });
+  const apr2 = await api("POST", `/documentos-sgc/${nuevaId}/aprobar`, {}, { token: token3 });
   const v1 = (await api("GET", `/documentos-sgc/${docId}`)).data?.item;
   check("aprobar revision 2 deja obsoleta la revision 1", apr2.status === 200 && v1?.estado === "obsoleto", `status ${apr2.status} v1=${v1?.estado}`);
   const maestra = (await api("GET", "/documentos-sgc/lista-maestra")).data?.items || [];

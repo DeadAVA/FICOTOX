@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowRight, CalendarCheck, CalendarX, Cube, FileText, Flask, Package, SealCheck, TestTube, Truck, Wrench } from "@phosphor-icons/react";
+import { ArrowRight, CalendarCheck, CalendarX, Cube, FileText, Flask, Package, SealCheck, Stamp, TestTube, Truck, Wrench } from "@phosphor-icons/react";
 import { cn } from "@/components/ui/cn";
 import { HoverCard } from "@/components/ui/Overlay";
 import { fmt } from "@/lib/client/format";
@@ -40,6 +40,8 @@ const ICONS: Record<string, ReactNode> = {
   // Fase 2: lo que toca supervisar y los accesos que vencen pronto.
   por_supervisar: <SealCheck size={17} />,
   accesos_vencen: <CalendarX size={17} />,
+  // Fase 3: solicitudes que puedo aprobar como segundo usuario.
+  por_autorizar: <Stamp size={17} />,
 };
 
 const TONE = {

@@ -115,7 +115,7 @@ Revisión del resto de módulos: en documentos, muestras, ensayos, informes, equ
 | Rol (clave) | usuarios | documentos | muestras | ensayos | informes | equipos | inventario | calidad | compras |
 |---|---|---|---|---|---|---|---|---|---|
 | Administrador técnico del sistema (`admin_tecnico`, sistémico) | G | V (tecnico) | V (estado) | — | — | V | — | V (bitacora) | — |
-| Responsable General (`responsable_general`) | V | V R A AN | V AN | V R AN | V R A AN | V AN | V AN | V R A AN | V A |
+| Responsable General (`responsable_general`) | V A | V R A AN | V AN | V R AN | V R A AN | V AN | V AN | V R A AN | V A |
 | Coordinador/a de Mejora Continua (`mejora_continua`) | V | G R A AN | V | V | V | V | V | G R A AN | V |
 | Coordinador/a del Área Técnica (`coord_area_tecnica`) | V | C E R (tecnico) | C E R A AN | C E R A AN | C R A AN | G R AN | G R AN | C R | V |
 | Coordinador/a de Investigación y Desarrollo (`coord_investigacion`) | V | C E R (investigacion) | C E (proyecto) | C E R (proyecto) | C R (proyecto) | C E R | C E | C E | V |
@@ -150,10 +150,36 @@ Las reglas 1 y 2 usan un permiso "ancla" para identificar el lado administrativo
 - Bitácora: `asignar_rol`, `revocar_rol`, `vencer_rol` (el vencimiento se registra una vez, en el primer minuto de actividad después de la fecha), y los cambios de permisos de un rol, todos con motivo.
 - **Cargo en las firmas**: al capturar, firmar, revisar, aprobar, autorizar, entregar o anular (recepción, procesamiento, extracción, análisis e informes) se guarda el rol con el que se actuó (`*_rol_id`, `*_cargo`, y `actuo_como` en la bitácora). Si un solo rol vigente otorga el permiso se usa ese; si varios, la interfaz pide "Actuar como: <rol>" y envía `X-Actuar-Como`; el servidor valida que ese rol lo otorgue. El PDF del informe muestra el cargo elegido.
 
+## 6 bis. Separación de funciones y segundo usuario (Fase 3)
+
+Catálogos versionados en el repositorio (no se editan desde la aplicación): `src/lib/shared/segregacion.ts` (`VERSION_SEGREGACION`) y `src/lib/shared/acciones-criticas.ts` (`VERSION_ACCIONES_CRITICAS`). Se evalúan en el servidor **por persona**, sin importar cuántos roles tenga ni con qué cargo actúe. "Elaboró" = quien creó el registro y cualquiera que haya editado su contenido (según su bitácora).
+
+| # | Regla de segregación |
+| --- | --- |
+| 1 | Análisis: quien lo elaboró no lo revisa ni lo aprueba (revisor y aprobador pueden coincidir). |
+| 2 | Informe: quien lo elaboró, o elaboró un análisis incluido, no lo revisa ni lo autoriza ("el Analista no validará ni liberará su propio resultado"). |
+| 3 | Procesamiento y extracción: quien firma "supervisó" no es quien procesó, extrajo o realizó la limpieza. |
+| 4 | Supervisión: el supervisor no da visto bueno a lo que él mismo capturó. |
+| 5 | Documentos SGC: quien elaboró no revisa ni aprueba; quien revisó no aprueba. |
+| 6 | Segundo usuario: quien solicita una acción crítica no la aprueba. |
+
+Violación: 409 con código `segregacion` y la regla concreta. Las excepciones se piden como solicitud `excepcion_segregacion` (la aprueba A en calidad) y quedan registradas en el registro, en la bitácora y, en informes, en el PDF.
+
+| Acción crítica (crea solicitud; no se ejecuta hasta aprobarla) | Aprueba (segundo usuario) |
+| --- | --- |
+| Anular o restaurar recepción, procesamiento, extracción o análisis que ya no esté en borrador/registrado (incluye el análisis aprobado) | AN del mismo módulo |
+| Anular un informe autorizado o entregado | AN en informes |
+| Excepción de segregación | A en calidad (Responsable General / Mejora Continua) |
+| Asignar un rol a un usuario (también el rol inicial de una cuenta nueva) | A en usuarios (Responsable General) |
+| Reactivar una cuenta dada de baja | A en usuarios |
+| Ampliar la vigencia de una cuenta temporal | A en usuarios |
+
+Revocar roles, dar de baja cuentas, bloquear y acortar vigencias **no** requieren segundo usuario (reducir privilegios no debe esperar). `usuarios:G` implica A: un administrador técnico también puede aprobar cambios de acceso que pidió otra persona. Guardas: siempre queda al menos un usuario activo con `usuarios:G` vigente (y uno sin fecha de fin) y con `usuarios:A` vigente. El script de alta asigna roles sin solicitud y lo deja dicho en la bitácora.
+
 ## 7. Decisiones pendientes de validar con Mejora Continua
 
 1. **AN (anular con justificación)**: la matriz original no lo asignaba a ningún rol. Se propuso y se cargó: Coord. Área Técnica en muestras, ensayos, informes, equipos e inventario; Mejora Continua en documentos y calidad; Responsable General en todo excepto usuarios (anulaciones excepcionales). La aprobación de un segundo usuario llega en Fase 3.
-2. **Responsable General en usuarios**: la matriz dice "V/A"; queda como V. La aprobación de altas y cambios se implementa en Fase 2/3.
+2. **Responsable General en usuarios**: la matriz dice "V/A"; desde la Fase 3 es V A y aprueba las asignaciones de rol, reactivaciones y ampliaciones de vigencia (solicitudes de segundo usuario).
 3. **A de informes de la Coord. Técnica**: deberá valer solo para personas autorizadas en FX-THF-AP (Fase 4).
 4. **Interpretación de módulos**: muestras = recepción y custodia; ensayos = procesamiento, extracción y análisis (reconcilia la matriz con la sección 7).
 5. **Anclas de las reglas 1 y 2** (`usuarios:G` y `compras:G`) y la lectura de las celdas con paréntesis (sección 3).
@@ -161,3 +187,7 @@ Las reglas 1 y 2 usan un permiso "ancla" para identificar el lado administrativo
 7. **Uso de equipos e insumos al capturar**: se exige `equipos:C` / `inventario:C` además de `ensayos:C`.
 8. **Alcances diferidos en calidad** (resuelto en la Fase 2): en calidad un diferido es *sin acceso*, así que `C (incidencias)` ya no abre la bitácora. Cuando se implemente el registro de incidencias (Fase 8) se aplicará el alcance real.
 9. **Supervisión de cuentas temporales** (Fase 2): además del alcance `supervisado`, todo lo que captura una cuenta temporal con supervisor queda pendiente de visto bueno. Validar si una estancia temporal con rol de Técnico Analista debe quedar supervisada o no.
+10. **Segregación en documentos** (Fase 3): el modelo tiene un solo paso de revisión; la regla "revisor de calidad, revisor técnico y aprobador no pueden ser todos la misma persona" se aplica como revisor distinto del aprobador. Validar si se requieren dos revisiones (calidad y técnica) en la Fase 7. Además, como "enviar a revisión" registra al revisor, quien elaboró el documento no lo envía a revisión (lo envía otra persona con E); se rehace con el flujo completo de documentos.
+11. **`usuarios:G` implica A** (Fase 3): el Administrador técnico también puede aprobar asignaciones de rol pedidas por otra persona. Validar si la aprobación debe quedar solo en el Responsable General. Consecuencia: la guarda de `usuarios:A` no se puede disparar de extremo a extremo (la de G salta antes); se conserva por si se separan.
+12. **Cambios de permisos de un rol ya asignado** (Fase 3): quien tiene `usuarios:G` los hace sin segundo usuario (con motivo, reautenticación y bitácora). Riesgo aceptado; validar si deben pasar por solicitud.
+13. **Regla 3 por nombre** (Fase 3): procesó/supervisó se comparan como texto firmado, no como cuentas. Se ligará a la cuenta con la asignación de muestras (Fase 5).

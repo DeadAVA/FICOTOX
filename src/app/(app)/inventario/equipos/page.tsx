@@ -17,7 +17,7 @@ import { SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, TableSkeleton, type Tone } from "@/components/ui/Primitives";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
-import { deadlineTone, fmt, fmtDate } from "@/lib/client/format";
+import { deadlineTone, fmt, fmtDate, fmtDateTime } from "@/lib/client/format";
 import { useDebouncedValue, useInitialParam, useOpenState, useParamChange, useUrlTrigger } from "@/lib/client/hooks";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
@@ -285,14 +285,14 @@ function EquiposContent() {
                 { label: "Responsable", value: selected.responsable },
                 { label: "Próxima calibración", value: selected.fecha_prox_calibracion ? fmtDate(selected.fecha_prox_calibracion) : null },
                 { label: "Mantenimiento pendiente", value: selectedMeta?.detail || null },
-                { label: "Registrado", value: selected.creado_en ? fmtDate(selected.creado_en) : null },
+                { label: "Registrado", value: selected.creado_en ? fmtDateTime(selected.creado_en) : null },
               ],
             },
             {
               title: "Baja",
               rows: [
                 { label: "Motivo", value: selectedInactive ? selected.baja_motivo : null },
-                { label: "Fecha", value: selectedInactive && selected.baja_en ? fmtDate(selected.baja_en) : null },
+                { label: "Fecha", value: selectedInactive && selected.baja_en ? fmtDateTime(selected.baja_en) : null },
               ],
             },
           ]}

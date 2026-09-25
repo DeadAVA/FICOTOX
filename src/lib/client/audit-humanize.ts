@@ -1,6 +1,7 @@
 import type { ApiRecord } from "@/lib/client/types";
 import { ACCION_KEYS, MODULOS, alcanceLabel, isAccion, isModulo } from "@/lib/shared/permisos";
 import { ACCEPTANCE_DECISIONS, ANALYSIS_STATES, AUDIT_ENTITIES, CLIENT_CONTACT_MEDIA, DISPOSAL_TYPES, DOCUMENT_STATES, RECEPTION_DELIVERY_MEDIA, REPORT_DELIVERY_MEDIA, REPORT_STATES, SAMPLE_STATES, STORAGE_PLACES } from "@/lib/shared/sgc";
+import { diaSemana, diasEntre, fechaSola, formatearFecha, formatearFechaHora, formatearFechaLarga, formatearHora, hoyLocal, instanteDe } from "../shared/fechas";
 
 /*
  * Traduce una entrada de la bitacora de auditoria a lenguaje llano:
@@ -97,6 +98,12 @@ export const ACTION_TONE: Record<string, AuditTone> = {
   visto_bueno: "success",
   regresar_supervision: "warning",
   cambiar_cargo: "neutral",
+  // Fase 3: solicitudes de autorizacion de un segundo usuario.
+  solicitar: "warning",
+  aprobar_solicitud: "success",
+  rechazar_solicitud: "danger",
+  cancelar_solicitud: "neutral",
+  vencer_solicitud: "warning",
 };
 
 /*
@@ -285,7 +292,6 @@ const FIELD_LABELS: Record<string, string> = {
   vigente_hasta: "Vigente hasta",
   actuo_como: "Actuó como",
   es_sistemico: "Usuario del sistema",
-  auth_provider: "Acceso mediante",
   ultimo_acceso: "Último acceso",
   contrasena: "Contraseña",
   tipo_cuenta: "Tipo de cuenta",
@@ -386,13 +392,10 @@ const HIDDEN_FIELDS = new Set([
   "supervisado_en",
   // Copia interna del estado para poder restaurar; el cambio de estado ya se muestra.
   "estado_previo",
-  // Ids de relaciones y datos internos de la cuenta Microsoft.
+  // Ids de relaciones.
   "id_equipo",
   "equipo_id",
   "id_permiso",
-  "microsoft_oid",
-  "microsoft_tid",
-  "microsoft_preferred_username",
   "hojas",
   // Columnas heredadas del sistema anterior que duplican a las actuales.
   "amount_in_stock",
@@ -423,24 +426,43 @@ const GENERIC_STATES: Record<string, string> = { pendiente: "Pendiente", vencido
 
 const CONSUMED_DETAIL = new Set(["enmienda_de", "enmienda", "nueva_revision_de", "avatar", "contrasena", "excepcion", "revisiones_obsoletas", "pdf", "sha256", "a_quien", "medio", "fecha", "decision", "disposicion", "cantidad", "insertados", "actualizados", "ignorados", "errores", "hojas", "movimientos_repuestos", "proveedor", "existe_usuario", "motivo", "permisos", "rol", "rol_id", "asignacion_id", "vigente_desde", "vigente_hasta", "actuo_como", "ip", "tipo", "bloqueado_hasta", "cambios", "roles_acotados", "cambio_obligatorio", "sesiones", "otras_sesiones", "supervisado", "antes", "despues", "tipo_cuenta", "supervisor_id"]);
 const DELIVERY_PHRASE: Record<string, string> = { correo: "por correo electrónico", impreso: "en mano (impreso)", portal: "por el portal o carpeta compartida", otro: "por otro medio" };
-const providerLabel = (value: unknown) => ({ microsoft: "Microsoft", local: "contraseña local" })[String(value)] || String(value);
 const exceptionLabel = (value: unknown) => {
   const text = String(value);
   if (/misma persona/.test(text)) return "Excepción: la misma persona hizo dos pasos que normalmente hacen personas distintas";
   return `Excepción: ${text}`;
 };
 
+/* Fase 3: la accion se hizo por una excepcion de segregacion aprobada por un segundo usuario. */
+const excepcionSegregacionLabel = (detalle: Record<string, unknown>): string | null => {
+  const e = detalle.excepcion_segregacion as { solicitud_id?: unknown } | undefined;
+  return e && typeof e === "object" ? `Por excepción de segregación (solicitud #${String(e.solicitud_id ?? "?")})` : null;
+};
+/* Fase 3: la accion la ejecuto un segundo usuario al aprobar una solicitud, o el script de alta sin solicitud. */
+const solicitudLabel = (detalle: Record<string, unknown>): string | null => {
+  if (detalle.solicitud_id !== undefined && detalle.solicitud_id !== null) return `Ejecutada al aprobar la solicitud #${String(detalle.solicitud_id)}${detalle.solicitado_por ? ` (pedida por el usuario #${String(detalle.solicitado_por)})` : ""}`;
+  if (detalle.sin_solicitud) return `Sin solicitud de segundo usuario: ${String(detalle.sin_solicitud)}`;
+  return null;
+};
+const TIPO_SOLICITUD_LABEL: Record<string, string> = {
+  anular_registro: "anular",
+  restaurar_registro: "restaurar",
+  anular_informe: "anular",
+  excepcion_segregacion: "una excepción de segregación para",
+  asignar_rol: "asignar un rol a",
+  reactivar_cuenta: "reactivar la cuenta",
+  ampliar_vigencia: "ampliar la vigencia de la cuenta",
+};
+
 const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/* Instante -> dd/mm/aaaa HH:mm en la zona del laboratorio. */
 export function fmtWhen(value: unknown): string {
   if (!value) return "—";
-  const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return instanteDe(value) ? formatearFechaHora(value) : String(value);
 }
 
-const fmtDateOnly = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
+const fmtDateOnly = (value: string) => formatearFecha(value);
 
 const humanKey = (key: string) => {
   const clean = key.replace(/_json$/, "").replace(/_/g, " ");
@@ -649,23 +671,28 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
     case "anular":
       action = `anuló ${obj}`;
       if (Number(detalle.movimientos_repuestos)) facts.push(`Se repuso el inventario (${Number(detalle.movimientos_repuestos)} movimiento${Number(detalle.movimientos_repuestos) === 1 ? "" : "s"})`);
+      if (solicitudLabel(detalle)) facts.push(solicitudLabel(detalle)!);
       break;
     case "restaurar":
       action = `restauró ${obj}`;
+      if (solicitudLabel(detalle)) facts.push(solicitudLabel(detalle)!);
       break;
     case "baja":
       action = `dio de baja ${obj}`;
       break;
     case "reactivar":
       action = `reactivó ${obj}`;
+      if (solicitudLabel(detalle)) facts.push(solicitudLabel(detalle)!);
       break;
     case "revisar":
       action = `marcó como revisado ${obj}`;
       if (detalle.excepcion) facts.push(exceptionLabel(detalle.excepcion));
+      if (excepcionSegregacionLabel(detalle)) facts.push(excepcionSegregacionLabel(detalle)!);
       break;
     case "aprobar":
       action = `aprobó ${obj}`;
       if (detalle.excepcion) facts.push(exceptionLabel(detalle.excepcion));
+      if (excepcionSegregacionLabel(detalle)) facts.push(excepcionSegregacionLabel(detalle)!);
       {
         const obsoletas = Array.isArray(detalle.revisiones_obsoletas) ? detalle.revisiones_obsoletas.length : Number(detalle.revisiones_obsoletas || 0);
         if (obsoletas > 0) facts.push(obsoletas === 1 ? "La revisión anterior quedó obsoleta" : `${obsoletas} revisiones anteriores quedaron obsoletas`);
@@ -674,6 +701,26 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
     case "autorizar":
       action = `autorizó ${obj}${detalle.pdf ? " y se generó el PDF" : ""}`;
       if (detalle.excepcion) facts.push(exceptionLabel(detalle.excepcion));
+      if (excepcionSegregacionLabel(detalle)) facts.push(excepcionSegregacionLabel(detalle)!);
+      break;
+    case "solicitar": {
+      const que = TIPO_SOLICITUD_LABEL[String(detalle.tipo)] || String(detalle.accion || "una acción crítica sobre");
+      action = `solicitó autorización para ${que} ${obj}`;
+      if (detalle.solicitud_id !== undefined) facts.push(`Solicitud #${String(detalle.solicitud_id)}${detalle.aprueba ? ` · la aprueba quien tenga ${String(detalle.aprueba)}` : ""}${detalle.vence_en ? ` · vence ${fmtWhen(detalle.vence_en)}` : ""}`);
+      break;
+    }
+    case "aprobar_solicitud":
+      action = `aprobó la solicitud #${String(detalle.solicitud_id ?? "?")} (${TIPO_SOLICITUD_LABEL[String(detalle.tipo)] || String(detalle.accion || "")} ${obj}) como segundo usuario`;
+      if (detalle.solicitado_por) facts.push(`Pedida por el usuario #${String(detalle.solicitado_por)}`);
+      break;
+    case "rechazar_solicitud":
+      action = `rechazó la solicitud #${String(detalle.solicitud_id ?? "?")} (${TIPO_SOLICITUD_LABEL[String(detalle.tipo)] || String(detalle.accion || "")} ${obj})`;
+      break;
+    case "cancelar_solicitud":
+      action = `canceló su solicitud #${String(detalle.solicitud_id ?? "?")} (${TIPO_SOLICITUD_LABEL[String(detalle.tipo)] || String(detalle.accion || "")} ${obj})`;
+      break;
+    case "vencer_solicitud":
+      action = `venció la solicitud #${String(detalle.solicitud_id ?? "?")} (${TIPO_SOLICITUD_LABEL[String(detalle.tipo)] || String(detalle.accion || "")} ${obj}) sin resolverse`;
       break;
     case "entregar": {
       const to = detalle.a_quien ? ` a ${String(detalle.a_quien)}` : "";
@@ -713,7 +760,6 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       break;
     case "login":
       action = "inició sesión";
-      if (detalle.proveedor) facts.push(`Acceso con ${providerLabel(detalle.proveedor)}`);
       break;
     case "asignar_rol":
     case "revocar_rol":
@@ -726,6 +772,7 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       if (detalle.vigente_desde || detalle.vigente_hasta) {
         facts.push(`Vigencia: desde ${humanValue("vigente_desde", detalle.vigente_desde)}${detalle.vigente_hasta ? ` hasta ${humanValue("vigente_hasta", detalle.vigente_hasta)}` : " sin fecha de fin"}`);
       }
+      if (solicitudLabel(detalle)) facts.push(solicitudLabel(detalle)!);
       break;
     }
     case "login_fallido":
@@ -733,7 +780,6 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       if (detalle.motivo) facts.push(String(detalle.motivo));
       else if (detalle.existe_usuario === false) facts.push("El correo no corresponde a ningún usuario");
       else if (detalle.existe_usuario === true) facts.push("Contraseña incorrecta");
-      if (detalle.proveedor) facts.push(`Acceso con ${providerLabel(detalle.proveedor)}`);
       break;
     case "reauth_fallida":
       action = `no pudo confirmar su identidad${referencia ? ` (${referencia})` : ""}`;
@@ -760,6 +806,7 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       break;
     case "cambiar_vigencia": {
       action = `cambió la vigencia de la cuenta ${referencia || ""}`.trim();
+      if (solicitudLabel(detalle)) facts.push(solicitudLabel(detalle)!);
       const cambiosCuenta = (detalle.cambios || {}) as Record<string, { antes?: unknown; despues?: unknown }>;
       for (const [campo, par] of Object.entries(cambiosCuenta)) {
         if (!par || typeof par !== "object") continue;
@@ -800,7 +847,7 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
   }
   const route = ENTITY_ROUTE[entidad];
   const href = route !== undefined && (entry.entidad_id || referencia) ? route(String(entry.entidad_id || ""), referencia || "") : null;
-  const when = entry.fecha_hora ? new Date(String(entry.fecha_hora)) : null;
+  const when = entry.fecha_hora ? instanteDe(entry.fecha_hora) : null;
   if (!entry.usuario_nombre && !entry.usuario_email && ["login_fallido", "bloquear", "reauth_fallida"].includes(accion)) action = action.charAt(0).toUpperCase() + action.slice(1);
 
   // Lo que quede en `_detalle` sin traducir se muestra como hecho, para no perder datos.
@@ -811,7 +858,7 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
 
   return {
     id: Number(entry.id),
-    when: when && !Number.isNaN(when.getTime()) ? when : null,
+    when,
     actor: String(entry.usuario_nombre || entry.usuario_email || (["login_fallido", "bloquear", "reauth_fallida"].includes(accion) ? "" : "El sistema")),
     actorEmail: entry.usuario_email ? String(entry.usuario_email) : null,
     isSystem: !entry.usuario_nombre && !entry.usuario_email,
@@ -831,15 +878,16 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
 /* "Hoy", "Ayer" o la fecha larga, para agrupar la linea de tiempo. */
 export function dayLabel(date: Date | null): string {
   if (!date) return "Sin fecha";
-  const today = new Date();
-  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diff = Math.round((startOf(today) - startOf(date)) / 86_400_000);
+  // Dia local del laboratorio, no del navegador.
+  const dia = fechaSola(date);
+  const hoy = hoyLocal();
+  const diff = diasEntre(dia, hoy) ?? 0;
   if (diff === 0) return "Hoy";
   if (diff === 1) return "Ayer";
-  return date.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long", year: date.getFullYear() === today.getFullYear() ? undefined : "numeric" }).replace(/^\w/, (c) => c.toUpperCase());
+  const largo = dia.slice(0, 4) === hoy.slice(0, 4) ? formatearFechaLarga(dia).replace(/ de \d{4}$/, "") : formatearFechaLarga(dia);
+  return `${diaSemana(dia)} ${largo}`.replace(/^\w/, (c) => c.toUpperCase());
 }
 
 export function timeLabel(date: Date | null): string {
-  if (!date) return "—";
-  return date.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  return formatearHora(date, "—");
 }

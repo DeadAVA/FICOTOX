@@ -7,11 +7,12 @@ import { FloppyDisk, Plus } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Field, FormGrid, Input, Select } from "@/components/ui/Field";
+import { DateInput } from "@/components/ui/DateInput";
 import { useConfirm } from "@/components/ui/Overlay";
 import { cn } from "@/components/ui/cn";
 import { controlClass, controlClassSm } from "@/components/ui/Field";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
-import { isoDate, parseFloatOrNull, parseIntOrNull } from "@/lib/client/format";
+import { isoDate, parseFloatOrNull, parseIntOrNull, todayIso } from "@/lib/client/format";
 import { equipoAlert, filterManualInventario, findInsumoByAutoQuery, findInsumoOption, findReactivoByRef, findUniqueOperativeEquipo, formatInventoryAmount, loadInsumoOptions, nextBitacoraFolio, resolveFixedInventoryAmount } from "@/lib/client/insumos";
 import { formatExtractionFolio, getExtractionRowsFromProcessing, isSampleReadOnly, sampleStatusLabel } from "@/lib/client/samples";
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
@@ -26,7 +27,8 @@ import { DSP_PROTOCOL } from "./extraction/dsp";
 import { EquiposUsados, newEquipoExtra, type EquipoUsadoRow } from "./extraction/EquiposUsados";
 import { WeightTable, blancoRow, newWeightRow } from "./extraction/WeightTable";
 import type { ExtractionProtocol, ExtractionState, FixedField, ProtocolContext, WeightColumnPair, WeightRow } from "./extraction/types";
-import { SupervisionCallout } from "./status";
+import { SolicitudCallout, SupervisionCallout } from "./status";
+import { formatearHora } from "@/lib/shared/fechas";
 
 /*
  * Formato de extraccion como pagina completa. El formulario es comun; el
@@ -58,11 +60,11 @@ const str = (value: unknown): string => (value === undefined || value === null ?
 
 const defaultForm = (protocol: ExtractionProtocol): ExtractionState => ({
   claveRevision: EXTRACTION_TYPES[protocol.tipo].clave,
-  fechaEmision: isoDate(new Date()),
+  fechaEmision: todayIso(),
   estado: "registrada",
   folio: "",
-  fecha: isoDate(new Date()),
-  hora: new Date().toTimeString().slice(0, 5),
+  fecha: todayIso(),
+  hora: formatearHora(new Date()),
   processingId: "",
   muestraTipo: "unica",
   idInterno: "",
@@ -448,7 +450,8 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
   const detailCache = useRef(new Map<number, ApiRecord>());
   const editing = !!item?.id;
   const canEdit = editing ? can("ensayos", "E", { objeto: "extraccion", borrador: String(item?.estado || "registrada") === "registrada" }) : can("ensayos", "C", { objeto: "extraccion", borrador: true });
-  const readOnly = editing && (isSampleReadOnly(item?.estado) || !canEdit);
+  // Con una solicitud de autorizacion pendiente (Fase 3) el registro no se edita.
+  const readOnly = editing && (isSampleReadOnly(item?.estado) || !canEdit || !!item?.solicitud_pendiente);
   const patch = (changes: Partial<ExtractionState>) => setForm((prev) => ({ ...prev, ...changes }));
   const setField = (key: string, value: string) => setForm((prev) => ({ ...prev, fields: { ...prev.fields, [key]: value } }));
   const setSteps = (changes: Record<string, boolean>) => setForm((prev) => ({ ...prev, steps: { ...prev.steps, ...changes } }));
@@ -742,6 +745,7 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
       }
     >
       <SupervisionCallout item={item} />
+      <SolicitudCallout item={item} />
       {readOnly && item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}
@@ -754,7 +758,7 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
             <Input id="e-folio" type="number" min="1" inputMode="numeric" value={form.folio} onChange={(event) => patch({ folio: event.target.value })} mono invalid={!!error && !form.folio} />
           </Field>
           <Field label="Fecha" htmlFor="e-fecha" required>
-            <Input id="e-fecha" type="date" value={form.fecha} onChange={(event) => patch({ fecha: event.target.value })} />
+            <DateInput id="e-fecha" value={form.fecha} onChange={(value) => patch({ fecha: value })} />
           </Field>
           <Field label="Hora" htmlFor="e-hora" required>
             <Input id="e-hora" type="time" value={form.hora} onChange={(event) => patch({ hora: event.target.value })} />

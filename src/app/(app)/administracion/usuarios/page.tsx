@@ -14,10 +14,11 @@ import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Avatar, Badge, EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
 import { Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
-import { fmt, fmtDate, normalizeText } from "@/lib/client/format";
+import { fmt, fmtDate, fmtDateTime, normalizeText } from "@/lib/client/format";
 import { useOpenState } from "@/lib/client/hooks";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
+import { formatearHora } from "@/lib/shared/fechas";
 
 export default function UsuariosPage() {
   return (
@@ -219,7 +220,7 @@ function UsuariosContent() {
                       {item.departamento ? <span className="text-ink-4">{item.departamento}</span> : null}
                     </div>
                   </Td>
-                  <Td muted>{fmtDate(item.ultimo_acceso || item.creado_en)}</Td>
+                  <Td muted>{fmtDateTime(item.ultimo_acceso || item.creado_en)}</Td>
                   <Td>
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Badge tone={item.activo ? "success" : "neutral"} dot>
@@ -278,6 +279,5 @@ function UsuariosContent() {
 
 /* Hora local (HH:MM) hasta la que dura un bloqueo. */
 function horaBloqueo(value: unknown): string {
-  const fecha = new Date(String(value || ""));
-  return Number.isNaN(fecha.getTime()) ? "-" : fecha.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  return formatearHora(value, "-");
 }

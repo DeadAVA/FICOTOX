@@ -1,8 +1,8 @@
 # FICOTOX
 
-Sistema web de gestión operativa para laboratorio: inventario, muestras, trazabilidad y documentación, con autenticación local o corporativa (Microsoft Entra ID) y respaldo automático. Pensado para operar de forma local (SQLite) o con base de datos centralizada (MySQL/MariaDB).
+Sistema web de gestión operativa para laboratorio: inventario, muestras, trazabilidad y documentación, con autenticación por usuario y contraseña del sistema y respaldo automático. Pensado para operar de forma local (SQLite) o con base de datos centralizada (MySQL/MariaDB).
 
-> Web-based operations system for laboratory management: inventory, sample tracking, traceability and documentation, with local or corporate (Microsoft Entra ID) authentication and automated backups.
+> Web-based operations system for laboratory management: inventory, sample tracking, traceability and documentation, with system username/password authentication and automated backups.
 
 ---
 
@@ -11,7 +11,7 @@ Sistema web de gestión operativa para laboratorio: inventario, muestras, trazab
 - **Gestión de inventario** — Reactivos, consumibles, equipos y mantenimientos.
 - **Gestión de muestras** — Recepción, procesamiento y extracción, con registro automático de movimientos.
 - **Trazabilidad** — Historial de movimientos y consulta de documentos del sistema de gestión de calidad (SGC).
-- **Usuarios, roles y permisos** — Varios roles por persona con vigencia, permisos finos por módulo (ver/capturar/editar/revisar/aprobar/anular/administrar) con alcance, combinaciones prohibidas y cargo en las firmas. Autenticación local con correo y contraseña, o vía Microsoft Entra ID (SSO corporativo).
+- **Usuarios, roles y permisos** — Varios roles por persona con vigencia, permisos finos por módulo (ver/capturar/editar/revisar/aprobar/anular/administrar) con alcance, combinaciones prohibidas y cargo en las firmas. Autenticación con correo y contraseña del sistema; las acciones críticas piden reautenticación y, algunas, la aprobación de un segundo usuario, con separación de funciones.
 - **Interfaz** — Navegación superior, paleta de comandos (⌘K / Ctrl+K), paneles laterales para catálogos y formatos de muestra a pantalla completa (ver `docs/DISENO_UI.md`).
 - **Respaldo y sincronización** — Respaldo local automatizado con sincronización opcional a OneDrive/Graph.
 - **Distribución autocontenida** — Build `standalone` de Next.js para desplegar con solo Node.js.
@@ -62,7 +62,7 @@ npm run build
 npm run start:standalone     # lanza .next/standalone en HOST:PORT (por defecto 0.0.0.0:5000)
 ```
 
-Variables de entorno relevantes: `SECRET_KEY`, `JWT_SECRET`, `JWT_EXPIRES_HOURS`, `DATABASE_URL`, `SQLITE_PATH`, `LOCAL_LOGIN_ENABLED`, `MICROSOFT_*`, `CORS_ORIGINS` (ver `.env.example` y `src/lib/server/config.ts`).
+Variables de entorno relevantes: `SECRET_KEY`, `JWT_SECRET`, `JWT_EXPIRES_HOURS`, `DATABASE_URL`, `SQLITE_PATH`, `ALLOWED_EMAIL_DOMAINS`, `CORS_ORIGINS` (ver `.env.example` y `src/lib/server/config.ts`).
 
 La base SQLite vive en `instance/ficotox.sqlite3` (se crea sola si no existe) y los PDF de reportes en `instance/maintenance_reports/`.
 
@@ -91,4 +91,4 @@ Es idempotente y también carga la matriz en roles que ya existían sin ella. Ca
 
 ## English summary
 
-FICOTOX is a full-stack laboratory management system built with Next.js (React UI + REST route handlers) covering inventory, sample tracking, traceability, and document control, with local or Microsoft Entra ID authentication, SQLite/MySQL persistence, and automated OneDrive backups. It runs as a dev server or as a self-contained Node.js standalone build. See `MANUAL_TECNICO.md` and `docs/EXPLICACION_PROYECTO.md` for architecture details.
+FICOTOX is a full-stack laboratory management system built with Next.js (React UI + REST route handlers) covering inventory, sample tracking, traceability, and document control, with system username/password authentication, SQLite/MySQL persistence, and automated OneDrive backups. It runs as a dev server or as a self-contained Node.js standalone build. See `MANUAL_TECNICO.md` and `docs/EXPLICACION_PROYECTO.md` for architecture details.

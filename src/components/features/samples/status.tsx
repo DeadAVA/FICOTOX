@@ -1,4 +1,7 @@
+import type { ReactNode } from "react";
 import { Badge, type Tone } from "@/components/ui/Primitives";
+import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Overlay";
 import type { ApiRecord } from "@/lib/client/types";
 import { Callout } from "./FormLayout";
 import { normalizeSampleStatus, sampleStatusLabel } from "@/lib/client/samples";
@@ -77,4 +80,59 @@ export function SupervisionCallout({ item }: { item: ApiRecord | null | undefine
     );
   }
   return null;
+}
+
+/*
+ * Solicitud de autorizacion pendiente (Fase 3): una accion critica (anular,
+ * restaurar) espera al segundo usuario. Mientras tanto el registro no se edita
+ * ni sirve de origen.
+ */
+export function SolicitudBadge({ solicitud }: { solicitud: ApiRecord | null | undefined }) {
+  if (!solicitud || String(solicitud.estado || "pendiente") !== "pendiente") return null;
+  return (
+    <Badge tone="warning" className="ml-1.5">
+      {String(solicitud.pendiente_etiqueta || "Solicitud")} · pendiente de autorización
+    </Badge>
+  );
+}
+
+export function SolicitudCallout({ item }: { item: ApiRecord | null | undefined }) {
+  const solicitud = item?.solicitud_pendiente as ApiRecord | null | undefined;
+  if (!solicitud) return null;
+  return (
+    <Callout tone="warning" title={`${String(solicitud.pendiente_etiqueta || "Solicitud")} · pendiente de autorización (solicitud #${String(solicitud.id)})`}>
+      {solicitud.solicitado_nombre ? `${String(solicitud.solicitado_nombre)} pidió esta acción` : "Se pidió esta acción"}
+      {solicitud.motivo ? ` (motivo: ${String(solicitud.motivo)})` : ""}. Un segundo usuario autorizado debe aprobarla o rechazarla; hasta entonces el registro no se puede editar ni usar como origen de la etapa siguiente.
+    </Callout>
+  );
+}
+
+/*
+ * Segregacion de funciones (Fase 3): el boton de revisar/aprobar/autorizar se
+ * deshabilita con la explicacion del servidor (quien elaboro no valida lo
+ * suyo) en lugar de fallar al guardar; se ofrece pedir una excepcion.
+ */
+export function BotonSegregado({ bloqueo, children }: { bloqueo: string | null | undefined; onSolicitar?: () => void; children: ReactNode }) {
+  if (!bloqueo) return <>{children}</>;
+  return (
+    <Tooltip content={bloqueo}>
+      <span className="inline-flex" aria-label={bloqueo}>
+        {children}
+      </span>
+    </Tooltip>
+  );
+}
+
+export function SegregacionCallout({ bloqueo, accion, onSolicitar }: { bloqueo: string | null | undefined; accion: string; onSolicitar: () => void }) {
+  if (!bloqueo) return null;
+  return (
+    <Callout tone="info" title="Separación de funciones">
+      {bloqueo}. Si no hay otra persona disponible, puedes pedir una excepción a quien tiene A en calidad (Responsable General / Mejora Continua); queda registrada en el registro y en la bitácora.
+      <div className="mt-2">
+        <Button size="sm" variant="secondary" onClick={onSolicitar}>
+          Solicitar excepción para {accion}…
+        </Button>
+      </div>
+    </Callout>
+  );
 }

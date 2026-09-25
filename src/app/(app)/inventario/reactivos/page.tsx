@@ -15,7 +15,7 @@ import { SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, StockMeter, TableSkeleton } from "@/components/ui/Primitives";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
-import { deadlineTone, fmt, fmtDate } from "@/lib/client/format";
+import { deadlineTone, fmt, fmtDate, fmtDateTime } from "@/lib/client/format";
 import { useDebouncedValue, useInitialParam, useOpenState, useParamChange, useUrlTrigger } from "@/lib/client/hooks";
 import { formatReactivoName, getReactivoExpiry, getReactivoLocation, getReactivoStockInfo, getReactivoStockState, getReactivoTypeLabel, isReactivoLow } from "@/lib/client/reactivos";
 import { invalidate, useResource } from "@/lib/client/store";
@@ -295,7 +295,7 @@ function ReactivosContent() {
               title: "Baja",
               rows: [
                 { label: "Motivo", value: selectedInactive ? selected.baja_motivo : null },
-                { label: "Fecha", value: selectedInactive && selected.baja_en ? fmtDate(selected.baja_en) : null },
+                { label: "Fecha", value: selectedInactive && selected.baja_en ? fmtDateTime(selected.baja_en) : null },
               ],
             },
           ]}

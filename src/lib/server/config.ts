@@ -16,11 +16,8 @@ export interface AppConfig {
   SQLITE_PATH: string | null;
   JWT_SECRET: string;
   JWT_EXPIRES_HOURS: number;
-  LOCAL_LOGIN_ENABLED: boolean;
-  MICROSOFT_CLIENT_ID: string;
-  MICROSOFT_TENANT_ID: string;
-  MICROSOFT_ALLOWED_DOMAIN: string;
-  MICROSOFT_AUTH_ENABLED: boolean;
+  /* Dominios de correo admitidos al dar de alta cuentas (vacio = cualquiera). */
+  ALLOWED_EMAIL_DOMAINS: string[];
   CORS_ORIGINS: string;
   /* Fase 2: bloqueo por intentos, sesiones y reautenticacion. */
   LOGIN_MAX_INTENTOS: number;
@@ -32,6 +29,8 @@ export interface AppConfig {
   SUPERVISAR_CUENTAS_TEMPORALES: boolean;
   SESION_INACTIVIDAD_MIN: number;
   REAUTH_TTL_MIN: number;
+  /* Fase 3: dias que una solicitud de autorizacion espera al segundo usuario antes de vencer. */
+  SOLICITUD_VENCE_DIAS: number;
 }
 
 function envInt(name: string, fallback: number): number {
@@ -112,9 +111,6 @@ export function getConfig(): AppConfig {
       ? path.dirname(sqlitePath)
       : path.join(BASE_DIR, "instance");
 
-  const clientId = (process.env.MICROSOFT_CLIENT_ID || "").trim();
-  const tenantId = (process.env.MICROSOFT_TENANT_ID || "").trim();
-
   cached = {
     BASE_DIR,
     INSTANCE_DIR: instanceDir,
@@ -123,11 +119,10 @@ export function getConfig(): AppConfig {
     SQLITE_PATH: sqlitePath,
     JWT_SECRET: process.env.JWT_SECRET || "ficotox-jwt-secret",
     JWT_EXPIRES_HOURS: envInt("JWT_EXPIRES_HOURS", 8),
-    LOCAL_LOGIN_ENABLED: envBool("LOCAL_LOGIN_ENABLED", "true"),
-    MICROSOFT_CLIENT_ID: clientId,
-    MICROSOFT_TENANT_ID: tenantId,
-    MICROSOFT_ALLOWED_DOMAIN: (process.env.MICROSOFT_ALLOWED_DOMAIN || "cicese.mx").trim().toLowerCase(),
-    MICROSOFT_AUTH_ENABLED: envBool("MICROSOFT_AUTH_ENABLED", "true") && !!clientId && !!tenantId,
+    ALLOWED_EMAIL_DOMAINS: (process.env.ALLOWED_EMAIL_DOMAINS || "")
+      .split(",")
+      .map((d) => d.trim().toLowerCase().replace(/^@/, ""))
+      .filter(Boolean),
     // Por omision solo el mismo origen (sin encabezados CORS); "*" o una lista se configuran.
     CORS_ORIGINS: process.env.CORS_ORIGINS ?? "",
     LOGIN_MAX_INTENTOS: envInt("LOGIN_MAX_INTENTOS", 5),
@@ -138,6 +133,7 @@ export function getConfig(): AppConfig {
     SUPERVISAR_CUENTAS_TEMPORALES: envBool("SUPERVISAR_CUENTAS_TEMPORALES", "true"),
     SESION_INACTIVIDAD_MIN: envInt("SESION_INACTIVIDAD_MIN", 30),
     REAUTH_TTL_MIN: envInt("REAUTH_TTL_MIN", 5),
+    SOLICITUD_VENCE_DIAS: envInt("SOLICITUD_VENCE_DIAS", 7),
   };
   return cached;
 }

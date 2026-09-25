@@ -43,7 +43,8 @@
       "es_sistemico": false,
       "permisos": {
         "usuarios": {
-          "V": "total"
+          "V": "total",
+          "A": "total"
         },
         "documentos": {
           "V": "total",

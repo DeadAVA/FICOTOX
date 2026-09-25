@@ -11,6 +11,7 @@
  * Los datos se preparan por la API con el usuario QA.
  */
 import "../lib/reauth-auto.mjs";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -45,8 +46,11 @@ const R3 = (await api("POST", "/samples/reception", aceptada(`SEGUI-I-${stamp}`)
 const P3 = (await api("POST", "/samples/processing", { recepcion_id: R3, muestra_tipo: "unica", id_interno: `SEGUI-I-${stamp}`, fecha_procesamiento: "2026-09-20", tipo_organismo: ["bivalvos"], nombre_quien_proceso: "QA" }, QA)).data?.id;
 const E3 = (await api("POST", "/samples/extraction", { tipo_registro: "E-D", procesamiento_id: P3, tipo_molienda: "fresca", id_interno: `SEGUI-I-${stamp}`, fecha_extraccion: "2026-09-20", registro_pesos: [{ id_muestra: "M1", replica: "M1_R1", peso_muestra: 2.01 }], nombre_quien_extrajo: "QA" }, QA)).data?.id;
 const A3 = (await api("POST", "/samples/analysis", { tipo_analisis: "toxinas_lipofilicas", metodo: "hplc_ms_ms", extraccion_id: E3, fecha_analisis: "2026-09-20", analista_nombre: "QA", resultados: [{ id_muestra: "M1", resultado: 50, unidad: "µg/kg", limite_regulatorio: 160, cumple: "cumple" }] }, QA)).data?.id;
-await api("POST", `/samples/analysis/${A3}/revisar`, {}, QA);
-await api("POST", `/samples/analysis/${A3}/aprobar`, {}, QA);
+// Fase 3: el analisis de QA lo revisa y aprueba otra persona (Coord. del Area Tecnica).
+const credenciales = JSON.parse(readFileSync(process.env.CREDENCIALES_ROLES, "utf8"));
+const TR = (await api("POST", "/auth/login", { email: "ricardo.medina@ficotox.local", password: credenciales["ricardo.medina@ficotox.local"] })).data?.token;
+await api("POST", `/samples/analysis/${A3}/revisar`, {}, TR);
+await api("POST", `/samples/analysis/${A3}/aprobar`, {}, TR);
 const INF = (await api("POST", "/informes", { recepcion_id: R3, analisis_ids: [A3], cliente: { nombre: "Cliente UI" } }, QA)).data?.id;
 const PWD = "Seguridad-UI-2026";
 const alta = async (prefijo, rol) => {
@@ -98,9 +102,10 @@ try {
       check("sin contrasena no se confirma (el dialogo sigue abierto)", await dialogo.isVisible());
       await campo.fill(QA_PWD);
       await dialogo.getByRole("button", { name: "Anular", exact: true }).click();
-      await page.getByText(/anulad/i).first().waitFor();
-      const estado = (await api("GET", `/samples/reception/${R1}`, undefined, QA)).data?.item?.estado;
-      check("con la contrasena en el mismo dialogo la recepcion se anula (sin otro dialogo)", estado === "anulada" && (await page.getByText("Confirma tu identidad").count()) === 0, estado);
+      // Fase 3: la recepcion esta aceptada, asi que la anulacion queda solicitada (segundo usuario).
+      await page.getByText(/pendiente de autorización/i).first().waitFor();
+      const ficha = (await api("GET", `/samples/reception/${R1}`, undefined, QA)).data?.item;
+      check("con la contrasena en el mismo dialogo la solicitud se crea (sin otro dialogo)", ficha?.estado === "aceptada" && !!ficha?.solicitud_pendiente && (await page.getByText("Confirma tu identidad").count()) === 0, ficha?.estado);
 
       /* ---------- Sin contrasena previa: "Confirma tu identidad" sin salir del formulario ---------- */
       await page.goto(`${BASE}/muestras/recepcion/${R2}`);

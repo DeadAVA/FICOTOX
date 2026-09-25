@@ -7,6 +7,7 @@ import { addColumnIfMissing, markSchemaReady, schemaReady } from "./schema";
 import { getConfig } from "./config";
 import { exigirReauth } from "./seguridad";
 import type { Modulo } from "../shared/permisos";
+import { evaluarVistoBueno } from "../shared/segregacion";
 
 /*
  * Alcance "supervisado" aplicado (Fase 2; FX-MO-2-1, seccion 9).
@@ -206,6 +207,9 @@ export async function vistoBueno({ request, s, params }: RouteContext): Promise<
   const { tabla, id, row, userId } = await registroSupervisado(s, user, params);
   const payload = await readJson(request);
   const observaciones = String(payload.observaciones || "").trim() || null;
+  // Segregacion (regla 4): el supervisor no da visto bueno a lo que el mismo capturo.
+  const violacion = evaluarVistoBueno(userId, row.supervision_solicitada_por === null || row.supervision_solicitada_por === undefined ? null : Number(row.supervision_solicitada_por));
+  if (violacion) throw new HttpError(409, { message: violacion.mensaje, codigo: "segregacion", regla: violacion.regla, clave: violacion.clave });
   await exigirReauth(s, request, user, "supervision:visto_bueno");
   await s.execute("UPDATE " + tabla + " SET supervision_estado = 'aprobado', supervisado_por = :por, supervisado_en = :en, supervision_observaciones = :obs WHERE id = :id", {
     por: userId,

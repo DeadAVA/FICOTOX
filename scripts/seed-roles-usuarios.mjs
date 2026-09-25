@@ -203,7 +203,7 @@ const alta = db.transaction(() => {
       resumen.usuariosExistentes.push(email);
     } else {
       const { lastInsertRowid } = db
-        .prepare("INSERT INTO usuarios (nombre, email, activo, id_rol, departamento, auth_provider, password_hash, avatar) VALUES (?, ?, 1, ?, NULL, 'local', ?, ?)")
+        .prepare("INSERT INTO usuarios (nombre, email, activo, id_rol, departamento, password_hash, avatar) VALUES (?, ?, 1, ?, NULL, ?, ?)")
         .run(String(persona.nombre).trim().slice(0, 100), email, roleId, hashPassword(String(persona.password)), avatares[Math.floor(Math.random() * avatares.length)]);
       usuario = db.prepare("SELECT * FROM usuarios WHERE id = ?").get(Number(lastInsertRowid));
       auditar({ accion: "crear", entidad: "usuarios", entidadId: usuario.id, referencia: email, despues: usuario, detalle: { rol: persona.rol } });
@@ -228,7 +228,8 @@ const alta = db.transaction(() => {
     const { lastInsertRowid } = db
       .prepare("INSERT INTO usuario_roles (usuario_id, rol_id, vigente_desde, vigente_hasta, motivo, asignado_por, asignado_en) VALUES (?, ?, ?, ?, ?, NULL, ?)")
       .run(usuario.id, roleId, hoy, hasta, MOTIVO, new Date().toISOString());
-    auditar({ accion: "asignar_rol", entidad: "usuarios", entidadId: usuario.id, referencia: email, detalle: { rol: persona.rol, rol_id: roleId, asignacion_id: Number(lastInsertRowid), vigente_desde: hoy, vigente_hasta: hasta } });
+    // Fase 3: el script asigna sin solicitud de segundo usuario (alta inicial), y lo deja dicho en la bitacora.
+    auditar({ accion: "asignar_rol", entidad: "usuarios", entidadId: usuario.id, referencia: email, detalle: { rol: persona.rol, rol_id: roleId, asignacion_id: Number(lastInsertRowid), vigente_desde: hoy, vigente_hasta: hasta, sin_solicitud: "script de alta (seed)" } });
     resumen.asignaciones.push(`${email} → ${persona.rol}`);
   }
 });

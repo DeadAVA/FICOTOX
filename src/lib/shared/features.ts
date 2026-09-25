@@ -10,12 +10,5 @@ export const FEATURES = {
 
 export type FeatureKey = keyof typeof FEATURES;
 
-/*
- * Regla de dos personas (revisar/aprobar/autorizar por alguien distinto).
- * Apagada a petición del laboratorio: basta con tener el permiso de aprobación.
- * Todo sigue quedando en la bitácora con nombre y fecha.
- */
-export const TWO_PERSON_RULE = false;
-
 /* Módulos de permisos que hoy no tienen pantalla: se ocultan de menús y roles. */
 export const HIDDEN_MODULES = new Set<string>(FEATURES.documentos ? [] : ["documentos"]);

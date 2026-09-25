@@ -301,6 +301,11 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   visto_bueno: "Dio visto bueno",
   regresar_supervision: "Regresó con observaciones",
   cambiar_cargo: "Cambió su cargo predeterminado",
+  solicitar: "Solicitó autorización",
+  aprobar_solicitud: "Aprobó la solicitud",
+  rechazar_solicitud: "Rechazó la solicitud",
+  cancelar_solicitud: "Canceló su solicitud",
+  vencer_solicitud: "Venció la solicitud",
 };
 
 export const AUDIT_ENTITIES: Record<string, string> = {

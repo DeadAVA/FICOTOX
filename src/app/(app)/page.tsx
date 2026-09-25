@@ -14,6 +14,7 @@ import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { fmt } from "@/lib/client/format";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
+import { diaSemana, formatearFechaLarga, formatearHora, hoyLocal } from "@/lib/shared/fechas";
 
 /*
  * Inicio. El buscador (encuentra cualquier cosa, crea y navega) y, debajo,
@@ -29,7 +30,7 @@ interface Overview {
 }
 
 function greeting(): string {
-  const hour = new Date().getHours();
+  const hour = Number(formatearHora(new Date()).slice(0, 2));
   if (hour < 12) return "Buenos días";
   if (hour < 19) return "Buenas tardes";
   return "Buenas noches";
@@ -56,7 +57,9 @@ export default function InicioPage() {
   );
 
   const data = resource.data;
-  const rawToday = new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
+  // Fecha del laboratorio (America/Tijuana), no la del navegador.
+  const hoy = hoyLocal();
+  const rawToday = `${diaSemana(hoy)}, ${formatearFechaLarga(hoy).replace(/ de \d{4}$/, "")}`;
   const today = rawToday.charAt(0).toUpperCase() + rawToday.slice(1);
   const firstName = (user?.nombre || user?.email || "").split(/[\s@]/)[0];
 

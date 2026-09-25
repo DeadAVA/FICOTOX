@@ -67,7 +67,8 @@ const MATRIZ = {
   "Administrador técnico del sistema": { email: "jorge.ramirez@ficotox.local", filas: [...f("usuarios", "G"), ...f("documentos", "V", "tecnico"), ...f("muestras", "V", "estado"), ...f("equipos", "V"), ...f("calidad", "V", "bitacora")] },
   "Responsable General": {
     email: "patricia.luna@ficotox.local",
-    filas: [...f("usuarios", "V"), ...f("documentos", "V R A AN"), ...f("muestras", "V AN"), ...f("ensayos", "V R AN"), ...f("informes", "V R A AN"), ...f("equipos", "V AN"), ...f("inventario", "V AN"), ...f("calidad", "V R A AN"), ...f("compras", "V A")],
+    // Fase 3: el Responsable General aprueba los cambios de acceso (usuarios = V A).
+    filas: [...f("usuarios", "V A"), ...f("documentos", "V R A AN"), ...f("muestras", "V AN"), ...f("ensayos", "V R AN"), ...f("informes", "V R A AN"), ...f("equipos", "V AN"), ...f("inventario", "V AN"), ...f("calidad", "V R A AN"), ...f("compras", "V A")],
   },
   "Coordinador/a de Mejora Continua": {
     email: "ana.torres@ficotox.local",
@@ -505,8 +506,9 @@ if (!TRAS_REINICIO) {
     const PB = (await api("POST", "/samples/processing", procesamiento(RB, "CARGO-1"), QA)).data?.id;
     const EB = (await api("POST", "/samples/extraction", extraccion(PB, "CARGO-1"), QA)).data?.id;
     const AB = (await api("POST", "/samples/analysis", analisis(EB, "CARGO-1"), QA)).data?.id;
-    await api("POST", `/samples/analysis/${AB}/revisar`, {}, QA);
-    await api("POST", `/samples/analysis/${AB}/aprobar`, {}, QA);
+    // Fase 3: lo revisa y aprueba otra persona (QA lo elaboro).
+    await api("POST", `/samples/analysis/${AB}/revisar`, {}, T("Coordinador/a del Área Técnica"));
+    await api("POST", `/samples/analysis/${AB}/aprobar`, {}, T("Coordinador/a del Área Técnica"));
     const inf = await api("POST", "/informes", { recepcion_id: RB, analisis_ids: [AB], cliente: { nombre: "Cliente cargo" } }, QA);
     const cargo = await persona("cargo.roles@cicese.mx", "Responsable General");
     const a2 = await asignar(cargo.id, "Coordinador/a del Área Técnica");
@@ -546,6 +548,16 @@ if (!TRAS_REINICIO) {
 const verificacion = await api("GET", "/audit/verify", undefined, QA);
 check("Verificar integridad: cadena en verde", verificacion.status === 200 && verificacion.data?.ok === true, JSON.stringify(verificacion.data));
 
+// Fase 3: la migracion de la Fase 1 (id_rol -> usuario_roles) no asigna al reiniciar un rol inicial rechazado.
+if (TRAS_REINICIO) {
+  try {
+    const { alta_rechazada: uid } = JSON.parse(readFileSync(new URL("segregacion-reinicio.json", `file://${process.env.DATOS_APOYO_FILE}`), "utf8"));
+    const roles = (await api("GET", `/admin/usuarios/${uid}`, undefined, QA)).data?.item?.roles;
+    check("tras reiniciar, la cuenta con rol inicial rechazado sigue sin roles", Array.isArray(roles) && roles.length === 0, JSON.stringify(roles));
+  } catch (error) {
+    check("tras reiniciar, la cuenta con rol inicial rechazado sigue sin roles", false, error.message);
+  }
+}
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} pruebas OK`);
 process.exit(failed.length ? 1 : 0);

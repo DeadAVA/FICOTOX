@@ -60,7 +60,7 @@ export function resetTestDb() {
     for (const { clave } of db.prepare("SELECT clave FROM permisos WHERE activo = 1").all()) {
       db.prepare("INSERT INTO rol_acciones (id_rol, modulo, accion, alcance) VALUES (?, ?, 'G', 'total')").run(rol.id, clave);
     }
-    const qaId = Number(db.prepare("INSERT INTO usuarios (nombre, email, activo, id_rol, auth_provider, password_hash) VALUES (?, ?, 1, ?, 'local', ?)").run("QA Ficotox", QA_USER.email, rol.id, hash(QA_USER.password)).lastInsertRowid);
+    const qaId = Number(db.prepare("INSERT INTO usuarios (nombre, email, activo, id_rol, password_hash) VALUES (?, ?, 1, ?, ?)").run("QA Ficotox", QA_USER.email, rol.id, hash(QA_USER.password)).lastInsertRowid);
     db.prepare("INSERT INTO usuario_roles (usuario_id, rol_id, vigente_desde, vigente_hasta, motivo, asignado_por, asignado_en) VALUES (?, ?, '2000-01-01', NULL, 'Rol de pruebas automatizadas (solo base de prueba)', NULL, ?)").run(qaId, rol.id, new Date().toISOString());
 
     const credenciales = {};

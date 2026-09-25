@@ -1,53 +1,133 @@
 /*
- * Reautenticacion automatica para las suites de API (Fase 2).
+ * Reautenticacion y segundo usuario automaticos para las suites de API.
  *
- * Las acciones criticas (A, AN, visto bueno, usuarios) exigen el encabezado
- * X-Reauth con un token de un solo uso. Para no repetir ese paso en cada caso de
- * las suites anteriores, este modulo envuelve `fetch`:
+ * Fase 2: las acciones criticas exigen el encabezado X-Reauth con un token de un
+ * solo uso. Este modulo envuelve `fetch`:
  *  - recuerda la contrasena de cada token emitido por /auth/login (y por
  *    /auth/password, que devuelve una sesion nueva);
  *  - si una respuesta es 401 `reauth_required`, pide el token a /auth/reauth con
  *    esa contrasena y repite la peticion con X-Reauth.
- * Una peticion con el encabezado `X-Sin-Reauth-Auto: 1` no se reintenta (para
- * probar el 401 mismo). Importarlo al inicio de cada suite: `import "./lib/reauth-auto.mjs";`
+ * Fase 3: algunas acciones (anular fuera de borrador, asignar roles, reactivar,
+ * ampliar vigencia, alta de usuario con rol inicial) ya no se ejecutan: crean una
+ * solicitud de autorizacion (respuesta con `solicitud.estado = "pendiente"`).
+ * Para que las suites anteriores sigan probando el efecto de la accion, el
+ * envoltorio la aprueba con un SEGUNDO usuario distinto del solicitante (lee
+ * CREDENCIALES_ROLES: Responsable General primero, luego Mejora Continua,
+ * luego QA) y devuelve una respuesta 200 con el resultado de la ejecucion
+ * (`resultado`) fusionado, mas la `solicitud` aprobada.
+ * Encabezados de control (se quitan antes de enviar):
+ *  - `X-Sin-Reauth-Auto: 1`: no reintenta la reautenticacion (para probar el 401).
+ *  - `X-Sin-Aprobar-Auto: 1`: no aprueba la solicitud (para probar el flujo).
+ * Importarlo al inicio de cada suite: `import "./lib/reauth-auto.mjs";`
  */
+import { readFileSync } from "node:fs";
+
 const original = globalThis.fetch;
 const passwords = new Map();
+const tokensPorEmail = new Map();
 
 const tokenDe = (headers) => {
   const auth = headers.get("authorization") || "";
   return auth.startsWith("Bearer ") ? auth.slice(7) : null;
 };
 
+/* Aprobadores candidatos (correo -> contrasena), en orden de preferencia. */
+function aprobadores() {
+  const out = [];
+  try {
+    const cred = JSON.parse(readFileSync(process.env.CREDENCIALES_ROLES, "utf8"));
+    for (const email of ["patricia.luna@ficotox.local", "ana.torres@ficotox.local"]) if (cred[email]) out.push([email, cred[email]]);
+  } catch {
+    /* sin archivo de credenciales */
+  }
+  out.push(["qa@ficotox.local", "QaFicotox2026!"]);
+  return out;
+}
+
+async function reauthToken(base, token, password, accion, headers) {
+  const r = await original(`${base}auth/reauth`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(headers?.get("x-forwarded-for") ? { "X-Forwarded-For": headers.get("x-forwarded-for") } : {}) }, body: JSON.stringify({ accion, password }) });
+  const data = await r.json().catch(() => null);
+  return r.ok && data?.token ? data.token : null;
+}
+
+async function sesionDe(base, email, password) {
+  const previa = tokensPorEmail.get(email);
+  if (previa) {
+    const me = await original(`${base}auth/me`, { headers: { Authorization: `Bearer ${previa}` } });
+    if (me.ok) return previa;
+  }
+  const r = await original(`${base}auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
+  const data = await r.json().catch(() => null);
+  if (!r.ok || !data?.token) return null;
+  tokensPorEmail.set(email, data.token);
+  passwords.set(data.token, password);
+  return data.token;
+}
+
+/* Aprueba la solicitud con un segundo usuario que no sea el solicitante; devuelve la respuesta de /aprobar o null. */
+async function aprobar(base, solicitud) {
+  for (const [email, password] of aprobadores()) {
+    const token = await sesionDe(base, email, password);
+    if (!token) continue;
+    const reauth = await reauthToken(base, token, password, "solicitudes:aprobar");
+    if (!reauth) continue;
+    const r = await original(`${base}solicitudes/${solicitud.id}/aprobar`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-Reauth": reauth }, body: JSON.stringify({ motivo: "Aprobación automática de la suite de pruebas (segundo usuario)" }) });
+    const data = await r.json().catch(() => null);
+    if (r.ok) return data;
+    // 409 segregacion = este aprobador es el solicitante; 403 = sin permiso: probar con el siguiente.
+    if (![403, 409].includes(r.status)) return null;
+  }
+  return null;
+}
+
 globalThis.fetch = async (input, init = {}) => {
   const url = typeof input === "string" ? input : input.url;
   const headers = new Headers(init.headers || {});
   const sinAuto = headers.get("x-sin-reauth-auto") === "1";
+  const sinAprobar = headers.get("x-sin-aprobar-auto") === "1";
   headers.delete("x-sin-reauth-auto");
-  const res = await original(input, { ...init, headers });
+  headers.delete("x-sin-aprobar-auto");
+  let res = await original(input, { ...init, headers });
   const esLogin = /\/api\/auth\/(login|password)$/.test(url) && String(init.method || "GET").toUpperCase() === "POST";
   if (esLogin && res.ok) {
     try {
       const body = JSON.parse(String(init.body || "{}"));
       const data = await res.clone().json();
       const pwd = url.endsWith("/password") ? body.nueva : body.password;
-      if (data?.token && pwd) passwords.set(data.token, pwd);
+      if (data?.token && pwd) {
+        passwords.set(data.token, pwd);
+        if (body.email) tokensPorEmail.set(String(body.email).toLowerCase(), data.token);
+      }
     } catch {
       /* sin JSON */
     }
   }
-  if (res.status !== 401 || sinAuto) return res;
+  const base = url.includes("/api/") ? url.slice(0, url.indexOf("/api/") + 5) : null;
+  if (res.status === 401 && !sinAuto && base) {
+    const data = await res.clone().json().catch(() => null);
+    if (data?.codigo === "reauth_required") {
+      const token = tokenDe(headers);
+      const password = token ? passwords.get(token) : null;
+      if (password) {
+        const reauth = await reauthToken(base, token, password, data.accion, headers);
+        if (reauth) {
+          headers.set("X-Reauth", reauth);
+          res = await original(input, { ...init, headers });
+        }
+      }
+    }
+  }
+  if (sinAprobar || !base || !res.ok) return res;
   const data = await res.clone().json().catch(() => null);
-  if (data?.codigo !== "reauth_required") return res;
-  const token = tokenDe(headers);
-  const password = token ? passwords.get(token) : null;
-  if (!password) return res;
-  const base = url.slice(0, url.indexOf("/api/") + 5);
-  const r = await original(`${base}auth/reauth`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(headers.get("x-forwarded-for") ? { "X-Forwarded-For": headers.get("x-forwarded-for") } : {}) }, body: JSON.stringify({ accion: data.accion, password }) });
-  const reauth = await r.json().catch(() => null);
-  if (!r.ok || !reauth?.token) return res;
-  headers.set("X-Reauth", reauth.token);
-  return original(input, { ...init, headers });
+  if (data?.solicitud?.estado !== "pendiente") return res;
+  const aprobada = await aprobar(base, data.solicitud);
+  if (!aprobada) return res;
+  const resultado = aprobada.resultado || {};
+  const cuerpo = { ...resultado, ...data, message: aprobada.message, solicitud: aprobada.solicitud, aprobada_automaticamente: true };
+  // Asignar un rol respondia 201 con el id de la asignacion; las demas acciones, 200.
+  if (data.solicitud.tipo === "asignar_rol" && cuerpo.id === undefined && resultado.asignacion_id !== undefined) cuerpo.id = resultado.asignacion_id;
+  const status = res.status === 202 ? (data.solicitud.tipo === "asignar_rol" ? 201 : 200) : res.status;
+  return new Response(JSON.stringify(cuerpo), { status, headers: { "Content-Type": "application/json" } });
 };
 
 /* Para suites que obtienen el token por otra via. */

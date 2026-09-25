@@ -54,7 +54,6 @@ async function conCargo(send: (extra: Record<string, string>) => Promise<Respons
  */
 export interface CredencialReauth {
   password?: string;
-  id_token?: string;
 }
 type PedirReauth = (accion: string, mensaje: string) => Promise<CredencialReauth | null>;
 let pedirReauth: PedirReauth | null = null;
@@ -66,7 +65,7 @@ export function registrarReautenticador(fn: PedirReauth | null): void {
 
 /* La contrasena escrita en el mismo dialogo de confirmacion (vale para la siguiente accion critica, 2 min). */
 export function armarReauth(credencial: CredencialReauth | null): void {
-  armada = credencial && (credencial.password || credencial.id_token) ? { credencial, hasta: Date.now() + 120_000 } : null;
+  armada = credencial && credencial.password ? { credencial, hasta: Date.now() + 120_000 } : null;
 }
 
 async function tokenReauth(token: string, accion: string, credencial: CredencialReauth): Promise<string> {

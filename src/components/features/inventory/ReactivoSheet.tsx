@@ -17,6 +17,7 @@ import { workbookToReactivoSheets, type ReactivoImportSheet } from "@/lib/client
 import { getReactivoTypeConfig } from "@/lib/client/reactivos";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
+import { DateInput } from "@/components/ui/DateInput";
 
 /* Alta y edicion de reactivos: los campos dependen de la categoria. */
 export function ReactivoSheet({ open, item, onClose }: { open: boolean; item: ApiRecord | null; onClose: () => void }) {
@@ -105,6 +106,9 @@ export function ReactivoSheet({ open, item, onClose }: { open: boolean; item: Ap
               </option>
             ))}
           </Select>
+        ) : meta.type === "date" ? (
+          // Fase 3: fechas siempre dd/mm/aaaa (componente propio, no el <input type="date"> del navegador).
+          <DateInput id={id} required={!!meta.required} value={value} onChange={setValue} />
         ) : (
           <Input id={id} type={meta.type || "text"} step={meta.step} min={meta.min} required={!!meta.required} value={value} onChange={(event) => setValue(event.target.value)} />
         )}

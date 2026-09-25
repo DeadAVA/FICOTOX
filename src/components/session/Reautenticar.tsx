@@ -1,20 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { LockKey, WindowsLogo } from "@phosphor-icons/react";
+import { LockKey } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { Dialog } from "@/components/ui/Overlay";
 import { registrarReautenticador, type CredencialReauth } from "@/lib/client/api";
-import { reautenticarConMicrosoft } from "@/lib/client/msal";
 
 /*
  * Confirmar identidad (Fase 2). Las acciones criticas piden de nuevo la
  * contrasena. Los dialogos de confirmacion (motivo, firma) la piden en el mismo
  * dialogo con <CampoIdentidad>; si una accion critica llega sin ella, este
- * proveedor la pide en un dialogo propio, sin salir del formulario. Las cuentas
- * sin contrasena local confirman con Microsoft (prompt=login).
+ * proveedor la pide en un dialogo propio, sin salir del formulario.
  */
 
 const ETIQUETA_ACCION: Record<string, string> = {
@@ -43,16 +41,7 @@ export function describirAccion(accion: string): string {
  * pregunta. El servidor valida que el cargo elegido otorgue la accion.
  */
 export function CampoIdentidad({ value, onChange, error, id = "confirmar-identidad", cargo, onCargo }: { value: string; onChange: (value: string) => void; error?: string | null; id?: string; cargo?: string; onCargo?: (value: string) => void }) {
-  const { user } = useSession();
   const selector = onCargo ? <CampoCargo value={cargo || ""} onChange={onCargo} id={`${id}-cargo`} /> : null;
-  if (user?.tiene_password === false) {
-    return (
-      <div className="flex flex-col gap-3">
-        {selector}
-        <p className="rounded-[10px] bg-surface-2 px-3 py-2 text-[12.5px] text-ink-3 ring-1 ring-line">Al confirmar se te pedirá tu contraseña de Microsoft para verificar tu identidad.</p>
-      </div>
-    );
-  }
   return (
     <div className="flex flex-col gap-3">
       {selector}
@@ -81,18 +70,15 @@ export function CampoCargo({ value, onChange, id = "actuar-como" }: { value: str
   );
 }
 
-/* ¿La persona confirma con contrasena (y no con Microsoft)? */
+/* Toda persona confirma con su contrasena del sistema (Fase 3: sin proveedores externos). */
 export function useConfirmaConPassword(): boolean {
-  const { user } = useSession();
-  return user?.tiene_password !== false;
+  return true;
 }
 
 export function ReautenticarProvider({ children }: { children: ReactNode }) {
-  const { user, authConfig } = useSession();
   const [state, setState] = useState<{ accion: string; mensaje: string } | null>(null);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const resolver = useRef<((value: CredencialReauth | null) => void) | null>(null);
 
   const pedir = useCallback((accion: string, mensaje: string) => {
@@ -115,19 +101,7 @@ export function ReautenticarProvider({ children }: { children: ReactNode }) {
     setState(null);
   };
 
-  const conMicrosoft = user?.tiene_password === false;
-  const confirmar = async () => {
-    if (conMicrosoft) {
-      setBusy(true);
-      try {
-        cerrar({ id_token: await reautenticarConMicrosoft(authConfig, user?.email) });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "No se pudo confirmar con Microsoft");
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
+  const confirmar = () => {
     if (!password) {
       setError("Escribe tu contraseña");
       return;
@@ -151,25 +125,19 @@ export function ReautenticarProvider({ children }: { children: ReactNode }) {
             <Button variant="secondary" onClick={() => cerrar(null)}>
               Cancelar
             </Button>
-            <Button onClick={confirmar} loading={busy} icon={conMicrosoft ? <WindowsLogo size={16} weight="fill" /> : undefined}>
-              {conMicrosoft ? "Confirmar con Microsoft" : "Confirmar"}
-            </Button>
+            <Button onClick={confirmar}>Confirmar</Button>
           </>
         }
       >
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            void confirmar();
+            confirmar();
           }}
         >
-          {conMicrosoft ? (
-            <p className="text-[13px] text-ink-2">Se abrirá la ventana de Microsoft para que confirmes tu contraseña.{error ? <span className="mt-2 block text-danger">{error}</span> : null}</p>
-          ) : (
-            <Field label="Tu contraseña" htmlFor="reauth-password" required error={error || undefined}>
-              <Input id="reauth-password" type="password" autoComplete="current-password" autoFocus value={password} onChange={(event) => setPassword(event.target.value)} leading={<LockKey size={16} />} />
-            </Field>
-          )}
+          <Field label="Tu contraseña" htmlFor="reauth-password" required error={error || undefined}>
+            <Input id="reauth-password" type="password" autoComplete="current-password" autoFocus value={password} onChange={(event) => setPassword(event.target.value)} leading={<LockKey size={16} />} />
+          </Field>
         </form>
       </Dialog>
     </>

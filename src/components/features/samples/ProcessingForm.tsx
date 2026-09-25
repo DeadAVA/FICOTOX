@@ -8,10 +8,11 @@ import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Checkbox, Field, FormGrid, Input, Select, Textarea } from "@/components/ui/Field";
+import { DateInput } from "@/components/ui/DateInput";
 import { EmptyState } from "@/components/ui/Primitives";
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
-import { fmtDate, isoDate, parseFloatOrNull, parseIntOrNull } from "@/lib/client/format";
+import { fmtDate, isoDate, parseFloatOrNull, parseIntOrNull, todayIso } from "@/lib/client/format";
 import { filterManualInventario, findInsumoByAutoQuery, findInsumoOption, findUniqueOperativeEquipo, loadInsumoOptions, resolveFixedInventoryAmount, type InventarioRow } from "@/lib/client/insumos";
 import { formatProcessingFolio, isSampleReadOnly, sampleStatusLabel } from "@/lib/client/samples";
 import { formatActiveUserSignature } from "@/lib/client/session";
@@ -19,7 +20,8 @@ import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { Callout, ChoiceCard, ChoiceGrid, FormCard, FormPage, FormTable, PersonCard, StepRow, formTd, formTh, missingMessage, missingSections, openFormSection, type FormSectionDef } from "./FormLayout";
 import { InsumoSearch, InventarioRows, collectInventarioRows, newInventarioRow } from "./InsumoSearch";
-import { SupervisionCallout } from "./status";
+import { SolicitudCallout, SupervisionCallout } from "./status";
+import { formatearHora } from "@/lib/shared/fechas";
 
 /* Formato de procesamiento de muestras (FX-TCF-GMP) como pagina completa. */
 
@@ -108,12 +110,12 @@ interface ProcessingForm {
 
 const defaultForm = (): ProcessingForm => ({
   claveRevision: "FX-TCF-GMP",
-  fechaEmision: isoDate(new Date()),
+  fechaEmision: todayIso(),
   tipoRegistro: "P",
   estado: "registrada",
   folio: "",
-  fecha: isoDate(new Date()),
-  hora: new Date().toTimeString().slice(0, 5),
+  fecha: todayIso(),
+  hora: formatearHora(new Date()),
   receptionId: "",
   muestraTipo: "unica",
   muestraTipoDisabled: false,
@@ -264,7 +266,8 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
   const detailCache = useRef(new Map<number, ApiRecord>());
   const editing = !!item?.id;
   const canEdit = editing ? can("ensayos", "E", { objeto: "procesamiento", borrador: String(item?.estado || "registrada") === "registrada" }) : can("ensayos", "C", { objeto: "procesamiento", borrador: true });
-  const readOnly = editing && (isSampleReadOnly(item?.estado) || !canEdit);
+  // Con una solicitud de autorizacion pendiente (Fase 3) el registro no se edita.
+  const readOnly = editing && (isSampleReadOnly(item?.estado) || !canEdit || !!item?.solicitud_pendiente);
   const patch = (changes: Partial<ProcessingForm>) => setForm((prev) => ({ ...prev, ...changes }));
   const stepKeys = form.organismo === "bivalvos" ? BIVALVOS_STEPS.map(([k]) => k) : form.organismo === "sardinas" ? SARDINAS_STEPS.map(([k]) => k) : [];
   const completeness: Record<string, boolean> = {
@@ -496,6 +499,7 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
       }
     >
       <SupervisionCallout item={item} />
+      <SolicitudCallout item={item} />
       {readOnly && item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}
@@ -508,7 +512,7 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
             <Input id="p-folio" type="number" min="1" inputMode="numeric" value={form.folio} onChange={(event) => patch({ folio: event.target.value })} mono invalid={!!error && !form.folio} />
           </Field>
           <Field label="Fecha" htmlFor="p-fecha" required>
-            <Input id="p-fecha" type="date" value={form.fecha} onChange={(event) => patch({ fecha: event.target.value })} />
+            <DateInput id="p-fecha" value={form.fecha} onChange={(value) => patch({ fecha: value })} />
           </Field>
           <Field label="Hora" htmlFor="p-hora" required>
             <Input id="p-hora" type="time" value={form.hora} onChange={(event) => patch({ hora: event.target.value })} />

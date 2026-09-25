@@ -11,6 +11,7 @@ import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
+import { DateInput } from "@/components/ui/DateInput";
 import { FilterChips, FilterMenu, type FilterGroup } from "@/components/ui/FilterMenu";
 import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
@@ -169,10 +170,10 @@ function AuditoriaContent() {
           </Field>
           <div className="grid grid-cols-2 gap-2">
             <Field label="Desde" htmlFor="aud-desde">
-              <Input id="aud-desde" type="date" value={desde} onChange={(event) => setDesde(event.target.value)} />
+              <DateInput id="aud-desde" value={desde} onChange={(value) => setDesde(value)} />
             </Field>
             <Field label="Hasta" htmlFor="aud-hasta">
-              <Input id="aud-hasta" type="date" value={hasta} onChange={(event) => setHasta(event.target.value)} />
+              <DateInput id="aud-hasta" value={hasta} onChange={(value) => setHasta(value)} />
             </Field>
           </div>
         </FilterMenu>

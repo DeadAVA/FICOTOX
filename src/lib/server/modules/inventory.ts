@@ -11,6 +11,7 @@ import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
 import { ensureConsumiblesSchema } from "./consumables";
 import { firstTruthy, isTruthy, searchParam, toFloatOrNull, toIntOrNull, toStrOrNull, utcTimestampReference } from "./helpers";
 import { ensureSupervisionColumns } from "../supervision";
+import { finDiaLocal, hoyLocal, inicioDiaLocal, sumarDias } from "../../shared/fechas";
 
 /* Portado de modules/inventory/endpoints.py del backend Flask original. */
 
@@ -207,9 +208,13 @@ function isMonthlyMovementColumn(header: string): boolean {
   return hasMonth && hasMovementWord;
 }
 
+/* Instante ISO -> "AAAA-MM-DD HH:MM:SS" en UTC, como guardan CURRENT_TIMESTAMP SQLite y MySQL. */
+const sqlInstante = (iso: string) => iso.slice(0, 19).replace("T", " ");
+
 function cleanImportValue(value: unknown): unknown {
   if (value === null || value === undefined || value === "") return null;
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  // Fecha de una celda Excel: el dia segun sus getters locales (toISOString la correria un dia en UTC-7).
+  if (value instanceof Date) return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
   if (typeof value === "string") {
     const cleaned = value.trim();
     return cleaned || null;
@@ -616,7 +621,8 @@ export async function inventorySummary({ request, s }: RouteContext): Promise<Re
 
   // Las mismas reglas que usan las listas (ver `isReactivoLow` en el cliente y el filtro
   // "Con alerta de calibración"): así el aviso del Inicio siempre coincide con lo que se ve al abrirlo.
-  const today = isSqlite() ? "date('now')" : "CURDATE()";
+  // Dia local del laboratorio (date('now')/CURDATE() darian el dia UTC del servidor).
+  const today = ":hoy";
   const summary = await s.queryOne(
     `
     SELECT
@@ -646,6 +652,7 @@ export async function inventorySummary({ request, s }: RouteContext): Promise<Re
           AND (estado IN ('calibracion_pendiente', 'fuera_servicio') OR (fecha_prox_calibracion IS NOT NULL AND fecha_prox_calibracion < ${today}))
       ) AS equipos_calibracion_pendiente
     `,
+    { hoy: hoyLocal() },
   );
   return json(recortarPorModulo(auth, summary || {}, { total_reactivos: "inventario", total_consumibles: "inventario", reactivos_stock_bajo: "inventario", consumibles_stock_bajo: "inventario", total_equipos: "equipos", equipos_calibracion_pendiente: "equipos" }));
 }
@@ -1326,28 +1333,28 @@ export async function listMovimientos({ request, s }: RouteContext): Promise<Res
     `,
   );
 
-  const statsSql = isSqlite()
-    ? `
+  // Fase 3: "hoy", "semana" y "mes" son del calendario del laboratorio (America/Tijuana); creado_en esta en UTC.
+  const hoyLab = hoyLocal();
+  const dia = (hoyLab.length === 10 ? new Date(`${hoyLab}T12:00:00Z`).getUTCDay() : 1) || 7;
+  const lunes = sumarDias(hoyLab, 1 - dia);
+  const primeroMes = `${hoyLab.slice(0, 8)}01`;
+  const limites = {
+    hoy_ini: sqlInstante(inicioDiaLocal(hoyLab)),
+    semana_ini: sqlInstante(inicioDiaLocal(lunes)),
+    mes_ini: sqlInstante(inicioDiaLocal(primeroMes)),
+    fin: sqlInstante(finDiaLocal(hoyLab)),
+  };
+  const statsSql = `
       SELECT
         COUNT(*) AS total,
         SUM(CASE WHEN tabla_origen = 'reactivos' THEN 1 ELSE 0 END) AS reactivos,
         SUM(CASE WHEN tabla_origen = 'consumibles' THEN 1 ELSE 0 END) AS consumibles,
-        SUM(CASE WHEN DATE(creado_en) = DATE('now', 'localtime') THEN 1 ELSE 0 END) AS hoy,
-        SUM(CASE WHEN strftime('%Y-%W', creado_en) = strftime('%Y-%W', 'now', 'localtime') THEN 1 ELSE 0 END) AS semana,
-        SUM(CASE WHEN strftime('%Y-%m', creado_en) = strftime('%Y-%m', 'now', 'localtime') THEN 1 ELSE 0 END) AS mes
-      FROM movimientos
-    `
-    : `
-      SELECT
-        COUNT(*) AS total,
-        SUM(CASE WHEN tabla_origen = 'reactivos' THEN 1 ELSE 0 END) AS reactivos,
-        SUM(CASE WHEN tabla_origen = 'consumibles' THEN 1 ELSE 0 END) AS consumibles,
-        SUM(CASE WHEN DATE(creado_en) = CURDATE() THEN 1 ELSE 0 END) AS hoy,
-        SUM(CASE WHEN YEARWEEK(creado_en, 1) = YEARWEEK(CURDATE(), 1) THEN 1 ELSE 0 END) AS semana,
-        SUM(CASE WHEN DATE_FORMAT(creado_en, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m') THEN 1 ELSE 0 END) AS mes
+        SUM(CASE WHEN creado_en >= :hoy_ini AND creado_en <= :fin THEN 1 ELSE 0 END) AS hoy,
+        SUM(CASE WHEN creado_en >= :semana_ini AND creado_en <= :fin THEN 1 ELSE 0 END) AS semana,
+        SUM(CASE WHEN creado_en >= :mes_ini AND creado_en <= :fin THEN 1 ELSE 0 END) AS mes
       FROM movimientos
     `;
-  const stats = (await s.queryOne<Row>(statsSql)) || {};
+  const stats = (await s.queryOne<Row>(statsSql, limites)) || {};
   const summary: Record<string, number> = {};
   for (const key of ["total", "reactivos", "consumibles", "hoy", "semana", "mes"]) {
     summary[key] = Number.parseInt(String(stats[key] || 0), 10) || 0;

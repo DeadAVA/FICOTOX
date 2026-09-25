@@ -10,7 +10,7 @@ import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
-import { fmt, fmtDate, normalizeText } from "@/lib/client/format";
+import { fmt, fmtDateTime, normalizeText } from "@/lib/client/format";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 
@@ -110,7 +110,7 @@ function MovimientosContent() {
                 return (
                   <Tr key={item.id}>
                     <Td muted className="whitespace-nowrap">
-                      {fmtDate(item.fecha_hora)}
+                      {fmtDateTime(item.fecha_hora)}
                     </Td>
                     <Td className="max-w-[280px]">
                       <CellPrimary title={insumoName(item)} subtitle={item.item_codigo || undefined} />

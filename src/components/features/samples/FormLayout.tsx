@@ -10,6 +10,7 @@ import { Badge, type Tone } from "@/components/ui/Primitives";
 import { PersonSelect } from "./PersonSelect";
 import { SignaturePad } from "./SignaturePad";
 import type { PersonaCapacidad } from "@/lib/client/personal";
+import { formatearFechaHora } from "@/lib/shared/fechas";
 
 /*
  * Formatos de muestra e informe como pagina.
@@ -503,9 +504,8 @@ export function Panel({ title, description, children, className }: { title?: Rea
 /* Constancia de revision, aprobacion o autorizacion: quien, cuando y si sigue pendiente. */
 export function SignoffCard({ title, name, cargo, at, note, hint, children }: { title: string; name?: unknown; cargo?: unknown; at?: unknown; note?: unknown; hint?: ReactNode; children?: ReactNode }) {
   const done = !!at;
-  // Una fecha sin hora (YYYY-MM-DD) se muestra tal cual, sin convertirla a hora local (evita el "día anterior").
-  const raw = at ? String(at) : "";
-  const when = !raw ? null : /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T12:00:00`).toLocaleDateString("es-MX", { dateStyle: "medium" }) : new Date(raw).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" });
+  // Una fecha sin hora se muestra tal cual (dd/mm/aaaa); un instante, con hora en la zona del laboratorio.
+  const when = at ? formatearFechaHora(at, "") : null;
   return (
     <div className={cn("flex gap-3 rounded-[14px] p-4 ring-1", done ? "bg-success-soft/40 ring-success/30" : "bg-surface-2 ring-line")}>
       <span className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full", done ? "bg-success text-white" : "bg-surface-3 text-ink-4")}>{done ? <SealCheck size={16} weight="fill" /> : <Clock size={16} />}</span>

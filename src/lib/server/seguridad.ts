@@ -72,12 +72,8 @@ export async function ensureSeguridadSchema(s: Session): Promise<void> {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
       `,
   );
-  // id_token de Microsoft ya usados para reautenticar (solo su hash): cada uno vale una vez.
-  await s.execute(
-    isSqlite()
-      ? "CREATE TABLE IF NOT EXISTS reauth_idtokens (id INTEGER PRIMARY KEY AUTOINCREMENT, token_hash VARCHAR(64) NOT NULL UNIQUE, usuario_id INTEGER NOT NULL, usado_en VARCHAR(40) NOT NULL)"
-      : "CREATE TABLE IF NOT EXISTS reauth_idtokens (id INT NOT NULL AUTO_INCREMENT, token_hash VARCHAR(64) NOT NULL, usuario_id INT NOT NULL, usado_en VARCHAR(40) NOT NULL, PRIMARY KEY (id), UNIQUE KEY uk_reauth_idtoken (token_hash)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-  );
+  // Fase 3: la reautenticacion es solo con contrasena; la tabla de id_token de la Fase 2 ya no se usa.
+  await s.execute("DROP TABLE IF EXISTS reauth_idtokens");
   if (isSqlite()) {
     await s.execute("CREATE INDEX IF NOT EXISTS idx_intentos_email ON intentos_acceso (email, fecha)");
     await s.execute("CREATE INDEX IF NOT EXISTS idx_intentos_ip ON intentos_acceso (ip, fecha)");
@@ -186,14 +182,6 @@ export async function registrarIntento(s: Session, datos: { email: string; ip: s
 
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
-/* Marca un id_token de Microsoft como usado; false si ya se habia usado (reutilizacion). */
-export async function consumirIdToken(s: Session, idToken: string, usuarioId: number): Promise<boolean> {
-  await ensureSeguridadSchema(s);
-  const hash = hashToken(idToken);
-  if (await s.scalar("SELECT id FROM reauth_idtokens WHERE token_hash = :hash", { hash })) return false;
-  await s.execute("INSERT INTO reauth_idtokens (token_hash, usuario_id, usado_en) VALUES (:hash, :usuario_id, :en)", { hash, usuario_id: usuarioId, en: ahoraIso() });
-  return true;
-}
 
 /* Emite un token de reautenticacion (se guarda solo su hash). */
 export async function emitirReauth(s: Session, usuarioId: number, accion: string): Promise<{ token: string; expira_en: string }> {

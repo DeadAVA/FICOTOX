@@ -100,11 +100,12 @@ process.on("SIGINT", () => {
  * por IP simulan varios equipos) y usa los valores por omision de la sesion y de
  * CORS aunque el .env local los cambie (Next no pisa variables ya definidas).
  */
-const ENTORNO_FASE2 = { TRUST_PROXY: "true", JWT_EXPIRES_HOURS: "", CORS_ORIGINS: "", SESION_INACTIVIDAD_MIN: "" };
+const ENTORNO_FASE2 = { TRUST_PROXY: "true", JWT_EXPIRES_HOURS: "", CORS_ORIGINS: "", SESION_INACTIVIDAD_MIN: "", ALLOWED_EMAIL_DOMAINS: "cicese.mx,ficotox.local" };
 
 /* Levanta el servidor sobre la copia y no devuelve hasta confirmar que es esa base. */
-const arrancarServidor = async () => {
-  server = spawn("npx", ["next", "dev", "-p", String(PORT)], { cwd: root, stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, SQLITE_PATH: testDb, PORT: String(PORT), ...ENTORNO_FASE2 } });
+/* Fase 3: la zona horaria del servidor no debe cambiar ninguna fecha (se arranca en Tijuana y, tras reiniciar, en UTC). */
+const arrancarServidor = async (tz = "America/Tijuana") => {
+  server = spawn("npx", ["next", "dev", "-p", String(PORT)], { cwd: root, stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, SQLITE_PATH: testDb, PORT: String(PORT), TZ: tz, ...ENTORNO_FASE2 } });
   const salud = await waitFor(`http://localhost:${PORT}/api/health/db`);
   if (!salud) throw new Error("El servidor de pruebas no respondio");
   if (salud.archivo !== esperado) {
@@ -118,6 +119,12 @@ try {
   const datosApoyo = path.join(path.dirname(testDb), "datos-apoyo.json");
   const api = { BASE: `http://localhost:${PORT}/api`, TEST_DB_PATH: testDb, BETTER_SQLITE3: path.join(root, "node_modules/better-sqlite3"), CREDENCIALES_ROLES: CREDENCIALES, DATOS_APOYO_FILE: datosApoyo };
 
+  // Fase 3: los helpers de fechas dan lo mismo con cualquier zona horaria del proceso.
+  for (const tz of ["UTC", "America/Tijuana"]) {
+    console.log(`\n=== fechas.mjs (TZ=${tz})`);
+    failed += (await run(path.join(here, "fechas.mjs"), { TZ: tz })) ? 1 : 0;
+  }
+
   console.log("\n=== datos-apoyo.mjs");
   if (await run(path.join(here, "datos-apoyo.mjs"), api)) throw new Error("No se pudieron crear los datos de apoyo de las pruebas");
 
@@ -129,24 +136,28 @@ try {
   }
 
   // api-roles corre despues de api-dsp y api-sgc: crea registros y personas de prueba que alterarian los folios que esas suites esperan.
-  for (const file of ["api-dsp.mjs", "api-sgc.mjs", "api-roles.mjs", "api-seguridad.mjs"]) {
+  for (const file of ["api-dsp.mjs", "api-sgc.mjs", "api-roles.mjs", "api-seguridad.mjs", "api-segregacion.mjs"]) {
     console.log(`\n=== ${file}`);
     failed += (await run(path.join(here, file), api)) ? 1 : 0;
   }
+  console.log("\n=== api-fechas.mjs (servidor en TZ=America/Tijuana)");
+  failed += (await run(path.join(here, "api-fechas.mjs"), api, ["--fase=1"])) ? 1 : 0;
 
   // Reinicio: los permisos de un rol no deben crecer solos al arrancar de nuevo.
   console.log("\n=== api-permisos.mjs y api-roles.mjs --tras-reinicio (tras reiniciar el servidor)");
   stop();
   await new Promise((r) => setTimeout(r, 1500));
-  await arrancarServidor();
+  await arrancarServidor("UTC");
   failed += (await run(path.join(here, "api-permisos.mjs"), api)) ? 1 : 0;
   failed += (await run(path.join(here, "api-roles.mjs"), api, ["--tras-reinicio"])) ? 1 : 0;
+  console.log("\n=== api-fechas.mjs (servidor en TZ=UTC: los mismos registros muestran las mismas fechas)");
+  failed += (await run(path.join(here, "api-fechas.mjs"), api, ["--fase=2"])) ? 1 : 0;
 
   if (!onlyApi) {
     if (!existsSync(chrome)) {
       console.log(`\n(navegador omitido: no se encontro Chrome en ${chrome}; define CHROME_PATH)`);
     } else {
-      for (const file of ["roles.mjs", "dsp.mjs", "sgc.mjs", "seguridad.mjs"]) {
+      for (const file of ["roles.mjs", "dsp.mjs", "sgc.mjs", "seguridad.mjs", "fechas.mjs", "segregacion.mjs"]) {
         console.log(`\n=== ui/${file}`);
         failed += (await run(path.join(here, "ui", file), { BASE: `http://localhost:${PORT}`, CHROME_PATH: chrome, CREDENCIALES_ROLES: CREDENCIALES, DATOS_APOYO_FILE: datosApoyo })) ? 1 : 0;
       }

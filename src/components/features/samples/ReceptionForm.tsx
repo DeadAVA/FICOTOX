@@ -9,9 +9,10 @@ import { RecordHistory } from "@/components/features/audit/RecordHistory";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Checkbox, Field, FormGrid, Input, Select, Textarea, controlClassSm } from "@/components/ui/Field";
+import { DateInput } from "@/components/ui/DateInput";
 import { Badge } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
-import { fmtDate, isoDate, parseIntOrNull } from "@/lib/client/format";
+import { fmtDate, isoDate, parseIntOrNull, todayIso } from "@/lib/client/format";
 import { formatSampleFolio, isSampleReadOnly, sampleStatusLabel } from "@/lib/client/samples";
 import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
@@ -20,7 +21,8 @@ import { ACCEPTANCE_DECISIONS, DISPOSAL_TYPES, LEGACY_INSPECTION_REQUIREMENTS, L
 import { Callout, ChoiceCard, ChoiceGrid, EditableScope, FieldGroup, FormCard, FormPage, Panel, PersonCard, missingMessage, missingSections, openFormSection, type FormSectionDef } from "./FormLayout";
 import { PersonSelect } from "./PersonSelect";
 import { SignaturePad } from "./SignaturePad";
-import { FolioChip, SampleStatus, SupervisionCallout } from "./status";
+import { FolioChip, SampleStatus, SolicitudCallout, SupervisionCallout } from "./status";
+import { formatearHora } from "@/lib/shared/fechas";
 
 /*
  * Formato de recepcion de muestras (FX-TCF-GMR) como pagina completa, con
@@ -106,12 +108,12 @@ interface SampleForm {
 
 const defaultForm = (): SampleForm => ({
   claveRevision: "FX-TCF-GMR",
-  fechaEmision: isoDate(new Date()),
+  fechaEmision: todayIso(),
   tipoRegistro: "R",
   estado: "registrada",
   folio: "",
-  fechaRecepcion: isoDate(new Date()),
-  horaRecepcion: new Date().toTimeString().slice(0, 5),
+  fechaRecepcion: todayIso(),
+  horaRecepcion: formatearHora(new Date()),
   recibidoPor: formatActiveUserSignature(),
   medioRecepcion: "",
   solicitante: "",
@@ -129,7 +131,7 @@ const defaultForm = (): SampleForm => ({
   inspeccion: RECEPTION_INSPECTION_REQUIREMENTS.map((requisito) => ({ requisito, estado: "", observacion: "" })),
   inspeccionGeneral: "",
   decision: "",
-  aceptacionFecha: isoDate(new Date()),
+  aceptacionFecha: todayIso(),
   aceptacionResponsable: formatActiveUserSignature(),
   temperaturaLlegada: "",
   aceptacionObservaciones: "",
@@ -188,7 +190,7 @@ const formFromItem = (item: ApiRecord): SampleForm => {
     inspeccion: inspectionFromSaved(checklist),
     inspeccionGeneral: inspeccion.observaciones_generales || "",
     decision: item.decision_aceptacion || "",
-    aceptacionFecha: isoDate(aceptacion.fecha) || isoDate(new Date()),
+    aceptacionFecha: isoDate(aceptacion.fecha) || todayIso(),
     aceptacionResponsable: aceptacion.responsable || formatActiveUserSignature(),
     temperaturaLlegada: aceptacion.temperatura_llegada || "",
     aceptacionObservaciones: aceptacion.observaciones || "",
@@ -246,11 +248,12 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
   const [form, setForm] = useState<SampleForm>(() => (item ? formFromItem(item) : defaultForm()));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [disposicion, setDisposicion] = useState({ tipo: "", tipoOtro: "", fecha: isoDate(new Date()), responsable: formatActiveUserSignature(), remanentes: "", observaciones: "", firma: "" });
+  const [disposicion, setDisposicion] = useState({ tipo: "", tipoOtro: "", fecha: todayIso(), responsable: formatActiveUserSignature(), remanentes: "", observaciones: "", firma: "" });
   const [savingDisposicion, setSavingDisposicion] = useState(false);
   const editing = !!item?.id;
   const canEdit = editing ? can("muestras", "E", { objeto: "recepcion", borrador: String(item?.estado || "registrada") === "registrada" }) : can("muestras", "C", { objeto: "recepcion", borrador: true });
-  const readOnly = editing && (isSampleReadOnly(item?.estado) || !canEdit);
+  // Con una solicitud de autorizacion pendiente (Fase 3) el registro no se edita.
+  const readOnly = editing && (isSampleReadOnly(item?.estado) || !canEdit || !!item?.solicitud_pendiente);
   const patch = (changes: Partial<SampleForm>) => setForm((prev) => ({ ...prev, ...changes }));
 
   useEffect(() => {
@@ -488,7 +491,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
                 {disposicion.tipo === "otro" ? <Input placeholder="Especificar" maxLength={120} value={disposicion.tipoOtro} onChange={(event) => setDisposicion({ ...disposicion, tipoOtro: event.target.value })} aria-label="Otro tipo de disposición" /> : null}
                 <FormGrid cols={3}>
                   <Field label="Fecha" htmlFor="r-disp-fecha" required>
-                    <Input id="r-disp-fecha" type="date" value={disposicion.fecha} onChange={(event) => setDisposicion({ ...disposicion, fecha: event.target.value })} />
+                    <DateInput id="r-disp-fecha" value={disposicion.fecha} onChange={(value) => setDisposicion({ ...disposicion, fecha: value })} />
                   </Field>
                   <Field label="Responsable" htmlFor="r-disp-resp" required>
                     <PersonSelect id="r-disp-resp" value={disposicion.responsable} onChange={(name) => setDisposicion({ ...disposicion, responsable: name })} requires="muestras" />
@@ -537,6 +540,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
       }
     >
       <SupervisionCallout item={item} />
+      <SolicitudCallout item={item} />
       {readOnly && item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}
@@ -550,7 +554,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
             <Input id="r-folio" type="number" min="1" inputMode="numeric" value={form.folio} onChange={(event) => patch({ folio: event.target.value })} mono invalid={!!error && !form.folio} />
           </Field>
           <Field label="Fecha de recepción" htmlFor="r-fecha" required>
-            <Input id="r-fecha" type="date" value={form.fechaRecepcion} onChange={(event) => patch({ fechaRecepcion: event.target.value })} />
+            <DateInput id="r-fecha" value={form.fechaRecepcion} onChange={(value) => patch({ fechaRecepcion: value })} />
           </Field>
           <Field label="Hora" htmlFor="r-hora" required>
             <Input id="r-hora" type="time" value={form.horaRecepcion} onChange={(event) => patch({ horaRecepcion: event.target.value })} />
@@ -585,7 +589,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
               <Input id="r-id" maxLength={100} placeholder="Ejemplo: D26-100" value={form.idInterno} onChange={(event) => patch({ idInterno: event.target.value })} mono invalid={!!error && isUnique && !form.idInterno.trim()} />
             </Field>
             <Field label="Fecha de la muestra" htmlFor="r-fecha-muestra">
-              <Input id="r-fecha-muestra" type="date" value={form.fechaMuestra} onChange={(event) => patch({ fechaMuestra: event.target.value })} />
+              <DateInput id="r-fecha-muestra" value={form.fechaMuestra} onChange={(value) => patch({ fechaMuestra: value })} />
             </Field>
             <Field label="Especificaciones" htmlFor="r-esp">
               <Input id="r-esp" maxLength={220} value={form.especificaciones} onChange={(event) => patch({ especificaciones: event.target.value })} />
@@ -621,7 +625,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
                       </label>
                       <label className={cell}>
                         Fecha de la muestra
-                        <input type="date" className={`${controlClassSm}`} value={row.fecha_muestra} onChange={(event) => updateLote(row.key, { fecha_muestra: event.target.value })} aria-label={`Fecha de la muestra ${index + 1}`} />
+                        <DateInput small value={row.fecha_muestra} onChange={(value) => updateLote(row.key, { fecha_muestra: value })} aria-label={`Fecha de la muestra ${index + 1}`} />
                       </label>
                       <label className={cell}>
                         Información adicional
@@ -724,7 +728,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
           <div className="flex flex-col gap-4">
             <FormGrid cols={3}>
               <Field label="Fecha de la decisión" htmlFor="r-acep-fecha" required>
-                <Input id="r-acep-fecha" type="date" value={form.aceptacionFecha} onChange={(event) => patch({ aceptacionFecha: event.target.value })} />
+                <DateInput id="r-acep-fecha" value={form.aceptacionFecha} onChange={(value) => patch({ aceptacionFecha: value })} />
               </Field>
               <Field label="Responsable" htmlFor="r-acep-resp" required>
                 <PersonSelect id="r-acep-resp" value={form.aceptacionResponsable} onChange={(name) => patch({ aceptacionResponsable: name })} requires="muestras" />
@@ -740,7 +744,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
               <Panel title="Comunicación al cliente (FX-MC 7.4.3)" description="La desviación o el rechazo se comunican al cliente antes de continuar. Si pide analizar de todos modos, el informe llevará el descargo correspondiente.">
                 <FormGrid cols={4}>
                   <Field label="Fecha" htmlFor="r-com-fecha" required>
-                    <Input id="r-com-fecha" type="date" value={form.comunicacion.fecha} onChange={(event) => patch({ comunicacion: { ...form.comunicacion, fecha: event.target.value } })} />
+                    <DateInput id="r-com-fecha" value={form.comunicacion.fecha} onChange={(value) => patch({ comunicacion: { ...form.comunicacion, fecha: value } })} />
                   </Field>
                   <Field label="Medio" htmlFor="r-com-medio" required>
                     <Select id="r-com-medio" value={form.comunicacion.medio} onChange={(event) => patch({ comunicacion: { ...form.comunicacion, medio: event.target.value } })}>

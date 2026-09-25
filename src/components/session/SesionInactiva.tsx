@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { LockKey, WindowsLogo } from "@phosphor-icons/react";
+import { LockKey } from "@phosphor-icons/react";
 import { BrandMark } from "@/components/shell/Brand";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { Dialog } from "@/components/ui/Overlay";
-import { loginWithMicrosoft } from "@/lib/client/msal";
 
 /*
  * Cierre de sesion por inactividad (Fase 2; FX-MO-2-1, seccion 11).
@@ -115,11 +114,10 @@ export function SesionInactiva() {
 
 /* Pantalla de bloqueo: cubre la aplicacion (que sigue montada) hasta volver a entrar. */
 function PantallaBloqueo() {
-  const { user, authConfig, unlock, unlockWith, logout } = useSession();
+  const { user, unlock, logout } = useSession();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const conMicrosoft = user?.tiene_password === false && !!authConfig.microsoft?.enabled;
 
   const entrar = async (event: FormEvent) => {
     event.preventDefault();
@@ -129,26 +127,6 @@ function PantallaBloqueo() {
       await unlock(password);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo volver a entrar");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const entrarMicrosoft = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const data = await loginWithMicrosoft(authConfig);
-      if (!data) return;
-      // Solo la misma persona continua sobre lo capturado; otra cuenta empieza de cero.
-      const otra = String((data.user as { email?: string } | undefined)?.email || "").toLowerCase() !== String(user?.email || "").toLowerCase();
-      if (otra) {
-        logout();
-        return;
-      }
-      unlockWith(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo volver a entrar con Microsoft");
     } finally {
       setBusy(false);
     }
@@ -164,12 +142,7 @@ function PantallaBloqueo() {
           </h2>
           <p className="mt-1.5 text-[13.5px] text-ink-2">Lo que estabas capturando sigue aquí. Vuelve a entrar como {user?.nombre || user?.email} para continuar.</p>
         </div>
-        {conMicrosoft ? (
-          <Button className="mt-5" block loading={busy} onClick={entrarMicrosoft} icon={<WindowsLogo size={16} weight="fill" />}>
-            Continuar con Microsoft
-          </Button>
-        ) : (
-          <form onSubmit={entrar} className="mt-5 flex flex-col gap-3">
+        <form onSubmit={entrar} className="mt-5 flex flex-col gap-3">
             <Field label="Contraseña" htmlFor="bloqueo-password" error={error || undefined}>
               <Input id="bloqueo-password" type="password" autoComplete="current-password" autoFocus value={password} onChange={(event) => setPassword(event.target.value)} leading={<LockKey size={16} />} />
             </Field>
@@ -177,8 +150,6 @@ function PantallaBloqueo() {
               Volver a entrar
             </Button>
           </form>
-        )}
-        {conMicrosoft && error ? <p className="mt-3 text-[13px] text-danger">{error}</p> : null}
         <button type="button" onClick={logout} className="mt-4 w-full text-center text-[12.5px] text-ink-3 underline-offset-2 hover:underline">
           Salir (se descarta lo capturado)
         </button>

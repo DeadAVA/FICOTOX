@@ -57,7 +57,12 @@ export type AuditAction =
   | "cambiar_vigencia"
   | "visto_bueno"
   | "regresar_supervision"
-  | "cambiar_cargo";
+  | "cambiar_cargo"
+  | "solicitar"
+  | "aprobar_solicitud"
+  | "rechazar_solicitud"
+  | "cancelar_solicitud"
+  | "vencer_solicitud";
 
 export interface AuditEntry {
   accion: AuditAction;

@@ -85,7 +85,7 @@ const procesamiento = await api(
     parte_organismo: ["cuerpo_completo"],
     resguardo: { entregado_extraccion: true },
     nombre_quien_proceso: "QA",
-    nombre_quien_superviso: "QA",
+    nombre_quien_superviso: "Supervisor QA",
     uso_inventario: [{ tipo: "consumible", ref: String(bolsa.id), cantidad: 1 }],
   },
   T,
@@ -128,7 +128,7 @@ const extraccionAsp = await api(
     ],
     nombre_quien_extrajo: "QA",
     nombre_quien_limpieza: "QA",
-    nombre_quien_superviso: "QA",
+    nombre_quien_superviso: "Supervisor QA",
   },
   T,
 );

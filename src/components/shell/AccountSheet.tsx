@@ -140,16 +140,12 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
               Tu sesión se cierra tras {authConfig.sesion?.inactividad_min ?? 30} minutos sin actividad y, en todo caso, a las {authConfig.sesion?.expira_horas ?? 8} horas.
             </p>
           </div>
-          {user?.tiene_password !== false ? (
-            cambiarClave ? (
-              <FormCambiarPassword onDone={() => setCambiarClave(false)} />
-            ) : (
-              <Button variant="secondary" icon={<Key size={16} />} onClick={() => setCambiarClave(true)}>
-                Cambiar contraseña
-              </Button>
-            )
+          {cambiarClave ? (
+            <FormCambiarPassword onDone={() => setCambiarClave(false)} />
           ) : (
-            <p className="text-[12.5px] text-ink-3">Entras con Microsoft: tu contraseña se administra allí.</p>
+            <Button variant="secondary" icon={<Key size={16} />} onClick={() => setCambiarClave(true)}>
+              Cambiar contraseña
+            </Button>
           )}
           <Button variant="secondary" icon={<SignOut size={16} />} onClick={cerrarTodas}>
             Cerrar sesión en todos los dispositivos

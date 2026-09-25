@@ -14,7 +14,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
-import { fmtDate } from "@/lib/client/format";
+import { fmtDateTime } from "@/lib/client/format";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 
@@ -127,7 +127,7 @@ export default function SupervisionPage() {
                       <CellPrimary title={`${item.tipo} ${item.referencia}`} subtitle={<Badge tone="warning">Pendiente de visto bueno</Badge>} />
                     </Td>
                     <Td muted>{item.solicitado_por || "—"}</Td>
-                    <Td muted>{item.solicitado_en ? fmtDate(item.solicitado_en) : "—"}</Td>
+                    <Td muted>{item.solicitado_en ? fmtDateTime(item.solicitado_en) : "—"}</Td>
                     <Td align="right">
                       <div className="flex flex-wrap justify-end gap-2">
                         <Link href={String(item.href)} className="press inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2.5 text-[13px] text-ink-2 hover:bg-surface-2">
