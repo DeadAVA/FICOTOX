@@ -13,7 +13,7 @@ import type { Accion, Modulo } from "./permisos";
 
 export const VERSION_ACCIONES_CRITICAS = "2026-09-24.1";
 
-export type TipoSolicitud = "anular_registro" | "restaurar_registro" | "anular_informe" | "excepcion_segregacion" | "asignar_rol" | "reactivar_cuenta" | "ampliar_vigencia" | "decision_recepcion" | "cambiar_folio" | "reabrir_recepcion";
+export type TipoSolicitud = "anular_registro" | "restaurar_registro" | "anular_informe" | "excepcion_segregacion" | "asignar_rol" | "reactivar_cuenta" | "ampliar_vigencia" | "decision_recepcion" | "cambiar_folio" | "reabrir_recepcion" | "obsoletar_documento";
 
 export type EstadoSolicitud = "pendiente" | "aprobada" | "rechazada" | "cancelada" | "vencida";
 
@@ -38,6 +38,8 @@ export const ACCIONES_CRITICAS: Record<TipoSolicitud, AccionCritica> = {
   decision_recepcion: { tipo: "decision_recepcion", etiqueta: "Decisión de la recepción", pendiente: "Decisión solicitada", aprueba: { modulo: "muestras", accion: "A" }, descripcion: "Rechazar una recepción o aceptarla con desviación. Si quien la registra ya tiene muestras:A, se aplica directo (con reautenticación)." },
   cambiar_folio: { tipo: "cambiar_folio", etiqueta: "Cambio de folio", pendiente: "Cambio de folio solicitado", aprueba: { modulo: "muestras", accion: "A" }, descripcion: "Cambiar el folio de una recepción ya creada (el campo deja de ser editable)." },
   reabrir_recepcion: { tipo: "reabrir_recepcion", etiqueta: "Reabrir recepción", pendiente: "Reapertura solicitada", aprueba: { modulo: "muestras", accion: "A" }, descripcion: "Reabrir una recepción cerrada o rechazada: vuelve al estado previo." },
+  // Fase 7: documento vigente declarado obsoleto sin reemplazo (lo pide documentos:G).
+  obsoletar_documento: { tipo: "obsoletar_documento", etiqueta: "Declarar documento obsoleto", pendiente: "Obsolescencia solicitada", aprueba: { modulo: "documentos", accion: "A" }, descripcion: "Declarar obsoleto, sin reemplazo, un documento vigente del SGC." },
   ampliar_vigencia: { tipo: "ampliar_vigencia", etiqueta: "Ampliar vigencia", pendiente: "Ampliación de vigencia solicitada", aprueba: { modulo: "usuarios", accion: "A" }, descripcion: "Ampliar la vigencia de una cuenta temporal (o convertirla en permanente)." },
 };
 

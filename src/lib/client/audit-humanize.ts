@@ -126,6 +126,10 @@ export const ACTION_TONE: Record<string, AuditTone> = {
   confirmar_envio: "success",
   requiere_enmienda: "danger",
   alerta_integridad: "danger",
+  // Fase 7: control documental.
+  publicar: "success",
+  confirmar_lectura: "success",
+  proponer: "brand",
 };
 
 /*
@@ -792,6 +796,16 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       if (detalle.formato) facts.push(detalle.formato === "hoja" ? "Formato: hoja completa" : "Formato: etiqueta 50 × 25 mm");
       break;
     }
+    case "publicar":
+      action = `publicó ${obj} (vigente)`;
+      if (detalle.distribuido_a) facts.push(`distribuido a ${String(detalle.distribuido_a)} persona(s)`);
+      break;
+    case "confirmar_lectura":
+      action = `confirmó la lectura de ${obj} (leí y comprendí)`;
+      break;
+    case "proponer":
+      action = `${detalle.tipo === "cambio" ? "solicitó un cambio" : "propuso un documento"}: ${obj}`;
+      break;
     case "liberar":
       action = `liberó ${obj}`;
       if (detalle.sha256) facts.push(`PDF final SHA-256 ${String(detalle.sha256).slice(0, 16)}…`);

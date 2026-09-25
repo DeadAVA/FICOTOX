@@ -64,7 +64,7 @@ export const ALCANCES = [
   { clave: "proyecto", nombre: "Proyecto", fase: "8", descripcion: "Solo su proyecto" },
   { clave: "tecnico", nombre: "Técnico", fase: "7/8", descripcion: "Solo documentos tecnicos" },
   { clave: "investigacion", nombre: "Investigación", fase: "7/8", descripcion: "Solo documentos de investigacion" },
-  { clave: "autorizados", nombre: "Autorizados", fase: "7/8", descripcion: "Solo documentos autorizados" },
+  { clave: "autorizados", nombre: "Autorizados", fase: null, descripcion: "Solo los documentos vigentes que le fueron distribuidos" },
   { clave: "administrativo", nombre: "Administrativo", fase: "7/8", descripcion: "Solo lo administrativo" },
   { clave: "limitado", nombre: "Limitado", fase: "posterior", descripcion: "Vista limitada" },
   { clave: "incidencias", nombre: "Incidencias", fase: "8", descripcion: "Solo incidencias" },
@@ -82,7 +82,7 @@ export const MODULOS_DIFERIDO_RESTRINGIDO: Record<string, "sin_acceso" | "propio
 };
 
 /* Alcances que limitan tambien lo que se ve; los demas solo limitan la operacion. */
-const LIMITAN_VISTA = new Set<Alcance>(["propio", "estado", "bitacora", "asignado"]);
+const LIMITAN_VISTA = new Set<Alcance>(["propio", "estado", "bitacora", "asignado", "autorizados"]);
 
 export function isModulo(value: unknown): value is Modulo {
   return typeof value === "string" && (MODULO_KEYS as string[]).includes(value);
@@ -197,6 +197,9 @@ export function alcancePermite(alcance: Alcance, ctx: ContextoAlcance = {}): boo
   switch (alcance) {
     case "propio":
       return ctx.propio === true;
+    case "autorizados":
+      // Fase 7: se permite; el servidor filtra a los documentos vigentes distribuidos a la persona.
+      return true;
     case "asignado":
       // Fase 5: se permite salvo que el servidor sepa que la muestra no esta asignada a la persona.
       return ctx.asignado !== false;

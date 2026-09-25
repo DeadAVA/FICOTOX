@@ -4,8 +4,8 @@
  * ruta responde "no existe". Para reactivarlo basta poner `true`.
  */
 export const FEATURES = {
-  /* Documentos controlados del SGC (Calidad › Documentos). Apagado a petición del laboratorio (2026-09-11) hasta definir su uso. */
-  documentos: false,
+  /* Documentos controlados del SGC (Calidad › Documentos). Encendido en la Fase 7 con el flujo de control documental. */
+  documentos: true,
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

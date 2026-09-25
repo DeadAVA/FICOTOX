@@ -2,6 +2,7 @@ import { ensureAuditSchema } from "./audit";
 import { withSession } from "./db";
 import { ensureAsignacionesSchema } from "./asignaciones";
 import { ensureEnviosSchema } from "./envios";
+import { ensureDocumentosFlujoSchema } from "./modules/documentos-flujo";
 import { ensureAutorizacionesSchema, registrarVencimientosAutorizaciones } from "./autorizaciones";
 import { ensureRbacSchema, migrarPermisosFase3, migrarRolesUnicos, registrarVencimientos } from "./rbac";
 import { ensureSolicitudesSchema, vencerSolicitudes } from "./solicitudes";
@@ -49,6 +50,7 @@ export function ensureInitialSchema(): Promise<void> {
       await ensureAnalysisSchema(s);
       await ensureInformesSchema(s);
       await ensureDocumentosSgcSchema(s);
+      await ensureDocumentosFlujoSchema(s);
       await ensureReportesMantenimientoSchema(s);
       await ensureReactivosSchema(s);
       await ensureConsumiblesSchema(s);

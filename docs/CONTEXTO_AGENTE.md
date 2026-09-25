@@ -434,6 +434,10 @@ npm run test:reset-db # solo regenerar la base de prueba
   `analisisVigentes` sustituye análisis enmendados en la enmienda del informe.
 - Revisar un análisis exige `en_revision` (el analista lo envía).
 
+## 8 nonies. Fase 7 — Documentos SGC (rama `fase-7-documentos`)
+
+Módulo encendido (`FEATURES.documentos`); flujo borrador → revision_calidad → revision_tecnica → por_aprobar → aprobado → vigente → obsoleto en `src/lib/server/modules/documentos-sgc.ts` (registro, aprobar, lista maestra con `?formato=csv`, obsoletar por solicitud `obsoletar_documento`) y `documentos-flujo.ts` (revisiones, devolver, publicar con `distribucion_documento`, acuse de lectura, `propuestas_documento`, alcance "autorizados"); prueba en `tests/api-documentos.mjs`.
+
 ## 9. Pendientes conocidos
 
 - El `.env` local tiene `JWT_EXPIRES_HOURS=12` y `CORS_ORIGINS=*`, que anulan los

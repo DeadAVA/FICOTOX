@@ -280,7 +280,12 @@ export const DOCUMENT_AREAS: CatalogItem[] = [
 
 export const DOCUMENT_STATES: Record<string, { label: string; tone: "neutral" | "brand" | "warning" | "success" | "danger" | "ink" }> = {
   borrador: { label: "Borrador", tone: "neutral" },
-  en_revision: { label: "En revisión", tone: "warning" },
+  // Fase 7: flujo de control documental.
+  revision_calidad: { label: "Revisión de calidad", tone: "warning" },
+  revision_tecnica: { label: "Revisión técnica", tone: "warning" },
+  por_aprobar: { label: "Por aprobar", tone: "brand" },
+  aprobado: { label: "Aprobado", tone: "brand" },
+  en_revision: { label: "Revisión de calidad", tone: "warning" },
   vigente: { label: "Vigente", tone: "success" },
   obsoleto: { label: "Obsoleto", tone: "ink" },
   cancelado: { label: "Cancelado", tone: "danger" },
@@ -359,6 +364,9 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   confirmar_envio: "Registró la confirmación de recepción",
   requiere_enmienda: "Quedó marcado: requiere enmienda",
   alerta_integridad: "Alerta de integridad del PDF",
+  publicar: "Publicó (vigente)",
+  confirmar_lectura: "Confirmó la lectura (leí y comprendí)",
+  proponer: "Propuso un documento o cambio",
 };
 
 export const AUDIT_ENTITIES: Record<string, string> = {

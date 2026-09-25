@@ -8,9 +8,11 @@ import { isIntegrityError, isSqlite, type Row, type Session } from "../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
 import { requirePermission } from "../rbac";
 import { exigirReauth } from "../seguridad";
+import { crearSolicitud, detalleSolicitud, respuestaSolicitud, type ContextoEjecucion } from "../solicitudes";
 import { detalleExcepcion, elaboradoresDe, ensureExcepcionesColumn, excepcionesDe, exigirSegregacion } from "../segregacion";
 import { evaluarDocumento, type Violacion } from "../../shared/segregacion";
-import { hoyLocal } from "../../shared/fechas";
+import { formatearFecha, hoyLocal } from "../../shared/fechas";
+import { distribucionDe, documentosDistribuidosA, soloAutorizados } from "./documentos-flujo";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
 import { readMotivo } from "../samples-flow";
 import { DOCUMENT_AREAS, DOCUMENT_KEY_RE, DOCUMENT_REVIEW_YEARS, DOCUMENT_TYPES, parseDocumentKey } from "../../shared/sgc";
@@ -20,11 +22,13 @@ import { searchParam, strippedOrNull, toIntOrNull } from "./helpers";
 /*
  * Control de documentos del SGC (ISO/IEC 17025 8.3; FX-GCP-CD, FX-GCL-MD).
  *
- * Cada fila es una revision de un documento (clave + revision). Ciclo:
- * borrador -> en_revision -> vigente -> obsoleto (o cancelado). Solo hay una
- * revision vigente por clave: al aprobar una nueva, la anterior pasa a
- * obsoleto automaticamente y se conserva. La lista maestra es la vista de
- * las revisiones vigentes.
+ * Cada fila es una revision de un documento (clave + revision). Ciclo (Fase 7):
+ * borrador -> revision_calidad -> revision_tecnica (si la requiere) ->
+ * por_aprobar -> aprobado -> vigente -> obsoleto (o cancelado). Cada revisor
+ * puede devolver a borrador. Solo hay una revision vigente por clave: al
+ * publicar una nueva, la anterior pasa a obsoleto y se conserva. La lista
+ * maestra es la vista de las revisiones vigentes. Revision, publicacion,
+ * propuestas y distribucion viven en documentos-flujo.ts.
  */
 
 const TABLE = "documentos_sgc";
@@ -104,6 +108,15 @@ export async function ensureDocumentosSgcSchema(s: Session): Promise<void> {
   );
   await addColumnIfMissing(s, TABLE, "archivo_sha256", "VARCHAR(64) DEFAULT NULL");
   await ensureExcepcionesColumn(s, "documentos_sgc");
+  // Fase 7: flujo de control documental.
+  for (const [col, def] of [
+    ["requiere_revision_tecnica", "INT NOT NULL DEFAULT 0"],
+    ["revision_tecnica_json", "LONGTEXT"],
+    ["publico_json", "LONGTEXT"],
+    ["asignado_a", "INT DEFAULT NULL"],
+    ["devolucion_observaciones", "TEXT"],
+  ]) await addColumnIfMissing(s, TABLE, col, def);
+  await s.execute(`UPDATE ${TABLE} SET estado = 'revision_calidad' WHERE estado = 'en_revision'`);
   markSchemaReady("documentos_sgc");
 }
 
@@ -118,7 +131,7 @@ const ALLOWED_EXT = new Set([".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", 
 export function serializeDocumento(row: Row): Row {
   row = { ...row, excepciones: excepcionesDe(row), excepciones_json: undefined };
   const item: Row = { ...row };
-  for (const key of ["elaboro", "reviso", "aprobo"]) {
+  for (const key of ["elaboro", "reviso", "aprobo", "revision_tecnica", "publico"]) {
     item[key] = safeParse(item[`${key}_json`]);
     delete item[`${key}_json`];
   }
@@ -199,6 +212,7 @@ function normalize(data: Record<string, unknown>, existing: Row | null) {
     elaboro_json: JSON.stringify(persona(data.elaboro ?? safeParse(existing?.elaboro_json))),
     reviso_json: JSON.stringify(persona(data.reviso ?? safeParse(existing?.reviso_json))),
     distribucion: strippedOrNull(data.distribucion),
+    requiere_revision_tecnica: data.requiere_revision_tecnica === undefined ? Number(existing?.requiere_revision_tecnica || 0) : data.requiere_revision_tecnica === true || ["1", "true"].includes(String(data.requiere_revision_tecnica)) ? 1 : 0,
   };
 }
 
@@ -228,8 +242,10 @@ function docRef(row: Row | null | undefined): string {
 
 export async function listDocumentos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "V");
+  const permiso = await requirePermission(s, user, "documentos", "V");
   await ensureDocumentosSgcSchema(s);
+  // Fase 7: con alcance "autorizados" solo los documentos vigentes distribuidos a la persona.
+  const autorizados = soloAutorizados(permiso.auth) ? await documentosDistribuidosA(s, permiso.auth.userId) : null;
   const search = searchParam(request, "search");
   const estado = searchParam(request, "estado");
   const tipo = searchParam(request, "tipo").toUpperCase();
@@ -245,6 +261,7 @@ export async function listDocumentos({ request, s }: RouteContext): Promise<Resp
       AND (:area = '' OR area = :area)
       AND (:clave = '' OR clave = :clave)
       AND (:search = '' OR clave LIKE :search_like OR titulo LIKE :search_like OR descripcion LIKE :search_like)
+      ${autorizados ? `AND estado = 'vigente' AND id IN (${autorizados.join(", ") || "0"})` : ""}
     ORDER BY clave ASC, revision DESC
     LIMIT 800
     `,
@@ -256,20 +273,32 @@ export async function listDocumentos({ request, s }: RouteContext): Promise<Resp
 /* Lista maestra (FX-GCL-MD): revision vigente de cada clave, con proxima revision. */
 export async function listaMaestra({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "V");
+  const permiso = await requirePermission(s, user, "documentos", "V");
   await ensureDocumentosSgcSchema(s);
+  const autorizados = soloAutorizados(permiso.auth) ? await documentosDistribuidosA(s, permiso.auth.userId) : null;
   const rows = await s.query(
     `
     SELECT d.id, d.clave, d.revision, d.titulo, d.tipo, d.area, d.es_externo, d.fecha_emision, d.fecha_vigencia, d.fecha_proxima_revision,
-           d.estado, d.archivo_nombre, d.archivo_original, d.aprobo_json, d.distribucion,
+           d.estado, d.archivo_nombre, d.archivo_original, d.aprobo_json, d.elaboro_json, d.distribucion,
            (SELECT COUNT(*) FROM ${TABLE} o WHERE o.clave = d.clave AND o.estado = 'obsoleto') AS revisiones_obsoletas,
-           (SELECT COUNT(*) FROM ${TABLE} b WHERE b.clave = d.clave AND b.estado IN ('borrador', 'en_revision')) AS revisiones_en_curso
+           (SELECT COUNT(*) FROM ${TABLE} b WHERE b.clave = d.clave AND b.estado IN ('borrador', 'revision_calidad', 'revision_tecnica', 'por_aprobar', 'aprobado')) AS revisiones_en_curso
     FROM ${TABLE} d
-    WHERE d.estado = 'vigente'
+    WHERE d.estado = 'vigente' ${autorizados ? `AND d.id IN (${autorizados.join(", ") || "0"})` : ""}
     ORDER BY d.area, d.tipo, d.clave
     `,
   );
   const today = hoyLocal();
+  // Fase 7: exportable a CSV (clave, version, estado, vigencia, responsable y ubicacion).
+  if (searchParam(request, "formato") === "csv") {
+    const celda = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const lineas = [["Clave", "Revisión", "Título", "Estado", "Fecha de vigencia", "Próxima revisión", "Responsable (elaboró)", "Aprobó", "Ubicación"].map(celda).join(",")];
+    for (const row of rows) {
+      const elaboro = safeParse(row.elaboro_json);
+      const aprobo = safeParse(row.aprobo_json);
+      lineas.push([row.clave, row.revision, row.titulo, row.estado, row.fecha_vigencia ? formatearFecha(row.fecha_vigencia) : "", row.fecha_proxima_revision ? formatearFecha(row.fecha_proxima_revision) : "", elaboro?.nombre, aprobo?.nombre, row.distribucion || (row.archivo_original ? `Plataforma: ${row.archivo_original}` : "")].map(celda).join(","));
+    }
+    return new Response(`\uFEFF${lineas.join("\r\n")}\r\n`, { status: 200, headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="lista-maestra-${today}.csv"` } });
+  }
   return json({
     items: rows.map((row) => ({ ...serializeDocumento(row), revision_vencida: !!row.fecha_proxima_revision && String(row.fecha_proxima_revision) < today })),
     total: rows.length,
@@ -299,12 +328,17 @@ export async function documentosSummary({ request, s }: RouteContext): Promise<R
 export async function getDocumento({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "V");
+  const permiso = await requirePermission(s, user, "documentos", "V");
   await ensureDocumentosSgcSchema(s);
   const row = await snapshotRow(s, TABLE, id);
   if (!row) return json({ message: "Documento no encontrado" }, 404);
-  const revisiones = await s.query(`SELECT id, revision, estado, fecha_emision, fecha_vigencia, cambios FROM ${TABLE} WHERE clave = :clave ORDER BY revision DESC`, { clave: row.clave });
-  return json({ item: { ...serializeDocumento(row), revisiones } });
+  // Fase 7: con alcance "autorizados" solo un vigente distribuido a la persona, sin versiones anteriores.
+  const autorizados = soloAutorizados(permiso.auth);
+  if (autorizados && (String(row.estado) !== "vigente" || !(await documentosDistribuidosA(s, permiso.auth.userId)).includes(id))) return json({ message: "Documento no encontrado" }, 404);
+  const revisiones = autorizados ? [] : await s.query(`SELECT id, revision, estado, fecha_emision, fecha_vigencia, cambios FROM ${TABLE} WHERE clave = :clave ORDER BY revision DESC`, { clave: row.clave });
+  const distribucion = await distribucionDe(s, id);
+  const mia = distribucion.find((d) => Number(d.usuario_id) === permiso.auth.userId) || null;
+  return json({ item: { ...serializeDocumento(row), revisiones, distribucion_lectura: autorizados ? [] : distribucion, mi_distribucion: mia } });
 }
 
 export async function createDocumento({ request, s }: RouteContext): Promise<Response> {
@@ -323,7 +357,7 @@ export async function createDocumento({ request, s }: RouteContext): Promise<Res
   if (previas === 0) {
     revision = toIntOrNull(data.revision) || 1;
   } else {
-    const enCurso = await s.queryOne<{ revision: number }>(`SELECT revision FROM ${TABLE} WHERE clave = :clave AND estado IN ('borrador', 'en_revision')`, { clave: normalized.clave });
+    const enCurso = await s.queryOne<{ revision: number }>(`SELECT revision FROM ${TABLE} WHERE clave = :clave AND estado IN ('borrador', 'revision_calidad', 'revision_tecnica', 'por_aprobar', 'aprobado')`, { clave: normalized.clave });
     if (enCurso) return json({ message: `Ya existe la revision ${enCurso.revision} de ${normalized.clave} en curso` }, 409);
     revision = Number((await s.scalar(`SELECT COALESCE(MAX(revision), 0) + 1 FROM ${TABLE} WHERE clave = :clave`, { clave: normalized.clave })) || 1);
   }
@@ -333,9 +367,9 @@ export async function createDocumento({ request, s }: RouteContext): Promise<Res
     const result = await s.execute(
       `
       INSERT INTO ${TABLE} (clave, revision, titulo, tipo, area, es_externo, origen_externo, descripcion, cambios, fecha_emision, fecha_vigencia, fecha_proxima_revision,
-        elaboro_json, reviso_json, distribucion, archivo_nombre, archivo_original, archivo_sha256, estado, creado_por, actualizado_por)
+        elaboro_json, reviso_json, distribucion, requiere_revision_tecnica, archivo_nombre, archivo_original, archivo_sha256, estado, creado_por, actualizado_por)
       VALUES (:clave, :revision, :titulo, :tipo, :area, :es_externo, :origen_externo, :descripcion, :cambios, :fecha_emision, :fecha_vigencia, :fecha_proxima_revision,
-        :elaboro_json, :reviso_json, :distribucion, :archivo_nombre, :archivo_original, :archivo_sha256, 'borrador', :creado_por, :actualizado_por)
+        :elaboro_json, :reviso_json, :distribucion, :requiere_revision_tecnica, :archivo_nombre, :archivo_original, :archivo_sha256, 'borrador', :creado_por, :actualizado_por)
       `,
       { ...normalized, ...stored, revision, creado_por: userId, actualizado_por: userId },
     );
@@ -358,7 +392,7 @@ export async function updateDocumento({ request, s, params }: RouteContext): Pro
   await ensureDocumentosSgcSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Documento no encontrado" }, 404);
-  if (!["borrador", "en_revision"].includes(String(antes.estado))) return json({ message: "Solo se editan documentos en borrador o en revision; para cambiar uno vigente crea una nueva revision" }, 409);
+  if (String(antes.estado) !== "borrador") return json({ message: "Solo se editan documentos en borrador (un revisor puede devolverlo); para cambiar uno vigente crea una nueva revision" }, 409);
   const { data, file } = await readPayload(request);
   const normalized = normalize(data, antes);
   const invalid = validate(normalized);
@@ -368,7 +402,7 @@ export async function updateDocumento({ request, s, params }: RouteContext): Pro
     `
     UPDATE ${TABLE} SET titulo = :titulo, tipo = :tipo, area = :area, es_externo = :es_externo, origen_externo = :origen_externo, descripcion = :descripcion, cambios = :cambios,
       fecha_emision = :fecha_emision, fecha_vigencia = :fecha_vigencia, fecha_proxima_revision = :fecha_proxima_revision, elaboro_json = :elaboro_json, reviso_json = :reviso_json,
-      distribucion = :distribucion, estado = 'borrador', actualizado_por = :actualizado_por
+      distribucion = :distribucion, requiere_revision_tecnica = :requiere_revision_tecnica, estado = 'borrador', actualizado_por = :actualizado_por
       ${stored ? ", archivo_nombre = :archivo_nombre, archivo_original = :archivo_original, archivo_sha256 = :archivo_sha256" : ""}
     WHERE id = :id
     `,
@@ -395,16 +429,13 @@ export async function enviarRevision({ request, s, params }: RouteContext): Prom
   if (!antes) return json({ message: "Documento no encontrado" }, 404);
   if (String(antes.estado) !== "borrador") return json({ message: "Solo los borradores se envian a revision" }, 409);
   if (!antes.archivo_nombre && !antes.es_externo) return json({ message: "Adjunta el archivo del documento antes de enviarlo a revision" }, 400);
-  const payload = await readJson(request);
-  // Segregacion (regla 5): quien elaboro el documento no lo revisa.
+  // Fase 7: quien elabora lo envia a la revision de calidad (enviar no es revisar).
   const yo = userIdFromClaims(user) as number;
-  const excepcion = exigirSegregacion(evaluarDocumento(yo, await elaboradoresDe(s, TABLE, id, antes.creado_por), null, "revisar"), antes, yo, "revisar");
-  const reviso = persona(payload.reviso ?? safeParse(antes.reviso_json), { nombre: String(user.nombre || "") });
-  await s.execute(`UPDATE ${TABLE} SET estado = 'en_revision', reviso_json = :reviso, actualizado_por = :usuario WHERE id = :id`, { reviso: JSON.stringify({ ...reviso, fecha: reviso.fecha || hoyLocal(), usuario_id: yo }), usuario: yo, id });
+  await s.execute(`UPDATE ${TABLE} SET estado = 'revision_calidad', devolucion_observaciones = NULL, actualizado_por = :usuario WHERE id = :id`, { usuario: yo, id });
   const despues = await snapshotRow(s, TABLE, id);
-  await registrarAuditoria(s, user, { accion: "revisar", entidad: TABLE, entidadId: id, referencia: docRef(despues), antes, despues, detalle: excepcion ? detalleExcepcion(excepcion) : null });
+  await registrarAuditoria(s, user, { accion: "enviar_revision", entidad: TABLE, entidadId: id, referencia: docRef(despues), antes, despues });
   await s.commit();
-  return json({ message: "Documento enviado a revision", item: serializeDocumento(despues!) });
+  return json({ message: "Documento enviado a revisión de calidad", item: serializeDocumento(despues!) });
 }
 
 /*
@@ -413,18 +444,22 @@ export async function enviarRevision({ request, s, params }: RouteContext): Prom
  */
 export async function violacionParaExcepcionDocumento(s: Session, user: CurrentUser, id: number, accion: string): Promise<{ violacion: Violacion | null; row: Row }> {
   if (accion !== "revisar" && accion !== "aprobar") throw new HttpError(400, { message: "En un documento la excepción aplica a revisar o aprobar" });
-  if (accion === "revisar") await requirePermission(s, user, "documentos", "E", { objeto: "documento", borrador: true });
+  if (accion === "revisar") await requirePermission(s, user, "documentos", "G");
   else await requirePermission(s, user, "documentos", "A");
   await ensureDocumentosSgcSchema(s);
   const row = await snapshotRow(s, TABLE, id);
   if (!row) throw new HttpError(404, { message: "Documento no encontrado" });
-  const estado = accion === "revisar" ? "borrador" : "en_revision";
-  if (String(row.estado) !== estado) throw new HttpError(409, { message: `El documento no está ${accion === "revisar" ? "en borrador" : "en revisión"}; no hay nada que ${accion}` });
+  const estado = accion === "revisar" ? "revision_calidad" : "por_aprobar";
+  if (String(row.estado) !== estado) throw new HttpError(409, { message: `El documento no está ${accion === "revisar" ? "en revisión de calidad" : "por aprobar"}; no hay nada que ${accion}` });
   const revisorId = accion === "aprobar" ? Number((safeParse(row.reviso_json) as { usuario_id?: unknown } | null)?.usuario_id) || null : null;
   return { violacion: evaluarDocumento(userIdFromClaims(user) as number, await elaboradoresDe(s, TABLE, id, row.creado_por), revisorId, accion), row };
 }
 
-/* Aprobacion: la revision queda vigente y la anterior vigente pasa a obsoleta. */
+/*
+ * Fase 7: aprobacion (por_aprobar -> aprobado) con documentos:A y reautenticacion.
+ * Ni quien elaboro ni quien hizo la revision de calidad aprueban. La revision
+ * queda vigente al publicarla (documentos-flujo.ts).
+ */
 export async function aprobarDocumento({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
@@ -432,49 +467,48 @@ export async function aprobarDocumento({ request, s, params }: RouteContext): Pr
   await ensureDocumentosSgcSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Documento no encontrado" }, 404);
-  if (String(antes.estado) !== "en_revision") return json({ message: "Solo se aprueban documentos en revision; envialo a revision primero" }, 409);
-  if (!antes.archivo_nombre && !Number(antes.es_externo)) return json({ message: "El documento no tiene archivo adjunto; no puede quedar vigente sin el" }, 409);
+  if (String(antes.estado) !== "por_aprobar") return json({ message: "Solo se aprueban documentos por aprobar (con sus revisiones terminadas)" }, 409);
+  if (!antes.archivo_nombre && !Number(antes.es_externo)) return json({ message: "El documento no tiene archivo adjunto; no puede aprobarse sin el" }, 409);
   const payload = await readJson(request);
-  // Segregacion (regla 5): ni quien elaboro ni quien reviso aprueban el documento.
+  // Segregacion (regla 5): ni quien elaboro ni quien hizo la revision de calidad aprueban el documento.
   const yo = userIdFromClaims(user) as number;
   const revisorId = Number((safeParse(antes.reviso_json) as { usuario_id?: unknown } | null)?.usuario_id) || null;
-  const excepcion = exigirSegregacion(evaluarDocumento(yo, await elaboradoresDe(s, TABLE, id, antes.creado_por), revisorId, "aprobar"), antes, yo, "aprobar");
+  const excepcion = exigirSegregacion(evaluarDocumento(yo, await elaboradoresDe(s, TABLE, id, antes.creado_por, antes.asignado_a), revisorId, "aprobar"), antes, yo, "aprobar");
   await exigirReauth(s, request, user, "documentos:A");
-  const today = hoyLocal();
-  const vigencia = strippedOrNull(payload.fecha_vigencia, 10) || (antes.fecha_vigencia as string | null) || today;
-  const aprobo = { ...persona(payload.aprobo, { nombre: String(user.nombre || user.email || "") }), fecha: strippedOrNull((payload.aprobo as Record<string, unknown> | undefined)?.fecha, 10) || today, usuario_id: userIdFromClaims(user) };
-  const previas = await s.query<{ id: number; revision: number }>(`SELECT id, revision FROM ${TABLE} WHERE clave = :clave AND estado = 'vigente' AND id <> :id`, { clave: antes.clave, id });
-  for (const previa of previas) {
-    const prevAntes = await snapshotRow(s, TABLE, previa.id);
-    await s.execute(`UPDATE ${TABLE} SET estado = 'obsoleto', motivo_estado = :motivo, actualizado_por = :usuario WHERE id = :id`, { motivo: `Sustituido por la revision ${antes.revision}`, usuario: userIdFromClaims(user), id: previa.id });
-    await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: previa.id, referencia: docRef(prevAntes), antes: prevAntes, despues: await snapshotRow(s, TABLE, previa.id), motivo: `Obsoleto: sustituido por la revision ${antes.revision}` });
-  }
-  await s.execute(
-    `UPDATE ${TABLE} SET estado = 'vigente', aprobo_json = :aprobo, fecha_vigencia = :vigencia, fecha_proxima_revision = COALESCE(fecha_proxima_revision, :proxima), motivo_estado = NULL, actualizado_por = :usuario WHERE id = :id`,
-    { aprobo: JSON.stringify(aprobo), vigencia, proxima: addYears(vigencia, DOCUMENT_REVIEW_YEARS), usuario: userIdFromClaims(user), id },
-  );
+  const aprobo = { ...persona(payload.aprobo, { nombre: String(user.nombre || user.email || "") }), fecha: hoyLocal(), usuario_id: yo };
+  await s.execute(`UPDATE ${TABLE} SET estado = 'aprobado', aprobo_json = :aprobo, actualizado_por = :usuario WHERE id = :id`, { aprobo: JSON.stringify(aprobo), usuario: yo, id });
   const despues = await snapshotRow(s, TABLE, id);
-  await registrarAuditoria(s, user, { accion: "aprobar", entidad: TABLE, entidadId: id, referencia: docRef(despues), antes, despues, detalle: { revisiones_obsoletas: previas.map((p) => p.revision), ...detalleExcepcion(excepcion) } });
+  await registrarAuditoria(s, user, { accion: "aprobar", entidad: TABLE, entidadId: id, referencia: docRef(despues), antes, despues, detalle: detalleExcepcion(excepcion) });
   await s.commit();
-  return json({ message: previas.length ? `Documento aprobado y vigente; la revision anterior queda obsoleta` : "Documento aprobado y vigente", item: serializeDocumento(despues!) });
+  return json({ message: "Documento aprobado; falta publicarlo", item: serializeDocumento(despues!) });
 }
 
+/* Fase 7: declarar obsoleto sin reemplazo: documentos:G pide y aprueba alguien con documentos:A (solicitud). */
 export async function obsoletarDocumento({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "AN");
+  await requirePermission(s, user, "documentos", "G");
   await ensureDocumentosSgcSchema(s);
   const motivo = await readMotivo(request);
   if (motivo.length < 5) return json({ message: "Indica el motivo (al menos 5 caracteres)" }, 400);
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Documento no encontrado" }, 404);
   if (String(antes.estado) !== "vigente") return json({ message: "Solo un documento vigente se declara obsoleto" }, 409);
-  await exigirReauth(s, request, user, "documentos:AN");
-  await s.execute(`UPDATE ${TABLE} SET estado = 'obsoleto', motivo_estado = :motivo, actualizado_por = :usuario WHERE id = :id`, { motivo, usuario: userIdFromClaims(user), id });
-  const despues = await snapshotRow(s, TABLE, id);
-  await registrarAuditoria(s, user, { accion: "baja", entidad: TABLE, entidadId: id, referencia: docRef(despues), antes, despues, motivo });
+  await exigirReauth(s, request, user, "documentos:G");
+  const solicitud = await crearSolicitud(s, user, { tipo: "obsoletar_documento", entidad: TABLE, entidadId: id, referencia: docRef(antes), accion: "obsoletar", motivo });
   await s.commit();
-  return json({ message: "Documento declarado obsoleto", item: serializeDocumento(despues!) });
+  return respuestaSolicitud(solicitud, `declarar obsoleto ${docRef(antes)}`);
+}
+
+/* Ejecutor de la solicitud aprobada: el documento vigente pasa a obsoleto (se conserva). */
+export async function ejecutarObsoletarDocumento(ctx: ContextoEjecucion): Promise<Record<string, unknown>> {
+  const id = Number(ctx.solicitud.entidad_id);
+  const antes = await snapshotRow(ctx.s, TABLE, id);
+  if (!antes || String(antes.estado) !== "vigente") throw new HttpError(409, { message: "El documento ya no está vigente" });
+  await ctx.s.execute(`UPDATE ${TABLE} SET estado = 'obsoleto', motivo_estado = :motivo, actualizado_por = :usuario WHERE id = :id`, { motivo: ctx.solicitud.motivo, usuario: userIdFromClaims(ctx.user), id });
+  const despues = await snapshotRow(ctx.s, TABLE, id);
+  await registrarAuditoria(ctx.s, ctx.user, { accion: "baja", entidad: TABLE, entidadId: id, referencia: docRef(despues), antes, despues, motivo: ctx.solicitud.motivo, detalle: detalleSolicitud(ctx.solicitud) });
+  return { item: serializeDocumento(despues!) };
 }
 
 export async function cancelarDocumento({ request, s, params }: RouteContext): Promise<Response> {
@@ -486,7 +520,7 @@ export async function cancelarDocumento({ request, s, params }: RouteContext): P
   if (motivo.length < 5) return json({ message: "Indica el motivo (al menos 5 caracteres)" }, 400);
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Documento no encontrado" }, 404);
-  if (!["borrador", "en_revision"].includes(String(antes.estado))) return json({ message: "Solo se cancelan borradores o revisiones en curso" }, 409);
+  if (!["borrador", "revision_calidad", "revision_tecnica", "por_aprobar", "aprobado"].includes(String(antes.estado))) return json({ message: "Solo se cancelan borradores o revisiones en curso" }, 409);
   await exigirReauth(s, request, user, "documentos:AN");
   await s.execute(`UPDATE ${TABLE} SET estado = 'cancelado', motivo_estado = :motivo, actualizado_por = :usuario WHERE id = :id`, { motivo, usuario: userIdFromClaims(user), id });
   const despues = await snapshotRow(s, TABLE, id);
@@ -508,7 +542,7 @@ export async function nuevaRevision({ request, s, params }: RouteContext): Promi
   if (!["vigente", "obsoleto"].includes(String(original.estado))) {
     return json({ message: "Solo se crean revisiones a partir de un documento vigente u obsoleto" }, 409);
   }
-  const enCurso = await s.queryOne(`SELECT id, revision FROM ${TABLE} WHERE clave = :clave AND estado IN ('borrador', 'en_revision')`, { clave: original.clave });
+  const enCurso = await s.queryOne(`SELECT id, revision FROM ${TABLE} WHERE clave = :clave AND estado IN ('borrador', 'revision_calidad', 'revision_tecnica', 'por_aprobar', 'aprobado')`, { clave: original.clave });
   if (enCurso) return json({ message: `Ya existe la revision ${enCurso.revision} de ${original.clave} en curso` }, 409);
   const payload = await readJson(request);
   const revision = Number((await s.scalar(`SELECT COALESCE(MAX(revision), 0) + 1 FROM ${TABLE} WHERE clave = :clave`, { clave: original.clave })) || 1);

@@ -17,6 +17,8 @@ import { ensureSamplesProcesamientoSchema } from "./samples/procesamiento";
 import { ensureSamplesRecepcionSchema } from "./samples/recepcion";
 import { diasDesde, formatearFecha, hoyLocal, sumarDias } from "../../shared/fechas";
 import { esCoordinacion, filtroAsignadas, soloAsignado } from "../asignaciones";
+import { FEATURES } from "../../shared/features";
+import { documentosPorLeer } from "./documentos-flujo";
 
 /*
  * Datos del Inicio.
@@ -338,6 +340,13 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
     build("mant_proximos", "Mantenimientos en los próximos 30 días", "info", "/inventario/mantenimiento?filtro=proximo", mantProximos, (m) => ({ label: String(m.equipo || "Equipo"), sub: `${TIPO_MANT[String(m.tipo)] || m.tipo || "Mantenimiento"} · ${fmtDate(m.fecha_programada)}`, href: "/inventario/mantenimiento?filtro=proximo" })),
   ].filter((a) => a.count > 0 && !!permisoDe(auth, MODULO_AVISO[a.key], "V"));
 
+  // Fase 7: documentos distribuidos que la persona aun no confirma ("Leí y comprendí").
+  if (FEATURES.documentos && permisoDe(auth, "documentos", "V")) {
+    const porLeer = await documentosPorLeer(s, auth.userId);
+    if (porLeer.length) {
+      avisos.unshift({ key: "documentos_por_leer", label: "Documentos por leer", tone: "warning", count: porLeer.length, href: "/documentos", items: porLeer.slice(0, MAX_ITEMS).map((d) => ({ label: `${d.clave} rev. ${d.revision}`, sub: String(d.titulo || ""), href: `/documentos?documento=${d.id}` })) });
+    }
+  }
   // Fase 3: solicitudes de autorizacion que puedo aprobar como segundo usuario.
   const porAutorizar = await porAutorizarDe(s, auth);
   if (porAutorizar.length) {

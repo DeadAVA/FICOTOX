@@ -323,13 +323,11 @@ try {
   await page.getByText("Enviado").first().waitFor();
   check("envío registrado con evidencia: el informe queda enviado", (await page.locator("[data-envio]").count()) === 1);
 
-  /* ---------- Documentos SGC (módulo apagado: la ruta no existe y no aparece en el menú) ---------- */
+  /* ---------- Documentos SGC (Fase 7: encendido, aparece en Calidad) ---------- */
   await page.goto(`${BASE}/documentos`);
-  await page.getByText(/Esta página no existe/).waitFor();
-  check("documentos apagado: la ruta responde 'no existe'", true);
-  await page.goto(`${BASE}/auditoria`);
-  await page.getByText("Quién hizo qué, cuándo y por qué").waitFor();
-  check("documentos apagado: no aparece en el menú Calidad", (await page.locator("nav a", { hasText: /^Documentos$/ }).count()) === 0);
+  await page.getByRole("button", { name: /Proponer documento/ }).first().waitFor();
+  check("documentos encendido: la página abre con 'Proponer documento'", true);
+  check("documentos encendido: aparece en el menú Calidad", (await page.locator("nav a", { hasText: /^Documentos$/ }).count()) > 0);
 
   /* ---------- Auditoria ---------- */
   await page.goto(`${BASE}/auditoria`);

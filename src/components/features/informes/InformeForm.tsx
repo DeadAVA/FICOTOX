@@ -341,7 +341,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
                 <Callout tone="info">{estado === "autorizado" ? "Libera el informe para generar el PDF final; después se registra su envío por correo." : "El envío por correo se registra una vez liberado el informe."}</Callout>
               )}
             </FormCard>
-            <FormCard id="sec-historial" title="Historial del informe" description="Bitácora de auditoría: creación, revisión, autorización, entrega, enmiendas y descargas.">
+            <FormCard id="sec-historial" title="Historial del informe" description="Bitácora de auditoría: creación, revisión, autorización, liberación, envíos, enmiendas y descargas.">
               <RecordHistory entidad="informes" entidadId={item?.id as number | undefined} />
             </FormCard>
           </>

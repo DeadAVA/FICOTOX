@@ -513,6 +513,15 @@ En recepcion, procesamiento, extraccion y analisis, las personas que firman (rec
 
 En la recepcion (o en el menu de su fila) use **Imprimir etiqueta**. Se abre una vista con una etiqueta por muestra del lote (folio R, ID interno, organismo, fecha de muestreo, fecha de recepcion y lugar de resguardo), en tamaño pequeño (50 × 25 mm) o en **Hoja completa**. Al imprimir queda en la bitacora "imprimió etiquetas".
 
+### 13.17 Documentos del SGC (Calidad › Documentos)
+
+- **Proponer**: cualquiera que vea documentos usa **Proponer documento** o, en un documento vigente, **Solicitar cambio** (titulo y motivo). Mejora Continua la **acepta** (elige quien elabora; se crea el borrador o la nueva revision) o la **rechaza** con motivo.
+- **Flujo**: borrador → revision de calidad (Mejora Continua) → revision tecnica (solo si el documento la requiere; quien tiene documentos:R) → por aprobar → aprobado (Responsable General, con contrasena) → vigente (Mejora Continua **publica**, con contrasena; la revision vigente anterior queda obsoleta). Cada revisor puede **devolver con observaciones** a borrador.
+- Quien elaboro no revisa ni aprueba; quien hizo la revision de calidad no aprueba ese documento.
+- **Distribucion**: al publicar se eligen personas o roles. Cada destinatario ve **Documentos por leer** en el Inicio y confirma **Lei y comprendi**; en la ficha se ve quien ya confirmo.
+- **Obsoleto sin reemplazo**: Mejora Continua lo pide con motivo y lo aprueba la Responsable General (solicitud).
+- **Lista maestra**: revisiones vigentes con clave, revision, vigencia, responsable y ubicacion; **Exportar CSV**. Las versiones anteriores se consultan en la ficha (solo lectura). El Estudiante solo ve los documentos vigentes que le fueron distribuidos.
+
 ## 14. Buenas practicas de uso
 
 - Capture folios y codigos internos de forma consistente.

@@ -11,7 +11,7 @@ import { ejecutarAmpliacionVigencia, ejecutarAsignacionRol, ejecutarReactivacion
 import { ejecutarAnulacionInforme, informeFolio, violacionParaExcepcionInforme } from "./modules/informes";
 import { violacionParaExcepcionAnalisis } from "./modules/samples/analisis";
 import { ejecutarCambioFolio, ejecutarDecisionRecepcion, ejecutarReapertura } from "./modules/samples/recepcion";
-import { violacionParaExcepcionDocumento } from "./modules/documentos-sgc";
+import { ejecutarObsoletarDocumento, violacionParaExcepcionDocumento } from "./modules/documentos-sgc";
 
 /*
  * Que hace el servidor cuando un segundo usuario aprueba cada tipo de
@@ -60,6 +60,7 @@ export const EJECUTORES: Ejecutores = {
   decision_recepcion: ejecutarDecisionRecepcion,
   cambiar_folio: ejecutarCambioFolio,
   reabrir_recepcion: ejecutarReapertura,
+  obsoletar_documento: ejecutarObsoletarDocumento,
 };
 
 export const aprobarSolicitud = aprobarSolicitudCon(EJECUTORES);

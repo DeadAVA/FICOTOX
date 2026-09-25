@@ -38,6 +38,7 @@ export function DocumentoSheet({ open, item, onClose }: { open: boolean; item: A
     elaboroNombre: String(elaboro.nombre || formatActiveUserSignature()),
     elaboroCargo: String(elaboro.cargo || ""),
     distribucion: String(item?.distribucion || ""),
+    requiereTecnica: !!Number(item?.requiere_revision_tecnica || 0),
   });
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -71,6 +72,7 @@ export function DocumentoSheet({ open, item, onClose }: { open: boolean; item: A
     data.set("fecha_proxima_revision", form.fechaProximaRevision);
     data.set("elaboro", JSON.stringify({ nombre: form.elaboroNombre.trim(), cargo: form.elaboroCargo.trim(), fecha: form.fechaEmision || null }));
     data.set("distribucion", form.distribucion.trim());
+    data.set("requiere_revision_tecnica", form.requiereTecnica ? "1" : "0");
     if (file) data.set("archivo", file);
     try {
       if (editing) {
@@ -168,6 +170,9 @@ export function DocumentoSheet({ open, item, onClose }: { open: boolean; item: A
         <div className="rounded-card border border-line bg-surface-2/50 p-4">
           <Checkbox checked={form.esExterno} onChange={(event) => setForm((prev) => ({ ...prev, esExterno: event.target.checked }))} label="Documento externo" description="Norma, manual de fabricante u otro documento que no emite el laboratorio." />
           {form.esExterno ? <Input className="mt-3" maxLength={180} placeholder="Origen (organismo, fabricante)" value={form.origenExterno} onChange={set("origenExterno")} aria-label="Origen del documento externo" /> : null}
+          <div className="mt-3">
+            <Checkbox checked={form.requiereTecnica} onChange={(event) => setForm((prev) => ({ ...prev, requiereTecnica: event.target.checked }))} label="Requiere revisión técnica" description="Después de la revisión de calidad pasa por una revisión técnica antes de aprobarse." />
+          </div>
         </div>
         <Field label={editing && item?.archivo_original ? `Archivo (actual: ${item.archivo_original})` : "Archivo"} htmlFor="d-archivo" hint="PDF, Word, Excel, PowerPoint o texto. Obligatorio para enviar a revisión (salvo externos).">
           <input id="d-archivo" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.pptx,.txt" onChange={(event) => setFile(event.target.files?.[0] || null)} className="block w-full text-[13px] text-ink-2 file:mr-3 file:rounded-control file:border file:border-line-strong file:bg-surface file:px-3 file:py-1.5 file:text-[13px] file:font-medium file:text-ink" />

@@ -80,7 +80,10 @@ export type AuditAction =
   | "enviar"
   | "confirmar_envio"
   | "requiere_enmienda"
-  | "alerta_integridad";
+  | "alerta_integridad"
+  | "publicar"
+  | "confirmar_lectura"
+  | "proponer";
 
 export interface AuditEntry {
   accion: AuditAction;

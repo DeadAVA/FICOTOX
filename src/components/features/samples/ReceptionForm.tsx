@@ -102,6 +102,7 @@ interface SampleForm {
   aceptacionObservaciones: string;
   comunicacion: Comunicacion;
   solicitanteNombre: string;
+  solicitanteCorreo: string;
   solicitanteFirma: string;
   conformidad: boolean;
   custodioNombre: string;
@@ -142,6 +143,7 @@ const defaultForm = (): SampleForm => ({
   aceptacionObservaciones: "",
   comunicacion: { fecha: "", medio: "", persona: "", respuesta: "" },
   solicitanteNombre: "",
+  solicitanteCorreo: "",
   solicitanteFirma: "",
   conformidad: false,
   custodioNombre: formatActiveUserSignature(),
@@ -201,6 +203,7 @@ const formFromItem = (item: ApiRecord): SampleForm => {
     aceptacionObservaciones: aceptacion.observaciones || "",
     comunicacion: { fecha: isoDate(comunicacion.fecha), medio: comunicacion.medio || "", persona: comunicacion.persona || "", respuesta: comunicacion.respuesta || "" },
     solicitanteNombre: solicitante.nombre_entrega || "",
+    solicitanteCorreo: solicitante.correo || "",
     solicitanteFirma: solicitante.firma_conformidad || "",
     conformidad: solicitante.conformidad === true || (solicitante.conformidad === undefined && !!solicitante.firma_conformidad),
     custodioNombre: custodio.nombre_cargo_firma || "",
@@ -349,7 +352,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
             comunicacion_cliente: needsComunicacion ? { requerida: true, fecha: form.comunicacion.fecha || null, medio: form.comunicacion.medio || null, persona: form.comunicacion.persona.trim() || null, respuesta: form.comunicacion.respuesta.trim() || null } : { requerida: false },
           }
         : {},
-      datos_solicitante: { nombre_entrega: form.solicitanteNombre.trim() || null, firma_conformidad: form.solicitanteFirma.trim() || null, conformidad: form.conformidad },
+      datos_solicitante: { nombre_entrega: form.solicitanteNombre.trim() || null, correo: form.solicitanteCorreo.trim() || null, firma_conformidad: form.solicitanteFirma.trim() || null, conformidad: form.conformidad },
       datos_custodio: {
         nombre_cargo_firma: form.custodioNombre.trim() || null,
         cargo: form.custodioCargo.trim() || null,
@@ -828,6 +831,10 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_300px]">
           <Field label="Nombre de quien entrega" htmlFor="r-sol-nombre">
             <Input id="r-sol-nombre" maxLength={150} value={form.solicitanteNombre} onChange={(event) => patch({ solicitanteNombre: event.target.value })} />
+          </Field>
+          {/* Fase 7: el informe lo toma como correo de contacto para su envío. */}
+          <Field label="Correo del solicitante" htmlFor="r-sol-correo" hint="Se usa como correo de contacto del informe.">
+            <Input id="r-sol-correo" type="email" maxLength={180} value={form.solicitanteCorreo} onChange={(event) => patch({ solicitanteCorreo: event.target.value })} />
           </Field>
           <Field label="Firma de conformidad">
             <SignaturePad value={form.solicitanteFirma} onChange={(value) => patch({ solicitanteFirma: value })} label="Firma de conformidad del solicitante" compact />
