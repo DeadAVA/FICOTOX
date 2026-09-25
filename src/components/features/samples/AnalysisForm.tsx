@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ArrowCounterClockwise, CheckCircle, FloppyDisk, Plus, Prohibit, SealCheck, X } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, ArrowUUpLeft, CheckCircle, FloppyDisk, PaperPlaneTilt, PencilLine, Plus, Prohibit, SealCheck, X } from "@phosphor-icons/react";
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -12,7 +12,7 @@ import { cn } from "@/components/ui/cn";
 import { Field, FormGrid, Input, Select, Textarea, controlClassSm } from "@/components/ui/Field";
 import { DateInput } from "@/components/ui/DateInput";
 import { EmptyState } from "@/components/ui/Primitives";
-import { ActionMenu, usePrompt, type MenuItem } from "@/components/ui/Overlay";
+import { ActionMenu, useConfirm, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { fmtDate, isoDate, parseFloatOrNull, parseIntOrNull, todayIso } from "@/lib/client/format";
 import { findInsumoOption, findUniqueOperativeEquipo, loadInsumoOptions, nextBitacoraFolio } from "@/lib/client/insumos";
@@ -28,6 +28,7 @@ import { useAnulacion } from "./useAnulacion";
 import { formatearHora } from "@/lib/shared/fechas";
 import { AvisoAutorizacion } from "./AvisoAutorizacion";
 import { requisitosAnalisis, requisitosRevisionResultados } from "@/lib/shared/autorizaciones";
+import { firmanteDe, firmantesPayload, type FirmanteState } from "./FirmanteSelect";
 
 /*
  * Registro de analisis: metodo, equipo, condiciones, resultados por muestra
@@ -169,6 +170,7 @@ const formFromItem = (item: ApiRecord): AnalysisFormState => {
 
 const FLOW_STEPS = [
   { key: "registrado", label: "Registrado" },
+  { key: "en_revision", label: "En revisión" },
   { key: "revisado", label: "Revisado" },
   { key: "aprobado", label: "Aprobado" },
 ];
@@ -182,8 +184,11 @@ const ACEPTABLE = [
 export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | null; prefillExtraccionId?: number | null }) {
   const router = useRouter();
   const prompt = usePrompt();
+  const confirm = useConfirm();
   const { token, can, user } = useSession();
   const [form, setForm] = useState<AnalysisFormState>(() => (item ? formFromItem(item) : defaultForm()));
+  // Fase 5: el analista se liga a una cuenta (con su contraseña si no es la sesión).
+  const [analistaCuenta, setAnalistaCuenta] = useState<FirmanteState>(() => firmanteDe(item, "analista"));
   const [extracciones, setExtracciones] = useState<ApiRecord[]>([]);
   const [recepciones, setRecepciones] = useState<ApiRecord[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -196,7 +201,8 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
   // E solo mientras el análisis está registrado (Fase 1): revisado y aprobado se leen, no se editan.
   const canEdit = editing ? can("ensayos", "E", { objeto: "analisis", borrador: estado === "registrado" }) && estado === "registrado" : can("ensayos", "C", { objeto: "analisis", borrador: true });
   // Con una solicitud de autorizacion pendiente (Fase 3) el registro no se edita.
-  const readOnly = editing && (["aprobado", "revisado", "anulado", "anulada"].includes(estado) || !canEdit || !!item?.solicitud_pendiente);
+  // Fase 5: enviado a revision ya no se edita; un aprobado se corrige con enmienda.
+  const readOnly = editing && (["en_revision", "aprobado", "revisado", "sustituido", "anulado", "anulada"].includes(estado) || !canEdit || !!item?.solicitud_pendiente);
   const patch = (changes: Partial<AnalysisFormState>) => setForm((prev) => ({ ...prev, ...changes }));
   const meta = ANALYSIS_TYPES.find((t) => t.value === form.tipo);
   const requiereExtraccion = !!meta?.requiere_extraccion;
@@ -338,7 +344,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
   };
 
   const handleSave = async () => {
-    const payload = buildPayload();
+    const payload = { ...buildPayload(), firmantes: firmantesPayload({ analista: analistaCuenta }) };
     const incompletas = missingSections(sections);
     if (incompletas.length) return fail(missingMessage(incompletas), incompletas[0].id);
     if (!payload.tipo_analisis) return fail("Selecciona el tipo de análisis", "sec-datos");
@@ -418,7 +424,39 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       toast.error(err instanceof Error ? err.message : "No se pudo solicitar la excepción");
     }
   };
-  const folioLabel = `A ${form.folio ? String(form.folio).padStart(7, "0") : "—"}`;
+  const version = Number(item?.version || 1);
+  const folioLabel = `A ${form.folio ? String(form.folio).padStart(7, "0") : "—"}${version > 1 ? ` v${version}` : ""}`;
+  /* Fase 5: enviar a revision, devolver con observaciones y enmendar un aprobado. */
+  const [flujo, setFlujo] = useState(false);
+  const accionFlujo = async (ruta: "enviar-revision" | "devolver" | "enmendar", body: Record<string, unknown>) => {
+    if (!item) return null;
+    setFlujo(true);
+    try {
+      const data = await sendJsonAuth("POST", `${API_BASE_URL}/samples/analysis/${item.id}/${ruta}`, token, body);
+      toast.success(String(data.message || "Listo"));
+      invalidate("muestras", "dashboard");
+      return data;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo completar la acción");
+      return null;
+    } finally {
+      setFlujo(false);
+    }
+  };
+  const enviarRevision = async () => {
+    const ok = await confirm({ title: `Enviar ${folioLabel} a revisión`, description: "Desde ahí ya no podrás editarlo; si el revisor encuentra algo, te lo devolverá con observaciones.", confirmLabel: "Enviar a revisión" });
+    if (ok && (await accionFlujo("enviar-revision", {}))) router.push("/muestras/analisis");
+  };
+  const devolver = async () => {
+    const motivo = await prompt({ title: `Devolver ${folioLabel} con observaciones`, description: "El análisis vuelve a registrado para que el analista lo corrija antes de aprobarse.", label: "Observaciones para el analista", confirmLabel: "Devolver" });
+    if (motivo && (await accionFlujo("devolver", { motivo }))) router.push("/muestras/analisis");
+  };
+  const enmendar = async () => {
+    const motivo = await prompt({ title: `Enmendar ${folioLabel}`, description: "Se crea una nueva versión (mismo folio) que sigue el flujo normal; al aprobarse, esta queda sustituida.", label: "Motivo de la enmienda", confirmLabel: "Crear enmienda" });
+    if (!motivo) return;
+    const data = await accionFlujo("enmendar", { motivo });
+    if (data?.id) router.push(`/muestras/analisis/${data.id}`);
+  };
   const resultadosOk = form.resultados.length > 0 && form.resultados.every((r) => r.id_muestra.trim() && (r.resultado.trim() || r.resultado_texto.trim()));
 
   const sections: FormSectionDef[] = [
@@ -463,7 +501,22 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
             {readOnly ? "Volver" : "Cancelar"}
           </Button>
           {moreItems.length ? <ActionMenu items={moreItems} label="Más acciones" header={folioLabel} /> : null}
-          {editing && estado === "registrado" && canReview ? (
+          {editing && estado === "registrado" && canEdit && !item?.solicitud_pendiente ? (
+            <Button variant="soft" icon={<PaperPlaneTilt size={16} />} onClick={enviarRevision} loading={flujo}>
+              Enviar a revisión
+            </Button>
+          ) : null}
+          {editing && estado === "en_revision" && canReview ? (
+            <Button variant="secondary" icon={<ArrowUUpLeft size={16} />} onClick={devolver} loading={flujo}>
+              Devolver con observaciones
+            </Button>
+          ) : null}
+          {editing && estado === "aprobado" && can("ensayos", "C", { objeto: "analisis", borrador: true }) ? (
+            <Button variant="secondary" icon={<PencilLine size={16} />} onClick={enmendar} loading={flujo}>
+              Enmendar…
+            </Button>
+          ) : null}
+          {editing && (estado === "registrado" || estado === "en_revision") && canReview ? (
             <BotonSegregado bloqueo={segregacion.revisar} onSolicitar={() => solicitarExcepcion("revisar")}>
               <Button variant="soft" icon={<CheckCircle size={16} />} onClick={() => setSign("revisar")} disabled={!!segregacion.revisar}>
                 Marcar revisado
@@ -492,10 +545,27 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       ) : null}
       <SupervisionCallout item={item} />
       <SolicitudCallout item={item} />
+      {item?.sustituye_a ? (
+        <Callout tone="info" title={`Enmienda: versión ${version}`}>
+          Sustituye a la versión {version - 1}
+          {item.motivo_enmienda ? ` · ${String(item.motivo_enmienda)}` : ""}
+        </Callout>
+      ) : null}
+      {estado === "sustituido" ? (
+        <Callout tone="warning" title="Sustituido por una enmienda">
+          Esta versión ya no se reporta; consulta la versión más reciente del mismo folio.
+        </Callout>
+      ) : null}
+      {estado === "registrado" && item?.devolucion_observaciones ? (
+        <Callout tone="warning" title="Devuelto con observaciones del revisor">
+          {String(item.devolucion_observaciones)}
+        </Callout>
+      ) : null}
+      {estado === "en_revision" ? <Callout tone="info">Enviado a revisión: ya no se edita. El revisor lo revisa o lo devuelve con observaciones.</Callout> : null}
       {!readOnly ? <AvisoAutorizacion requisitos={requisitosAnalisis(form.tipo)} /> : null}
-      {editing && estado === "registrado" && canReview ? <AvisoAutorizacion requisitos={requisitosRevisionResultados(form.tipo, "revisar")} accion="revisar este análisis" /> : null}
+      {editing && (estado === "registrado" || estado === "en_revision") && canReview ? <AvisoAutorizacion requisitos={requisitosRevisionResultados(form.tipo, "revisar")} accion="revisar este análisis" /> : null}
       {editing && estado === "revisado" && canApprove ? <AvisoAutorizacion requisitos={requisitosRevisionResultados(form.tipo, "aprobar")} accion="aprobar este análisis" /> : null}
-      <SegregacionCallout bloqueo={editing && estado === "registrado" && canReview ? segregacion.revisar : editing && estado === "revisado" && canApprove ? segregacion.aprobar : null} accion={estado === "revisado" ? "aprobar" : "revisar"} onSolicitar={() => solicitarExcepcion(estado === "revisado" ? "aprobar" : "revisar")} />
+      <SegregacionCallout bloqueo={editing && (estado === "registrado" || estado === "en_revision") && canReview ? segregacion.revisar : editing && estado === "revisado" && canApprove ? segregacion.aprobar : null} accion={estado === "revisado" ? "aprobar" : "revisar"} onSolicitar={() => solicitarExcepcion(estado === "revisado" ? "aprobar" : "revisar")} />
       {item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}
@@ -750,7 +820,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       </FormCard>
 
       <FormCard id="sec-personal" title="Analista" description="Quién realizó el análisis.">
-        <PersonCard title="Analista" name={form.analista} onName={(v) => patch({ analista: v })} signature={form.analistaFirma} onSignature={(v) => patch({ analistaFirma: v })} />
+        <PersonCard title="Analista" firmante={analistaCuenta} onFirmante={setAnalistaCuenta} name={form.analista} onName={(v) => patch({ analista: v })} signature={form.analistaFirma} onSignature={(v) => patch({ analistaFirma: v })} />
       </FormCard>
 
       <FormCard id="sec-revision" title="Revisión y aprobación" description="Una segunda persona revisa; otra distinta aprueba. Solo los análisis aprobados pueden reportarse.">

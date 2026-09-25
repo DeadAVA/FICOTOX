@@ -4,11 +4,13 @@
  * - equipo del inventario no autorizado en una extraccion, 403;
  * - autorizacion vencida o revocada, 403;
  * - autorizar un informe sin autorizacion_informe, 403; la Responsable General si;
- * - nadie se otorga una autorizacion a si mismo (409); el Administrador tecnico no otorga (403).
+ * - nadie se otorga una autorizacion a si mismo (409); el Administrador tecnico no otorga (403);
+ * - Fase 5: "Autorizar a…" al dar de alta un equipo; con solo las del seed, Luis no hace un analisis PSP (403).
  * Las autorizaciones de ejemplo las crea el seed (scripts/seed-roles-usuarios.mjs).
  */
 import "./lib/reauth-auto.mjs";
 import { readFileSync } from "node:fs";
+import { asignarRecepcion } from "./lib/autorizar.mjs";
 
 const BASE = process.env.BASE || "http://localhost:3100/api";
 const credenciales = JSON.parse(readFileSync(process.env.CREDENCIALES_ROLES, "utf8"));
@@ -45,6 +47,8 @@ const cadenaHastaProcesamiento = async (prefijo) => {
   const id = `${prefijo}-${Date.now()}-${(n += 1)}`;
   const R = (await api("POST", "/samples/reception", { fecha_recepcion: "2026-09-20", hora_recepcion: "09:00", recibido_por: "QA", medio_recepcion: "directa", solicitante: "Cliente autorizaciones", muestra_unica: true, id_interno: id, fecha_muestra: "2026-09-19", analisis: { tipos: ["toxinas_lipofilicas"], metodos: ["cromatografia_liquidos"], tipos_muestra: ["organismo_completo"] }, inspeccion, decision_aceptacion: "aceptada", aceptacion: { fecha: "2026-09-20", responsable: "QA" } }, QA)).data?.id;
   const P = (await api("POST", "/samples/processing", { recepcion_id: R, muestra_tipo: "unica", id_interno: id, fecha_procesamiento: "2026-09-20", tipo_organismo: ["bivalvos"], nombre_quien_proceso: "Persona A", nombre_quien_superviso: "Persona B" }, QA)).data?.id;
+  // Fase 5: el Analista trabaja la muestra asignada.
+  await asignarRecepcion(BASE, QA, R, [idDe(LUIS)]);
   return { id, R, P };
 };
 const extraccion = (c, extra = {}) => ({ tipo_registro: "E-D", procesamiento_id: c.P, tipo_molienda: "fresca", id_interno: c.id, fecha_extraccion: "2026-09-20", registro_pesos: [{ id_muestra: c.id, replica: `${c.id}_R1`, peso_muestra: 2.01 }], nombre_quien_extrajo: "Luis", nombre_quien_superviso: "Ricardo", ...extra });
@@ -106,6 +110,36 @@ const extraccion = (c, extra = {}) => ({ tipo_registro: "E-D", procesamiento_id:
   check("el Administrador tecnico no otorga autorizaciones: 403", admin.status === 403, `${admin.status} ${admin.data?.message}`);
   const mias = await api("GET", "/autorizaciones/mias", undefined, tL);
   check("Mis autorizaciones: el Analista ve las suyas (folio FX-THF-AP-DEMO del seed)", mias.status === 200 && (mias.data?.items || []).some((a) => a.clave === "extraccion" && a.folio_fx_thf_ap === "FX-THF-AP-DEMO"), `${mias.status} ${(mias.data?.items || []).length}`);
+}
+
+/* ---------- Fase 5: "Autorizar a…" al dar de alta un equipo ---------- */
+{
+  const nombre = `Equipo autorizado ${Date.now()}`;
+  const alta = await api("POST", "/inventory/equipos", { nombre, estado: "operativo", autorizar_a: [idDe(LUIS)], folio_fx_thf_ap: "FX-THF-AP-ALTA" }, QA);
+  const luisEquipo = await autorizacion(LUIS, "equipo", String(alta.data?.id));
+  check("alta de equipo con 'Autorizar a…': el equipo se crea (201) y Luis queda autorizado", alta.status === 201 && (alta.data?.autorizados || []).some((a) => a.email === LUIS) && !!luisEquipo && luisEquipo.folio_fx_thf_ap === "FX-THF-AP-ALTA", `${alta.status} ${JSON.stringify(alta.data?.autorizados)} ${luisEquipo?.id}`);
+  const adminEq = await api("POST", "/inventory/equipos", { nombre: `${nombre} (admin)`, estado: "operativo", autorizar_a: [idDe(LUIS)] }, tJ);
+  check("el Administrador tecnico con 'Autorizar a…' recibe 403", adminEq.status === 403, `${adminEq.status} ${adminEq.data?.message}`);
+  const GABRIELA = "gabriela.ortiz@ficotox.local";
+  const tG = await login(GABRIELA, credenciales[GABRIELA]);
+  const nombreG = `${nombre} (I+D)`;
+  const sinOtorgar = await api("POST", "/inventory/equipos", { nombre: nombreG, estado: "operativo", autorizar_a: [idDe(LUIS)] }, tG);
+  const creadoG = ((await api("GET", "/inventory/equipos", undefined, QA)).data?.items || []).some((e) => e.nombre === nombreG);
+  check("quien da de alta equipos pero no otorga autorizaciones: 403 y el equipo no se crea", sinOtorgar.status === 403 && /autorizaciones/i.test(sinOtorgar.data?.message || "") && !creadoG, `${sinOtorgar.status} ${sinOtorgar.data?.message} creado=${creadoG}`);
+}
+
+/* ---------- Solo las autorizaciones del seed: Luis no tiene PSP ---------- */
+{
+  // tests/reset-test-db.mjs completa autorizaciones para las suites de roles; se revocan las que no son del seed.
+  const todas = (await api("GET", `/admin/usuarios/${idDe(LUIS)}/autorizaciones`, undefined, QA)).data?.items || [];
+  for (const a of todas.filter((x) => x.estado === "vigente" && x.folio_fx_thf_ap !== "FX-THF-AP-DEMO")) {
+    await api("POST", `/admin/usuarios/${idDe(LUIS)}/autorizaciones/${a.id}/revocar`, { motivo: "Prueba solo con el seed" }, tR);
+  }
+  const quedan = ((await api("GET", `/admin/usuarios/${idDe(LUIS)}/autorizaciones`, undefined, QA)).data?.items || []).filter((x) => x.estado === "vigente");
+  const c = await cadenaHastaProcesamiento("AUTPSP");
+  const E = (await api("POST", "/samples/extraction", extraccion(c, { nombre_quien_extrajo: "QA", nombre_quien_superviso: "Supervisor QA" }), QA)).data?.id;
+  const psp = await api("POST", "/samples/analysis", { tipo_analisis: "toxinas_paralizantes", metodo: "hplc_fld", extraccion_id: E, fecha_analisis: "2026-09-20", analista_nombre: "Luis", resultados: [{ id_muestra: c.id, resultado: 10, unidad: "µg/100 g", limite_regulatorio: 80, cumple: "cumple" }] }, tL);
+  check("solo con las autorizaciones del seed, Luis recibe 403 en un analisis PSP", quedan.every((x) => x.folio_fx_thf_ap === "FX-THF-AP-DEMO") && psp.status === 403 && psp.data?.codigo === "no_autorizado" && /PSP/.test(psp.data?.message || ""), `vigentes=${quedan.length} ${psp.status} ${psp.data?.codigo} ${psp.data?.message}`);
 }
 
 const failed = results.filter((r) => !r.ok).length;

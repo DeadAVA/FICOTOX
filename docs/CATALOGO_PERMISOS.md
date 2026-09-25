@@ -86,12 +86,12 @@ Un permiso es `(rol, módulo, acción, alcance)`. `total` = sin límite.
 | `mantenimiento` | En equipos: solo mantenimientos (y su reporte); no el catálogo. |
 | `movimientos` | En inventario: solo movimientos y reposiciones; no el catálogo. |
 | `supervisado` | (Fase 2) Se permite crear y editar, pero lo capturado queda **pendiente del visto bueno** del supervisor de la cuenta: no sirve de origen de la etapa siguiente, no se cierra, revisa, aprueba ni autoriza, y un mantenimiento no se marca completado hasta el visto bueno. Lo mismo aplica a todo lo que capture una **cuenta temporal con supervisor**. Su V implícita es `total`. |
+| `asignado` | (Fase 5) Solo las muestras **asignadas** a la persona (o registradas por ella): la lista de recepciones se filtra y la ficha o la edición de otra responde 403 `no_asignado`. Su V implícita es `asignado`. |
 
 ### Diferidos (se guardan; se aplican en fases posteriores)
 
 | Alcance | Fase |
 | --- | --- |
-| `asignado` | 5 |
 | `proyecto` | 8 |
 | `tecnico`, `investigacion`, `autorizados`, `administrativo` | 7/8 |
 | `incidencias`, `auditoria` | 8 |
@@ -173,6 +173,9 @@ Violación: 409 con código `segregacion` y la regla concreta. Las excepciones s
 | Asignar un rol a un usuario (también el rol inicial de una cuenta nueva) | A en usuarios (Responsable General) |
 | Reactivar una cuenta dada de baja | A en usuarios |
 | Ampliar la vigencia de una cuenta temporal | A en usuarios |
+| Rechazar una recepción o aceptarla con desviación (Fase 5) | A en muestras (Coord. Área Técnica); directo si quien la registra ya tiene muestras:A |
+| Cambiar el folio de una recepción ya creada (Fase 5) | A en muestras |
+| Reabrir una recepción cerrada o rechazada (Fase 5) | A en muestras |
 
 Revocar roles, dar de baja cuentas, bloquear y acortar vigencias **no** requieren segundo usuario (reducir privilegios no debe esperar). En usuarios, `G` **no** implica A (Fase 3.1): solo quien tiene `usuarios:A` explícito (Responsable General) aprueba cambios de acceso; en los demás módulos G sigue implicando todas las acciones. Nadie puede editar los permisos de un rol que él mismo tiene vigente (409 `rol_propio`); los demás roles se editan como antes. Guardas: siempre queda al menos un usuario activo con `usuarios:G` vigente (y uno sin fecha de fin) y con `usuarios:A` vigente. El script de alta asigna roles sin solicitud y lo deja dicho en la bitácora.
 
@@ -190,6 +193,14 @@ Segunda capa, además del rol: el rol da la acción en el módulo; la autorizaci
 | Revisar / autorizar informe | informes R / A | `revision_informe` / `autorizacion_informe` |
 
 Otorgan y revocan (con motivo, reautenticación y bitácora): quien tiene `ensayos:A` o `calidad:A` (Coord. Área Técnica, Mejora Continua, Responsable General); no el Administrador técnico; nadie a sí mismo (409). `AUTORIZACIONES_OBLIGATORIAS=false` desactiva la validación solo para cargar datos iniciales.
+
+## 6 quater. Asignación de muestras y firmas por cuenta (Fase 5)
+
+- **Asignación**: asigna y reasigna quien tiene `muestras:A` (Coord. Área Técnica). Regla operativa: crear o editar procesamiento, extracción o análisis (y enviar a revisión o enmendar) exige estar asignado a la recepción, salvo la **coordinación** (`muestras:A` o `ensayos:A`); sin asignación, 403 `no_asignado`. Al asignar se avisa (sin bloquear) si a la persona le faltan autorizaciones FX-THF-AP de los análisis solicitados.
+- **Alcance `asignado`**: se aplica desde la Fase 5 (ya no es diferido); ver sección 3.
+- **Firmas**: recibió, procesó, supervisó, extrajo, limpió y analista se eligen de las cuentas activas y se guarda su `usuario_id` y cargo. Si el firmante no es quien tiene la sesión, confirma con su contraseña (token de firma de un solo uso). Los firmantes de trabajo técnico (procesó, extrajo, limpió, analista) necesitan la autorización FX-THF-AP de la actividad y el método.
+- **Regla 3 por cuenta**: supervisó ≠ procesó/extrajo/limpió se compara por `usuario_id` cuando ambas firmas están ligadas a cuentas (con los nombres escritos solo como respaldo para registros sin cuenta).
+- **Análisis**: el analista envía a revisión (desde ahí no edita); el revisor (ensayos:R) puede devolver con observaciones; un aprobado se corrige solo con enmienda versionada (ensayos:C), y la original queda sustituida al aprobarse la enmienda.
 
 ## 7. Decisiones pendientes de validar con Mejora Continua
 

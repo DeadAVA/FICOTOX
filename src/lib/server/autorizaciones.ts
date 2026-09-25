@@ -213,23 +213,73 @@ export async function otorgarAutorizacion({ request, s, params }: RouteContext):
   if (actuales.some((a) => a.tipo === tipo && a.clave === clave && (a.estado === "vigente" || a.estado === "por_iniciar"))) throw new HttpError(409, { message: "La persona ya tiene esa autorización vigente o por iniciar; revócala antes de registrar otra" });
   await exigirReauth(s, request, user, "autorizaciones:otorgar");
   const actuo = cargoActuante(request, permiso);
+  const item = await insertarAutorizacion(s, user, { usuarioId, email: String(persona.email), tipo, clave, desde, hasta, folio, motivo, actuo });
+  await s.commit();
+  return json({ message: `Autorización registrada: ${item.etiqueta}`, item }, 201);
+}
+
+/* Inserta una autorizacion ya validada y la deja en la bitacora (sin commit). */
+async function insertarAutorizacion(
+  s: Session,
+  user: CurrentUser,
+  a: { usuarioId: number; email: string; tipo: TipoAutorizacion; clave: string; desde: string; hasta: string | null; folio: string | null; motivo: string; actuo: { rol_id: number; cargo: string } },
+): Promise<AutorizacionPersonal> {
   const result = await s.execute(
     `INSERT INTO ${TABLE} (usuario_id, tipo, clave, vigente_desde, vigente_hasta, folio_fx_thf_ap, otorgada_por, otorgada_rol, otorgada_en, motivo)
      VALUES (:usuario_id, :tipo, :clave, :desde, :hasta, :folio, :por, :rol, :en, :motivo)`,
-    { usuario_id: usuarioId, tipo, clave, desde, hasta, folio, por: yo, rol: actuo.cargo, en: new Date().toISOString(), motivo },
+    { usuario_id: a.usuarioId, tipo: a.tipo, clave: a.clave, desde: a.desde, hasta: a.hasta, folio: a.folio, por: userIdFromClaims(user), rol: a.actuo.cargo, en: new Date().toISOString(), motivo: a.motivo },
   );
   const id = result.lastrowid as number;
   const [item] = await serializar(s, [(await s.queryOne<Row>(`SELECT * FROM ${TABLE} WHERE id = :id`, { id }))!]);
   await registrarAuditoria(s, user, {
     accion: "otorgar_autorizacion",
     entidad: "usuarios",
-    entidadId: usuarioId,
-    referencia: String(persona.email),
-    motivo,
-    detalle: { autorizacion_id: id, tipo, clave, autorizacion: item.etiqueta, vigente_desde: desde, vigente_hasta: hasta, folio_fx_thf_ap: folio, actuo_como: actuo },
+    entidadId: a.usuarioId,
+    referencia: a.email,
+    motivo: a.motivo,
+    detalle: { autorizacion_id: id, tipo: a.tipo, clave: a.clave, autorizacion: item.etiqueta, vigente_desde: a.desde, vigente_hasta: a.hasta, folio_fx_thf_ap: a.folio, actuo_como: a.actuo },
   });
-  await s.commit();
-  return json({ message: `Autorización registrada: ${item.etiqueta}`, item }, 201);
+  return item;
+}
+
+/*
+ * Fase 5: al dar de alta un equipo, "Autorizar a…" otorga en el mismo paso la
+ * autorizacion del equipo a las personas elegidas. Exige poder otorgar y
+ * reautenticacion; la propia persona se omite (nadie se autoriza a si misma).
+ * No hace commit: lo hace quien llama junto con el alta del equipo.
+ */
+export async function autorizarEquipoA(s: Session, request: Request, user: CurrentUser, equipoId: number, personas: unknown[], folioIn?: unknown): Promise<{ autorizados: Array<{ usuario_id: number; email: string }>; omitidos: Array<{ usuario_id: number; motivo: string }> }> {
+  const ids = [...new Set(personas.map((p) => Number(p)).filter((p) => Number.isFinite(p) && p > 0))];
+  const out = { autorizados: [] as Array<{ usuario_id: number; email: string }>, omitidos: [] as Array<{ usuario_id: number; motivo: string }> };
+  if (!ids.length) return out;
+  const { permiso } = await exigirAdministrar(s, user);
+  await ensureAutorizacionesSchema(s);
+  await exigirReauth(s, request, user, "autorizaciones:otorgar");
+  const actuo = cargoActuante(request, permiso);
+  const yo = userIdFromClaims(user) as number;
+  const folio = String(folioIn || "").trim().slice(0, 80) || null;
+  for (const usuarioId of ids) {
+    if (usuarioId === yo) {
+      out.omitidos.push({ usuario_id: usuarioId, motivo: "No puedes autorizarte a ti mismo; lo debe hacer otra persona" });
+      continue;
+    }
+    const persona = await s.queryOne<Row>("SELECT id, email FROM usuarios WHERE id = :id AND COALESCE(activo, 1) = 1", { id: usuarioId });
+    if (!persona) {
+      out.omitidos.push({ usuario_id: usuarioId, motivo: "Cuenta inexistente o inactiva" });
+      continue;
+    }
+    await insertarAutorizacion(s, user, { usuarioId, email: String(persona.email), tipo: "equipo", clave: String(equipoId), desde: hoyLocal(), hasta: null, folio, motivo: "Alta del equipo", actuo });
+    out.autorizados.push({ usuario_id: usuarioId, email: String(persona.email) });
+  }
+  return out;
+}
+
+/* GET /api/autorizaciones/personas: cuentas activas, para "Autorizar a…" (solo quien puede otorgar). */
+export async function personasAutorizables({ request, s }: RouteContext): Promise<Response> {
+  const user = await requireUser(request);
+  const { auth } = await exigirAdministrar(s, user);
+  const filas = await s.query<Row>("SELECT id, nombre, email FROM usuarios WHERE COALESCE(activo, 1) = 1 ORDER BY nombre, email");
+  return json({ items: filas.filter((f) => Number(f.id) !== auth.userId).map((f) => ({ id: Number(f.id), nombre: String(f.nombre || f.email), email: String(f.email) })) });
 }
 
 /* POST /api/admin/usuarios/:id/autorizaciones/:autorizacion/revocar */

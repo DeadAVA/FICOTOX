@@ -10,6 +10,7 @@ import { aprobarSolicitudCon, crearSolicitud, detalleSolicitud, respuestaSolicit
 import { ejecutarAmpliacionVigencia, ejecutarAsignacionRol, ejecutarReactivacion } from "./modules/admin";
 import { ejecutarAnulacionInforme, informeFolio, violacionParaExcepcionInforme } from "./modules/informes";
 import { violacionParaExcepcionAnalisis } from "./modules/samples/analisis";
+import { ejecutarCambioFolio, ejecutarDecisionRecepcion, ejecutarReapertura } from "./modules/samples/recepcion";
 import { violacionParaExcepcionDocumento } from "./modules/documentos-sgc";
 
 /*
@@ -56,6 +57,9 @@ export const EJECUTORES: Ejecutores = {
   asignar_rol: ejecutarAsignacionRol,
   reactivar_cuenta: ejecutarReactivacion,
   ampliar_vigencia: ejecutarAmpliacionVigencia,
+  decision_recepcion: ejecutarDecisionRecepcion,
+  cambiar_folio: ejecutarCambioFolio,
+  reabrir_recepcion: ejecutarReapertura,
 };
 
 export const aprobarSolicitud = aprobarSolicitudCon(EJECUTORES);

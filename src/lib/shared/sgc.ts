@@ -20,7 +20,16 @@ export interface CatalogItem {
 export const SAMPLE_STATES: Record<string, { label: string; tone: "neutral" | "brand" | "warning" | "success" | "danger" | "bloom" | "ink" }> = {
   registrada: { label: "Registrada", tone: "brand" },
   aceptada: { label: "Aceptada", tone: "brand" },
+  aceptada_con_desviacion: { label: "Aceptada con desviación", tone: "warning" },
   rechazada: { label: "Rechazada", tone: "danger" },
+  // Fase 5: estados de la recepcion (seccion 7 de la especificacion), solo hacia adelante.
+  en_procesamiento: { label: "En procesamiento", tone: "warning" },
+  en_extraccion: { label: "En extracción", tone: "warning" },
+  en_analisis: { label: "En análisis", tone: "warning" },
+  en_revision_tecnica: { label: "En revisión técnica", tone: "bloom" },
+  validada: { label: "Validada", tone: "success" },
+  informe_elaborado: { label: "Informe elaborado", tone: "success" },
+  liberada: { label: "Liberada", tone: "success" },
   en_proceso: { label: "En proceso", tone: "warning" },
   completada: { label: "Completada", tone: "success" },
   analizada: { label: "Analizada", tone: "success" },
@@ -34,6 +43,25 @@ export const SAMPLE_STATES: Record<string, { label: string; tone: "neutral" | "b
   cancelada: { label: "Cancelada", tone: "danger" },
   pendiente: { label: "Pendiente", tone: "neutral" },
 };
+
+/* Fase 5: estados de la recepcion en orden (aceptada, aceptada_con_desviacion y rechazada comparten paso). */
+export const RECEPTION_STATE_ORDER = ["registrada", "aceptada", "aceptada_con_desviacion", "rechazada", "en_procesamiento", "en_extraccion", "en_analisis", "en_revision_tecnica", "validada", "informe_elaborado", "liberada", "cerrada"] as const;
+export const RECEPTION_STATE_RANK: Record<string, number> = {
+  registrada: 0,
+  aceptada: 1,
+  aceptada_con_desviacion: 1,
+  rechazada: 1,
+  en_procesamiento: 2,
+  en_extraccion: 3,
+  en_analisis: 4,
+  en_revision_tecnica: 5,
+  validada: 6,
+  informe_elaborado: 7,
+  liberada: 8,
+  cerrada: 9,
+};
+/* Estados anteriores a la Fase 5 y su equivalente. */
+export const RECEPTION_LEGACY_STATES: Record<string, string> = { en_proceso: "en_procesamiento", analizada: "validada", informada: "liberada" };
 
 /* Estados en los que un registro ya no se edita ni se usa como origen de otra etapa. */
 export const SAMPLE_TERMINAL_STATES = new Set(["anulada", "rechazada", "cerrada"]);
@@ -151,9 +179,12 @@ export const ANALYSIS_METHODS: CatalogItem[] = [
 
 export const ANALYSIS_STATES: Record<string, { label: string; tone: "neutral" | "brand" | "warning" | "success" | "danger" }> = {
   registrado: { label: "Registrado", tone: "brand" },
+  // Fase 5: enviado a revision (ya no se edita) y sustituido por una enmienda.
+  en_revision: { label: "En revisión", tone: "warning" },
   revisado: { label: "Revisado", tone: "warning" },
   aprobado: { label: "Aprobado", tone: "success" },
   anulado: { label: "Anulado", tone: "danger" },
+  sustituido: { label: "Sustituido", tone: "neutral" },
 };
 
 export const CONFORMITY_OPTIONS: CatalogItem[] = [
@@ -309,6 +340,16 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   otorgar_autorizacion: "Otorgó una autorización (FX-THF-AP)",
   revocar_autorizacion: "Revocó una autorización (FX-THF-AP)",
   vencer_autorizacion: "Venció una autorización (FX-THF-AP)",
+  imprimir_etiquetas: "Imprimió etiquetas",
+  asignar_muestra: "Asignó la muestra",
+  revocar_asignacion: "Revocó la asignación de la muestra",
+  enviar_revision: "Envió a revisión",
+  devolver: "Devolvió con observaciones",
+  enmendar: "Enmendó (nueva versión)",
+  sustituir: "Quedó sustituido por una enmienda",
+  cambiar_folio: "Cambió el folio",
+  reabrir: "Reabrió",
+  confirmar_firma: "Confirmó su firma con contraseña",
 };
 
 export const AUDIT_ENTITIES: Record<string, string> = {

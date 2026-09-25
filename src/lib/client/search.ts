@@ -8,7 +8,7 @@ import { resetSearchIndex, searchIndexState as idx } from "./search-index";
 import { subscribeInvalidate } from "./store";
 import { fmtDate } from "./format";
 import { formatReactivoName } from "./reactivos";
-import { formatExtractionFolio, formatProcessingFolio, formatSampleFolio } from "./samples";
+import { formatExtractionFolio, formatProcessingFolio, formatSampleFolio, sampleStatusLabel } from "./samples";
 import type { ApiRecord } from "./types";
 
 /*
@@ -208,7 +208,9 @@ async function buildIndex(token: string, can: SessionValue["can"]): Promise<Sear
 
   for (const s of recepciones) {
     const folio = formatSampleFolio(s);
-    hits.push({ id: `r-${s.id}`, kind: "muestra", label: folio, sub: join(s.solicitante, s.id_interno), href: `/muestras/recepcion/${s.id}`, mono: true, tag: "Recepción", keywords: norm(join(folio, folio.replace(/\s/g, ""), s.solicitante, s.id_interno, "recepcion")) });
+    // Fase 5: el estado de la recepcion (en extracción, validada, liberada...) tambien se busca.
+    const estadoR = s.estado ? sampleStatusLabel(s.estado) : null;
+    hits.push({ id: `r-${s.id}`, kind: "muestra", label: folio, sub: join(s.solicitante, s.id_interno, estadoR), href: `/muestras/recepcion/${s.id}`, mono: true, tag: "Recepción", keywords: norm(join(folio, folio.replace(/\s/g, ""), s.solicitante, s.id_interno, estadoR, "recepcion")) });
   }
   for (const s of procesamientos) {
     const folio = formatProcessingFolio(s);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useSession } from "@/components/session/SessionProvider";
 import { AvatarArt, AVATARS, resolveAvatarKey } from "@/components/ui/AvatarArt";
@@ -23,6 +23,10 @@ import { ListaAutorizaciones } from "@/components/features/admin/AutorizacionesP
  * una accion, sin preguntar), cambio de contrasena y cerrar la sesion en todos
  * los dispositivos.
  */
+/* Fase 5: abre "Mi cuenta" desde cualquier parte (p. ej. el aviso de autorizaciones por vencer). */
+export const ABRIR_MIS_AUTORIZACIONES = "#mis-autorizaciones";
+export const EVENTO_ABRIR_CUENTA = "ficotox:abrir-cuenta";
+
 export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user, token, refreshMe, roles, logoutAll, authConfig } = useSession();
   const confirm = useConfirm();
@@ -30,6 +34,16 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
   const [savingCargo, setSavingCargo] = useState(false);
   const [cambiarClave, setCambiarClave] = useState(false);
   const { items: autorizaciones } = useAutorizaciones();
+
+  // Si se abrio desde un enlace a #mis-autorizaciones, se lleva la vista a esa seccion.
+  useEffect(() => {
+    if (!open || typeof window === "undefined" || window.location.hash !== ABRIR_MIS_AUTORIZACIONES) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById("mis-autorizaciones")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [open]);
 
   const guardarCargo = async (valor: string) => {
     setCargo(valor);

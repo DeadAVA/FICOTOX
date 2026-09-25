@@ -590,7 +590,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
         open={sign !== null}
         onOpenChange={(open) => !open && setSign(null)}
         title={sign === "revisar" ? "Marcar informe como revisado" : "Autorizar informe"}
-        description={sign === "revisar" ? `Quedará registrado a nombre de ${user?.nombre || user?.email || "tu usuario"}.` : "Al autorizar se congelan los resultados, se genera el PDF y la recepción pasa a informada."}
+        description={sign === "revisar" ? `Quedará registrado a nombre de ${user?.nombre || user?.email || "tu usuario"}.` : "Al autorizar se congelan los resultados, se genera el PDF y la recepción pasa a liberada."}
         confirmLabel={sign === "revisar" ? "Marcar revisado" : "Autorizar"}
         requireSignature={sign === "autorizar"}
         loading={signing}

@@ -80,10 +80,16 @@ export const nombreNormalizado = (value: unknown): string =>
     .trim();
 
 /* Regla 3: procesamiento / extraccion: quien firma "superviso" no es quien proceso, extrajo o limpio. */
-export function evaluarSupervisionCaptura(superviso: unknown, ejecutores: Array<{ etiqueta: string; nombre: unknown }>): Violacion | null {
+/* Fase 5: compara cuentas (usuario_id) cuando ambas firmas estan ligadas; si no, los nombres escritos. */
+export function evaluarSupervisionCaptura(superviso: unknown, ejecutores: Array<{ etiqueta: string; nombre: unknown; usuarioId?: unknown }>, supervisoId?: unknown): Violacion | null {
+  const supId = Number(supervisoId) || 0;
   const sup = nombreNormalizado(superviso);
-  if (!sup) return null;
-  const coincide = ejecutores.find((e) => nombreNormalizado(e.nombre) && nombreNormalizado(e.nombre) === sup);
+  if (!sup && !supId) return null;
+  const coincide = ejecutores.find((e) => {
+    const id = Number(e.usuarioId) || 0;
+    if (supId && id) return supId === id;
+    return !!sup && !!nombreNormalizado(e.nombre) && nombreNormalizado(e.nombre) === sup;
+  });
   if (!coincide) return null;
   return { regla: 3, clave: "supervision_captura", mensaje: `Quien supervisó no puede ser la misma persona que ${coincide.etiqueta}; debe firmar otra persona como supervisor` };
 }

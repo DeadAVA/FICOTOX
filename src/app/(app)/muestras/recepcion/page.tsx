@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ArrowCounterClockwise, ArrowSquareOut, Flask, PencilSimple, Plus, Prohibit, TestTube } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, ArrowSquareOut, Flask, Hash, PencilSimple, Plus, Printer, Prohibit, TestTube, UserPlus } from "@phosphor-icons/react";
 import { FolioChip, SampleStatus, SolicitudBadge, SupervisionBadge } from "@/components/features/samples/status";
 import { useAnulacion } from "@/components/features/samples/useAnulacion";
 import { RequireModule } from "@/components/session/RequireModule";
@@ -20,7 +20,8 @@ import { useDebouncedValue } from "@/lib/client/hooks";
 import { formatSampleFolio, getSampleTypeSummary, normalizeSampleStatus } from "@/lib/client/samples";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
-import { ACCEPTANCE_DECISIONS, RECEPTION_ANALYSIS_TYPES } from "@/lib/shared/sgc";
+import { ACCEPTANCE_DECISIONS, RECEPTION_ANALYSIS_TYPES, RECEPTION_STATE_ORDER, SAMPLE_STATES } from "@/lib/shared/sgc";
+import { recepcionAsignable, useAccionesRecepcion } from "@/components/features/samples/RecepcionAcciones";
 
 export default function RecepcionListPage() {
   return (
@@ -34,7 +35,8 @@ const DECISION_TONE: Record<string, "success" | "warning" | "danger"> = { acepta
 const DECISION_SHORT: Record<string, string> = { aceptada: "Aceptada", aceptada_con_desviacion: "Con desviación", rechazada: "Rechazada" };
 const ANALYSIS_SHORT: Record<string, string> = { acido_domoico: "ASP", toxinas_lipofilicas: "DSP", toxinas_paralizantes: "PSP", pigmentos: "Pigmentos", plancton: "Plancton", otro: "Otro" };
 
-type EtapaFilter = "" | "registrada" | "aceptada" | "en_proceso" | "analizada" | "informada" | "cerrada" | "rechazada";
+/* Fase 5: estados de la especificacion (solo hacia adelante). */
+type EtapaFilter = "" | (typeof RECEPTION_STATE_ORDER)[number];
 type DecisionFilter = "" | "aceptada" | "aceptada_con_desviacion" | "rechazada" | "pendiente";
 
 function RecepcionList() {
@@ -44,16 +46,17 @@ function RecepcionList() {
   const [showAnuladas, setShowAnuladas] = useState(false);
   const [etapa, setEtapa] = useState<EtapaFilter>("");
   const [decision, setDecision] = useState<DecisionFilter>("");
+  const [mias, setMias] = useState(false);
   const debounced = useDebouncedValue(search);
   const { anular, restaurar } = useAnulacion("reception", formatSampleFolio);
 
   const resource = useResource<ApiRecord[]>(
     "muestras",
     async () => {
-      const data = await getJsonAuth(`${API_BASE_URL}/samples/reception?search=${encodeURIComponent(debounced.trim())}${showAnuladas ? "&anuladas=1" : ""}`, token);
+      const data = await getJsonAuth(`${API_BASE_URL}/samples/reception?search=${encodeURIComponent(debounced.trim())}${showAnuladas ? "&anuladas=1" : ""}${mias ? "&mias=1" : ""}`, token);
       return (data.items || []) as ApiRecord[];
     },
-    { enabled: !!token, deps: [debounced, showAnuladas] },
+    { enabled: !!token, deps: [debounced, showAnuladas, mias] },
   );
   const items = resource.data;
 
@@ -61,6 +64,8 @@ function RecepcionList() {
   const canEdit = (item: ApiRecord) => can("muestras", "E", { objeto: "recepcion", borrador: String(item.estado || "registrada") === "registrada" });
   const canProcesar = can("ensayos", "C", { objeto: "procesamiento", borrador: true });
   const canDelete = can("muestras", "AN");
+  const canAsignar = can("muestras", "A");
+  const acciones = useAccionesRecepcion(() => resource.reload());
 
   const count = (predicate: (item: ApiRecord) => boolean) => (items ? items.filter(predicate).length : null);
   const visible = useMemo(() => {
@@ -84,12 +89,7 @@ function RecepcionList() {
       onChange: (v) => setEtapa(v as EtapaFilter),
       options: [
         { value: "", label: "Todas", count: items ? items.length : null },
-        { value: "registrada", label: "Registradas", count: count((i) => normalizeSampleStatus(i.estado) === "registrada") },
-        { value: "aceptada", label: "Aceptadas", count: count((i) => normalizeSampleStatus(i.estado) === "aceptada") },
-        { value: "en_proceso", label: "En proceso", count: count((i) => normalizeSampleStatus(i.estado) === "en_proceso") },
-        { value: "analizada", label: "Analizadas", count: count((i) => normalizeSampleStatus(i.estado) === "analizada") },
-        { value: "informada", label: "Informadas", count: count((i) => normalizeSampleStatus(i.estado) === "informada") },
-        { value: "cerrada", label: "Cerradas", count: count((i) => normalizeSampleStatus(i.estado) === "cerrada") },
+        ...RECEPTION_STATE_ORDER.map((estado) => ({ value: estado, label: SAMPLE_STATES[estado]?.label || estado, count: count((i) => normalizeSampleStatus(i.estado) === estado) })),
       ],
     },
     {
@@ -105,13 +105,23 @@ function RecepcionList() {
       ],
     },
   ];
-  const toggles: FilterToggle[] = [{ key: "anuladas", label: "Mostrar anuladas", description: "Incluye las recepciones anuladas con motivo.", checked: showAnuladas, onChange: setShowAnuladas }];
+  const toggles: FilterToggle[] = [
+    { key: "mias", label: "Mis muestras", description: "Solo las recepciones asignadas a ti o que registraste.", checked: mias, onChange: setMias },
+    { key: "anuladas", label: "Mostrar anuladas", description: "Incluye las recepciones anuladas con motivo.", checked: showAnuladas, onChange: setShowAnuladas },
+  ];
 
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulada = item.estado === "anulada";
-    const puedeProcesar = canProcesar && !anulada && ["aceptada", "aceptada_con_desviacion"].includes(String(item.decision_aceptacion || "")) && !["rechazada", "cerrada"].includes(String(item.estado));
+    const estado = String(item.estado || "");
+    // Fase 5: las acciones dependen del estado (liberada, cerrada y rechazada ya no se editan) y del permiso.
+    const terminada = ["liberada", "cerrada", "rechazada"].includes(estado);
+    const puedeProcesar = canProcesar && !anulada && ["aceptada", "aceptada_con_desviacion"].includes(String(item.decision_aceptacion || "")) && !["rechazada", "cerrada", "liberada"].includes(estado);
     const list: MenuItem[] = [{ label: "Abrir", description: "Ver el formato completo", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/muestras/recepcion/${item.id}`) }];
-    if (canEdit(item) && !anulada) list.push({ label: "Editar", description: "Cambiar datos o decidir la aceptación", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/recepcion/${item.id}`) });
+    if (canAsignar && recepcionAsignable(item)) list.push({ label: "Asignar…", description: "Quién trabaja esta muestra", icon: <UserPlus size={16} weight="duotone" />, onSelect: () => acciones.asignar(item) });
+    if (canEdit(item) && !anulada && !terminada) list.push({ label: "Editar", description: "Cambiar datos o decidir la aceptación", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/recepcion/${item.id}`) });
+    if (!anulada) list.push({ label: "Imprimir etiqueta", description: "Una etiqueta por muestra del lote", icon: <Printer size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/recepcion/${item.id}/etiquetas`) });
+    if (!anulada && !terminada && can("muestras", "E", { objeto: "recepcion" })) list.push({ label: "Cambiar folio…", description: "Con motivo; lo autoriza la Coord. Técnica", icon: <Hash size={16} weight="duotone" />, onSelect: () => acciones.cambiarFolio(item) });
+    if (["cerrada", "rechazada"].includes(estado) && can("muestras", "E", { objeto: "recepcion" })) list.push({ label: "Reabrir…", description: "Vuelve al estado previo, con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", onSelect: () => acciones.reabrir(item) });
     if (puedeProcesar) list.push({ label: "Procesar", description: "Crear el procesamiento de esta muestra", icon: <Flask size={16} weight="duotone" />, tone: "success", onSelect: () => router.push(`/muestras/procesamiento/nuevo?recepcion=${item.id}`) });
     if (canDelete) {
       if (anulada) list.push({ label: "Restaurar recepción", description: "Vuelve a la lista con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => restaurar(item) });
@@ -201,6 +211,7 @@ function RecepcionList() {
           </Table>
         )}
       </TableShell>
+      {acciones.dialogo}
     </>
   );
 }

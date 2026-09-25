@@ -113,7 +113,8 @@ try {
   await page.fill("#r-id", `UI-${stamp}`);
   await page.selectOption("#r-medio", { index: 1 });
   // "Recibido por" es un selector del personal autorizado, prellenado con la persona con sesión.
-  const recibido = await page.locator("#r-recibido").inputValue();
+  // Fase 5: el valor es la cuenta (id); se compara la etiqueta de la opción elegida.
+  const recibido = (await page.locator("#r-recibido option:checked").textContent())?.trim();
   check("«Recibido por» viene prellenado con la persona con sesión", recibido === "QA Ficotox", recibido);
   await page.locator("#r-recibido").selectOption("QA Ficotox");
   await page.fill("#r-solicitante", "Cliente UI Playwright");

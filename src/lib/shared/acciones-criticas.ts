@@ -13,7 +13,7 @@ import type { Accion, Modulo } from "./permisos";
 
 export const VERSION_ACCIONES_CRITICAS = "2026-09-24.1";
 
-export type TipoSolicitud = "anular_registro" | "restaurar_registro" | "anular_informe" | "excepcion_segregacion" | "asignar_rol" | "reactivar_cuenta" | "ampliar_vigencia";
+export type TipoSolicitud = "anular_registro" | "restaurar_registro" | "anular_informe" | "excepcion_segregacion" | "asignar_rol" | "reactivar_cuenta" | "ampliar_vigencia" | "decision_recepcion" | "cambiar_folio" | "reabrir_recepcion";
 
 export type EstadoSolicitud = "pendiente" | "aprobada" | "rechazada" | "cancelada" | "vencida";
 
@@ -34,6 +34,10 @@ export const ACCIONES_CRITICAS: Record<TipoSolicitud, AccionCritica> = {
   excepcion_segregacion: { tipo: "excepcion_segregacion", etiqueta: "Excepción de segregación", pendiente: "Excepción solicitada", aprueba: { modulo: "calidad", accion: "A" }, descripcion: "Una persona pide revisar, aprobar o autorizar lo que elaboró, por falta de personal. La aprueba quien tiene A en calidad (Responsable General / Mejora Continua)." },
   asignar_rol: { tipo: "asignar_rol", etiqueta: "Asignar rol", pendiente: "Asignación de rol solicitada", aprueba: { modulo: "usuarios", accion: "A" }, descripcion: "Asignar un rol a un usuario (también el rol inicial de una cuenta nueva). La aprueba quien tiene A en usuarios (Responsable General)." },
   reactivar_cuenta: { tipo: "reactivar_cuenta", etiqueta: "Reactivar cuenta", pendiente: "Reactivación solicitada", aprueba: { modulo: "usuarios", accion: "A" }, descripcion: "Reactivar una cuenta dada de baja." },
+  // Fase 5: decisiones de la recepcion que autoriza la Coord. del Area Tecnica (muestras:A).
+  decision_recepcion: { tipo: "decision_recepcion", etiqueta: "Decisión de la recepción", pendiente: "Decisión solicitada", aprueba: { modulo: "muestras", accion: "A" }, descripcion: "Rechazar una recepción o aceptarla con desviación. Si quien la registra ya tiene muestras:A, se aplica directo (con reautenticación)." },
+  cambiar_folio: { tipo: "cambiar_folio", etiqueta: "Cambio de folio", pendiente: "Cambio de folio solicitado", aprueba: { modulo: "muestras", accion: "A" }, descripcion: "Cambiar el folio de una recepción ya creada (el campo deja de ser editable)." },
+  reabrir_recepcion: { tipo: "reabrir_recepcion", etiqueta: "Reabrir recepción", pendiente: "Reapertura solicitada", aprueba: { modulo: "muestras", accion: "A" }, descripcion: "Reabrir una recepción cerrada o rechazada: vuelve al estado previo." },
   ampliar_vigencia: { tipo: "ampliar_vigencia", etiqueta: "Ampliar vigencia", pendiente: "Ampliación de vigencia solicitada", aprueba: { modulo: "usuarios", accion: "A" }, descripcion: "Ampliar la vigencia de una cuenta temporal (o convertirla en permanente)." },
 };
 

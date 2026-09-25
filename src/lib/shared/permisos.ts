@@ -59,7 +59,7 @@ export const ALCANCES = [
   { clave: "uso", nombre: "Uso", fase: null, descripcion: "Solo registrar uso y folio de bitacora al capturar extracciones y analisis; no el catalogo" },
   { clave: "mantenimiento", nombre: "Mantenimiento", fase: null, descripcion: "Solo mantenimientos; no el catalogo de equipos" },
   { clave: "movimientos", nombre: "Movimientos", fase: null, descripcion: "Solo movimientos y reposiciones; no el catalogo" },
-  { clave: "asignado", nombre: "Asignado", fase: "5", descripcion: "Solo lo que tiene asignado" },
+  { clave: "asignado", nombre: "Asignado", fase: null, descripcion: "Solo las muestras asignadas a la persona (o registradas por ella)" },
   { clave: "supervisado", nombre: "Supervisado", fase: null, descripcion: "Lo que crea o edita queda pendiente del visto bueno de su supervisor" },
   { clave: "proyecto", nombre: "Proyecto", fase: "8", descripcion: "Solo su proyecto" },
   { clave: "tecnico", nombre: "Técnico", fase: "7/8", descripcion: "Solo documentos tecnicos" },
@@ -82,7 +82,7 @@ export const MODULOS_DIFERIDO_RESTRINGIDO: Record<string, "sin_acceso" | "propio
 };
 
 /* Alcances que limitan tambien lo que se ve; los demas solo limitan la operacion. */
-const LIMITAN_VISTA = new Set<Alcance>(["propio", "estado", "bitacora"]);
+const LIMITAN_VISTA = new Set<Alcance>(["propio", "estado", "bitacora", "asignado"]);
 
 export function isModulo(value: unknown): value is Modulo {
   return typeof value === "string" && (MODULO_KEYS as string[]).includes(value);
@@ -188,6 +188,8 @@ export interface ContextoAlcance {
   objeto?: string;
   borrador?: boolean;
   propio?: boolean;
+  /* Fase 5: la muestra esta asignada a la persona (alcance "asignado"). */
+  asignado?: boolean;
 }
 
 export function alcancePermite(alcance: Alcance, ctx: ContextoAlcance = {}): boolean {
@@ -195,6 +197,9 @@ export function alcancePermite(alcance: Alcance, ctx: ContextoAlcance = {}): boo
   switch (alcance) {
     case "propio":
       return ctx.propio === true;
+    case "asignado":
+      // Fase 5: se permite salvo que el servidor sepa que la muestra no esta asignada a la persona.
+      return ctx.asignado !== false;
     case "supervisado":
       // Se permite; lo que se crea o edita queda pendiente del visto bueno del supervisor.
       return true;

@@ -12,6 +12,7 @@ import { ensureConsumiblesSchema } from "./consumables";
 import { firstTruthy, isTruthy, searchParam, toFloatOrNull, toIntOrNull, toStrOrNull, utcTimestampReference } from "./helpers";
 import { ensureSupervisionColumns } from "../supervision";
 import { finDiaLocal, hoyLocal, inicioDiaLocal, sumarDias } from "../../shared/fechas";
+import { autorizarEquipoA } from "../autorizaciones";
 
 /* Portado de modules/inventory/endpoints.py del backend Flask original. */
 
@@ -1194,12 +1195,15 @@ export async function createEquipo({ request, s }: RouteContext): Promise<Respon
   const supervision = marcaSupervision(await requirePermission(s, user, "equipos", "C", { objeto: "equipo" }));
   await ensureEquiposSchema(s);
 
-  const data = normalizeEquipoPayload(await readJson(request));
+  const payload = await readJson(request);
+  const data = normalizeEquipoPayload(payload);
   if (!data.nombre) {
     return json({ message: "El nombre del equipo es obligatorio" }, 400);
   }
+  const autorizarA = Array.isArray(payload.autorizar_a) ? (payload.autorizar_a as unknown[]) : [];
 
   let insertedId: number | null;
+  let autorizacion: Awaited<ReturnType<typeof autorizarEquipoA>> | null = null;
   try {
     const result = await s.execute(
       `
@@ -1217,6 +1221,8 @@ export async function createEquipo({ request, s }: RouteContext): Promise<Respon
     insertedId = result.lastrowid;
     if (insertedId) await aplicarSupervision(s, "equipos", insertedId, supervision, userIdFromClaims(user));
     await registrarAuditoria(s, user, { accion: "crear", entidad: "equipos", entidadId: insertedId, referencia: String(data.nombre), despues: await snapshotRow(s, "equipos", insertedId) });
+    // Fase 5: "Autorizar a…" otorga la autorizacion FX-THF-AP del equipo en el mismo paso.
+    if (insertedId && autorizarA.length) autorizacion = await autorizarEquipoA(s, request, user, insertedId, autorizarA, payload.folio_fx_thf_ap);
     await s.commit();
   } catch (error) {
     if (isIntegrityError(error)) {
@@ -1225,7 +1231,7 @@ export async function createEquipo({ request, s }: RouteContext): Promise<Respon
     }
     throw error;
   }
-  return json({ message: "Equipo creado", id: insertedId }, 201);
+  return json({ message: "Equipo creado", id: insertedId, autorizados: autorizacion?.autorizados || [], omitidos: autorizacion?.omitidos || [] }, 201);
 }
 
 export async function updateEquipo({ request, s, params }: RouteContext): Promise<Response> {

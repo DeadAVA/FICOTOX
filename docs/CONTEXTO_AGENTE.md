@@ -397,6 +397,26 @@ npm run test:reset-db # solo regenerar la base de prueba
 - `AUTORIZACIONES_OBLIGATORIAS=false` desactiva la validación (solo carga inicial).
   El seed da autorizaciones de ejemplo (folio `FX-THF-AP-DEMO`).
 
+## 8 septies. Fase 5 — flujo de muestras: asignación, estados y firmas (rama `fase-5-muestras`)
+
+- Asignación: `src/lib/server/asignaciones.ts` (tabla `asignaciones_muestra`;
+  `exigirAsignacion(s, user, recepcionId)` → 403 `no_asignado` salvo coordinación
+  `muestras:A`/`ensayos:A`; `filtroAsignadas` para `?mias=1` y el alcance
+  `asignado`, que ya no es diferido). Rutas `/api/samples/reception/<id>/asignaciones`.
+- Estados de la recepción: `RECEPTION_STATE_RANK` en `src/lib/shared/sgc.ts`;
+  `advanceState`, `avanzarRecepcion`, `validarRecepcionSiCompleta` en
+  `src/lib/server/samples-flow.ts`. Solo hacia adelante; estados viejos se mapean
+  al arrancar. Autorizar informe = liberar (hasta la Fase 6).
+- Análisis: `enviar-revision`, `devolver`, `enmendar` (versión + 1, mismo folio,
+  `UNIQUE(folio_num, version)`; la original queda `sustituido` al aprobarse).
+- Decisiones de recepción por solicitud (`decision_recepcion`, `cambiar_folio`,
+  `reabrir_recepcion` en `acciones-criticas.ts`; ejecutores en `recepcion.ts`).
+- Firmas: `src/lib/server/firmas.ts` (`resolverFirmantes` antes de escribir,
+  `guardarFirmantes` después; `POST /api/firmas/confirmar` da token de un solo
+  uso; `GET /api/cuentas/activas`). La regla 3 compara `<rol>_usuario_id`.
+- Etiquetas: `src/lib/server/modules/samples/etiquetas.ts` y
+  `/muestras/recepcion/<id>/etiquetas`.
+
 ## 9. Pendientes conocidos
 
 - El `.env` local tiene `JWT_EXPIRES_HOURS=12` y `CORS_ORIGINS=*`, que anulan los

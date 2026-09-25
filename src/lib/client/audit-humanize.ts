@@ -108,6 +108,18 @@ export const ACTION_TONE: Record<string, AuditTone> = {
   otorgar_autorizacion: "success",
   revocar_autorizacion: "danger",
   vencer_autorizacion: "warning",
+  // Fase 5: etiquetas imprimibles de la recepcion.
+  imprimir_etiquetas: "neutral",
+  // Fase 5: asignacion, flujo del analisis, decisiones de la recepcion y firmas ligadas a cuentas.
+  asignar_muestra: "brand",
+  revocar_asignacion: "warning",
+  enviar_revision: "brand",
+  devolver: "warning",
+  enmendar: "warning",
+  sustituir: "neutral",
+  cambiar_folio: "warning",
+  reabrir: "warning",
+  confirmar_firma: "neutral",
 };
 
 /*
@@ -738,6 +750,40 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
             : `venció ${aut}${referencia ? ` de ${referencia}` : ""} (FX-THF-AP)`;
       if (detalle.vigente_desde || detalle.vigente_hasta) facts.push(`Vigencia: desde ${detalle.vigente_desde ? humanValue("fecha", detalle.vigente_desde) : "—"}${detalle.vigente_hasta ? ` hasta ${humanValue("fecha", detalle.vigente_hasta)}` : " sin fecha de fin"}`);
       if (detalle.folio_fx_thf_ap) facts.push(`Folio FX-THF-AP: ${String(detalle.folio_fx_thf_ap)}`);
+      break;
+    }
+    case "asignar_muestra":
+      action = `asignó ${obj} a ${String(detalle.persona || "una persona")}`;
+      if (detalle.aviso_autorizaciones) facts.push(`Aviso: ${String(detalle.aviso_autorizaciones)}`);
+      break;
+    case "revocar_asignacion":
+      action = `quitó la asignación ${de(obj)} a ${String(detalle.persona || "una persona")}`;
+      break;
+    case "enviar_revision":
+      action = `envió a revisión ${obj}`;
+      break;
+    case "devolver":
+      action = `devolvió con observaciones ${obj}`;
+      break;
+    case "enmendar":
+      action = detalle.enmienda_id ? `abrió una enmienda (versión ${String(detalle.version ?? "?")}) ${de(obj)}` : `registró la versión ${String(detalle.version ?? "?")} ${de(obj)} como enmienda`;
+      break;
+    case "sustituir":
+      action = `${obj} quedó sustituido por su enmienda${detalle.version ? ` (versión ${String(detalle.version)})` : ""}`;
+      break;
+    case "cambiar_folio":
+      action = `cambió el folio ${de(obj)}${detalle.folio_anterior ? ` (antes R ${String(detalle.folio_anterior).padStart(7, "0")})` : ""}`;
+      break;
+    case "reabrir":
+      action = `reabrió ${obj}${detalle.de ? ` (de "${String(detalle.de)}" a "${String(detalle.a || "")}")` : ""}`;
+      break;
+    case "confirmar_firma":
+      action = `${String(detalle.firmante || referencia || "una persona")} confirmó su firma con contraseña`;
+      break;
+    case "imprimir_etiquetas": {
+      const n = Number(detalle.etiquetas || 0);
+      action = `imprimió ${n === 1 ? "la etiqueta" : `${n || ""} etiquetas`.trim()} ${de(obj)}`.replace(/\s+/g, " ");
+      if (detalle.formato) facts.push(detalle.formato === "hoja" ? "Formato: hoja completa" : "Formato: etiqueta 50 × 25 mm");
       break;
     }
     case "entregar": {

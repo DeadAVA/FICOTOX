@@ -6,6 +6,12 @@ import { ArrowRight, CalendarCheck, CalendarX, Cube, FileText, Flask, Identifica
 import { cn } from "@/components/ui/cn";
 import { HoverCard } from "@/components/ui/Overlay";
 import { fmt } from "@/lib/client/format";
+import { ABRIR_MIS_AUTORIZACIONES, EVENTO_ABRIR_CUENTA } from "@/components/shell/AccountSheet";
+
+/* Fase 5: los enlaces a #mis-autorizaciones abren "Mi cuenta" (es una hoja, no una ruta). */
+const abrirCuentaSi = (href: string) => {
+  if (href.endsWith(ABRIR_MIS_AUTORIZACIONES)) window.dispatchEvent(new Event(EVENTO_ABRIR_CUENTA));
+};
 
 /*
  * Avisos del Inicio: una fila por aviso, solo nombre y cuenta; al pasar el
@@ -60,7 +66,7 @@ function AvisoDetail({ aviso }: { aviso: Aviso }) {
       <ul className="flex flex-col">
         {aviso.items.map((item, index) => (
           <li key={`${item.href}-${index}`}>
-            <Link href={item.href} className="press flex items-center gap-3 rounded-[10px] px-3 py-2 hover:bg-brand-faint">
+            <Link href={item.href} onClick={() => abrirCuentaSi(item.href)} className="press flex items-center gap-3 rounded-[10px] px-3 py-2 hover:bg-brand-faint">
               <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", TONE[aviso.tone].dot)} aria-hidden="true" />
               <span className="flex min-w-0 flex-1 flex-col leading-tight">
                 <span className="truncate text-[13px] font-medium text-ink">{item.label}</span>
@@ -70,7 +76,7 @@ function AvisoDetail({ aviso }: { aviso: Aviso }) {
           </li>
         ))}
       </ul>
-      <Link href={aviso.href} className="press m-1 mt-1.5 inline-flex h-8 items-center justify-center gap-1 rounded-[10px] bg-surface-3/80 text-[12.5px] font-medium text-ink hover:bg-surface-3">
+      <Link href={aviso.href} onClick={() => abrirCuentaSi(aviso.href)} className="press m-1 mt-1.5 inline-flex h-8 items-center justify-center gap-1 rounded-[10px] bg-surface-3/80 text-[12.5px] font-medium text-ink hover:bg-surface-3">
         {rest > 0 ? `Ver los ${fmt(aviso.count)}` : "Abrir la lista"} <ArrowRight size={12} weight="bold" />
       </Link>
     </div>
@@ -82,7 +88,7 @@ export function AvisoRow({ aviso }: { aviso: Aviso }) {
   return (
     <li>
       <HoverCard content={<AvisoDetail aviso={aviso} />} side="left" align="start" width={340}>
-        <Link href={aviso.href} className="press group/aviso flex items-center gap-3 px-5 py-3 outline-none transition-colors hover:bg-brand-faint/70 focus-visible:bg-brand-faint/70">
+        <Link href={aviso.href} onClick={() => abrirCuentaSi(aviso.href)} className="press group/aviso flex items-center gap-3 px-5 py-3 outline-none transition-colors hover:bg-brand-faint/70 focus-visible:bg-brand-faint/70">
           <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] transition-transform duration-300 ease-[var(--ease-spring)] group-hover/aviso:scale-105", tone.icon)}>{ICONS[aviso.key] || <Wrench size={17} />}</span>
           <span className="min-w-0 flex-1 truncate text-[13.5px] text-ink">{aviso.label}</span>
           <span className={cn("tnum text-[15px] font-semibold", tone.count)}>{fmt(aviso.count)}</span>

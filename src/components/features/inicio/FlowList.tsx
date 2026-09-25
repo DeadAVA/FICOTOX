@@ -6,6 +6,7 @@ import { ArrowRight, CaretRight, Check, PencilSimple, SealCheck, Eye, FlagChecke
 import { cn } from "@/components/ui/cn";
 import { Tooltip } from "@/components/ui/Overlay";
 import { fmtDate } from "@/lib/client/format";
+import { sampleStatusLabel } from "@/lib/client/samples";
 
 /*
  * "En curso" del Inicio: una tarjeta por recepción que no ha terminado su
@@ -108,7 +109,7 @@ export function FlowCard({ item }: { item: FlowItem }) {
             <span className="min-w-0 truncate text-[13.5px] text-ink">{item.cliente || "Sin solicitante"}</span>
           </div>
           <p className="text-[12px] text-ink-3">
-            {[tipos.join(" + ") || null, `${muestras} ${muestras === 1 ? "muestra" : "muestras"}`, item.dias === 0 ? "hoy" : item.dias === 1 ? "1 día" : `${item.dias} días`].filter(Boolean).join(" · ")}
+            {[item.estado ? sampleStatusLabel(item.estado) : null, tipos.join(" + ") || null, `${muestras} ${muestras === 1 ? "muestra" : "muestras"}`, item.dias === 0 ? "hoy" : item.dias === 1 ? "1 día" : `${item.dias} días`].filter(Boolean).join(" · ")}
           </p>
           <ol className="flex items-start pt-0.5 pr-2" aria-label="Etapas">
             {item.pasos.map((step, index) => (

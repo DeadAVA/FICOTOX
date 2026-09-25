@@ -14,6 +14,8 @@ import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from
 import { ensureSupervisionColumns } from "../../supervision";
 import { exigirAutorizaciones } from "../../autorizaciones";
 import { requisitosProcesamiento } from "../../../shared/autorizaciones";
+import { exigirAsignacion, filtroAsignadas } from "../../asignaciones";
+import { ensureColumnasFirma, guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
 
 /*
  * Portado de modules/samples/procesamiento.py del backend Flask original.
@@ -110,6 +112,7 @@ export async function ensureSamplesProcesamientoSchema(s: Session): Promise<void
   await ensureAnulacionColumns(s, TABLE);
   await ensureActuoColumns(s, TABLE);
   await ensureSupervisionColumns(s, "muestras_procesamiento");
+  await ensureColumnasFirma(s, "muestras_procesamiento", FIRMAS_PROCESAMIENTO);
   markSchemaReady("muestras_procesamiento");
 }
 
@@ -119,8 +122,15 @@ const ORIGEN_REQUERIDO = "El procesamiento debe partir de una recepción de mues
 type ProcessingData = ReturnType<typeof normalizePayload>;
 
 /* Regla 3 de segregacion: quien firma "superviso" no es quien proceso. */
-function exigirSupervisorDistinto(data: { nombre_quien_proceso: string | null; nombre_quien_superviso: string | null }): void {
-  const violacion = evaluarSupervisionCaptura(data.nombre_quien_superviso, [{ etiqueta: "procesó la muestra", nombre: data.nombre_quien_proceso }]);
+/* Fase 5: quien proceso (trabajo tecnico: autorizacion de procesamiento) y quien superviso, de las cuentas activas. */
+const FIRMAS_PROCESAMIENTO: RolFirma[] = [
+  { rol: "proceso", columnaNombre: "nombre_quien_proceso", etiqueta: "Procesó", requisitos: requisitosProcesamiento() },
+  { rol: "superviso", columnaNombre: "nombre_quien_superviso", etiqueta: "Supervisó" },
+];
+
+/* Regla 3: compara cuentas (usuario_id); sin cuenta ligada, los nombres escritos. */
+function exigirSupervisorDistinto(data: { nombre_quien_proceso: string | null; nombre_quien_superviso: string | null } & Record<string, unknown>): void {
+  const violacion = evaluarSupervisionCaptura(data.nombre_quien_superviso, [{ etiqueta: "procesó la muestra", nombre: data.nombre_quien_proceso, usuarioId: data.proceso_usuario_id }], data.superviso_usuario_id);
   if (violacion) throw new HttpError(409, { message: violacion.mensaje, codigo: "segregacion", regla: violacion.regla, clave: violacion.clave });
 }
 
@@ -193,6 +203,8 @@ export async function listProcessingSamples({ request, s }: RouteContext): Promi
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "ensayos", "V");
   const supFiltro = filtroSupervision(request, "p", permiso.auth.userId);
+  // Fase 5: filtro "Mis muestras".
+  const asignadas = await filtroAsignadas(s, permiso.auth.userId, "p.recepcion_id", searchParam(request, "mias") === "1");
   await ensureSamplesProcesamientoSchema(s);
 
   const search = searchParam(request, "search");
@@ -206,6 +218,7 @@ export async function listProcessingSamples({ request, s }: RouteContext): Promi
     FROM muestras_procesamiento p
     WHERE (:incluir_anuladas = 1 OR p.estado <> 'anulada')
       ${supFiltro.sql}
+      ${asignadas.sql}
       AND (:search = ''
        OR p.id_interno LIKE :search_like
        OR CAST(p.folio_num AS CHAR) LIKE :search_like
@@ -243,6 +256,7 @@ export async function getProcessingSample({ request, s, params }: RouteContext):
            observaciones_generales, nombre_quien_proceso,
            nombre_quien_superviso, firma_quien_proceso,
            firma_quien_superviso, uso_inventario_json,
+           proceso_usuario_id, proceso_cargo, superviso_usuario_id, superviso_cargo,
            estado, creado_en, actualizado_en,
            requiere_supervision, supervision_estado, supervisor_id, supervision_observaciones
     FROM muestras_procesamiento
@@ -262,14 +276,18 @@ export async function createProcessingSample({ request, s }: RouteContext): Prom
   const actuo = cargoActuante(request, permiso);
   await ensureSamplesProcesamientoSchema(s);
 
-  const data = normalizePayload(await readJson(request));
+  const payload = await readJson(request);
+  const data = normalizePayload(payload);
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: false, insumosJson: data.uso_inventario_json });
   // Fase 4: autorizacion FX-THF-AP de quien captura.
   await exigirAutorizaciones(s, user, requisitosProcesamiento());
   if (!data.folio_num) {
     data.folio_num = await nextFolioNum(s, TABLE);
   }
+  await resolverFirmantes(s, user, payload, data, FIRMAS_PROCESAMIENTO, null);
   exigirSupervisorDistinto(data);
+  // Fase 5: solo quien esta asignado a la muestra (o la coordinacion).
+  await exigirAsignacion(s, user, data.recepcion_id, permiso.auth);
   // Solo se procesa una muestra recibida, aceptada y vigente.
   await assertOrigin(s, "muestras_recepcion", data.recepcion_id, { requireAccepted: true, requerido: ORIGEN_REQUERIDO });
   const supervision = marcaSupervision(permiso);
@@ -312,7 +330,8 @@ export async function createProcessingSample({ request, s }: RouteContext): Prom
     const id = result.lastrowid as number;
     await applyStageInventory(s, "PROC", id, data.uso_inventario_json, `Procesamiento de muestra folio ${data.folio_num}`, userId);
     await aplicarSupervision(s, TABLE, id, supervision, userId);
-    await advanceState(s, "muestras_recepcion", data.recepcion_id, "en_proceso");
+    await guardarFirmantes(s, TABLE, id, data, FIRMAS_PROCESAMIENTO);
+    await advanceState(s, "muestras_recepcion", data.recepcion_id, "en_procesamiento");
     const despues = await snapshotRow(s, TABLE, id);
     await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues, detalle: { actuo_como: actuo } });
     await s.commit();
@@ -335,14 +354,18 @@ export async function updateProcessingSample({ request, s, params }: RouteContex
   const permiso = await requirePermission(s, user, "ensayos", "E", { objeto: "procesamiento", borrador: String(antes?.estado || "registrada") === "registrada" });
   const actuo = cargoActuante(request, permiso);
   await assertEditableAsync(s, antes, TABLE);
-  const data = normalizePayload(await readJson(request));
+  const payload = await readJson(request);
+  const data = normalizePayload(payload);
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: false, insumosJson: data.uso_inventario_json });
   // Fase 4: autorizacion FX-THF-AP de quien captura.
   await exigirAutorizaciones(s, user, requisitosProcesamiento());
   if (!data.folio_num) {
     return json({ message: "El folio de procesamiento es obligatorio" }, 400);
   }
+  await resolverFirmantes(s, user, payload, data, FIRMAS_PROCESAMIENTO, antes);
   exigirSupervisorDistinto(data);
+  // Fase 5: solo quien esta asignado a la muestra (o la coordinacion).
+  await exigirAsignacion(s, user, data.recepcion_id, permiso.auth);
   // El origen se valida tambien al editar (no se puede quitar ni cambiar por uno invalido).
   await assertOrigin(s, "muestras_recepcion", data.recepcion_id, { requireAccepted: true, requerido: ORIGEN_REQUERIDO });
   const supervision = marcaSupervision(permiso);
@@ -391,7 +414,8 @@ export async function updateProcessingSample({ request, s, params }: RouteContex
     }
     await replaceInventoryUsage(s, processingId, data, userId, insumosDeclarados(antes?.uso_inventario_json));
     await aplicarSupervision(s, TABLE, processingId, supervision, userId);
-    await advanceState(s, "muestras_recepcion", data.recepcion_id, "en_proceso");
+    await guardarFirmantes(s, TABLE, processingId, data, FIRMAS_PROCESAMIENTO);
+    await advanceState(s, "muestras_recepcion", data.recepcion_id, "en_procesamiento");
     const despues = await snapshotRow(s, TABLE, processingId);
     await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: processingId, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { actuo_como: actuo } });
     await s.commit();

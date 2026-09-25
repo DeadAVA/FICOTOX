@@ -17,3 +17,14 @@ export async function autorizarTodo(base, token, usuarioId) {
     });
   }
 }
+
+/* Fase 5: asigna una recepcion a varias personas (lo hace quien llama, p. ej. QA, que tiene muestras:A). */
+export async function asignarRecepcion(base, token, recepcionId, usuarioIds) {
+  for (const usuarioId of usuarioIds.filter(Boolean)) {
+    await fetch(`${base}/samples/reception/${recepcionId}/asignaciones`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ usuario_id: usuarioId, motivo: "Asignación de prueba" }),
+    });
+  }
+}

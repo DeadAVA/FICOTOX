@@ -16,6 +16,7 @@ import { ensureSamplesExtraccionSchema } from "./samples/extraccion";
 import { ensureSamplesProcesamientoSchema } from "./samples/procesamiento";
 import { ensureSamplesRecepcionSchema } from "./samples/recepcion";
 import { diasDesde, formatearFecha, hoyLocal, sumarDias } from "../../shared/fechas";
+import { esCoordinacion, filtroAsignadas, soloAsignado } from "../asignaciones";
 
 /*
  * Datos del Inicio.
@@ -83,14 +84,21 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
   await ensureAnalysisSchema(s);
   await ensureInformesSchema(s);
 
-  const ABIERTAS = "estado NOT IN ('cerrada', 'anulada', 'rechazada')";
-  const total = Number((await s.scalar(`SELECT COUNT(*) FROM muestras_recepcion WHERE ${ABIERTAS}`)) || 0);
+  /*
+   * Fase 5: cada analista (captura ensayos sin ser coordinacion) o quien tiene el
+   * alcance "asignado" ve solo sus muestras: asignadas o registradas por la persona.
+   */
+  const soloMias = soloAsignado(permiso) || (!esCoordinacion(permiso.auth) && !!permisoDe(permiso.auth, "ensayos", "C"));
+  const mias = await filtroAsignadas(s, permiso.auth.userId, "id", soloMias, "creado_por");
+  const ABIERTAS = `estado NOT IN ('cerrada', 'anulada', 'rechazada') ${mias.sql}`;
+  const total = Number((await s.scalar(`SELECT COUNT(*) FROM muestras_recepcion WHERE ${ABIERTAS}`, mias.params)) || 0);
   const recepciones = await s.query(
     `SELECT id, folio_num, solicitante, id_interno, muestra_unica, lote_muestras_json, analisis_json, estado, decision_aceptacion, fecha_recepcion
      FROM muestras_recepcion
      WHERE ${ABIERTAS}
      ORDER BY fecha_recepcion DESC, id DESC
      LIMIT 40`,
+    mias.params,
   );
   if (!recepciones.length) return json({ items: [], resumen: {}, total: 0 });
 
@@ -353,8 +361,9 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
       label: "Autorizaciones por vencer (30 días)",
       tone: "warning",
       count: porVencer.length,
-      href: administraAut ? "/administracion/usuarios" : "/",
-      items: porVencer.slice(0, MAX_ITEMS).map((a) => ({ label: a.propia ? `Tu autorización: ${a.etiqueta}` : `${a.persona} · ${a.etiqueta}`, sub: `Vence el ${fmtDate(a.vigente_hasta)}`, href: administraAut ? "/administracion/usuarios" : "/" })),
+      // Fase 5: a quien no las administra lo lleva a Mi cuenta › Mis autorizaciones.
+      href: administraAut ? "/administracion/usuarios" : "/#mis-autorizaciones",
+      items: porVencer.slice(0, MAX_ITEMS).map((a) => ({ label: a.propia ? `Tu autorización: ${a.etiqueta}` : `${a.persona} · ${a.etiqueta}`, sub: `Vence el ${fmtDate(a.vigente_hasta)}`, href: administraAut ? "/administracion/usuarios" : "/#mis-autorizaciones" })),
     });
   }
 

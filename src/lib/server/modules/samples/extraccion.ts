@@ -13,13 +13,15 @@ import { respuestaSolicitud } from "../../solicitudes";
 import { aplicarSupervision, filtroSupervision, marcaSupervision } from "../../supervision";
 import { recordBitacoraFolios } from "../inventory";
 import { addColumnIfMissing, getTableColumns, markSchemaReady, schemaReady } from "../../schema";
-import { advanceState, anularOSolicitar, applyStageInventory, assertEditableAsync, assertOrigin, conSolicitudes, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
+import { advanceState, anularOSolicitar, applyStageInventory, recepcionDe, assertEditableAsync, assertOrigin, avanzarRecepcion, conSolicitudes, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
 import { EXTRACTION_TYPES, claveForType, normalizeExtractionType, parseExtractionFolioSearch, type ExtractionType } from "../../../shared/extraction";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
 import { ensureEquiposSchema } from "../inventory";
 import { ensureSupervisionColumns } from "../../supervision";
 import { exigirAutorizaciones, requisitosEquipos } from "../../autorizaciones";
 import { requisitosExtraccion } from "../../../shared/autorizaciones";
+import { exigirAsignacion, filtroAsignadas } from "../../asignaciones";
+import { ensureColumnasFirma, guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
 
 /*
  * Portado de modules/samples/extraccion.py del backend Flask original.
@@ -156,11 +158,19 @@ let folioPerTypeVerified = false;
 const ORIGEN_REQUERIDO = "La extracción debe partir de un procesamiento de muestra";
 
 /* Regla 3 de segregacion: quien firma "superviso" no es quien extrajo ni quien hizo la limpieza. */
-function exigirSupervisorDistinto(data: { nombre_quien_extrajo: string | null; nombre_quien_limpieza: string | null; nombre_quien_superviso: string | null }): void {
+/* Fase 5: quien extrajo y quien limpio (trabajo tecnico: autorizacion de extraccion y metodo) y quien superviso, de las cuentas activas. */
+const firmasExtraccion = (tipo: string): RolFirma[] => [
+  { rol: "extrajo", columnaNombre: "nombre_quien_extrajo", etiqueta: "Extrajo", requisitos: requisitosExtraccion(tipo) },
+  { rol: "limpio", columnaNombre: "nombre_quien_limpieza", etiqueta: "Realizó la limpieza", requisitos: requisitosExtraccion(tipo) },
+  { rol: "superviso", columnaNombre: "nombre_quien_superviso", etiqueta: "Supervisó" },
+];
+
+/* Regla 3: compara cuentas (usuario_id); sin cuenta ligada, los nombres escritos. */
+function exigirSupervisorDistinto(data: { nombre_quien_extrajo: string | null; nombre_quien_limpieza: string | null; nombre_quien_superviso: string | null } & Record<string, unknown>): void {
   const violacion = evaluarSupervisionCaptura(data.nombre_quien_superviso, [
-    { etiqueta: "realizó la extracción", nombre: data.nombre_quien_extrajo },
-    { etiqueta: "realizó la limpieza", nombre: data.nombre_quien_limpieza },
-  ]);
+    { etiqueta: "realizó la extracción", nombre: data.nombre_quien_extrajo, usuarioId: data.extrajo_usuario_id },
+    { etiqueta: "realizó la limpieza", nombre: data.nombre_quien_limpieza, usuarioId: data.limpio_usuario_id },
+  ], data.superviso_usuario_id);
   if (violacion) throw new HttpError(409, { message: violacion.mensaje, codigo: "segregacion", regla: violacion.regla, clave: violacion.clave });
 }
 
@@ -179,6 +189,7 @@ export async function ensureSamplesExtraccionSchema(s: Session): Promise<void> {
     await ensureFolioPerType(s);
   }
   await ensureSupervisionColumns(s, "muestras_extraccion");
+  await ensureColumnasFirma(s, TABLE, firmasExtraccion("E-A"));
   markSchemaReady("muestras_extraccion");
   // Solo se marca como verificada cuando la migracion ya quedo confirmada.
   folioPerTypeVerified = true;
@@ -393,6 +404,8 @@ export async function listExtractionSamples({ request, s }: RouteContext): Promi
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "ensayos", "V");
   const supFiltro = filtroSupervision(request, "e", permiso.auth.userId);
+  // Fase 5: filtro "Mis muestras".
+  const asignadas = await filtroAsignadas(s, permiso.auth.userId, "(SELECT p2.recepcion_id FROM muestras_procesamiento p2 WHERE p2.id = e.procesamiento_id)", searchParam(request, "mias") === "1");
   await ensureSamplesExtraccionSchema(s);
 
   const search = searchParam(request, "search");
@@ -412,6 +425,7 @@ export async function listExtractionSamples({ request, s }: RouteContext): Promi
     FROM ${TABLE} e
     WHERE (:tipo = '' OR e.tipo_registro = :tipo)
       ${supFiltro.sql}
+      ${asignadas.sql}
       AND (:incluir_anuladas = 1 OR e.estado <> 'anulada')
       AND (
         :search = ''
@@ -457,6 +471,7 @@ export async function getExtractionSample({ request, s, params }: RouteContext):
            nombre_quien_limpieza, nombre_quien_superviso,
            firma_quien_extrajo, firma_quien_limpieza,
            firma_quien_superviso, uso_inventario_json,
+           extrajo_usuario_id, extrajo_cargo, limpio_usuario_id, limpio_cargo, superviso_usuario_id, superviso_cargo,
            estado, creado_en, actualizado_en,
            requiere_supervision, supervision_estado, supervisor_id, supervision_observaciones
     FROM ${TABLE}
@@ -488,7 +503,10 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
   if (!data.folio_num) {
     data.folio_num = await nextFolioNum(s, TABLE, "tipo_registro = :tipo", { tipo });
   }
+  await resolverFirmantes(s, user, payload, data, firmasExtraccion(tipo), null);
   exigirSupervisorDistinto(data);
+  // Fase 5: solo quien esta asignado a la muestra (o la coordinacion).
+  await exigirAsignacion(s, user, await recepcionDe(s, "muestras_procesamiento", data.procesamiento_id), permiso.auth);
   // Solo se extrae a partir de un procesamiento vigente.
   await assertOrigin(s, "muestras_procesamiento", data.procesamiento_id, { requerido: ORIGEN_REQUERIDO });
   const supervision = marcaSupervision(permiso);
@@ -526,7 +544,9 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
     const id = result.lastrowid as number;
     await applyStageInventory(s, "EXT", id, data.uso_inventario_json, `Extraccion ${data.tipo_registro} folio ${data.folio_num}`, userId);
     await aplicarSupervision(s, TABLE, id, supervision, userId);
+    await guardarFirmantes(s, TABLE, id, data, firmasExtraccion(tipo));
     await advanceState(s, "muestras_procesamiento", data.procesamiento_id, "en_proceso");
+    await avanzarRecepcion(s, "muestras_procesamiento", data.procesamiento_id, "en_extraccion");
     const despues = await snapshotRow(s, TABLE, id);
     await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues, detalle: { actuo_como: actuo } });
     await recordBitacoraFolios(s, (safeJsonLoad(data.equipos_json, []) as Array<{ equipo_id?: unknown; folio_bitacora?: unknown }>).map((e) => ({ equipoId: e.equipo_id, folio: e.folio_bitacora })));
@@ -561,7 +581,10 @@ export async function updateExtractionSample({ request, s, params }: RouteContex
   if (!data.folio_num) {
     return json({ message: "El folio de extraccion es obligatorio" }, 400);
   }
+  await resolverFirmantes(s, user, payload, data, firmasExtraccion(tipo), antes);
   exigirSupervisorDistinto(data);
+  // Fase 5: solo quien esta asignado a la muestra (o la coordinacion).
+  await exigirAsignacion(s, user, await recepcionDe(s, "muestras_procesamiento", data.procesamiento_id), permiso.auth);
   // El origen se valida tambien al editar.
   await assertOrigin(s, "muestras_procesamiento", data.procesamiento_id, { requerido: ORIGEN_REQUERIDO });
   const supervision = marcaSupervision(permiso);
@@ -607,7 +630,9 @@ export async function updateExtractionSample({ request, s, params }: RouteContex
     }
     await replaceInventoryUsage(s, extractionId, data, userId, insumosDeclarados(antes?.uso_inventario_json));
     await aplicarSupervision(s, TABLE, extractionId, supervision, userId);
+    await guardarFirmantes(s, TABLE, extractionId, data, firmasExtraccion(tipo));
     await advanceState(s, "muestras_procesamiento", data.procesamiento_id, "en_proceso");
+    await avanzarRecepcion(s, "muestras_procesamiento", data.procesamiento_id, "en_extraccion");
     const despues = await snapshotRow(s, TABLE, extractionId);
     await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: extractionId, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { actuo_como: actuo } });
     await recordBitacoraFolios(s, (safeJsonLoad(data.equipos_json, []) as Array<{ equipo_id?: unknown; folio_bitacora?: unknown }>).map((e) => ({ equipoId: e.equipo_id, folio: e.folio_bitacora })));

@@ -37,12 +37,12 @@ export async function samplesSummary(ctx: RouteContext): Promise<Response> {
       ) AS total_muestras,
       0 AS pendientes,
       (
-        (SELECT COUNT(*) FROM muestras_recepcion WHERE estado = 'en_proceso') +
+        (SELECT COUNT(*) FROM muestras_recepcion WHERE estado IN ('en_procesamiento', 'en_extraccion', 'en_analisis', 'en_revision_tecnica')) +
         (SELECT COUNT(*) FROM muestras_procesamiento WHERE estado = 'en_proceso') +
         (SELECT COUNT(*) FROM muestras_extraccion WHERE estado = 'en_proceso')
       ) AS en_proceso,
       (
-        (SELECT COUNT(*) FROM muestras_recepcion WHERE estado = 'completada') +
+        (SELECT COUNT(*) FROM muestras_recepcion WHERE estado IN ('validada', 'informe_elaborado', 'liberada', 'cerrada')) +
         (SELECT COUNT(*) FROM muestras_procesamiento WHERE estado = 'completada') +
         (SELECT COUNT(*) FROM muestras_extraccion WHERE estado = 'completada')
       ) AS completadas

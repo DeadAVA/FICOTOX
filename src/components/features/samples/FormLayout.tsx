@@ -8,6 +8,7 @@ import { checkboxClass, radioClass } from "@/components/ui/Field";
 import { SegmentedTabs } from "@/components/ui/PageHeader";
 import { Badge, type Tone } from "@/components/ui/Primitives";
 import { PersonSelect } from "./PersonSelect";
+import { FirmanteSelect, type FirmanteState } from "./FirmanteSelect";
 import { SignaturePad } from "./SignaturePad";
 import type { PersonaCapacidad } from "@/lib/client/personal";
 import { formatearFechaHora } from "@/lib/shared/fechas";
@@ -454,7 +455,7 @@ export function ChoiceCard({ checked, onChange, label, description, type = "chec
 const slug = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 /* Persona responsable: se elige del personal autorizado (o "Otra persona…") y firma compacta. El cargo sale del rol de la persona (no se captura). Varias se apilan. */
-export function PersonCard({ title, name, onName, cargo, onCargo, signature, onSignature, disabled = false, requires = "muestras" }: { title: string; name: string; onName: (v: string) => void; cargo?: string; onCargo?: (v: string) => void; signature: string; onSignature: (v: string) => void; disabled?: boolean; requires?: PersonaCapacidad }) {
+export function PersonCard({ title, name, onName, cargo, onCargo, signature, onSignature, disabled = false, requires = "muestras", firmante, onFirmante, firmanteSesion = true }: { title: string; name: string; onName: (v: string) => void; cargo?: string; onCargo?: (v: string) => void; signature: string; onSignature: (v: string) => void; disabled?: boolean; requires?: PersonaCapacidad; /* Fase 5: firma ligada a una cuenta activa (con contrasena si no es la sesion). */ firmante?: FirmanteState; onFirmante?: (v: FirmanteState) => void; firmanteSesion?: boolean }) {
   const id = `persona-${slug(title)}`;
   return (
     <div className="on-panel grid gap-4 rounded-[12px] bg-surface-2 p-4 ring-1 ring-line md:grid-cols-[minmax(0,1fr)_300px]">
@@ -463,19 +464,35 @@ export function PersonCard({ title, name, onName, cargo, onCargo, signature, onS
         <div className="grid gap-3">
           <label className="flex flex-col gap-1.5 text-[12.5px] font-medium text-ink-2" htmlFor={id}>
             Nombre
-            <PersonSelect
-              id={id}
-              value={name}
-              onChange={(value, persona) => {
-                onName(value);
-                // Un solo cargo: el rol que le da la capacidad pedida (no la lista de todos sus roles).
-                onCargo?.(persona?.cargos?.[requires] || persona?.roles?.[0] || "");
-              }}
-              requires={requires}
-              disabled={disabled}
-            />
+            {firmante && onFirmante ? (
+              <FirmanteSelect
+                id={id}
+                title={title}
+                value={firmante}
+                nombre={name}
+                disabled={disabled}
+                porOmisionSesion={firmanteSesion}
+                onChange={(value, cuenta) => {
+                  onFirmante(value);
+                  onName(cuenta?.nombre || "");
+                  onCargo?.(cuenta?.cargo || "");
+                }}
+              />
+            ) : (
+              <PersonSelect
+                id={id}
+                value={name}
+                onChange={(value, persona) => {
+                  onName(value);
+                  // Un solo cargo: el rol que le da la capacidad pedida (no la lista de todos sus roles).
+                  onCargo?.(persona?.cargos?.[requires] || persona?.roles?.[0] || "");
+                }}
+                requires={requires}
+                disabled={disabled}
+              />
+            )}
           </label>
-          {cargo ? <p className="text-[12.5px] text-ink-3">Cargo: {cargo}</p> : null}
+          {cargo && !(firmante && onFirmante) ? <p className="text-[12.5px] text-ink-3">Cargo: {cargo}</p> : null}
         </div>
       </div>
       <div className="flex min-w-0 flex-col gap-1.5">

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Archive, FloppyDisk, Plus, X } from "@phosphor-icons/react";
+import { Archive, ArrowCounterClockwise, FloppyDisk, Hash, Plus, Printer, UserPlus, X } from "@phosphor-icons/react";
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -24,7 +24,10 @@ import { SignaturePad } from "./SignaturePad";
 import { FolioChip, SampleStatus, SolicitudCallout, SupervisionCallout } from "./status";
 import { formatearHora } from "@/lib/shared/fechas";
 import { AvisoAutorizacion } from "./AvisoAutorizacion";
+import { DECISIONES_CON_AUTORIZACION, recepcionAsignable, useAccionesRecepcion } from "./RecepcionAcciones";
+import { useConfirm } from "@/components/ui/Overlay";
 import { requisitosRecepcion } from "@/lib/shared/autorizaciones";
+import { FirmanteSelect, firmanteDe, firmantesPayload, type FirmanteState } from "./FirmanteSelect";
 
 /*
  * Formato de recepcion de muestras (FX-TCF-GMR) como pagina completa, con
@@ -248,6 +251,8 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
   const router = useRouter();
   const { token, can } = useSession();
   const [form, setForm] = useState<SampleForm>(() => (item ? formFromItem(item) : defaultForm()));
+  // Fase 5: quien recibe se liga a una cuenta (por omisión la sesión; otra persona confirma con su contraseña).
+  const [recibio, setRecibio] = useState<FirmanteState>(() => firmanteDe(item, "recibio"));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [disposicion, setDisposicion] = useState({ tipo: "", tipoOtro: "", fecha: todayIso(), responsable: formatActiveUserSignature(), remanentes: "", observaciones: "", firma: "" });
@@ -256,6 +261,13 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
   const canEdit = editing ? can("muestras", "E", { objeto: "recepcion", borrador: String(item?.estado || "registrada") === "registrada" }) : can("muestras", "C", { objeto: "recepcion", borrador: true });
   // Con una solicitud de autorizacion pendiente (Fase 3) el registro no se edita.
   const readOnly = editing && (isSampleReadOnly(item?.estado) || !canEdit || !!item?.solicitud_pendiente);
+  // Fase 5: asignar, cambiar folio y reabrir (sin muestras:A quedan como solicitud para la Coord. Tecnica).
+  const acciones = useAccionesRecepcion();
+  const confirm = useConfirm();
+  const estadoGuardado = String(item?.estado || "");
+  const puedeAsignar = editing && can("muestras", "A") && recepcionAsignable(item);
+  const puedeCambiarFolio = editing && !item?.solicitud_pendiente && !["anulada", "liberada", "cerrada", "rechazada"].includes(estadoGuardado) && can("muestras", "E", { objeto: "recepcion" });
+  const puedeReabrir = editing && !item?.solicitud_pendiente && ["cerrada", "rechazada"].includes(estadoGuardado) && can("muestras", "E", { objeto: "recepcion" });
   const patch = (changes: Partial<SampleForm>) => setForm((prev) => ({ ...prev, ...changes }));
 
   useEffect(() => {
@@ -357,7 +369,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
   };
 
   const handleSave = async () => {
-    const payload = buildPayload();
+    const payload = { ...buildPayload(), firmantes: firmantesPayload({ recibio }) };
     const missing = missingSections(sections);
     if (missing.length) return fail(missingMessage(missing), missing[0].id);
     if (!payload.folio_num) return fail("El folio es obligatorio", "sec-recepcion");
@@ -369,15 +381,24 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
     if (form.decision === "aceptada" && hasNc) return fail("Hay requisitos que no cumplen: la muestra solo puede aceptarse con desviación o rechazarse", "sec-aceptacion");
     if (needsComunicacion && (!form.comunicacion.fecha || !form.comunicacion.medio)) return fail("Registra la comunicación al cliente (fecha y medio)", "sec-aceptacion");
     if (!canEdit) return fail("No tienes permiso para esta acción", "sec-recepcion");
+    // Fase 5: rechazo o aceptacion con desviacion los autoriza la Coord. Tecnica (muestras:A).
+    if (DECISIONES_CON_AUTORIZACION.has(form.decision) && form.decision !== String(item?.decision_aceptacion || "") && !can("muestras", "A")) {
+      const seguir = await confirm({
+        title: "La decisión quedará como solicitud",
+        description: `"${ACCEPTANCE_DECISIONS.find((d) => d.value === form.decision)?.label || form.decision}" la autoriza la Coord. del Área Técnica. La recepción se guarda sin esa decisión y queda bloqueada hasta que la aprueben o rechacen.`,
+        confirmLabel: "Guardar y solicitar",
+      });
+      if (!seguir) return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       if (editing) {
-        await sendJsonAuth("PUT", `${API_BASE_URL}/samples/reception/${item!.id}`, token, payload);
-        toast.success("Recepción actualizada");
+        const data = await sendJsonAuth("PUT", `${API_BASE_URL}/samples/reception/${item!.id}`, token, payload);
+        acciones.avisarSolicitud(data, "Recepción actualizada");
       } else {
-        await sendJsonAuth("POST", `${API_BASE_URL}/samples/reception`, token, payload);
-        toast.success("Recepción registrada");
+        const data = await sendJsonAuth("POST", `${API_BASE_URL}/samples/reception`, token, payload);
+        acciones.avisarSolicitud(data, "Recepción registrada");
       }
       invalidate("muestras", "dashboard");
       router.push("/muestras/recepcion");
@@ -533,6 +554,26 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
           <Button variant="secondary" onClick={() => router.push("/muestras/recepcion")}>
             {readOnly ? "Volver" : "Cancelar"}
           </Button>
+          {editing ? (
+            <Button variant="secondary" icon={<Printer size={16} />} onClick={() => router.push(`/muestras/recepcion/${item!.id}/etiquetas`)}>
+              Imprimir etiqueta
+            </Button>
+          ) : null}
+          {puedeAsignar ? (
+            <Button variant="secondary" icon={<UserPlus size={16} />} onClick={() => acciones.asignar(item!)}>
+              Asignar
+            </Button>
+          ) : null}
+          {puedeCambiarFolio ? (
+            <Button variant="secondary" icon={<Hash size={16} />} onClick={() => acciones.cambiarFolio(item!)}>
+              Cambiar folio…
+            </Button>
+          ) : null}
+          {puedeReabrir ? (
+            <Button variant="secondary" icon={<ArrowCounterClockwise size={16} />} onClick={() => acciones.reabrir(item!)}>
+              Reabrir…
+            </Button>
+          ) : null}
           {!readOnly ? (
             <Button onClick={handleSave} loading={submitting} icon={<FloppyDisk size={16} />}>
               {editing ? "Guardar cambios" : "Registrar recepción"}
@@ -543,6 +584,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
     >
       <SupervisionCallout item={item} />
       <SolicitudCallout item={item} />
+      {acciones.dialogo}
       {!readOnly ? <AvisoAutorizacion requisitos={requisitosRecepcion()} /> : null}
       {readOnly && item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
@@ -553,8 +595,8 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
 
       <FormCard id="sec-recepcion" title="Datos de la recepción" description="Quién recibe, cuándo y por qué medio.">
         <FormGrid cols={4}>
-          <Field label="Folio" htmlFor="r-folio" required hint="Se sugiere el siguiente disponible.">
-            <Input id="r-folio" type="number" min="1" inputMode="numeric" value={form.folio} onChange={(event) => patch({ folio: event.target.value })} mono invalid={!!error && !form.folio} />
+          <Field label="Folio" htmlFor="r-folio" required hint={editing ? "Ya no se edita; usa «Cambiar folio…»." : "Se sugiere el siguiente disponible."}>
+            <Input id="r-folio" type="number" min="1" inputMode="numeric" value={form.folio} readOnly={editing} onChange={(event) => patch({ folio: event.target.value })} mono invalid={!!error && !form.folio} />
           </Field>
           <Field label="Fecha de recepción" htmlFor="r-fecha" required>
             <DateInput id="r-fecha" value={form.fechaRecepcion} onChange={(value) => patch({ fechaRecepcion: value })} />
@@ -573,7 +615,16 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
             </Select>
           </Field>
           <Field label="Recibido por" htmlFor="r-recibido" required className="sm:col-span-2">
-            <PersonSelect id="r-recibido" value={form.recibidoPor} onChange={(name) => patch({ recibidoPor: name })} requires="muestras" placeholder="Quién recibe la muestra" />
+            <FirmanteSelect
+              id="r-recibido"
+              title="Recibido por"
+              value={recibio}
+              nombre={item ? form.recibidoPor : ""}
+              onChange={(value, cuenta) => {
+                setRecibio(value);
+                patch({ recibidoPor: cuenta?.nombre || "" });
+              }}
+            />
           </Field>
           <Field label="Solicitante" htmlFor="r-solicitante" className="sm:col-span-2">
             <Input id="r-solicitante" maxLength={180} placeholder="Cliente o institución que entrega" value={form.solicitante} onChange={(event) => patch({ solicitante: event.target.value })} />

@@ -44,6 +44,7 @@ function ExtraccionList() {
   const [etapa, setEtapa] = useState<EtapaFilter>("");
   const [molienda, setMolienda] = useState<MoliendaFilter>("");
   const [showAnuladas, setShowAnuladas] = useState(false);
+  const [mias, setMias] = useState(false);
   const debounced = useDebouncedValue(search);
   const { anular, restaurar } = useAnulacion("extraction", formatExtractionFolio);
 
@@ -53,10 +54,11 @@ function ExtraccionList() {
       const query = new URLSearchParams({ search: debounced.trim() });
       if (tipo) query.set("tipo", tipo);
       if (showAnuladas) query.set("anuladas", "1");
+      if (mias) query.set("mias", "1");
       const data = await getJsonAuth(`${API_BASE_URL}/samples/extraction?${query.toString()}`, token);
       return (data.items || []) as ApiRecord[];
     },
-    { enabled: !!token, deps: [debounced, tipo, showAnuladas] },
+    { enabled: !!token, deps: [debounced, tipo, showAnuladas, mias] },
   );
   const items = resource.data;
 
@@ -110,7 +112,7 @@ function ExtraccionList() {
       ],
     },
   ];
-  const toggles: FilterToggle[] = [{ key: "anuladas", label: "Mostrar anuladas", checked: showAnuladas, onChange: setShowAnuladas }];
+  const toggles: FilterToggle[] = [{ key: "mias", label: "Mis muestras", description: "Solo las muestras asignadas a ti o que registraste.", checked: mias, onChange: setMias }, { key: "anuladas", label: "Mostrar anuladas", checked: showAnuladas, onChange: setShowAnuladas }];
 
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulada = item.estado === "anulada";

@@ -8,6 +8,7 @@ import { requirePermission, type Autorizacion } from "./rbac";
 import { exigirSinSupervisionPendiente } from "./supervision";
 import { crearSolicitud, exigirSinSolicitudPendiente, pendientesDe, serializarSolicitud, type Solicitud } from "./solicitudes";
 import { ESTADOS_BORRADOR } from "../shared/acciones-criticas";
+import { RECEPTION_STATE_RANK } from "../shared/sgc";
 
 /*
  * Reglas comunes del flujo de muestras (ISO/IEC 17025 7.4, 7.5 y la
@@ -42,7 +43,8 @@ export const ANULADO_VALUE: Record<SampleTable, string> = {
 
 /* Estados desde los que ya no se edita ni se continua el flujo. */
 const LOCKED_STATES: Record<SampleTable, Set<string>> = {
-  muestras_recepcion: new Set(["anulada", "rechazada", "cerrada"]),
+  // Fase 5: una recepcion liberada (informe autorizado) ya no se edita.
+  muestras_recepcion: new Set(["anulada", "rechazada", "cerrada", "liberada"]),
   muestras_procesamiento: new Set(["anulada"]),
   muestras_extraccion: new Set(["anulada"]),
   muestras_analisis: new Set(["anulado", "aprobado"]),
@@ -108,7 +110,9 @@ export async function ensureActuoColumns(s: Session, table: string): Promise<voi
 export function folioLabel(table: SampleTable, row: Row | null | undefined): string {
   if (!row) return LABEL[table];
   const prefix = table === "muestras_extraccion" ? String(row.tipo_registro || "E-A") : FOLIO_PREFIX[table];
-  return `${prefix} ${String(row.folio_num || 0).padStart(7, "0")}`;
+  // Fase 5: las enmiendas de analisis conservan el folio con su version.
+  const version = table === "muestras_analisis" && Number(row.version || 1) > 1 ? ` v${row.version}` : "";
+  return `${prefix} ${String(row.folio_num || 0).padStart(7, "0")}${version}`;
 }
 
 export function isAnulado(table: SampleTable, row: Row | null | undefined): boolean {
@@ -251,8 +255,38 @@ export async function advanceState(s: Session, table: SampleTable, id: number | 
   if (!row) return;
   const current = String(row.estado || "");
   if (LOCKED_STATES[table].has(current)) return;
-  if ((STATE_RANK[current] ?? 0) >= (STATE_RANK[estado] ?? 0)) return;
+  const rank = table === "muestras_recepcion" ? RECEPTION_STATE_RANK : STATE_RANK;
+  if ((rank[current] ?? 0) >= (rank[estado] ?? 0)) return;
   await s.execute(`UPDATE ${table} SET estado = :estado WHERE id = :id`, { estado, id });
+}
+
+/* Fase 5: avanza la recepcion de origen de un registro (procesamiento, extraccion o analisis). */
+export async function avanzarRecepcion(s: Session, table: SampleTable, id: number | null | undefined, estado: string): Promise<void> {
+  const recepcionId = await recepcionDe(s, table, id);
+  if (recepcionId) await advanceState(s, "muestras_recepcion", recepcionId, estado);
+}
+
+/* Recepcion a la que pertenece un registro del flujo. */
+export async function recepcionDe(s: Session, table: SampleTable, id: number | null | undefined): Promise<number | null> {
+  if (!id) return null;
+  if (table === "muestras_recepcion") return Number(id);
+  if (table === "muestras_procesamiento" || table === "muestras_analisis") {
+    const v = await s.scalar(`SELECT recepcion_id FROM ${table} WHERE id = :id`, { id });
+    return v ? Number(v) : null;
+  }
+  const v = await s.scalar("SELECT p.recepcion_id FROM muestras_extraccion e INNER JOIN muestras_procesamiento p ON p.id = e.procesamiento_id WHERE e.id = :id", { id });
+  return v ? Number(v) : null;
+}
+
+/*
+ * Fase 5: la recepcion queda "validada" cuando todos sus analisis vigentes (ni
+ * anulados ni sustituidos) estan aprobados.
+ */
+export async function validarRecepcionSiCompleta(s: Session, recepcionId: number | null | undefined): Promise<void> {
+  if (!recepcionId) return;
+  const pendientes = Number((await s.scalar("SELECT COUNT(*) FROM muestras_analisis WHERE recepcion_id = :id AND estado NOT IN ('aprobado', 'anulado', 'sustituido')", { id: recepcionId })) || 0);
+  const aprobados = Number((await s.scalar("SELECT COUNT(*) FROM muestras_analisis WHERE recepcion_id = :id AND estado = 'aprobado'", { id: recepcionId })) || 0);
+  if (!pendientes && aprobados) await advanceState(s, "muestras_recepcion", recepcionId, "validada");
 }
 
 export async function readMotivo(request: Request): Promise<string> {

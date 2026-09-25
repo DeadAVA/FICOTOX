@@ -21,8 +21,8 @@ import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { ANALYSIS_METHODS, ANALYSIS_TYPES } from "@/lib/shared/sgc";
 
-type EstadoFilter = "" | "pendiente" | "registrado" | "revisado" | "aprobado";
-const ESTADOS: string[] = ["pendiente", "registrado", "revisado", "aprobado"];
+type EstadoFilter = "" | "pendiente" | "registrado" | "en_revision" | "revisado" | "aprobado" | "sustituido";
+const ESTADOS: string[] = ["pendiente", "registrado", "en_revision", "revisado", "aprobado", "sustituido"];
 
 export default function AnalisisListPage() {
   return (
@@ -45,6 +45,7 @@ function AnalisisList() {
   const [estado, setEstado] = useState<EstadoFilter>(ESTADOS.includes(initialFilter) ? (initialFilter as EstadoFilter) : "");
   useParamChange("filtro", (value) => setEstado(ESTADOS.includes(value) ? (value as EstadoFilter) : ""));
   const [showAnulados, setShowAnulados] = useState(false);
+  const [mias, setMias] = useState(false);
   const [tipoFilter, setTipoFilter] = useState("");
   const debounced = useDebouncedValue(search);
   const folioA = (item: ApiRecord) => `A ${String(Number(item.folio_num || 0)).padStart(7, "0")}`;
@@ -57,10 +58,11 @@ function AnalisisList() {
       if (estado) query.set("estado", estado);
       if (recepcionId) query.set("recepcion_id", recepcionId);
       if (showAnulados) query.set("anulados", "1");
+      if (mias) query.set("mias", "1");
       const data = await getJsonAuth(`${API_BASE_URL}/samples/analysis?${query.toString()}`, token);
       return (data.items || []) as ApiRecord[];
     },
-    { enabled: !!token, deps: [debounced, estado, showAnulados, recepcionId] },
+    { enabled: !!token, deps: [debounced, estado, showAnulados, recepcionId, mias] },
   );
   const items = (resource.data || []).filter((item) => !tipoFilter || item.tipo_analisis === tipoFilter);
   const loaded = !!resource.data;
@@ -79,9 +81,11 @@ function AnalisisList() {
       options: [
         { value: "", label: "Todos" },
         { value: "pendiente", label: "Por revisar o aprobar" },
-        { value: "registrado", label: "Por revisar" },
+        { value: "registrado", label: "En captura" },
+        { value: "en_revision", label: "Por revisar" },
         { value: "revisado", label: "Por aprobar" },
         { value: "aprobado", label: "Aprobados" },
+        { value: "sustituido", label: "Sustituidos (enmendados)" },
       ],
     },
     {
@@ -93,7 +97,7 @@ function AnalisisList() {
       options: [{ value: "", label: "Cualquiera" }, ...ANALYSIS_TYPES.map((t) => ({ value: t.value, label: t.short || t.label, count: count((i) => i.tipo_analisis === t.value) }))],
     },
   ];
-  const toggles: FilterToggle[] = [{ key: "anulados", label: "Mostrar anulados", checked: showAnulados, onChange: setShowAnulados }];
+  const toggles: FilterToggle[] = [{ key: "mias", label: "Mis muestras", description: "Solo las muestras asignadas a ti o que registraste.", checked: mias, onChange: setMias }, { key: "anulados", label: "Mostrar anulados", checked: showAnulados, onChange: setShowAnulados }];
 
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulado = item.estado === "anulado";

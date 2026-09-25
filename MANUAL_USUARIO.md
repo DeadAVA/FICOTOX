@@ -453,7 +453,55 @@ Ademas de su rol, cada persona solo puede operar las actividades, metodos y equi
 - **Quien las registra**: la Coordinacion del Area Tecnica, Mejora Continua o la Responsable General, desde **Administracion › Usuarios**, ficha de la persona, pestaña **Autorizaciones (FX-THF-AP)**. **Agregar** pide tipo, actividad/metodo/equipo, vigencia (desde y, si aplica, hasta), el folio del formato en papel y el motivo; **Revocar** pide el motivo. Ambas piden su contrasena y quedan en la bitacora. Nadie puede otorgarse ni revocarse autorizaciones a si mismo. Nada se borra: una autorizacion revocada o vencida sigue en la lista con su estado.
 - **Si le falta una**: al abrir el formato aparece un aviso con lo que le falta, y al guardar el sistema lo impide con un mensaje como "No tienes autorización vigente para extracción DSP" o "... para el equipo CE1". Pida a su coordinacion que la registre.
 - **Mis autorizaciones**: en **Mi cuenta** puede consultar (solo lectura) sus autorizaciones, su vigencia, folio y estado.
-- **Vencimientos**: el Inicio avisa de las autorizaciones que vencen en los proximos 30 dias, a la persona y a quien las administra. Al vencer, la autorizacion deja de valer sola y queda anotado en la bitacora.
+- **Vencimientos**: el Inicio avisa de las autorizaciones que vencen en los proximos 30 dias, a la persona y a quien las administra. Al vencer, la autorizacion deja de valer sola y queda anotado en la bitacora. Si usted no administra autorizaciones, el aviso lo lleva a **Mi cuenta › Mis autorizaciones**.
+- **Autorizar a… al dar de alta un equipo**: quien puede otorgar autorizaciones (Coord. Area Tecnica, Mejora Continua, Responsable General) ve en el alta del equipo la seccion **Autorizar a…**: elija a las personas y, en el mismo paso, quedan autorizadas para usar ese equipo (con folio FX-THF-AP opcional). Pide su contrasena y queda en la bitacora; usted no puede autorizarse a si mismo.
+
+### 13.11 Asignacion de muestras
+
+- **Quien asigna**: la Coordinacion del Area Tecnica (permiso de aprobar en muestras). Desde la recepcion (boton **Asignar**) o desde el menu de su fila en la lista, elige una o varias personas de las cuentas activas. Solo se asignan recepciones aceptadas (o aceptadas con desviacion). Reasignar es revocar una asignacion (con motivo) y asignar a otra persona; nada se borra y todo queda en la bitacora.
+- **Aviso de autorizaciones**: si la persona no tiene las autorizaciones FX-THF-AP de los analisis solicitados (procesamiento, analisis y el metodo), el sistema lo avisa al asignar. Es un aviso, no impide la asignacion; pida que se las registren antes de que trabaje la muestra.
+- **Sin asignacion**: para crear o editar el procesamiento, la extraccion o el analisis de una muestra hay que estar asignado a su recepcion. Si no, el sistema responde "No estás asignado a la muestra R ...". La coordinacion (aprobar en muestras o en ensayos) no necesita asignacion.
+- **Alcance "asignado"**: quien tiene este alcance en muestras (p. ej. Tecnico Analista, estudiante) solo ve y edita las recepciones asignadas a el o registradas por el.
+- **Mis muestras**: en las listas de recepcion, procesamiento, extraccion y analisis, el filtro **Mis muestras** muestra solo las muestras asignadas a usted. En el Inicio, "En curso" le muestra a cada analista solo sus muestras.
+
+### 13.12 Estados de la recepcion
+
+La recepcion avanza solo hacia adelante, en este orden:
+
+1. **Registrada** — se capturo la recepcion.
+2. **Aceptada**, **Aceptada con desviacion** o **Rechazada** — decision de aceptacion.
+3. **En procesamiento** — se guardo el procesamiento.
+4. **En extraccion** — se guardo una extraccion.
+5. **En analisis** — se guardo un analisis.
+6. **En revision tecnica** — un analisis se envio a revision (o se reviso).
+7. **Validada** — todos los analisis vigentes de la recepcion estan aprobados.
+8. **Informe elaborado** — se creo el informe.
+9. **Liberada** — se autorizo el informe (por ahora autorizar equivale a liberar; se separan en la siguiente fase).
+10. **Cerrada** — se registro la disposicion final.
+
+Los botones y acciones de cada fila dependen del estado y de su permiso. Una recepcion liberada, cerrada, rechazada o anulada ya no se edita.
+
+### 13.13 Enviar a revision, devolver y enmiendas de analisis
+
+- **Enviar a revision**: cuando el analista termina, usa **Enviar a revision**. Desde ese momento ya no puede editarlo.
+- **Devolver con observaciones**: el revisor puede devolver un analisis enviado a revision, con observaciones, para que el analista lo corrija antes de aprobarlo. Al devolverlo vuelve a quedar editable.
+- **Enmienda**: un analisis aprobado no se edita. Para corregirlo se usa **Enmendar**, con motivo obligatorio: se crea una nueva version (mismo folio, "v2", "v3"...) que sigue el flujo normal (enviar a revision, revisar, aprobar). Al aprobarse la enmienda, la version original queda **Sustituida** y se conserva. La enmienda no vuelve a descontar inventario.
+
+### 13.14 Decisiones que autoriza la Coordinacion Tecnica
+
+Estas acciones sobre una recepcion las autoriza alguien con permiso de aprobar en muestras (Coord. Area Tecnica), distinto de quien las pide. Si quien las hace ya tiene ese permiso, se aplican directo (con su contrasena).
+
+- **Rechazo o aceptacion con desviacion**: si usted registra esa decision sin tener el permiso, la recepcion se guarda y la decision queda **pendiente de autorizacion** en **Por autorizar**; al aprobarla la coordinacion, se aplica.
+- **Cambio de folio**: el folio ya no se edita despues de crear la recepcion. Use **Cambiar folio**, con el folio nuevo y el motivo.
+- **Reapertura**: una recepcion cerrada o rechazada se reabre con **Reabrir** y motivo. Vuelve al estado previo (una rechazada vuelve a Registrada, sin decision, para decidir de nuevo; una cerrada vuelve al estado en que se cerro).
+
+### 13.15 Firmas con contrasena del firmante
+
+En recepcion, procesamiento, extraccion y analisis, las personas que firman (recibio, proceso, superviso, extrajo, realizo la limpieza, analista) se eligen de las cuentas activas; se guarda su cuenta, su nombre y su cargo. Si quien firma no es usted, esa persona debe escribir su propia contrasena en ese momento para confirmar su firma. Quien firma un trabajo tecnico (proceso, extrajo, limpio, analista) debe tener la autorizacion FX-THF-AP de esa actividad y metodo. Quien supervisa no puede ser la misma cuenta que proceso, extrajo o limpio.
+
+### 13.16 Etiquetas imprimibles
+
+En la recepcion (o en el menu de su fila) use **Imprimir etiqueta**. Se abre una vista con una etiqueta por muestra del lote (folio R, ID interno, organismo, fecha de muestreo, fecha de recepcion y lugar de resguardo), en tamaño pequeño (50 × 25 mm) o en **Hoja completa**. Al imprimir queda en la bitacora "imprimió etiquetas".
 
 ## 14. Buenas practicas de uso
 
@@ -486,6 +534,10 @@ Revise que alguno de sus roles tenga R (revisar) o A (aprobar/autorizar) en Ensa
 ### "No tienes autorización vigente para ..."
 
 Le falta la autorizacion FX-THF-AP de la actividad, el metodo o el equipo que indica el mensaje, o ya vencio o fue revocada. Consulte **Mi cuenta › Mis autorizaciones** y pida a la Coordinacion del Area Tecnica, a Mejora Continua o a la Responsable General que la registre (ver 13.10).
+
+### "No estás asignado a la muestra ..."
+
+Para trabajar el procesamiento, la extraccion o el analisis de una muestra debe estar asignado a su recepcion. Pida a la Coordinacion del Area Tecnica que se la asigne (13.11).
 
 ### El registro aparece en solo lectura
 

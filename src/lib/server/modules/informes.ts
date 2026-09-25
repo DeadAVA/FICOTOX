@@ -427,6 +427,8 @@ export async function createInforme({ request, s }: RouteContext): Promise<Respo
     );
     const id = result.lastrowid as number;
     await aplicarSupervision(s, TABLE, id, supervision, userId);
+    // Fase 5: informe creado -> la recepcion queda "informe_elaborado".
+    await advanceState(s, "muestras_recepcion", Number(recepcion.id), "informe_elaborado");
     const despues = await snapshotRow(s, TABLE, id);
     await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), despues, detalle: { actuo_como: actuo } });
     await s.commit();
@@ -596,7 +598,8 @@ export async function authorizeInforme({ request, s, params }: RouteContext): Pr
   await fs.promises.writeFile(path.join(informesDir(), filename), pdf);
   const sha = createHash("sha256").update(pdf).digest("hex");
   await s.execute(`UPDATE ${TABLE} SET archivo_pdf = :archivo, pdf_sha256 = :sha WHERE id = :id`, { archivo: filename, sha, id });
-  await advanceState(s, "muestras_recepcion", Number(row.recepcion_id), "informada");
+  // Fase 5: autorizar = liberar (en la Fase 6 se separan).
+  await advanceState(s, "muestras_recepcion", Number(row.recepcion_id), "liberada");
   // 7.8.8: el informe enmendado deja de ser valido y su PDF lo declara.
   if (row.sustituye_a) await marcarSustituido(s, user, Number(row.sustituye_a), row);
   const despues = await snapshotRow(s, TABLE, id);

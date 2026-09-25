@@ -38,6 +38,7 @@ function ProcesamientoList() {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [showAnuladas, setShowAnuladas] = useState(false);
+  const [mias, setMias] = useState(false);
   const [etapa, setEtapa] = useState<EtapaFilter>("");
   const [organismo, setOrganismo] = useState<OrganismoFilter>("");
   const debounced = useDebouncedValue(search);
@@ -46,10 +47,10 @@ function ProcesamientoList() {
   const resource = useResource<ApiRecord[]>(
     "muestras",
     async () => {
-      const data = await getJsonAuth(`${API_BASE_URL}/samples/processing?search=${encodeURIComponent(debounced.trim())}${showAnuladas ? "&anuladas=1" : ""}`, token);
+      const data = await getJsonAuth(`${API_BASE_URL}/samples/processing?search=${encodeURIComponent(debounced.trim())}${showAnuladas ? "&anuladas=1" : ""}${mias ? "&mias=1" : ""}`, token);
       return (data.items || []) as ApiRecord[];
     },
-    { enabled: !!token, deps: [debounced, showAnuladas] },
+    { enabled: !!token, deps: [debounced, showAnuladas, mias] },
   );
   const items = resource.data;
 
@@ -90,7 +91,7 @@ function ProcesamientoList() {
       ],
     },
   ];
-  const toggles: FilterToggle[] = [{ key: "anulados", label: "Mostrar anulados", checked: showAnuladas, onChange: setShowAnuladas }];
+  const toggles: FilterToggle[] = [{ key: "mias", label: "Mis muestras", description: "Solo las muestras asignadas a ti o que registraste.", checked: mias, onChange: setMias }, { key: "anulados", label: "Mostrar anulados", checked: showAnuladas, onChange: setShowAnuladas }];
 
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulada = item.estado === "anulada";

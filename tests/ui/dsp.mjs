@@ -79,6 +79,10 @@ try {
   await page.getByRole("checkbox", { name: /^Entregado a FX-106/ }).check();
   // Quien supervisó: solo personal con permiso de aprobación (Coordinador/a del Área Técnica del catálogo de roles).
   await page.locator("#persona-quien-superviso").selectOption("Ricardo Medina Flores");
+  // Fase 5: la firma de otra persona se confirma con su contraseña.
+  await page.locator("#firma-password").fill(JSON.parse(readFileSync(process.env.CREDENCIALES_ROLES, "utf8"))["ricardo.medina@ficotox.local"]);
+  await page.getByRole("button", { name: "Confirmar firma" }).click();
+  await page.locator("#firma-password").waitFor({ state: "detached" });
   // Pesos e hidrolisis
   await page.getByLabel("Peso (g) de D45-2", { exact: true }).fill("2.03");
   await page.getByText("Sí se realizó hidrólisis").click();

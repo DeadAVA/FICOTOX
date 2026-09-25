@@ -24,6 +24,7 @@ import { SolicitudCallout, SupervisionCallout } from "./status";
 import { formatearHora } from "@/lib/shared/fechas";
 import { AvisoAutorizacion } from "./AvisoAutorizacion";
 import { requisitosProcesamiento } from "@/lib/shared/autorizaciones";
+import { firmanteDe, firmantesPayload, type FirmanteState } from "./FirmanteSelect";
 
 /* Formato de procesamiento de muestras (FX-TCF-GMP) como pagina completa. */
 
@@ -261,6 +262,9 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
   const router = useRouter();
   const { token, can } = useSession();
   const [form, setForm] = useState<ProcessingForm>(() => (item ? formFromItem(item) : defaultForm()));
+  // Fase 5: firmas ligadas a cuentas (procesó, supervisó).
+  const [firmantes, setFirmantes] = useState<Record<string, FirmanteState>>(() => ({ proceso: firmanteDe(item, "proceso"), superviso: firmanteDe(item, "superviso") }));
+  const firmante = (rol: string) => ({ firmante: firmantes[rol], onFirmante: (v: FirmanteState) => setFirmantes((prev) => ({ ...prev, [rol]: v })) });
   const [receptions, setReceptions] = useState<ApiRecord[]>([]);
   const [equipos, setEquipos] = useState<ApiRecord[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -430,7 +434,7 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
     const missing = missingSections(sections);
     if (missing.length) return fail(missingMessage(missing), missing[0].id);
     setForm(current);
-    const payload = buildPayload(current);
+    const payload = { ...buildPayload(current), firmantes: firmantesPayload(firmantes) };
     if (!payload.folio_num) return fail("El folio de procesamiento es obligatorio", "sec-datos");
     if (payload.muestra_tipo === "unica" && !payload.id_interno) return fail("Captura el ID interno de la muestra", "sec-muestra");
     if (payload.muestra_tipo === "lote" && !payload.lote_seleccion.length) return fail("Selecciona al menos una muestra del lote", "sec-muestra");
@@ -684,8 +688,8 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
       <FormCard id="sec-personal" title="Personal responsable" description="Quién procesó y quién supervisó.">
         <div className="flex flex-col gap-3">
           {/* El formato oficial pide nombre y firma; el cargo no se guarda en este registro. */}
-          <PersonCard title="Quien procesó" name={form.quienProceso} onName={(v) => patch({ quienProceso: v })} signature={form.firmaProceso} onSignature={(v) => patch({ firmaProceso: v })} />
-          <PersonCard title="Quien supervisó" requires="revision" name={form.quienSuperviso} onName={(v) => patch({ quienSuperviso: v })} signature={form.firmaSuperviso} onSignature={(v) => patch({ firmaSuperviso: v })} />
+          <PersonCard title="Quien procesó" {...firmante("proceso")} name={form.quienProceso} onName={(v) => patch({ quienProceso: v })} signature={form.firmaProceso} onSignature={(v) => patch({ firmaProceso: v })} />
+          <PersonCard title="Quien supervisó" requires="revision" {...firmante("superviso")} firmanteSesion={false} name={form.quienSuperviso} onName={(v) => patch({ quienSuperviso: v })} signature={form.firmaSuperviso} onSignature={(v) => patch({ firmaSuperviso: v })} />
         </div>
         <Callout tone="info" className="mt-4">Recuerda registrar el uso de cada equipo en su bitácora correspondiente.</Callout>
       </FormCard>

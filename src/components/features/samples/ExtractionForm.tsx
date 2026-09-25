@@ -31,6 +31,7 @@ import { SolicitudCallout, SupervisionCallout } from "./status";
 import { formatearHora } from "@/lib/shared/fechas";
 import { AvisoAutorizacion } from "./AvisoAutorizacion";
 import { requisitoEquipo, requisitosExtraccion } from "@/lib/shared/autorizaciones";
+import { firmanteDe, firmantesPayload, type FirmanteState } from "./FirmanteSelect";
 
 /*
  * Formato de extraccion como pagina completa. El formulario es comun; el
@@ -446,6 +447,9 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
   const protocol = PROTOCOLS[(item?.tipo_registro as ExtractionType) || tipo || "E-A"] || ASP_PROTOCOL;
   const meta = EXTRACTION_TYPES[protocol.tipo];
   const [form, setForm] = useState<ExtractionState>(() => (item ? formFromItem(item, protocol) : defaultForm(protocol)));
+  // Fase 5: firmas ligadas a cuentas (extrajo, limpió, supervisó).
+  const [firmantes, setFirmantes] = useState<Record<string, FirmanteState>>(() => ({ extrajo: firmanteDe(item, "extrajo"), limpio: firmanteDe(item, "limpio"), superviso: firmanteDe(item, "superviso") }));
+  const firmante = (rol: string) => ({ firmante: firmantes[rol], onFirmante: (v: FirmanteState) => setFirmantes((prev) => ({ ...prev, [rol]: v })) });
   const [processings, setProcessings] = useState<ApiRecord[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -579,7 +583,7 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
     const current = autoResolve(form, protocol, !editing);
     setForm(current);
     const currentTubes = tubeCountOf(current);
-    const payload = buildPayload(current, protocol, processings, currentTubes);
+    const payload = { ...buildPayload(current, protocol, processings, currentTubes), firmantes: firmantesPayload(protocol.hasLimpiezaPerson ? firmantes : { ...firmantes, limpio: undefined }) };
     const incompletas = missingSections(sections);
     if (incompletas.length) return fail(missingMessage(incompletas), incompletas[0].id);
     if (!payload.folio_num) return fail("El folio de extracción es obligatorio", "sec-datos");
@@ -850,12 +854,12 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
       <FormCard id="sec-personal" title="Personal responsable" description={protocol.hasLimpiezaPerson && form.fields.limpieza === "si" ? "Quién extrajo, quién realizó la limpieza y quién supervisó." : "Quién extrajo y quién supervisó."}>
         <div className="flex flex-col gap-3">
           {/* El formato oficial pide nombre y firma; el cargo no se guarda en este registro. */}
-          <PersonCard title="Quien extrajo" name={form.quienExtrajo} onName={(v) => patch({ quienExtrajo: v })} signature={form.firmaExtrajo} onSignature={(v) => patch({ firmaExtrajo: v })} />
+          <PersonCard title="Quien extrajo" {...firmante("extrajo")} name={form.quienExtrajo} onName={(v) => patch({ quienExtrajo: v })} signature={form.firmaExtrajo} onSignature={(v) => patch({ firmaExtrajo: v })} />
           {/* Solo si el protocolo tiene limpieza y esta extracción sí la requirió. */}
           {protocol.hasLimpiezaPerson && form.fields.limpieza === "si" ? (
-            <PersonCard title="Quien realizó la limpieza" name={form.quienLimpieza} onName={(v) => patch({ quienLimpieza: v })} signature={form.firmaLimpieza} onSignature={(v) => patch({ firmaLimpieza: v })} />
+            <PersonCard title="Quien realizó la limpieza" {...firmante("limpio")} firmanteSesion={false} name={form.quienLimpieza} onName={(v) => patch({ quienLimpieza: v })} signature={form.firmaLimpieza} onSignature={(v) => patch({ firmaLimpieza: v })} />
           ) : null}
-          <PersonCard title="Quien supervisó" requires="revision" name={form.quienSuperviso} onName={(v) => patch({ quienSuperviso: v })} signature={form.firmaSuperviso} onSignature={(v) => patch({ firmaSuperviso: v })} />
+          <PersonCard title="Quien supervisó" requires="revision" {...firmante("superviso")} firmanteSesion={false} name={form.quienSuperviso} onName={(v) => patch({ quienSuperviso: v })} signature={form.firmaSuperviso} onSignature={(v) => patch({ firmaSuperviso: v })} />
         </div>
         <Callout tone="info" title="Bitácoras" className="mt-4">
           Registrar el uso de cada equipo en su bitácora correspondiente y anotar el folio en la sección de equipos.

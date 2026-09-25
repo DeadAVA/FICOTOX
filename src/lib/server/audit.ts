@@ -65,7 +65,17 @@ export type AuditAction =
   | "vencer_solicitud"
   | "otorgar_autorizacion"
   | "revocar_autorizacion"
-  | "vencer_autorizacion";
+  | "vencer_autorizacion"
+  | "imprimir_etiquetas"
+  | "asignar_muestra"
+  | "revocar_asignacion"
+  | "enviar_revision"
+  | "devolver"
+  | "enmendar"
+  | "sustituir"
+  | "cambiar_folio"
+  | "reabrir"
+  | "confirmar_firma";
 
 export interface AuditEntry {
   accion: AuditAction;

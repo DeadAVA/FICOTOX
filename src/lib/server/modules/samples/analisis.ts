@@ -5,18 +5,20 @@ import { HttpError, intParam, json, readJson, type RouteContext } from "../../ht
 import { restoreInventoryUsage } from "../../inventory-usage";
 import { cargoActuante, requirePermission } from "../../rbac";
 import { exigirReauth } from "../../seguridad";
-import { pendientesDe, respuestaSolicitud, serializarSolicitud } from "../../solicitudes";
+import { exigirSinSolicitudPendiente, pendientesDe, respuestaSolicitud, serializarSolicitud } from "../../solicitudes";
 import { detalleExcepcion, elaboradoresDe, ensureExcepcionesColumn, excepcionesDe, exigirSegregacion } from "../../segregacion";
 import { evaluarAnalisis, excepcionPara, type Violacion } from "../../../shared/segregacion";
 import { aplicarSupervision, exigirSinSupervisionPendiente, filtroSupervision, marcaSupervision } from "../../supervision";
 import { recordBitacoraFolios } from "../inventory";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../../schema";
-import { advanceState, anularOSolicitar, applyStageInventory, assertEditableAsync, assertOrigin, conSolicitudes, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
+import { advanceState, anularOSolicitar, validarRecepcionSiCompleta, applyStageInventory, assertEditableAsync, assertOrigin, conSolicitudes, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
 import { ANALYSIS_METHODS, ANALYSIS_TYPES, CONFORMITY_OPTIONS } from "../../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toFloatOrNull, toIntOrNull } from "../helpers";
 import { ensureSupervisionColumns } from "../../supervision";
 import { exigirAutorizaciones, requisitosEquipos } from "../../autorizaciones";
 import { requisitosAnalisis, requisitosRevisionResultados } from "../../../shared/autorizaciones";
+import { exigirAsignacion, filtroAsignadas } from "../../asignaciones";
+import { ensureColumnasFirma, guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
 
 /*
  * Etapa de analisis (ISO/IEC 17025 7.5, 7.7 y 7.8; diagrama de flujo del
@@ -33,6 +35,9 @@ const TABLE = "muestras_analisis";
 const TYPES = new Set(ANALYSIS_TYPES.map((item) => item.value));
 const METHODS = new Set(ANALYSIS_METHODS.map((item) => item.value));
 const CONFORMITY = new Set(CONFORMITY_OPTIONS.map((item) => item.value));
+
+/* Fase 5: el analista (trabajo tecnico: autorizacion de analisis y metodo) se elige de las cuentas activas. */
+const firmasAnalisis = (tipo: unknown): RolFirma[] => [{ rol: "analista", columnaNombre: "analista_nombre", etiqueta: "Analista", requisitos: requisitosAnalisis(tipo) }];
 
 export async function ensureAnalysisSchema(s: Session): Promise<void> {
   if (schemaReady("muestras_analisis")) return;
@@ -139,7 +144,53 @@ export async function ensureAnalysisSchema(s: Session): Promise<void> {
   await addColumnIfMissing(s, TABLE, "aprobado_cargo", "VARCHAR(120) DEFAULT NULL");
   await ensureSupervisionColumns(s, "muestras_analisis");
   await ensureExcepcionesColumn(s, "muestras_analisis");
+  // Fase 5: enmiendas versionadas (mismo folio, version + 1, sustituye_a) y devolucion con observaciones.
+  await addColumnIfMissing(s, TABLE, "version", "INT NOT NULL DEFAULT 1");
+  await addColumnIfMissing(s, TABLE, "sustituye_a", "INT DEFAULT NULL");
+  await addColumnIfMissing(s, TABLE, "motivo_enmienda", "TEXT");
+  await addColumnIfMissing(s, TABLE, "enviado_revision_por", "INT DEFAULT NULL");
+  await addColumnIfMissing(s, TABLE, "enviado_revision_en", "VARCHAR(40) DEFAULT NULL");
+  await addColumnIfMissing(s, TABLE, "devolucion_observaciones", "TEXT");
+  await ensureColumnasFirma(s, TABLE, firmasAnalisis(""));
+  await migrarUnicidadFolioVersion(s);
   markSchemaReady("muestras_analisis");
+}
+
+/*
+ * Fase 5: la unicidad del folio pasa de UNIQUE(folio_num) a UNIQUE(folio_num,
+ * version), para que la enmienda conserve el folio. Idempotente.
+ */
+async function migrarUnicidadFolioVersion(s: Session): Promise<void> {
+  if (isSqlite()) {
+    const indices = await s.query<{ name: string; unique: number }>(`PRAGMA index_list("${TABLE}")`);
+    let soloFolio = false;
+    for (const indice of indices) {
+      if (!indice.unique) continue;
+      const cols = (await s.query<{ name: string }>(`PRAGMA index_info("${indice.name}")`)).map((c) => c.name);
+      if (cols.length === 1 && cols[0] === "folio_num") soloFolio = true;
+    }
+    if (!soloFolio) return;
+    const sql = String((await s.scalar("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = :t", { t: TABLE })) || "");
+    const nuevo = sql
+      .replace(/CREATE TABLE\s+(IF NOT EXISTS\s+)?["`]?muestras_analisis["`]?/i, "CREATE TABLE muestras_analisis_v5")
+      .replace(/folio_num\s+INTEGER\s+NOT\s+NULL\s+UNIQUE/i, "folio_num INTEGER NOT NULL")
+      .replace(/\)\s*$/, ", UNIQUE (folio_num, version))");
+    if (nuevo === sql || !nuevo.includes("muestras_analisis_v5")) throw new Error("No se pudo migrar la unicidad del folio de analisis");
+    await s.execute("DROP TABLE IF EXISTS muestras_analisis_v5");
+    await s.execute(nuevo);
+    await s.execute(`INSERT INTO muestras_analisis_v5 SELECT * FROM ${TABLE}`);
+    await s.execute(`DROP TABLE ${TABLE}`);
+    await s.execute(`ALTER TABLE muestras_analisis_v5 RENAME TO ${TABLE}`);
+    return;
+  }
+  const filas = await s.query<{ INDEX_NAME: string; COLUMN_NAME: string }>(
+    "SELECT INDEX_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND NON_UNIQUE = 0 AND INDEX_NAME <> 'PRIMARY' ORDER BY INDEX_NAME, SEQ_IN_INDEX",
+    { t: TABLE },
+  );
+  const porIndice = new Map<string, string[]>();
+  for (const f of filas) porIndice.set(f.INDEX_NAME, [...(porIndice.get(f.INDEX_NAME) || []), f.COLUMN_NAME]);
+  for (const [nombre, cols] of porIndice) if (cols.length === 1 && cols[0] === "folio_num") await s.execute(`ALTER TABLE ${TABLE} DROP INDEX \`${nombre}\``);
+  if (!porIndice.has("uq_muestras_analisis_folio_version")) await s.execute(`ALTER TABLE ${TABLE} ADD UNIQUE KEY uq_muestras_analisis_folio_version (folio_num, version)`);
 }
 
 
@@ -308,6 +359,8 @@ export async function listAnalyses({ request, s }: RouteContext): Promise<Respon
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "ensayos", "V");
   const supFiltro = filtroSupervision(request, "a", permiso.auth.userId);
+  // Fase 5: filtro "Mis muestras".
+  const asignadas = await filtroAsignadas(s, permiso.auth.userId, "a.recepcion_id", searchParam(request, "mias") === "1");
   await ensureAnalysisSchema(s);
   const search = searchParam(request, "search");
   const estado = searchParam(request, "estado");
@@ -326,10 +379,11 @@ export async function listAnalyses({ request, s }: RouteContext): Promise<Respon
     LEFT JOIN muestras_recepcion r ON r.id = a.recepcion_id
     LEFT JOIN muestras_extraccion e ON e.id = a.extraccion_id
     WHERE (:incluir_anulados = 1 OR a.estado <> 'anulado')
-      AND (:estado = '' OR a.estado = :estado OR (:estado = 'pendiente' AND a.estado IN ('registrado', 'revisado')))
+      AND (:estado = '' OR a.estado = :estado OR (:estado = 'pendiente' AND a.estado IN ('registrado', 'en_revision', 'revisado')))
       AND (:recepcion_id = 0 OR a.recepcion_id = :recepcion_id)
       AND (:extraccion_id = 0 OR a.extraccion_id = :extraccion_id)
       ${supFiltro.sql}
+      ${asignadas.sql}
       AND (:search = ''
         OR CAST(a.folio_num AS CHAR) LIKE :search_like
         OR r.solicitante LIKE :search_like
@@ -380,7 +434,8 @@ export async function createAnalysis({ request, s }: RouteContext): Promise<Resp
   const permiso = await requirePermission(s, user, "ensayos", "C", { objeto: "analisis", borrador: true });
   const actuo = cargoActuante(request, permiso);
   await ensureAnalysisSchema(s);
-  const data = normalizePayload(await readJson(request));
+  const payload = await readJson(request);
+  const data = normalizePayload(payload);
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: !!(data.equipo_id || data.equipo_nombre), insumosJson: data.uso_inventario_json });
   // Fase 4: autorizacion FX-THF-AP: analisis, metodo del tipo de analisis y equipo usado (si esta en el inventario).
   await exigirAutorizaciones(s, user, [...requisitosAnalisis(data.tipo_analisis), ...(await requisitosEquipos(s, [data.equipo_id]))]);
@@ -388,6 +443,9 @@ export async function createAnalysis({ request, s }: RouteContext): Promise<Resp
   const invalid = validate(data);
   if (invalid) return json({ message: invalid }, 400);
   await resolveChain(s, data);
+  // Fase 5: solo quien esta asignado a la muestra (o la coordinacion).
+  await exigirAsignacion(s, user, data.recepcion_id, permiso.auth);
+  await resolverFirmantes(s, user, payload, data, firmasAnalisis(data.tipo_analisis), null);
   await snapshotEquipo(s, data);
   const supervision = marcaSupervision(permiso);
   const userId = userIdFromClaims(user);
@@ -413,6 +471,8 @@ export async function createAnalysis({ request, s }: RouteContext): Promise<Resp
     const id = result.lastrowid as number;
     await applyStageInventory(s, "ANA", id, data.uso_inventario_json, `Analisis folio ${data.folio_num}`, userId);
     await aplicarSupervision(s, TABLE, id, supervision, userId);
+    await guardarFirmantes(s, TABLE, id, data, firmasAnalisis(data.tipo_analisis));
+    await advanceState(s, "muestras_recepcion", data.recepcion_id, "en_analisis");
     const despues = await snapshotRow(s, TABLE, id);
     await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues, detalle: { actuo_como: actuo } });
     await recordBitacoraFolios(s, [{ equipoId: data.equipo_id, folio: data.equipo_folio_bitacora }]);
@@ -432,9 +492,10 @@ export async function updateAnalysis({ request, s, params }: RouteContext): Prom
   const antes = await snapshotRow(s, TABLE, id);
   const permiso = await requirePermission(s, user, "ensayos", "E", { objeto: "analisis", borrador: String(antes?.estado || "registrado") === "registrado" });
   const actuo = cargoActuante(request, permiso);
-  // E solo mientras el analisis no ha pasado a revision ni aprobacion (Fase 1).
-  if (["revisado", "aprobado"].includes(String(antes?.estado))) {
-    return json({ message: `El analisis ya esta ${antes?.estado}; no se edita. Anulalo con motivo y registra uno nuevo` }, 409);
+  // E solo mientras el analisis no se ha enviado a revision (Fase 5); un aprobado se corrige con enmienda.
+  if (["en_revision", "revisado", "aprobado", "sustituido"].includes(String(antes?.estado))) {
+    const como = String(antes?.estado) === "aprobado" ? "Corrígelo con una enmienda (nueva versión)" : "Pide al revisor que lo devuelva con observaciones";
+    return json({ message: `El analisis ya esta ${antes?.estado === "en_revision" ? "enviado a revision" : antes?.estado}; no se edita. ${como}`, codigo: "analisis_bloqueado" }, 409);
   }
   await assertEditableAsync(s, antes, TABLE);
   const payload = await readJson(request);
@@ -446,6 +507,9 @@ export async function updateAnalysis({ request, s, params }: RouteContext): Prom
   const invalid = validate(data);
   if (invalid) return json({ message: invalid }, 400);
   await resolveChain(s, data);
+  // Fase 5: solo quien esta asignado a la muestra (o la coordinacion).
+  await exigirAsignacion(s, user, data.recepcion_id, permiso.auth);
+  await resolverFirmantes(s, user, payload, data, firmasAnalisis(data.tipo_analisis), antes);
   await snapshotEquipo(s, data);
   const supervision = marcaSupervision(permiso);
   const userId = userIdFromClaims(user);
@@ -470,6 +534,7 @@ export async function updateAnalysis({ request, s, params }: RouteContext): Prom
     await restoreInventoryUsage(s, `ANA-${id}-INS-`);
     await applyStageInventory(s, "ANA", id, data.uso_inventario_json, `Analisis folio ${data.folio_num}`, userId, insumosDeclarados(antes?.uso_inventario_json));
     await aplicarSupervision(s, TABLE, id, supervision, userId);
+    await guardarFirmantes(s, TABLE, id, data, firmasAnalisis(data.tipo_analisis));
     const despues = await snapshotRow(s, TABLE, id);
     await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { actuo_como: actuo } });
     await recordBitacoraFolios(s, [{ equipoId: data.equipo_id, folio: data.equipo_folio_bitacora }]);
@@ -511,7 +576,8 @@ export async function reviewAnalysis({ request, s, params }: RouteContext): Prom
   await ensureAnalysisSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   await assertEditableAsync(s, antes, TABLE, "revisar");
-  if (String(antes?.estado) !== "registrado") return json({ message: "Solo se revisan analisis en estado registrado" }, 409);
+  // Fase 5: se revisa lo enviado a revision (o un registrado, que al revisarse se da por enviado).
+  if (!["registrado", "en_revision"].includes(String(antes?.estado))) return json({ message: "Solo se revisan analisis enviados a revision" }, 409);
   exigirSinSupervisionPendiente(antes, `El analisis ${folioLabel(TABLE, antes)}`, "revisar");
   await exigirAutorizaciones(s, user, requisitosRevisionResultados(antes?.tipo_analisis, "revisar"));
   const payload = await readJson(request);
@@ -524,6 +590,7 @@ export async function reviewAnalysis({ request, s, params }: RouteContext): Prom
     { usuario: userIdFromClaims(user), nombre: String(user.nombre || user.email || "").slice(0, 180), rol_id: actuo.rol_id, cargo: actuo.cargo, fecha: now, firma: strippedOrNull(payload.firma), obs: strippedOrNull(payload.observaciones), id },
   );
   const despues = await snapshotRow(s, TABLE, id);
+  await advanceState(s, "muestras_recepcion", toIntOrNull(antes?.recepcion_id), "en_revision_tecnica");
   await registrarAuditoria(s, user, { accion: "revisar", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), antes, despues, motivo: strippedOrNull(payload.observaciones), detalle: { actuo_como: actuo, ...detalleExcepcion(excepcion) } });
   await s.commit();
   return json({ message: "Analisis revisado", item: serializeAnalysis(despues!) });
@@ -552,11 +619,99 @@ export async function approveAnalysis({ request, s, params }: RouteContext): Pro
   );
   await advanceState(s, "muestras_extraccion", toIntOrNull(antes?.extraccion_id), "analizada");
   await advanceState(s, "muestras_procesamiento", toIntOrNull(antes?.procesamiento_id), "completada");
-  await advanceState(s, "muestras_recepcion", toIntOrNull(antes?.recepcion_id), "analizada");
+  // Fase 5: al aprobarse una enmienda, la version original queda sustituida.
+  if (antes?.sustituye_a) {
+    const original = await snapshotRow(s, TABLE, Number(antes.sustituye_a));
+    if (original && String(original.estado) === "aprobado") {
+      await s.execute(`UPDATE ${TABLE} SET estado = 'sustituido' WHERE id = :id`, { id: original.id });
+      await registrarAuditoria(s, user, { accion: "sustituir", entidad: TABLE, entidadId: Number(original.id), referencia: folioLabel(TABLE, original), antes: original, despues: await snapshotRow(s, TABLE, Number(original.id)), motivo: strippedOrNull(antes.motivo_enmienda), detalle: { sustituido_por: id, version: antes.version } });
+    }
+  }
+  await validarRecepcionSiCompleta(s, toIntOrNull(antes?.recepcion_id));
   const despues = await snapshotRow(s, TABLE, id);
   await registrarAuditoria(s, user, { accion: "aprobar", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { actuo_como: actuo, ...detalleExcepcion(excepcion) } });
   await s.commit();
   return json({ message: "Analisis aprobado", item: serializeAnalysis(despues!) });
+}
+
+/* Fase 5: el analista envia a revision (registrado -> en_revision); desde ahi ya no edita. */
+export async function enviarRevisionAnalysis({ request, s, params }: RouteContext): Promise<Response> {
+  const id = intParam(params.id);
+  const user = await requireUser(request);
+  const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "C", { objeto: "analisis", borrador: true }));
+  await ensureAnalysisSchema(s);
+  const antes = await snapshotRow(s, TABLE, id);
+  await assertEditableAsync(s, antes, TABLE, "enviar a revision");
+  if (String(antes?.estado) !== "registrado") return json({ message: "Solo se envian a revision analisis en estado registrado" }, 409);
+  exigirSinSupervisionPendiente(antes, `El analisis ${folioLabel(TABLE, antes)}`, "enviar a revision");
+  await exigirAsignacion(s, user, toIntOrNull(antes?.recepcion_id));
+  const now = new Date().toISOString();
+  await s.execute(`UPDATE ${TABLE} SET estado = 'en_revision', enviado_revision_por = :usuario, enviado_revision_en = :fecha, devolucion_observaciones = NULL WHERE id = :id`, { usuario: userIdFromClaims(user), fecha: now, id });
+  await advanceState(s, "muestras_recepcion", toIntOrNull(antes?.recepcion_id), "en_revision_tecnica");
+  const despues = await snapshotRow(s, TABLE, id);
+  await registrarAuditoria(s, user, { accion: "enviar_revision", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { actuo_como: actuo } });
+  await s.commit();
+  return json({ message: "Analisis enviado a revision; ya no se edita", item: serializeAnalysis(despues!) });
+}
+
+/* Fase 5: el revisor devuelve con observaciones (en_revision -> registrado) para correcciones antes de aprobar. */
+export async function devolverAnalysis({ request, s, params }: RouteContext): Promise<Response> {
+  const id = intParam(params.id);
+  const user = await requireUser(request);
+  const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "R"));
+  await ensureAnalysisSchema(s);
+  const antes = await snapshotRow(s, TABLE, id);
+  await assertEditableAsync(s, antes, TABLE, "devolver");
+  if (String(antes?.estado) !== "en_revision") return json({ message: "Solo se devuelven analisis enviados a revision" }, 409);
+  const payload = await readJson(request);
+  const motivo = String(payload.motivo || payload.observaciones || "").trim();
+  if (motivo.length < 5) return json({ message: "Escribe las observaciones para el analista (al menos 5 caracteres)" }, 400);
+  const yo = userIdFromClaims(user) as number;
+  const excepcion = exigirSegregacion(evaluarAnalisis(yo, await elaboradoresDe(s, TABLE, id, antes?.creado_por), "revisar"), antes, yo, "revisar");
+  await s.execute(`UPDATE ${TABLE} SET estado = 'registrado', devolucion_observaciones = :motivo WHERE id = :id`, { motivo, id });
+  const despues = await snapshotRow(s, TABLE, id);
+  await registrarAuditoria(s, user, { accion: "devolver", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), antes, despues, motivo, detalle: { actuo_como: actuo, ...detalleExcepcion(excepcion) } });
+  await s.commit();
+  return json({ message: "Analisis devuelto con observaciones; el analista puede corregirlo", item: serializeAnalysis(despues!) });
+}
+
+/*
+ * Fase 5: un analisis aprobado se corrige solo con enmienda: nueva version
+ * (mismo folio, version + 1, sustituye_a, motivo obligatorio) que sigue el flujo
+ * normal; al aprobarse, la original pasa a "sustituido". El inventario no se
+ * vuelve a descontar (la enmienda nace sin insumos declarados).
+ */
+export async function enmendarAnalysis({ request, s, params }: RouteContext): Promise<Response> {
+  const id = intParam(params.id);
+  const user = await requireUser(request);
+  const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "C", { objeto: "analisis", borrador: true }));
+  await ensureAnalysisSchema(s);
+  const original = await snapshotRow(s, TABLE, id);
+  if (!original) return json({ message: "Registro no encontrado" }, 404);
+  if (String(original.estado) !== "aprobado") return json({ message: "Solo se enmiendan analisis aprobados; los demas se corrigen antes de aprobarse" }, 409);
+  await exigirSinSolicitudPendiente(s, TABLE, id, `El analisis ${folioLabel(TABLE, original)}`, "enmendar");
+  const abierta = await s.queryOne<Row>(`SELECT id, version FROM ${TABLE} WHERE sustituye_a = :id AND estado NOT IN ('anulado', 'aprobado', 'sustituido') LIMIT 1`, { id });
+  if (abierta) return json({ message: `Ya hay una enmienda en curso (version ${abierta.version}); termina esa primero`, id: abierta.id }, 409);
+  await exigirAsignacion(s, user, toIntOrNull(original.recepcion_id));
+  await exigirAutorizaciones(s, user, requisitosAnalisis(original.tipo_analisis));
+  const payload = await readJson(request);
+  const motivo = String(payload.motivo || "").trim();
+  if (motivo.length < 5) return json({ message: "Indica el motivo de la enmienda (al menos 5 caracteres)" }, 400);
+  const version = Number((await s.scalar(`SELECT MAX(version) FROM ${TABLE} WHERE folio_num = :folio`, { folio: original.folio_num })) || 1) + 1;
+  const omitir = new Set(["id", "estado", "version", "sustituye_a", "motivo_enmienda", "creado_en", "actualizado_en", "uso_inventario_json", "excepciones_json", "motivo_anulacion", "anulado_en", "anulado_por", "estado_previo", "enviado_revision_por", "enviado_revision_en", "devolucion_observaciones"]);
+  const limpiar = (col: string) => /^(revisado|aprobado|revision)_/.test(col) || /^supervis/.test(col);
+  const userId = userIdFromClaims(user);
+  const copia: Row = {};
+  for (const [col, valor] of Object.entries(original)) if (!omitir.has(col) && !limpiar(col)) copia[col] = valor;
+  Object.assign(copia, { estado: "registrado", version, sustituye_a: id, motivo_enmienda: motivo, uso_inventario_json: "[]", creado_por: userId, actualizado_por: userId, creado_rol_id: actuo.rol_id, creado_cargo: actuo.cargo });
+  const cols = Object.keys(copia);
+  const result = await s.execute(`INSERT INTO ${TABLE} (${cols.join(", ")}) VALUES (${cols.map((c) => `:${c}`).join(", ")})`, copia);
+  const nuevoId = result.lastrowid as number;
+  const despues = await snapshotRow(s, TABLE, nuevoId);
+  await registrarAuditoria(s, user, { accion: "enmendar", entidad: TABLE, entidadId: nuevoId, referencia: folioLabel(TABLE, despues), despues, motivo, detalle: { sustituye_a: id, version, actuo_como: actuo } });
+  await registrarAuditoria(s, user, { accion: "enmendar", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, original), motivo, detalle: { enmienda_id: nuevoId, version } });
+  await s.commit();
+  return json({ message: `Enmienda creada: version ${version} del analisis ${folioLabel(TABLE, original)}`, id: nuevoId, version }, 201);
 }
 
 export async function anularAnalysis({ request, s, params }: RouteContext): Promise<Response> {

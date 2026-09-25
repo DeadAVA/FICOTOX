@@ -24,7 +24,7 @@ import "./lib/reauth-auto.mjs";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import zlib from "node:zlib";
-import { autorizarTodo } from "./lib/autorizar.mjs";
+import { asignarRecepcion, autorizarTodo } from "./lib/autorizar.mjs";
 
 const Database = createRequire(import.meta.url)(process.env.BETTER_SQLITE3 || "better-sqlite3");
 const BASE = process.env.BASE || "http://localhost:3100/api";
@@ -218,6 +218,8 @@ if (!TRAS_REINICIO) {
   const analisis = (ext, id) => ({ tipo_analisis: "toxinas_lipofilicas", metodo: "hplc_ms_ms", extraccion_id: ext, fecha_analisis: "2026-09-20", analista_nombre: "QA", resultados: [{ id_muestra: id, resultado: 50, unidad: "µg/kg", limite_regulatorio: 160, cumple: "cumple" }] });
 
   const RA = (await api("POST", "/samples/reception", aceptada("ROL-A"), QA)).data?.id;
+  // Fase 5: las personas de la matriz trabajan la muestra RA asignada (la regla de asignacion se prueba en api-muestras).
+  await asignarRecepcion(BASE, QA, RA, Object.values(usuarioIds));
   const PA = (await api("POST", "/samples/processing", procesamiento(RA, "ROL-A"), QA)).data?.id;
   const EA = (await api("POST", "/samples/extraction", extraccion(PA, "ROL-A"), QA)).data?.id;
   const equipos = (await api("GET", "/inventory/equipos", undefined, QA)).data?.items || [];
@@ -325,6 +327,7 @@ if (!TRAS_REINICIO) {
     // recepcion + preparacion (Tecnico Auxiliar)
     const aux = T("Técnico Auxiliar");
     const rec = await api("POST", "/samples/reception", aceptada("AUX-1"), aux);
+    await asignarRecepcion(BASE, QA, rec.data?.id, [usuarioIds["Técnico Auxiliar"]]);
     const proc = await api("POST", "/samples/processing", procesamiento(rec.data?.id || RA, "AUX-1"), aux);
     const ext = await api("POST", "/samples/extraction", extraccion(proc.data?.id || PA, "AUX-1"), aux);
     const ana = await api("POST", "/samples/analysis", analisis(EA, "ROL-A"), aux);
@@ -380,6 +383,7 @@ if (!TRAS_REINICIO) {
   const persona = async (email, rol) => {
     const r = await api("POST", "/admin/usuarios", { nombre: email.split("@")[0], email, activo: true, rol_id: rolId(rol), password: "PruebaRoles2026!", motivo: "Alta de prueba", ...temporalDe(rol) }, QA);
     await autorizarTodo(BASE, QA, r.data?.id);
+    await asignarRecepcion(BASE, QA, RA, [r.data?.id]);
     const t = (await api("POST", "/auth/login", { email, password: "PruebaRoles2026!" })).data?.token;
     return { id: r.data?.id, token: t, status: r.status };
   };

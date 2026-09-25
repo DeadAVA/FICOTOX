@@ -11,7 +11,7 @@ import { Dropdown, Tooltip } from "@/components/ui/Overlay";
 import { Avatar } from "@/components/ui/Primitives";
 import { isActivePath, isItemActive, visibleNav, type NavChild, type NavIcon, type NavItem } from "@/lib/client/nav";
 import { BrandLockup, BrandMark } from "./Brand";
-import { AccountSheet } from "./AccountSheet";
+import { ABRIR_MIS_AUTORIZACIONES, AccountSheet, EVENTO_ABRIR_CUENTA } from "./AccountSheet";
 import { CommandPalette } from "./CommandPalette";
 
 /*
@@ -108,6 +108,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);
+  }, []);
+
+  // Fase 5: "Mi cuenta" se abre con el evento EVENTO_ABRIR_CUENTA o al llegar con #mis-autorizaciones.
+  useEffect(() => {
+    const abrir = () => setAccountOpen(true);
+    if (window.location.hash === ABRIR_MIS_AUTORIZACIONES) abrir();
+    window.addEventListener(EVENTO_ABRIR_CUENTA, abrir);
+    return () => window.removeEventListener(EVENTO_ABRIR_CUENTA, abrir);
   }, []);
 
   useEffect(() => {
