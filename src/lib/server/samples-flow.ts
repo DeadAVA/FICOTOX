@@ -180,7 +180,7 @@ export function opcionesAnulacion(s: Session, table: SampleTable, id: number): {
       return {
         movimientosPrefix: `ANA-${id}-INS-`,
         bloqueaSi: async () => {
-          const informes = await s.query<{ folio_num: number; analisis_ids_json: string }>("SELECT folio_num, analisis_ids_json FROM informes WHERE estado IN ('autorizado', 'entregado')").catch(() => []);
+          const informes = await s.query<{ folio_num: number; analisis_ids_json: string }>("SELECT folio_num, analisis_ids_json FROM informes WHERE estado IN ('autorizado', 'liberado', 'enviado')").catch(() => []);
           const usado = informes.find((inf) => {
             try {
               return (JSON.parse(String(inf.analisis_ids_json || "[]")) as number[]).includes(id);

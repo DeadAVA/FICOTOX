@@ -161,12 +161,12 @@ const resumen = { rolesCreados: [], rolesCargados: [], rolesIguales: [], rolesDi
 const FOLIO_DEMO = "FX-THF-AP-DEMO";
 const RICARDO = "ricardo.medina@ficotox.local";
 const PATRICIA = "patricia.luna@ficotox.local";
-const TODAS_ACTIVIDADES = ["recepcion", "procesamiento", "extraccion", "analisis", "revision_resultados", "aprobacion_resultados", "revision_informe", "autorizacion_informe"];
+const TODAS_ACTIVIDADES = ["recepcion", "procesamiento", "extraccion", "analisis", "revision_resultados", "aprobacion_resultados", "revision_informe", "autorizacion_informe", "liberacion_informe"];
 const AUTORIZACIONES_DEMO = [
   { email: "luis.castro@ficotox.local", actividades: ["procesamiento", "extraccion", "analisis"], metodos: ["ASP", "DSP"], otorga: RICARDO },
   { email: "mariana.delgado@ficotox.local", actividades: ["recepcion", "procesamiento"], metodos: [], otorga: RICARDO },
   { email: RICARDO, actividades: TODAS_ACTIVIDADES, metodos: ["ASP", "DSP"], otorga: PATRICIA },
-  { email: PATRICIA, actividades: ["revision_informe", "autorizacion_informe"], metodos: [], otorga: RICARDO },
+  { email: PATRICIA, actividades: ["revision_informe", "autorizacion_informe", "liberacion_informe"], metodos: [], otorga: RICARDO },
   // Vigencia igual a la de su cuenta temporal.
   { email: "diego.salinas@ficotox.local", actividades: ["procesamiento"], metodos: [], otorga: RICARDO, comoCuenta: true },
 ];

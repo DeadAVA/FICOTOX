@@ -89,6 +89,8 @@ const extraccion = (c, extra = {}) => ({ tipo_registro: "E-D", procesamiento_id:
   const c = await cadenaHastaProcesamiento("AUTI");
   const E = (await api("POST", "/samples/extraction", extraccion(c, { nombre_quien_extrajo: "QA", nombre_quien_superviso: "Supervisor QA" }), QA)).data?.id;
   const A = (await api("POST", "/samples/analysis", { tipo_analisis: "toxinas_lipofilicas", metodo: "hplc_ms_ms", extraccion_id: E, fecha_analisis: "2026-09-20", analista_nombre: "QA", resultados: [{ id_muestra: c.id, resultado: 50, unidad: "µg/kg", limite_regulatorio: 160, cumple: "cumple" }] }, QA)).data?.id;
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${A}/enviar-revision`, {}, QA);
   const rev = await api("POST", `/samples/analysis/${A}/revisar`, {}, tR);
   const apr = await api("POST", `/samples/analysis/${A}/aprobar`, {}, tR);
   const inf = await api("POST", "/informes", { recepcion_id: c.R, analisis_ids: [A], cliente: { nombre: "Cliente autorizaciones" } }, QA);

@@ -59,6 +59,8 @@ interface FlowItem {
   /* accion "ver": la persona no tiene el permiso de ese paso; solo se informa. */
   siguiente: { label: string; href: string; accion: "capturar" | "revisar" | "aprobar" | "cerrar" | "ver" };
   pasos: FlowStep[];
+  /* Fase 6: recepcion liberada -> "Falta disposición final" (va al final de la lista). */
+  nota?: string | null;
 }
 
 const safeJson = <T,>(raw: unknown, fallback: T): T => {
@@ -132,7 +134,7 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
     const ext = exts[0] || null;
     const ans = analisis.filter((a) => Number(a.recepcion_id) === id);
     const extSinAnalisis = exts.find((e) => !ans.some((a) => Number(a.extraccion_id) === Number(e.id))) || null;
-    const RANK: Record<string, number> = { registrado: 0, revisado: 1, aprobado: 2 };
+    const RANK: Record<string, number> = { registrado: 0, en_revision: 1, revisado: 2, aprobado: 3 };
     const an = ans.length ? ans.reduce((menor, a) => ((RANK[String(a.estado)] ?? 0) < (RANK[String(menor.estado)] ?? 0) ? a : menor)) : null;
     const inf = informes.find((i) => Number(i.recepcion_id) === id) || null;
     const decision = String(r.decision_aceptacion || "");
@@ -166,6 +168,10 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
       requiere = ["ensayos", "C", { objeto: "analisis", borrador: true }];
     } else if (anEstado === "registrado") {
       etapa = "analisis";
+      siguiente = { label: "Enviar análisis a revisión", href: `/muestras/analisis/${an.id}`, accion: "capturar" };
+      requiere = ["ensayos", "C", { objeto: "analisis", borrador: true }];
+    } else if (anEstado === "en_revision") {
+      etapa = "analisis";
       siguiente = { label: "Revisar análisis", href: `/muestras/analisis/${an.id}`, accion: "revisar" };
       requiere = ["ensayos", "R"];
     } else if (anEstado === "revisado") {
@@ -186,7 +192,11 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
       requiere = ["informes", "A"];
     } else if (infEstado === "autorizado") {
       etapa = "informe";
-      siguiente = { label: "Registrar entrega", href: `/informes/${inf.id}`, accion: "cerrar" };
+      siguiente = { label: "Liberar informe", href: `/informes/${inf.id}`, accion: "aprobar" };
+      requiere = ["informes", "A"];
+    } else if (infEstado === "liberado") {
+      etapa = "informe";
+      siguiente = { label: "Enviar informe por correo", href: `/informes/${inf.id}`, accion: "cerrar" };
       requiere = ["informes", "A"];
     } else {
       etapa = "cierre";
@@ -205,8 +215,8 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
       { key: "recepcion", label: "Recepción", state: stateFor(0), folio, href: `/muestras/recepcion/${id}`, detail: aceptada ? (decision === "aceptada_con_desviacion" ? "Aceptada con desviación" : "Aceptada") : "Sin decisión de aceptación" },
       { key: "procesamiento", label: "Procesamiento", state: stateFor(1), folio: proc ? `P ${pad(proc.folio_num)}` : null, href: proc ? `/muestras/procesamiento/${proc.id}` : null, detail: proc ? fmtDate(proc.fecha_procesamiento) : null },
       { key: "extraccion", label: "Extracción", state: stateFor(2), folio: exts.length ? exts.map((e) => `${e.tipo_registro || "E-A"} ${pad(e.folio_num)}`).join(" · ") : null, href: ext ? `/muestras/extraccion/${ext.id}` : null, detail: faltaTipo ? `Falta la extracción ${faltaTipo === "E-D" ? "DSP" : "ASP"}` : exts.length ? exts.map((e) => (String(e.tipo_registro) === "E-D" ? "DSP" : "ASP")).join(" + ") : tipoExtraccion ? (tipoExtraccion === "E-D" ? "DSP" : "ASP") : null },
-      { key: "analisis", label: "Análisis", state: stateFor(3), folio: ans.length ? ans.map((a) => `A ${pad(a.folio_num)}`).join(" · ") : null, href: an ? `/muestras/analisis/${an.id}` : null, detail: extSinAnalisis && an ? `Falta el análisis ${String(extSinAnalisis.tipo_registro) === "E-D" ? "DSP" : "ASP"}` : an ? (anEstado === "aprobado" ? (ans.length > 1 ? "Aprobados" : "Aprobado") : anEstado === "revisado" ? "Revisado, falta aprobar" : "Registrado, falta revisar") : null },
-      { key: "informe", label: "Informe", state: stateFor(4), folio: inf ? `IR ${pad(inf.folio_num)}${Number(inf.version || 1) > 1 ? ` v${inf.version}` : ""}` : null, href: inf ? `/informes/${inf.id}` : null, detail: inf ? ({ borrador: "Borrador", en_revision: "En revisión", autorizado: "Autorizado, falta entregar", entregado: "Entregado" } as Record<string, string>)[infEstado] || infEstado : null },
+      { key: "analisis", label: "Análisis", state: stateFor(3), folio: ans.length ? ans.map((a) => `A ${pad(a.folio_num)}`).join(" · ") : null, href: an ? `/muestras/analisis/${an.id}` : null, detail: extSinAnalisis && an ? `Falta el análisis ${String(extSinAnalisis.tipo_registro) === "E-D" ? "DSP" : "ASP"}` : an ? (anEstado === "aprobado" ? (ans.length > 1 ? "Aprobados" : "Aprobado") : anEstado === "revisado" ? "Revisado, falta aprobar" : anEstado === "en_revision" ? "Enviado a revisión, falta revisar" : "Registrado, falta enviar a revisión") : null },
+      { key: "informe", label: "Informe", state: stateFor(4), folio: inf ? `IR ${pad(inf.folio_num)}${Number(inf.version || 1) > 1 ? ` v${inf.version}` : ""}` : null, href: inf ? `/informes/${inf.id}` : null, detail: inf ? ({ borrador: "Borrador", en_revision: "En revisión", autorizado: "Autorizado, falta liberar", liberado: "Liberado, falta enviar", enviado: "Enviado" } as Record<string, string>)[infEstado] || infEstado : null },
     ];
 
     return {
@@ -221,12 +231,14 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
       etapa,
       siguiente,
       pasos,
+      nota: String(r.estado) === "liberada" ? "Falta disposición final" : null,
     };
   });
 
   /* Lo más urgente primero: quien espera una firma, luego lo más antiguo. */
   const weight: Record<FlowItem["siguiente"]["accion"], number> = { aprobar: 0, revisar: 1, capturar: 2, cerrar: 3, ver: 4 };
-  items.sort((a, b) => weight[a.siguiente.accion] - weight[b.siguiente.accion] || b.dias - a.dias);
+  // Fase 6: las recepciones liberadas (solo falta la disposicion final) van al final.
+  items.sort((a, b) => Number(!!a.nota) - Number(!!b.nota) || weight[a.siguiente.accion] - weight[b.siguiente.accion] || b.dias - a.dias);
 
   const resumen: Record<string, number> = {};
   for (const item of items) resumen[item.etapa] = (resumen[item.etapa] || 0) + 1;
@@ -265,6 +277,7 @@ const MODULO_AVISO: Record<string, Modulo> = {
   analisis_pendientes: "ensayos",
   informes_revision: "informes",
   informes_entrega: "informes",
+  informes_enmienda: "informes",
 };
 
 export async function inicioAvisos({ request, s }: RouteContext): Promise<Response> {
@@ -289,7 +302,7 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
     const [count, rows] = await Promise.all([s.scalar(`SELECT COUNT(*) ${from}`, fechas), s.query(`SELECT ${select} ${from} ORDER BY ${order} LIMIT ${MAX_ITEMS}`, fechas)]);
     return { count: Number(count || 0), rows };
   };
-  const [mantVencidos, mantProximos, equiposCal, reactivosBajos, consumiblesBajos, analisisPendientes, informesRevision, informesEntrega] = await Promise.all([
+  const [mantVencidos, mantProximos, equiposCal, reactivosBajos, consumiblesBajos, analisisPendientes, informesRevision, informesEntrega, informesEnmienda] = await Promise.all([
     fetch(`FROM mantenimientos mt LEFT JOIN equipos e ON e.id = mt.id_equipo WHERE mt.estado = 'vencido' OR (mt.fecha_programada < ${today} AND mt.estado IN ('programado', 'en_proceso'))`, "mt.id, mt.tipo, mt.fecha_programada, e.nombre AS equipo, e.clave_bitacora", "mt.fecha_programada ASC"),
     fetch(`FROM mantenimientos mt LEFT JOIN equipos e ON e.id = mt.id_equipo WHERE mt.fecha_programada BETWEEN ${today} AND ${in30} AND mt.estado IN ('programado', 'en_proceso')`, "mt.id, mt.tipo, mt.fecha_programada, e.nombre AS equipo, e.clave_bitacora", "mt.fecha_programada ASC"),
     fetch(`FROM equipos WHERE COALESCE(activo, 1) = 1 AND (estado IN ('calibracion_pendiente', 'fuera_servicio') OR (fecha_prox_calibracion IS NOT NULL AND fecha_prox_calibracion < ${today}))`, "id, nombre, clave_bitacora, estado, fecha_prox_calibracion", "fecha_prox_calibracion ASC"),
@@ -299,9 +312,11 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
       "cantidad_actual ASC",
     ),
     fetch("FROM consumibles WHERE COALESCE(activo, 1) = 1 AND COALESCE(piezas, 0) <= 5", "id, producto, piezas", "piezas ASC"),
-    fetch("FROM muestras_analisis a LEFT JOIN muestras_recepcion r ON r.id = a.recepcion_id WHERE a.estado IN ('registrado', 'revisado')", "a.id, a.folio_num, a.estado, a.tipo_analisis, r.solicitante", "a.id ASC"),
+    fetch("FROM muestras_analisis a LEFT JOIN muestras_recepcion r ON r.id = a.recepcion_id WHERE a.estado IN ('en_revision', 'revisado')", "a.id, a.folio_num, a.estado, a.tipo_analisis, r.solicitante", "a.id ASC"),
     fetch("FROM informes WHERE estado IN ('borrador', 'en_revision')", "id, folio_num, version, estado, cliente_json", "id ASC"),
-    fetch("FROM informes WHERE estado = 'autorizado'", "id, folio_num, version, estado, cliente_json", "id ASC"),
+    fetch("FROM informes WHERE estado IN ('autorizado', 'liberado') AND COALESCE(requiere_enmienda, 0) = 0", "id, folio_num, version, estado, cliente_json", "id ASC"),
+    // Fase 6: informes con un analisis enmendado despues: no se liberan ni envian hasta su enmienda.
+    fetch("FROM informes WHERE COALESCE(requiere_enmienda, 0) = 1 AND estado IN ('autorizado', 'liberado', 'enviado')", "id, folio_num, version, estado, cliente_json, requiere_enmienda_motivo", "id ASC"),
   ]);
 
   const cliente = (row: Row) => {
@@ -316,9 +331,10 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
     build("equipos_cal", "Equipos con alerta de calibración", "warning", "/inventario/equipos?filtro=calibracion", equiposCal, (e) => ({ label: String(e.nombre || "Equipo"), sub: String(e.estado) === "fuera_servicio" ? "Fuera de servicio" : e.fecha_prox_calibracion ? `Calibración vencida el ${fmtDate(e.fecha_prox_calibracion)}` : "Calibración pendiente", href: `/inventario/equipos?buscar=${encodeURIComponent(String(e.nombre || ""))}` })),
     build("reactivos_bajos", "Reactivos con stock bajo", "warning", "/inventario/reactivos?filtro=bajo", reactivosBajos, (r) => ({ label: String(r.nombre), sub: Number(r.cantidad_actual) <= 0 ? "Agotado" : `Quedan ${Number(r.cantidad_actual)} ${r.unidad || ""}`.trim(), href: `/inventario/reactivos?buscar=${encodeURIComponent(String(r.nombre))}` })),
     build("consumibles_bajos", "Consumibles con 5 piezas o menos", "warning", "/inventario/consumibles?filtro=bajo", consumiblesBajos, (c) => ({ label: String(c.producto || "Consumible"), sub: Number(c.piezas) <= 0 ? "Agotado" : `${Number(c.piezas)} pieza${Number(c.piezas) === 1 ? "" : "s"}`, href: `/inventario/consumibles?buscar=${encodeURIComponent(String(c.producto || ""))}` })),
-    build("analisis_pendientes", "Análisis esperando revisión o aprobación", "info", "/muestras/analisis?filtro=pendiente", analisisPendientes, (a) => ({ label: `A ${pad(a.folio_num)}`, sub: `${String(a.estado) === "revisado" ? "Falta aprobar" : "Falta revisar"}${a.solicitante ? ` · ${a.solicitante}` : ""}`, href: `/muestras/analisis/${a.id}` })),
+    build("analisis_pendientes", "Análisis esperando revisión o aprobación", "info", "/muestras/analisis?filtro=pendiente", analisisPendientes, (a) => ({ label: `A ${pad(a.folio_num)}`, sub: `${String(a.estado) === "revisado" ? "Falta aprobar" : "Enviado, falta revisar"}${a.solicitante ? ` · ${a.solicitante}` : ""}`, href: `/muestras/analisis/${a.id}` })),
     build("informes_revision", "Informes por revisar o autorizar", "info", "/informes?filtro=pendiente", informesRevision, (i) => ({ label: `IR ${pad(i.folio_num)}${Number(i.version || 1) > 1 ? ` v${i.version}` : ""}`, sub: `${String(i.estado) === "en_revision" ? "Falta autorizar" : "Borrador, falta revisar"}${cliente(i) ? ` · ${cliente(i)}` : ""}`, href: `/informes/${i.id}` })),
-    build("informes_entrega", "Informes autorizados sin entregar", "info", "/informes?filtro=autorizado", informesEntrega, (i) => ({ label: `IR ${pad(i.folio_num)}${Number(i.version || 1) > 1 ? ` v${i.version}` : ""}`, sub: cliente(i) || "Falta registrar la entrega", href: `/informes/${i.id}` })),
+    build("informes_entrega", "Informes por liberar o enviar", "info", "/informes?filtro=autorizado", informesEntrega, (i) => ({ label: `IR ${pad(i.folio_num)}${Number(i.version || 1) > 1 ? ` v${i.version}` : ""}`, sub: `${String(i.estado) === "liberado" ? "Falta enviar" : "Falta liberar"}${cliente(i) ? ` · ${cliente(i)}` : ""}`, href: `/informes/${i.id}` })),
+    build("informes_enmienda", "Informes que requieren enmienda", "danger", "/informes?filtro=requiere_enmienda", informesEnmienda, (i) => ({ label: `IR ${pad(i.folio_num)}${Number(i.version || 1) > 1 ? ` v${i.version}` : ""}`, sub: String(i.requiere_enmienda_motivo || "Un análisis incluido se enmendó"), href: `/informes/${i.id}` })),
     build("mant_proximos", "Mantenimientos en los próximos 30 días", "info", "/inventario/mantenimiento?filtro=proximo", mantProximos, (m) => ({ label: String(m.equipo || "Equipo"), sub: `${TIPO_MANT[String(m.tipo)] || m.tipo || "Mantenimiento"} · ${fmtDate(m.fecha_programada)}`, href: "/inventario/mantenimiento?filtro=proximo" })),
   ].filter((a) => a.count > 0 && !!permisoDe(auth, MODULO_AVISO[a.key], "V"));
 

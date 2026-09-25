@@ -1,6 +1,7 @@
 import { ensureAuditSchema } from "./audit";
 import { withSession } from "./db";
 import { ensureAsignacionesSchema } from "./asignaciones";
+import { ensureEnviosSchema } from "./envios";
 import { ensureAutorizacionesSchema, registrarVencimientosAutorizaciones } from "./autorizaciones";
 import { ensureRbacSchema, migrarPermisosFase3, migrarRolesUnicos, registrarVencimientos } from "./rbac";
 import { ensureSolicitudesSchema, vencerSolicitudes } from "./solicitudes";
@@ -38,6 +39,7 @@ export function ensureInitialSchema(): Promise<void> {
       await ensureSolicitudesSchema(s);
       await ensureAutorizacionesSchema(s);
       await ensureAsignacionesSchema(s);
+      await ensureEnviosSchema(s);
       // Fase 1: usuarios.id_rol -> usuario_roles (una vez; queda en la bitacora).
       await migrarRolesUnicos(s);
       await migrarPermisosFase3(s);

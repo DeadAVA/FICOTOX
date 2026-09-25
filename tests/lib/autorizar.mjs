@@ -3,7 +3,7 @@
  * FX-THF-AP de actividades y metodos (las otorga quien llama, p. ej. QA, que tiene
  * ensayos:A). Asi las suites que prueban roles y segregacion no dependen de ellas.
  */
-const ACTIVIDADES = ["recepcion", "procesamiento", "extraccion", "analisis", "revision_resultados", "aprobacion_resultados", "revision_informe", "autorizacion_informe"];
+const ACTIVIDADES = ["recepcion", "procesamiento", "extraccion", "analisis", "revision_resultados", "aprobacion_resultados", "revision_informe", "autorizacion_informe", "liberacion_informe"];
 const METODOS = ["ASP", "DSP", "PSP", "pigmentos", "plancton", "otro"];
 
 export async function autorizarTodo(base, token, usuarioId) {

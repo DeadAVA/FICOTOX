@@ -45,8 +45,12 @@ const P = (await api("POST", "/samples/processing", { recepcion_id: R, muestra_t
 const E = (await api("POST", "/samples/extraction", { tipo_registro: "E-D", procesamiento_id: P, tipo_molienda: "fresca", id_interno: id, fecha_extraccion: "2026-09-20", registro_pesos: [{ id_muestra: id, replica: `${id}_R1`, peso_muestra: 2.01 }], nombre_quien_extrajo: "Persona A", nombre_quien_superviso: "Persona B" }, QA)).data?.id;
 // A1 lo elabora QA y queda revisado (para ver "Aprobar" deshabilitado); A2 queda aprobado (para pedir su anulacion).
 const A1 = (await api("POST", "/samples/analysis", { tipo_analisis: "toxinas_lipofilicas", metodo: "hplc_ms_ms", extraccion_id: E, fecha_analisis: "2026-09-20", analista_nombre: "QA", resultados: [{ id_muestra: id, resultado: 50, unidad: "µg/kg", limite_regulatorio: 160, cumple: "cumple" }] }, QA)).data?.id;
+// Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+await api("POST", `/samples/analysis/${A1}/enviar-revision`, {}, QA);
 await api("POST", `/samples/analysis/${A1}/revisar`, {}, TR);
 const A2 = (await api("POST", "/samples/analysis", { tipo_analisis: "toxinas_lipofilicas", metodo: "hplc_ms_ms", extraccion_id: E, fecha_analisis: "2026-09-20", analista_nombre: "QA", resultados: [{ id_muestra: id, resultado: 40, unidad: "µg/kg", limite_regulatorio: 160, cumple: "cumple" }] }, QA)).data?.id;
+// Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+await api("POST", `/samples/analysis/${A2}/enviar-revision`, {}, QA);
 await api("POST", `/samples/analysis/${A2}/revisar`, {}, TR);
 const tokA = await reauth(TR, "ensayos:A", credenciales[RICARDO]);
 const aprobado = await api("POST", `/samples/analysis/${A2}/aprobar`, {}, TR, { "X-Reauth": tokA });

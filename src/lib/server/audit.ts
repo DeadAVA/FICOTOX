@@ -75,7 +75,12 @@ export type AuditAction =
   | "sustituir"
   | "cambiar_folio"
   | "reabrir"
-  | "confirmar_firma";
+  | "confirmar_firma"
+  | "liberar"
+  | "enviar"
+  | "confirmar_envio"
+  | "requiere_enmienda"
+  | "alerta_integridad";
 
 export interface AuditEntry {
   accion: AuditAction;

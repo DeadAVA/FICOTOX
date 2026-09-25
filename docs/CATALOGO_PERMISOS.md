@@ -52,7 +52,7 @@ El módulo `aprobaciones` desapareció: revisar y aprobar son acciones de `ensay
 | Anular / restaurar procesamiento, extracción, análisis | `ensayos:AN` |
 | Crear o enmendar informe / editar borrador | `informes:C` / `informes:E` |
 | Revisar informe | `informes:R` |
-| Autorizar y entregar informe | `informes:A` (la entrega se rediseña en Fase 6) |
+| Autorizar, liberar y enviar informe | `informes:A` (liberar exige además la autorización FX-THF-AP `liberacion_informe`; Fase 6) |
 | Anular informe | `informes:AN` |
 | Alta / edición de equipos y mantenimientos | `equipos:C` / `equipos:E` (con alcance) |
 | Baja de equipo, cancelación de mantenimiento | `equipos:AN` |
@@ -148,7 +148,7 @@ Las reglas 1 y 2 usan un permiso "ancla" para identificar el lado administrativo
 - Nadie puede asignarse ni revocarse roles a sí mismo (403).
 - Guarda: siempre debe quedar al menos un usuario activo con `usuarios:G` vigente **y al menos uno sin fecha de fin** (409 si un cambio lo impide; así el sistema no se queda sin administrador cuando vence una vigencia).
 - Bitácora: `asignar_rol`, `revocar_rol`, `vencer_rol` (el vencimiento se registra una vez, en el primer minuto de actividad después de la fecha), y los cambios de permisos de un rol, todos con motivo.
-- **Cargo en las firmas**: al capturar, firmar, revisar, aprobar, autorizar, entregar o anular (recepción, procesamiento, extracción, análisis e informes) se guarda el rol con el que se actuó (`*_rol_id`, `*_cargo`, y `actuo_como` en la bitácora). Si un solo rol vigente otorga el permiso se usa ese; si varios, la interfaz pide "Actuar como: <rol>" y envía `X-Actuar-Como`; el servidor valida que ese rol lo otorgue. El PDF del informe muestra el cargo elegido.
+- **Cargo en las firmas**: al capturar, firmar, revisar, aprobar, autorizar, liberar, enviar o anular (recepción, procesamiento, extracción, análisis e informes) se guarda el rol con el que se actuó (`*_rol_id`, `*_cargo`, y `actuo_como` en la bitácora). Si un solo rol vigente otorga el permiso se usa ese; si varios, la interfaz pide "Actuar como: <rol>" y envía `X-Actuar-Como`; el servidor valida que ese rol lo otorgue. El PDF del informe muestra el cargo elegido.
 
 ## 6 bis. Separación de funciones y segundo usuario (Fase 3)
 
@@ -168,7 +168,7 @@ Violación: 409 con código `segregacion` y la regla concreta. Las excepciones s
 | Acción crítica (crea solicitud; no se ejecuta hasta aprobarla) | Aprueba (segundo usuario) |
 | --- | --- |
 | Anular o restaurar recepción, procesamiento, extracción o análisis que ya no esté en borrador/registrado (incluye el análisis aprobado) | AN del mismo módulo |
-| Anular un informe autorizado o entregado | AN en informes |
+| Anular un informe autorizado, liberado o enviado | AN en informes |
 | Excepción de segregación | A en calidad (Responsable General / Mejora Continua) |
 | Asignar un rol a un usuario (también el rol inicial de una cuenta nueva) | A en usuarios (Responsable General) |
 | Reactivar una cuenta dada de baja | A en usuarios |
@@ -191,6 +191,7 @@ Segunda capa, además del rol: el rol da la acción en el módulo; la autorizaci
 | Análisis | ensayos C/E | `analisis` + método del tipo de análisis + equipo usado (si está en inventario) |
 | Revisar / aprobar análisis | ensayos R / A | `revision_resultados` / `aprobacion_resultados` + método |
 | Revisar / autorizar informe | informes R / A | `revision_informe` / `autorizacion_informe` |
+| Liberar informe (Fase 6) | informes A | `liberacion_informe` |
 
 Otorgan y revocan (con motivo, reautenticación y bitácora): quien tiene `ensayos:A` o `calidad:A` (Coord. Área Técnica, Mejora Continua, Responsable General); no el Administrador técnico; nadie a sí mismo (409). `AUTORIZACIONES_OBLIGATORIAS=false` desactiva la validación solo para cargar datos iniciales.
 
@@ -201,6 +202,14 @@ Otorgan y revocan (con motivo, reautenticación y bitácora): quien tiene `ensay
 - **Firmas**: recibió, procesó, supervisó, extrajo, limpió y analista se eligen de las cuentas activas y se guarda su `usuario_id` y cargo. Si el firmante no es quien tiene la sesión, confirma con su contraseña (token de firma de un solo uso). Los firmantes de trabajo técnico (procesó, extrajo, limpió, analista) necesitan la autorización FX-THF-AP de la actividad y el método.
 - **Regla 3 por cuenta**: supervisó ≠ procesó/extrajo/limpió se compara por `usuario_id` cuando ambas firmas están ligadas a cuentas (con los nombres escritos solo como respaldo para registros sin cuenta).
 - **Análisis**: el analista envía a revisión (desde ahí no edita); el revisor (ensayos:R) puede devolver con observaciones; un aprobado se corrige solo con enmienda versionada (ensayos:C), y la original queda sustituida al aprobarse la enmienda.
+
+## 6 quinquies. Informes: autorizar, liberar y enviar (Fase 6)
+
+- **Autorizar** (`informes:A` + `autorizacion_informe`): solo firma; no genera PDF ni mueve la recepción.
+- **Liberar** (`informes:A` + `liberacion_informe`, con reautenticación): genera el PDF final con SHA-256, congela resultados y lleva la recepción a `liberada`. Puede hacerlo quien autorizó. Un liberado ya no se edita; se corrige por enmienda.
+- **Enviar** (`informes:A`): solo informes liberados o ya enviados; envío manual con evidencia (siempre) o SMTP (si está configurado); confirmación de recepción por envío. Los correos y evidencias solo los ve quien tiene `informes:V`; la bitácora muestra el correo parcialmente oculto.
+- **Requiere enmienda**: si se aprueba la enmienda de un análisis incluido en un informe autorizado, liberado o enviado, el informe no se libera ni se envía hasta liberar su enmienda.
+- **Revisar un análisis** (`ensayos:R`) exige que el analista lo haya enviado a revisión.
 
 ## 7. Decisiones pendientes de validar con Mejora Continua
 

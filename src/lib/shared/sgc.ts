@@ -222,8 +222,12 @@ export const CLIENT_CONTACT_MEDIA: CatalogItem[] = [
 export const REPORT_STATES: Record<string, { label: string; tone: "neutral" | "brand" | "warning" | "success" | "danger" | "ink" }> = {
   borrador: { label: "Borrador", tone: "neutral" },
   en_revision: { label: "En revisión", tone: "warning" },
-  autorizado: { label: "Autorizado", tone: "success" },
-  entregado: { label: "Entregado", tone: "ink" },
+  autorizado: { label: "Autorizado", tone: "warning" },
+  // Fase 6: liberar genera el PDF final; el envio por correo lo deja "enviado".
+  liberado: { label: "Liberado", tone: "success" },
+  enviado: { label: "Enviado", tone: "ink" },
+  // Valor anterior a la Fase 6 (el servidor lo migra a "enviado").
+  entregado: { label: "Enviado", tone: "ink" },
   sustituido: { label: "Sustituido por enmienda", tone: "neutral" },
   anulado: { label: "Anulado", tone: "danger" },
 };
@@ -350,6 +354,11 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   cambiar_folio: "Cambió el folio",
   reabrir: "Reabrió",
   confirmar_firma: "Confirmó su firma con contraseña",
+  liberar: "Liberó",
+  enviar: "Envió por correo",
+  confirmar_envio: "Registró la confirmación de recepción",
+  requiere_enmienda: "Quedó marcado: requiere enmienda",
+  alerta_integridad: "Alerta de integridad del PDF",
 };
 
 export const AUDIT_ENTITIES: Record<string, string> = {

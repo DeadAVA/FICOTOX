@@ -155,7 +155,7 @@ function parseFolio(q: string): { exact: string } | null {
 const TTL_MS = 60_000;
 
 const ANALYSIS_SHORT: Record<string, string> = { acido_domoico: "ASP", toxinas_lipofilicas: "DSP", toxinas_paralizantes: "PSP" };
-const INFORME_ESTADO: Record<string, string> = { borrador: "Borrador", en_revision: "En revisión", autorizado: "Autorizado", entregado: "Entregado", sustituido: "Sustituido", anulado: "Anulado" };
+const INFORME_ESTADO: Record<string, string> = { borrador: "Borrador", en_revision: "En revisión", autorizado: "Autorizado", liberado: "Liberado", enviado: "Enviado", entregado: "Enviado", sustituido: "Sustituido", anulado: "Anulado" };
 const MANT_TIPO: Record<string, string> = { preventivo: "Preventivo", correctivo: "Correctivo", calibracion: "Calibración", verificacion: "Verificación" };
 /* Temas del manual (/ayuda). Los anclas coinciden con las secciones de la página. */
 export const HELP_TOPICS: Array<{ anchor: string; label: string; sub: string; kw: string }> = [
@@ -332,7 +332,7 @@ export function useGlobalSearch() {
         { label: "Análisis por revisar o aprobar", sub: "Registrados o revisados, sin aprobar", href: "/muestras/analisis?filtro=pendiente", allowed: can("ensayos"), kw: "analisis pendientes revisar aprobar firma" },
         { label: "Informes por revisar o autorizar", sub: "Borradores y en revisión", href: "/informes?filtro=pendiente", allowed: can("informes"), kw: "informes revision revisar autorizar pendientes" },
         { label: "Informes autorizados sin entregar", sub: "Falta registrar la entrega al cliente", href: "/informes?filtro=autorizado", allowed: can("informes"), kw: "informes autorizados entregar entrega" },
-        { label: "Informes entregados", sub: "Ya en manos del cliente", href: "/informes?filtro=entregado", allowed: can("informes"), kw: "informes entregados historial" },
+        { label: "Informes enviados", sub: "Enviados por correo al cliente", href: "/informes?filtro=enviado", allowed: can("informes"), kw: "informes enviados entregados correo historial" },
         { label: "Reactivos con stock bajo", sub: "Por debajo del mínimo o agotados", href: "/inventario/reactivos?filtro=bajo", allowed: can("inventario"), kw: "reactivos stock bajo agotado minimo" },
         { label: "Reactivos por vencer", sub: "Caducan pronto o ya caducaron", href: "/inventario/reactivos?filtro=vencer", allowed: can("inventario"), kw: "reactivos caducidad vencer vencidos" },
         { label: "Consumibles con stock bajo", sub: "5 piezas o menos", href: "/inventario/consumibles?filtro=bajo", allowed: can("inventario"), kw: "consumibles stock bajo agotado" },

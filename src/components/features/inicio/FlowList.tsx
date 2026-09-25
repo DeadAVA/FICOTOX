@@ -36,6 +36,8 @@ export interface FlowItem {
   etapa: FlowStep["key"] | "cierre";
   siguiente: { label: string; href: string; accion: "capturar" | "revisar" | "aprobar" | "cerrar" | "ver" };
   pasos: FlowStep[];
+  /* Fase 6: recepcion liberada -> "Falta disposición final" (el servidor la manda al final). */
+  nota?: string | null;
 }
 
 const TIPO_LABEL: Record<string, string> = { acido_domoico: "ASP", toxinas_lipofilicas: "DSP", toxinas_paralizantes: "PSP" };
@@ -107,6 +109,11 @@ export function FlowCard({ item }: { item: FlowItem }) {
               {item.folio}
             </Link>
             <span className="min-w-0 truncate text-[13.5px] text-ink">{item.cliente || "Sin solicitante"}</span>
+            {item.nota ? (
+              <span className="rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-medium text-warning-text" data-nota-flujo>
+                {item.nota}
+              </span>
+            ) : null}
           </div>
           <p className="text-[12px] text-ink-3">
             {[item.estado ? sampleStatusLabel(item.estado) : null, tipos.join(" + ") || null, `${muestras} ${muestras === 1 ? "muestra" : "muestras"}`, item.dias === 0 ? "hoy" : item.dias === 1 ? "1 día" : `${item.dias} días`].filter(Boolean).join(" · ")}

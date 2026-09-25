@@ -120,6 +120,12 @@ export const ACTION_TONE: Record<string, AuditTone> = {
   cambiar_folio: "warning",
   reabrir: "warning",
   confirmar_firma: "neutral",
+  // Fase 6: liberacion y envio por correo del informe.
+  liberar: "success",
+  enviar: "ink",
+  confirmar_envio: "success",
+  requiere_enmienda: "danger",
+  alerta_integridad: "danger",
 };
 
 /*
@@ -786,6 +792,29 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       if (detalle.formato) facts.push(detalle.formato === "hoja" ? "Formato: hoja completa" : "Formato: etiqueta 50 × 25 mm");
       break;
     }
+    case "liberar":
+      action = `liberó ${obj}`;
+      if (detalle.sha256) facts.push(`PDF final SHA-256 ${String(detalle.sha256).slice(0, 16)}…`);
+      break;
+    case "enviar": {
+      // El correo llega ya parcialmente oculto desde el servidor (h***@dominio).
+      const a = detalle.destinatario ? ` a ${String(detalle.destinatario)}` : "";
+      const correo = detalle.correo ? ` (${String(detalle.correo)})` : "";
+      action = `envió por correo ${obj}${a}${correo}`;
+      facts.push(detalle.medio === "smtp" ? "Medio: desde la plataforma (SMTP)" : "Medio: registro manual con evidencia");
+      if (detalle.version) facts.push(`Versión ${String(detalle.version)}`);
+      if (detalle.enviado_en) facts.push(`Enviado: ${humanValue("enviado_en", detalle.enviado_en)}`);
+      break;
+    }
+    case "confirmar_envio":
+      action = `registró la confirmación de recepción ${de(obj)}${detalle.correo ? ` (${String(detalle.correo)})` : ""}`;
+      break;
+    case "requiere_enmienda":
+      action = `marcó ${obj} como "requiere enmienda"`;
+      break;
+    case "alerta_integridad":
+      action = `detectó que el PDF ${de(obj)} no coincide con su huella SHA-256`;
+      break;
     case "entregar": {
       const to = detalle.a_quien ? ` a ${String(detalle.a_quien)}` : "";
       const medio = detalle.medio ? ` ${DELIVERY_PHRASE[String(detalle.medio)] || `por ${String(detalle.medio)}`}` : "";

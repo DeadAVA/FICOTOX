@@ -33,6 +33,8 @@ export const ACTIVIDADES_AUTORIZABLES: Array<{ value: string; label: string }> =
   { value: "aprobacion_resultados", label: "Aprobación de resultados" },
   { value: "revision_informe", label: "Revisión de informes" },
   { value: "autorizacion_informe", label: "Autorización de informes" },
+  // Fase 6: liberar el informe (PDF final) es una actividad aparte de autorizarlo.
+  { value: "liberacion_informe", label: "Liberación de informes" },
 ];
 
 /* Texto para el mensaje "No tienes autorización vigente para ..." */
@@ -45,6 +47,7 @@ const FRASE_ACTIVIDAD: Record<string, string> = {
   aprobacion_resultados: "aprobar resultados",
   revision_informe: "revisar informes",
   autorizacion_informe: "autorizar informes",
+  liberacion_informe: "liberar informes",
 };
 
 export interface Requisito {
@@ -141,8 +144,8 @@ export function requisitosRevisionResultados(tipoAnalisis: unknown, accion: "rev
   return [actividad(accion === "revisar" ? "revision_resultados" : "aprobacion_resultados"), ...metodo(m, accion === "revisar" ? "revisar resultados" : "aprobar resultados")];
 }
 
-export function requisitosInforme(accion: "revisar" | "autorizar"): Requisito[] {
-  return [actividad(accion === "revisar" ? "revision_informe" : "autorizacion_informe")];
+export function requisitosInforme(accion: "revisar" | "autorizar" | "liberar"): Requisito[] {
+  return [actividad(accion === "revisar" ? "revision_informe" : accion === "autorizar" ? "autorizacion_informe" : "liberacion_informe")];
 }
 
 /* Requisitos que no cubre ninguna autorizacion vigente. */

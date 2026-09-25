@@ -16,7 +16,7 @@ import { hoyLocal } from "../../shared/fechas";
 import { aplicarSupervision, exigirSinSupervisionPendiente, filtroSupervision, marcaSupervision } from "../supervision";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
 import { advanceState, ensureAnulacionColumns, nextFolioNum, readMotivo } from "../samples-flow";
-import { ANALYSIS_METHODS, ANALYSIS_TYPES, REPORT_DEFAULT_STATEMENTS, REPORT_DELIVERY_MEDIA } from "../../shared/sgc";
+import { ANALYSIS_METHODS, ANALYSIS_TYPES, REPORT_DEFAULT_STATEMENTS } from "../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "./helpers";
 import { approvedAnalysesForReception, serializeAnalysis } from "./samples/analisis";
 import { ensureSupervisionColumns } from "../supervision";
@@ -26,15 +26,16 @@ import { requisitosInforme } from "../../shared/autorizaciones";
 /*
  * Informe de resultados (ISO/IEC 17025 7.8; FX-TCP-IR / FX-TCF-IR).
  *
- * Ciclo: borrador -> en_revision -> autorizado -> entregado. Al autorizar se
- * congela el contenido (resultados y muestras quedan copiados en el informe),
- * se genera el PDF con su huella SHA-256 y la recepcion pasa a "informada".
- * Un informe autorizado no se edita: se anula con motivo o se emite una
- * enmienda (nuevo informe, version +1, que declara al que sustituye; 7.8.8).
+ * Ciclo (Fase 6): borrador -> en_revision -> autorizado -> liberado -> enviado
+ * (mas anulado y sustituido). Autorizar firma; liberar congela el contenido
+ * (resultados y muestras copiados en el informe), genera el PDF final con su
+ * huella SHA-256 y la recepcion pasa a "liberada". El envio por correo y su
+ * evidencia viven en src/lib/server/envios.ts. Un informe autorizado o
+ * liberado no se edita: se anula con motivo o se emite una enmienda (nuevo
+ * informe, version +1, que declara al que sustituye; 7.8.8).
  */
 
 const TABLE = "informes";
-const DELIVERY = new Set(REPORT_DELIVERY_MEDIA.map((item) => item.value));
 
 export async function ensureInformesSchema(s: Session): Promise<void> {
   if (schemaReady("informes")) return;
@@ -133,6 +134,19 @@ export async function ensureInformesSchema(s: Session): Promise<void> {
   await ensureAnulacionColumns(s, TABLE);
   await ensureSupervisionColumns(s, "informes");
   await ensureExcepcionesColumn(s, "informes");
+  // Fase 6: liberacion separada de la autorizacion y marca "requiere enmienda".
+  for (const [col, def] of [
+    ["liberado_por", "INT DEFAULT NULL"],
+    ["liberado_nombre", "VARCHAR(180) DEFAULT NULL"],
+    ["liberado_cargo", "VARCHAR(120) DEFAULT NULL"],
+    ["liberado_rol_id", "INT DEFAULT NULL"],
+    ["liberado_en", "VARCHAR(40) DEFAULT NULL"],
+    ["requiere_enmienda", "INT NOT NULL DEFAULT 0"],
+    ["requiere_enmienda_motivo", "TEXT"],
+  ]) await addColumnIfMissing(s, TABLE, col, def);
+  // La antigua "entrega" se reemplaza por el envio por correo.
+  await s.execute(`UPDATE ${TABLE} SET estado = 'enviado' WHERE estado = 'entregado'`);
+  await s.execute(`UPDATE ${TABLE} SET estado_previo = 'enviado' WHERE estado_previo = 'entregado'`);
   markSchemaReady("informes");
 }
 
@@ -172,6 +186,8 @@ function normalizeCliente(raw: unknown, recepcion: Row | null) {
     nombre: strippedOrNull(value.nombre, 180) || strippedOrNull(recepcion?.solicitante, 180),
     contacto: strippedOrNull(value.contacto, 180) || strippedOrNull(solicitante.nombre_entrega, 180),
     direccion: strippedOrNull(value.direccion, 240),
+    // Fase 6: correo de contacto para el envio del informe (de la recepcion si existe).
+    correo: strippedOrNull(value.correo, 180) || strippedOrNull(solicitante.correo ?? solicitante.email, 180),
   };
 }
 
@@ -310,13 +326,13 @@ export async function listInformes({ request, s }: RouteContext): Promise<Respon
   const rows = await s.query(
     `
     SELECT i.id, i.folio_num, i.version, i.recepcion_id, i.sustituye_a, i.fecha_emision, i.estado,
-           i.elaborado_nombre, i.autorizado_nombre, i.autorizado_en, i.entrega_json, i.archivo_pdf, i.motivo_anulacion, i.creado_en,
+           i.elaborado_nombre, i.autorizado_nombre, i.autorizado_en, i.liberado_en, i.requiere_enmienda, i.requiere_enmienda_motivo, i.entrega_json, i.archivo_pdf, i.motivo_anulacion, i.creado_en,
            i.cliente_json, i.analisis_ids_json, i.supervision_estado, i.supervisor_id,
            r.folio_num AS folio_recepcion_num, r.solicitante, r.id_interno AS recepcion_id_interno
     FROM ${TABLE} i
     LEFT JOIN muestras_recepcion r ON r.id = i.recepcion_id
     WHERE (:incluir_anulados = 1 OR i.estado <> 'anulado')
-      AND (:estado = '' OR i.estado = :estado OR (:estado = 'pendiente' AND i.estado IN ('borrador', 'en_revision')))
+      AND (:estado = '' OR i.estado = :estado OR (:estado = 'pendiente' AND i.estado IN ('borrador', 'en_revision')) OR (:estado = 'requiere_enmienda' AND COALESCE(i.requiere_enmienda, 0) = 1))
       AND (:recepcion_id = 0 OR i.recepcion_id = :recepcion_id)
       ${supFiltro.sql}
       AND (:search = '' OR CAST(i.folio_num AS CHAR) LIKE :search_like OR r.solicitante LIKE :search_like OR i.cliente_json LIKE :search_like OR r.id_interno LIKE :search_like)
@@ -364,6 +380,8 @@ export async function getInforme({ request, s, params }: RouteContext): Promise<
   }
   const recepcion = await snapshotRow(s, "muestras_recepcion", Number(row.recepcion_id));
   item.recepcion = recepcion ? { id: recepcion.id, folio_num: recepcion.folio_num, solicitante: recepcion.solicitante, fecha_recepcion: recepcion.fecha_recepcion, estado: recepcion.estado, decision_aceptacion: recepcion.decision_aceptacion } : null;
+  // Fase 6: integridad del PDF final (su SHA-256 contra el guardado al liberar).
+  item.pdf_integridad = await integridadPdf(row);
   return json({ item });
 }
 
@@ -427,8 +445,8 @@ export async function createInforme({ request, s }: RouteContext): Promise<Respo
     );
     const id = result.lastrowid as number;
     await aplicarSupervision(s, TABLE, id, supervision, userId);
-    // Fase 5: informe creado -> la recepcion queda "informe_elaborado".
-    await advanceState(s, "muestras_recepcion", Number(recepcion.id), "informe_elaborado");
+    // Fase 5/6: informe creado -> la recepcion queda "informe_elaborado" si ya esta validada o el informe incluye analisis aprobados.
+    if (String(recepcion.estado) === "validada" || analyses.some((a) => String(a.estado) === "aprobado")) await advanceState(s, "muestras_recepcion", Number(recepcion.id), "informe_elaborado");
     const despues = await snapshotRow(s, TABLE, id);
     await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), despues, detalle: { actuo_como: actuo } });
     await s.commit();
@@ -522,7 +540,7 @@ export async function reviewInforme({ request, s, params }: RouteContext): Promi
 async function buildRender(s: Session, row: Row, analyses: Row[]): Promise<InformeRender> {
   const recepcion = await snapshotRow(s, "muestras_recepcion", Number(row.recepcion_id));
   const sustituye = row.sustituye_a ? await snapshotRow(s, TABLE, Number(row.sustituye_a)) : null;
-  const sustituidoPor = String(row.estado) === "sustituido" ? await s.queryOne<Row>(`SELECT folio_num, version FROM ${TABLE} WHERE sustituye_a = :id AND estado IN ('autorizado', 'entregado') ORDER BY version DESC LIMIT 1`, { id: row.id }) : null;
+  const sustituidoPor = String(row.estado) === "sustituido" ? await s.queryOne<Row>(`SELECT folio_num, version FROM ${TABLE} WHERE sustituye_a = :id AND estado IN ('liberado', 'enviado') ORDER BY version DESC LIMIT 1`, { id: row.id }) : null;
   const cliente = safeJsonLoad<{ nombre: string | null; contacto: string | null; direccion: string | null }>(String(row.cliente_json || "{}"), { nombre: null, contacto: null, direccion: null });
   const declaraciones = normalizeDeclaraciones(safeJsonLoad(String(row.declaraciones_json || "{}"), {}));
   return {
@@ -551,7 +569,7 @@ async function buildRender(s: Session, row: Row, analyses: Row[]): Promise<Infor
 /* El original de una enmienda autorizada queda "sustituido" y su PDF se regenera con la leyenda. */
 async function marcarSustituido(s: Session, user: CurrentUser, originalId: number, enmienda: Row): Promise<void> {
   const antes = await snapshotRow(s, TABLE, originalId);
-  if (!antes || !["autorizado", "entregado"].includes(String(antes.estado))) return;
+  if (!antes || !["autorizado", "liberado", "enviado"].includes(String(antes.estado))) return;
   await s.execute(`UPDATE ${TABLE} SET estado_previo = :previo, estado = 'sustituido', actualizado_por = :usuario WHERE id = :id`, { previo: String(antes.estado), usuario: userIdFromClaims(user), id: originalId });
   const despues = (await snapshotRow(s, TABLE, originalId))!;
   if (despues.archivo_pdf) {
@@ -588,9 +606,42 @@ export async function authorizeInforme({ request, s, params }: RouteContext): Pr
 
   const now = new Date().toISOString();
   const fechaEmision = strippedOrNull(payload.fecha_emision, 10) || String(antes.fecha_emision || hoyLocal());
+  // Fase 6: autorizar solo firma; el PDF final, la huella y la recepcion "liberada" llegan al liberar.
   await s.execute(
-    `UPDATE ${TABLE} SET estado = 'autorizado', resultados_json = :resultados_json, fecha_emision = :fecha_emision, autorizado_por = :usuario, autorizado_nombre = :nombre, autorizado_cargo = :cargo, autorizado_rol_id = :rol_id, autorizado_en = :fecha, autorizado_firma = :firma, actualizado_por = :usuario WHERE id = :id`,
-    { resultados_json: jsonText(snapshotAnalyses(analyses)), fecha_emision: fechaEmision, usuario: userIdFromClaims(user), nombre: String(user.nombre || user.email || "").slice(0, 180), cargo: actuo.cargo, rol_id: actuo.rol_id, fecha: now, firma: strippedOrNull(payload.firma), id },
+    `UPDATE ${TABLE} SET estado = 'autorizado', fecha_emision = :fecha_emision, autorizado_por = :usuario, autorizado_nombre = :nombre, autorizado_cargo = :cargo, autorizado_rol_id = :rol_id, autorizado_en = :fecha, autorizado_firma = :firma, actualizado_por = :usuario WHERE id = :id`,
+    { fecha_emision: fechaEmision, usuario: userIdFromClaims(user), nombre: String(user.nombre || user.email || "").slice(0, 180), cargo: actuo.cargo, rol_id: actuo.rol_id, fecha: now, firma: strippedOrNull(payload.firma), id },
+  );
+  const despues = await snapshotRow(s, TABLE, id);
+  await registrarAuditoria(s, user, { accion: "autorizar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, detalle: { actuo_como: actuo, ...detalleExcepcion(excepcion) } });
+  await s.commit();
+  return json({ message: "Informe autorizado; falta liberarlo para generar el PDF final", item: serializeInforme(despues!) });
+}
+
+/*
+ * Fase 6: autorizado -> liberado. Requiere informes:A, la autorizacion FX-THF-AP
+ * liberacion_informe y reautenticacion; puede hacerlo quien autorizo. Congela
+ * resultados, genera el PDF final con su SHA-256 y lleva la recepcion a "liberada".
+ */
+export async function liberarInforme({ request, s, params }: RouteContext): Promise<Response> {
+  const id = intParam(params.id);
+  const user = await requireUser(request);
+  const actuo = cargoActuante(request, await requirePermission(s, user, "informes", "A"));
+  await ensureInformesSchema(s);
+  const antes = await snapshotRow(s, TABLE, id);
+  if (!antes) return json({ message: "Informe no encontrado" }, 404);
+  if (String(antes.estado) !== "autorizado") return json({ message: "Solo se liberan informes autorizados" }, 409);
+  exigirSinRequiereEnmienda(antes, "liberar");
+  await exigirAutorizaciones(s, user, requisitosInforme("liberar"));
+  await exigirSinSolicitudPendiente(s, TABLE, id, `El informe ${informeFolio(antes)}`, "liberar");
+  const ids = safeJsonLoad<number[]>(String(antes.analisis_ids_json || "[]"), []);
+  const analyses = await loadAnalyses(s, ids);
+  const noAprobados = analyses.filter((a) => String(a.estado) !== "aprobado");
+  if (!analyses.length || noAprobados.length) return json({ message: noAprobados.length ? `Hay analisis sin aprobar: ${noAprobados.map((a) => `A ${String(a.folio_num).padStart(7, "0")}`).join(", ")}` : "El informe no incluye analisis" }, 409);
+  await exigirReauth(s, request, user, "informes:A");
+  const now = new Date().toISOString();
+  await s.execute(
+    `UPDATE ${TABLE} SET estado = 'liberado', resultados_json = :resultados_json, liberado_por = :usuario, liberado_nombre = :nombre, liberado_cargo = :cargo, liberado_rol_id = :rol_id, liberado_en = :fecha, actualizado_por = :usuario WHERE id = :id`,
+    { resultados_json: jsonText(snapshotAnalyses(analyses)), usuario: userIdFromClaims(user), nombre: String(user.nombre || user.email || "").slice(0, 180), cargo: actuo.cargo, rol_id: actuo.rol_id, fecha: now, id },
   );
   const row = (await snapshotRow(s, TABLE, id))!;
   const pdf = await renderInformePdf(await buildRender(s, row, analyses));
@@ -598,38 +649,42 @@ export async function authorizeInforme({ request, s, params }: RouteContext): Pr
   await fs.promises.writeFile(path.join(informesDir(), filename), pdf);
   const sha = createHash("sha256").update(pdf).digest("hex");
   await s.execute(`UPDATE ${TABLE} SET archivo_pdf = :archivo, pdf_sha256 = :sha WHERE id = :id`, { archivo: filename, sha, id });
-  // Fase 5: autorizar = liberar (en la Fase 6 se separan).
   await advanceState(s, "muestras_recepcion", Number(row.recepcion_id), "liberada");
   // 7.8.8: el informe enmendado deja de ser valido y su PDF lo declara.
   if (row.sustituye_a) await marcarSustituido(s, user, Number(row.sustituye_a), row);
   const despues = await snapshotRow(s, TABLE, id);
-  await registrarAuditoria(s, user, { accion: "autorizar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, detalle: { pdf: filename, sha256: sha, actuo_como: actuo, ...detalleExcepcion(excepcion) } });
+  await registrarAuditoria(s, user, { accion: "liberar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, detalle: { pdf: filename, sha256: sha, actuo_como: actuo } });
   await s.commit();
-  return json({ message: "Informe autorizado; PDF generado", item: serializeInforme(despues!) });
+  return json({ message: "Informe liberado; PDF final generado", item: serializeInforme(despues!) });
 }
 
-/* autorizado -> entregado (a quien, cuando, por que medio). */
-export async function deliverInforme({ request, s, params }: RouteContext): Promise<Response> {
-  const id = intParam(params.id);
-  const user = await requireUser(request);
-  const actuo = cargoActuante(request, await requirePermission(s, user, "informes", "A"));
+/* Fase 6: un informe con un analisis enmendado despues no se libera ni se envia hasta liberar su enmienda. */
+export function exigirSinRequiereEnmienda(row: Row, que: string): void {
+  if (Number(row.requiere_enmienda || 0)) throw new HttpError(409, { message: `El informe ${informeFolio(row)} requiere enmienda (${row.requiere_enmienda_motivo || "un análisis incluido se enmendó"}); no se puede ${que} hasta crear y liberar su enmienda`, codigo: "requiere_enmienda" });
+}
+
+/* Fase 6: compara el SHA-256 del PDF en disco con el guardado al liberar. */
+export async function integridadPdf(row: Row): Promise<"ok" | "alterado" | "faltante" | null> {
+  if (!row.archivo_pdf || !row.pdf_sha256) return null;
+  const ruta = path.join(informesDir(), String(row.archivo_pdf));
+  if (!fs.existsSync(ruta)) return "faltante";
+  const sha = createHash("sha256").update(await fs.promises.readFile(ruta)).digest("hex");
+  return sha === String(row.pdf_sha256) ? "ok" : "alterado";
+}
+
+/*
+ * Fase 6: al aprobarse la enmienda de un analisis incluido en informes
+ * autorizados, liberados o enviados, esos informes quedan "requiere enmienda".
+ */
+export async function marcarRequiereEnmienda(s: Session, user: CurrentUser, analisisOriginalId: number, referenciaAnalisis: string): Promise<void> {
   await ensureInformesSchema(s);
-  const antes = await snapshotRow(s, TABLE, id);
-  if (!antes) return json({ message: "Informe no encontrado" }, 404);
-  if (String(antes.estado) !== "autorizado") return json({ message: "Solo se entregan informes autorizados" }, 409);
-  await exigirSinSolicitudPendiente(s, TABLE, id, `El informe ${informeFolio(antes)}`, "entregar");
-  const payload = await readJson(request);
-  const medio = String(payload.medio || "").trim();
-  const fecha = strippedOrNull(payload.fecha, 10);
-  const aQuien = strippedOrNull(payload.a_quien, 180);
-  if (!DELIVERY.has(medio) || !fecha || !aQuien) return json({ message: "Indica fecha, medio y a quien se entrego el informe" }, 400);
-  await exigirReauth(s, request, user, "informes:A");
-  const entrega = { fecha, medio, a_quien: aQuien, observaciones: strippedOrNull(payload.observaciones), entregado_por: userIdFromClaims(user), entregado_rol_id: actuo.rol_id, entregado_cargo: actuo.cargo, entregado_en: new Date().toISOString() };
-  await s.execute(`UPDATE ${TABLE} SET estado = 'entregado', entrega_json = :entrega, actualizado_por = :usuario WHERE id = :id`, { entrega: jsonText(entrega), usuario: userIdFromClaims(user), id });
-  const despues = await snapshotRow(s, TABLE, id);
-  await registrarAuditoria(s, user, { accion: "entregar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, detalle: entrega });
-  await s.commit();
-  return json({ message: "Entrega registrada", item: serializeInforme(despues!) });
+  const candidatos = await s.query<Row>(`SELECT * FROM ${TABLE} WHERE estado IN ('autorizado', 'liberado', 'enviado') AND analisis_ids_json LIKE :like`, { like: `%${analisisOriginalId}%` });
+  for (const inf of candidatos) {
+    if (!safeJsonLoad<number[]>(String(inf.analisis_ids_json || "[]"), []).includes(analisisOriginalId)) continue;
+    const motivo = `El análisis ${referenciaAnalisis} se enmendó después del informe`;
+    await s.execute(`UPDATE ${TABLE} SET requiere_enmienda = 1, requiere_enmienda_motivo = :motivo WHERE id = :id`, { motivo, id: inf.id });
+    await registrarAuditoria(s, user, { accion: "requiere_enmienda", entidad: TABLE, entidadId: Number(inf.id), referencia: informeFolio(inf), motivo, detalle: { analisis_id: analisisOriginalId } });
+  }
 }
 
 /* Anulacion con motivo (un informe autorizado anulado conserva su PDF marcado). */
@@ -644,8 +699,8 @@ export async function anularInforme({ request, s, params }: RouteContext): Promi
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
   if (String(antes.estado) === "anulado") return json({ message: "El informe ya esta anulado" }, 409);
   await exigirReauth(s, request, user, "informes:AN");
-  // Fase 3: anular un informe autorizado o entregado requiere la aprobacion de un segundo usuario.
-  if (["autorizado", "entregado", "sustituido"].includes(String(antes.estado))) {
+  // Fase 3: anular un informe autorizado, liberado o enviado requiere la aprobacion de un segundo usuario.
+  if (["autorizado", "liberado", "enviado", "sustituido"].includes(String(antes.estado))) {
     const solicitud = await crearSolicitud(s, user, { tipo: "anular_informe", entidad: TABLE, entidadId: id, referencia: informeFolio(antes), accion: "anular", datos: { estado: antes.estado }, motivo, cargo: actuo.cargo });
     await s.commit();
     return respuestaSolicitud(solicitud, `la anulación del informe ${informeFolio(antes)}`);
@@ -704,6 +759,23 @@ async function violacionInforme(s: Session, usuarioId: number, informe: Row, ana
   return evaluarInforme(usuarioId, elaboradores, porAnalisis, accion);
 }
 
+/* Fase 6: en la enmienda del informe, cada analisis sustituido se cambia por su enmienda aprobada. */
+async function analisisVigentes(s: Session, ids: number[]): Promise<number[]> {
+  const out: number[] = [];
+  for (const id of ids) {
+    let actual = id;
+    for (let i = 0; i < 20; i += 1) {
+      const fila = await s.queryOne<Row>("SELECT id, estado FROM muestras_analisis WHERE id = :id", { id: actual });
+      if (!fila || String(fila.estado) !== "sustituido") break;
+      const sucesor = await s.scalar("SELECT id FROM muestras_analisis WHERE sustituye_a = :id AND estado = 'aprobado' ORDER BY version DESC LIMIT 1", { id: actual });
+      if (!sucesor) break;
+      actual = Number(sucesor);
+    }
+    out.push(actual);
+  }
+  return out;
+}
+
 /* Enmienda (7.8.8): nuevo informe en borrador, misma numeracion, version +1, que declara al que sustituye. */
 export async function amendInforme({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
@@ -713,7 +785,7 @@ export async function amendInforme({ request, s, params }: RouteContext): Promis
   await ensureInformesSchema(s);
   const original = await snapshotRow(s, TABLE, id);
   if (!original) return json({ message: "Informe no encontrado" }, 404);
-  if (!["autorizado", "entregado", "anulado"].includes(String(original.estado))) return json({ message: "Solo se enmiendan informes autorizados, entregados o anulados; los borradores se editan" }, 409);
+  if (!["autorizado", "liberado", "enviado", "anulado"].includes(String(original.estado))) return json({ message: "Solo se enmiendan informes autorizados, liberados, enviados o anulados; los borradores se editan" }, 409);
   await exigirSinSolicitudPendiente(s, TABLE, id, `El informe ${informeFolio(original)}`, "enmendar");
   const motivo = await readMotivo(request);
   if (motivo.length < 5) return json({ message: "Indica el motivo de la enmienda (al menos 5 caracteres)" }, 400);
@@ -736,7 +808,7 @@ export async function amendInforme({ request, s, params }: RouteContext): Promis
       motivo,
       cliente_json: original.cliente_json,
       muestras_json: original.muestras_json,
-      analisis_ids_json: original.analisis_ids_json,
+      analisis_ids_json: jsonText(await analisisVigentes(s, safeJsonLoad<number[]>(String(original.analisis_ids_json || "[]"), []))),
       resultados_json: original.resultados_json,
       declaraciones_json: original.declaraciones_json,
       usuario: userId,
@@ -762,20 +834,23 @@ export async function getInformePdf({ request, s, params }: RouteContext): Promi
   const row = await snapshotRow(s, TABLE, id);
   if (!row) return json({ message: "Informe no encontrado" }, 404);
   let pdf: Buffer;
+  const integridad = await integridadPdf(row);
   if (row.archivo_pdf && fs.existsSync(path.join(informesDir(), String(row.archivo_pdf)))) {
     pdf = await fs.promises.readFile(path.join(informesDir(), String(row.archivo_pdf)));
+    // Fase 6: si la huella no coincide con la guardada al liberar, se avisa en la bitacora (y en la ficha).
+    if (integridad === "alterado") await registrarAuditoria(s, user, { accion: "alerta_integridad", entidad: TABLE, entidadId: id, referencia: informeFolio(row), motivo: "El SHA-256 del PDF no coincide con el guardado al liberar", detalle: { esperado: row.pdf_sha256, obtenido: createHash("sha256").update(pdf).digest("hex") } });
   } else {
     // Borrador: vista previa generada al vuelo, marcada como tal.
     const analyses = await loadAnalyses(s, safeJsonLoad<number[]>(String(row.analisis_ids_json || "[]"), []));
     const render = await buildRender(s, row, analyses);
-    render.declaraciones = { ...render.declaraciones, opiniones: [render.declaraciones.opiniones, "VISTA PREVIA — informe no autorizado"].filter(Boolean).join("\n") };
+    render.declaraciones = { ...render.declaraciones, opiniones: [render.declaraciones.opiniones, "VISTA PREVIA — informe no liberado"].filter(Boolean).join("\n") };
     pdf = await renderInformePdf(render);
   }
   await registrarAuditoria(s, user, { accion: "descargar", entidad: TABLE, entidadId: id, referencia: informeFolio(row) });
   await s.commit();
   return new Response(new Uint8Array(pdf), {
     status: 200,
-    headers: { "Content-Type": "application/pdf", "Content-Length": String(pdf.length), "Content-Disposition": `inline; filename="${informeFolio(row).replace(/\s+/g, "-")}-v${row.version}.pdf"` },
+    headers: { "Content-Type": "application/pdf", "Content-Length": String(pdf.length), "X-Integridad-Pdf": integridad || "sin_pdf_final", "Content-Disposition": `inline; filename="${informeFolio(row).replace(/\s+/g, "-")}-v${row.version}.pdf"` },
   });
 }
 
@@ -789,7 +864,8 @@ export async function informesSummary({ request, s }: RouteContext): Promise<Res
       (SELECT COUNT(*) FROM ${TABLE} WHERE estado = 'borrador') AS borrador,
       (SELECT COUNT(*) FROM ${TABLE} WHERE estado = 'en_revision') AS en_revision,
       (SELECT COUNT(*) FROM ${TABLE} WHERE estado = 'autorizado') AS autorizados,
-      (SELECT COUNT(*) FROM ${TABLE} WHERE estado = 'entregado') AS entregados,
+      (SELECT COUNT(*) FROM ${TABLE} WHERE estado = 'liberado') AS liberados,
+      (SELECT COUNT(*) FROM ${TABLE} WHERE estado = 'enviado') AS enviados,
       (SELECT COUNT(*) FROM muestras_analisis WHERE estado = 'aprobado') AS analisis_aprobados
     `,
   );

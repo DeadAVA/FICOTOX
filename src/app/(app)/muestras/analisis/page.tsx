@@ -156,7 +156,11 @@ function AnalisisList() {
                 return (
                   <Tr key={item.id} interactive onClick={() => router.push(`/muestras/analisis/${item.id}`)} className={item.estado === "anulado" ? "opacity-60" : undefined}>
                     <Td>
-                      <FolioChip type="A" num={item.folio_num} />
+                      <span className="flex items-center gap-2">
+                        <FolioChip type="A" num={item.folio_num} />
+                        {/* Fase 6: las enmiendas conservan el folio con su version. */}
+                        {Number(item.version || 1) > 1 ? <Badge tone="warning">v{String(item.version)}</Badge> : null}
+                      </span>
                     </Td>
                     <Td className="max-w-[220px]">
                       <CellPrimary title={tipo?.label || item.tipo_analisis} subtitle={metodo || "-"} />

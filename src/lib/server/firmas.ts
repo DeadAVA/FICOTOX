@@ -157,3 +157,9 @@ export async function listarCuentasActivas({ request, s }: RouteContext): Promis
   for (const f of filas) items.push({ id: Number(f.id), nombre: f.nombre || f.email, email: f.email, cargo: await cargoDe(s, Number(f.id)) });
   return json({ items });
 }
+
+/* El formato eligio una cuenta para ese rol de firma. */
+export function firmanteElegido(payload: Record<string, unknown>, rol: string): boolean {
+  const elegidos = (payload.firmantes && typeof payload.firmantes === "object" ? payload.firmantes : {}) as Record<string, { usuario_id?: unknown } | null>;
+  return !!Number(elegidos[rol]?.usuario_id);
+}

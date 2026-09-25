@@ -14,6 +14,7 @@
 import "./lib/reauth-auto.mjs";
 import { readFileSync } from "node:fs";
 import { autorizarTodo } from "./lib/autorizar.mjs";
+import { liberar, registrarEnvio } from "./lib/envio.mjs";
 
 const BASE = process.env.BASE || "http://localhost:3100/api";
 const credenciales = JSON.parse(readFileSync(process.env.CREDENCIALES_ROLES, "utf8"));
@@ -73,6 +74,8 @@ let flujo = null;
   estados.push(await estadoR(R));
   const enviar = await api("POST", `/samples/analysis/${A}/enviar-revision`, {}, tL);
   estados.push(await estadoR(R));
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${A}/enviar-revision`, {}, QA);
   const rev = await api("POST", `/samples/analysis/${A}/revisar`, {}, tR);
   const apr = await api("POST", `/samples/analysis/${A}/aprobar`, {}, tR);
   estados.push(await estadoR(R));
@@ -81,8 +84,14 @@ let flujo = null;
   const revInf = await api("POST", `/informes/${inf.data?.id}/revisar`, {}, tR);
   const aut = await api("POST", `/informes/${inf.data?.id}/autorizar`, {}, tP);
   estados.push(await estadoR(R));
-  const esperado = ["aceptada", "en_procesamiento", "en_extraccion", "en_analisis", "en_revision_tecnica", "validada", "informe_elaborado", "liberada"];
-  check("flujo completo: la recepcion recorre los estados nuevos en orden", JSON.stringify(estados) === JSON.stringify(esperado) && enviar.status === 200 && rev.status === 200 && apr.status === 200 && inf.status === 201 && revInf.status === 200 && aut.status === 200, `${estados.join(" → ")} | ${enviar.status} ${rev.status} ${apr.status} ${inf.status} ${revInf.status} ${aut.status} ${aut.data?.message || ""}`);
+  // Fase 6: autorizar ya no libera; Patricia libera (PDF final) y se registra el envio.
+  const lib = await liberar(BASE, tP, inf.data?.id);
+  estados.push(await estadoR(R));
+  const env = await registrarEnvio(BASE, tP, inf.data?.id, { nombre: "Cliente flujo F5", correo: "cliente.flujo@ejemplo.mx" });
+  const infFinal = (await api("GET", `/informes/${inf.data?.id}`, undefined, QA)).data?.item;
+  const esperado = ["aceptada", "en_procesamiento", "en_extraccion", "en_analisis", "en_revision_tecnica", "validada", "informe_elaborado", "informe_elaborado", "liberada"];
+  check("flujo completo: la recepcion recorre los estados nuevos en orden (autorizar no libera; liberar si)", JSON.stringify(estados) === JSON.stringify(esperado) && enviar.status === 200 && rev.status === 200 && apr.status === 200 && inf.status === 201 && revInf.status === 200 && aut.status === 200 && lib.status === 200, `${estados.join(" → ")} | ${enviar.status} ${rev.status} ${apr.status} ${inf.status} ${revInf.status} ${aut.status} ${lib.status} ${lib.data?.message || ""}`);
+  check("flujo completo: el informe liberado se envia con evidencia y queda enviado", env.status === 200 && infFinal?.estado === "enviado" && infFinal?.pdf_integridad === "ok", `${env.status} ${env.data?.message} ${infFinal?.estado} ${infFinal?.pdf_integridad}`);
   const mias = (await api("GET", "/samples/reception?mias=1", undefined, tL)).data?.items || [];
   check("filtro 'Mis muestras': el Analista ve la muestra asignada", mias.some((r) => r.id === R), `${mias.length}`);
   flujo = { id, R, P: P.data?.id, E };

@@ -537,7 +537,7 @@ export function SignoffCard({ title, name, cargo, at, note, hint, children }: { 
   );
 }
 
-/* Linea de avance de un registro (borrador → revision → autorizado → entregado). */
+/* Linea de avance de un registro (borrador → revision → autorizado → liberado → enviado). */
 export function FlowSteps({ steps, current, failed }: { steps: { key: string; label: string }[]; current: string; failed?: string }) {
   const index = steps.findIndex((step) => step.key === current);
   return (

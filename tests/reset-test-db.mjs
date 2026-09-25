@@ -71,7 +71,7 @@ export function resetTestDb() {
       revocada_en VARCHAR(40) DEFAULT NULL, revocada_por INTEGER DEFAULT NULL, motivo_revocacion TEXT, vencimiento_registrado_en VARCHAR(40) DEFAULT NULL
     )`);
     const autorizacionesQa = [
-      ...["recepcion", "procesamiento", "extraccion", "analisis", "revision_resultados", "aprobacion_resultados", "revision_informe", "autorizacion_informe"].map((clave) => ["actividad", clave]),
+      ...["recepcion", "procesamiento", "extraccion", "analisis", "revision_resultados", "aprobacion_resultados", "revision_informe", "autorizacion_informe", "liberacion_informe"].map((clave) => ["actividad", clave]),
       ...["ASP", "DSP", "PSP", "pigmentos", "plancton", "otro"].map((clave) => ["metodo", clave]),
     ];
     for (const [tipo, clave] of autorizacionesQa) {

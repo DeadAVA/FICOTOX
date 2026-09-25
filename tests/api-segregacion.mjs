@@ -11,6 +11,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { autorizarTodo } from "./lib/autorizar.mjs";
+import { liberar, registrarEnvio } from "./lib/envio.mjs";
 
 const Database = createRequire(import.meta.url)(process.env.BETTER_SQLITE3 || "better-sqlite3");
 const BASE = process.env.BASE || "http://localhost:3100/api";
@@ -133,10 +134,14 @@ const cadena = async (prefijo, token = QA) => {
 
   // Regla 1: analisis.
   const c = await cadena("SEG1");
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${c.A}/enviar-revision`, {}, QA);
   const revPropio = await api("POST", `/samples/analysis/${c.A}/revisar`, {}, QA);
   check("regla 1: quien elaboro el analisis no lo revisa (409 segregacion)", revPropio.status === 409 && revPropio.data?.codigo === "segregacion" && revPropio.data?.regla === 1 && /Elaboraste este análisis/.test(revPropio.data?.message), `${revPropio.status} ${revPropio.data?.message}`);
   const ficha = (await api("GET", `/samples/analysis/${c.A}`, undefined, QA)).data?.item;
   check("la ficha informa a la interfaz por que no puede revisar (botones deshabilitados)", /Elaboraste/.test(String(ficha?.segregacion?.revisar)) && /Elaboraste/.test(String(ficha?.segregacion?.aprobar)), JSON.stringify(ficha?.segregacion));
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${c.A}/enviar-revision`, {}, QA);
   const rev = await api("POST", `/samples/analysis/${c.A}/revisar`, {}, tR);
   const aprPropio = await api("POST", `/samples/analysis/${c.A}/aprobar`, {}, QA);
   const apr = await api("POST", `/samples/analysis/${c.A}/aprobar`, {}, tR);
@@ -147,6 +152,8 @@ const cadena = async (prefijo, token = QA) => {
   const c2 = await cadena("SEG1E");
   const folio = fila("SELECT folio_num FROM muestras_analisis WHERE id = ?", c2.A)?.folio_num;
   const editar = await api("PUT", `/samples/analysis/${c2.A}`, { ...analisis(c2.E, c2.id), folio_num: folio, observaciones: "Corrijo el resultado" }, tR);
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${c2.A}/enviar-revision`, {}, QA);
   const revEditor = await api("POST", `/samples/analysis/${c2.A}/revisar`, {}, tR);
   check("regla 1: quien edito el analisis tambien cuenta como elaborador (409)", editar.status === 200 && revEditor.status === 409 && revEditor.data?.codigo === "segregacion", `${editar.status} ${revEditor.status}`);
 
@@ -161,7 +168,11 @@ const cadena = async (prefijo, token = QA) => {
   // Con cargo predeterminado captura sin elegir; al revisar prueba con cada cargo.
   await api("PUT", "/auth/me/cargo", { rol_id: rolId("Coordinador/a del Área Técnica") }, tDos);
   const c3 = await cadena("SEG1D", tDos);
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${c3.A}/enviar-revision`, {}, QA);
   const rev1 = await api("POST", `/samples/analysis/${c3.A}/revisar`, {}, tDos, { "X-Actuar-Como": String(rolId("Coordinador/a del Área Técnica")) });
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${c3.A}/enviar-revision`, {}, QA);
   const rev2 = await api("POST", `/samples/analysis/${c3.A}/revisar`, {}, tDos, { "X-Actuar-Como": String(rolId("Coordinador/a de Investigación y Desarrollo")) });
   check("una persona con dos roles no se salta la regla cambiando de cargo", !!c3.A && rev1.status === 409 && rev2.status === 409 && rev1.data?.codigo === "segregacion", `A=${c3.A} ${rev1.status} ${rev2.status}`);
 
@@ -201,6 +212,8 @@ const cadena = async (prefijo, token = QA) => {
   // Regla 5 (documentos): cubierta en api-sgc.mjs (elaborador no revisa; revisor no aprueba; tercera persona aprueba).
   // Regla 6: quien solicita no aprueba.
   const c6 = await cadena("SEG6");
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${c6.A}/enviar-revision`, {}, QA);
   await api("POST", `/samples/analysis/${c6.A}/revisar`, {}, tR);
   await api("POST", `/samples/analysis/${c6.A}/aprobar`, {}, tR);
   const sol = await api("POST", `/samples/analysis/${c6.A}/anular`, { motivo: "Resultado mal capturado" }, tR);
@@ -212,6 +225,8 @@ const cadena = async (prefijo, token = QA) => {
 /* ---------- 3. Segundo usuario ---------- */
 {
   const c = await cadena("SOL");
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${c.A}/enviar-revision`, {}, QA);
   await api("POST", `/samples/analysis/${c.A}/revisar`, {}, tR);
   await api("POST", `/samples/analysis/${c.A}/aprobar`, {}, tR);
 
@@ -270,6 +285,8 @@ const cadena = async (prefijo, token = QA) => {
 
   // Solicitud vencida.
   const c4 = await cadena("SOLV");
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${c4.A}/enviar-revision`, {}, QA);
   await api("POST", `/samples/analysis/${c4.A}/revisar`, {}, tR);
   const pedirV = await api("POST", `/samples/analysis/${c4.A}/anular`, { motivo: "Vencera sin respuesta" }, QA);
   sql("UPDATE solicitudes_autorizacion SET vence_en = ? WHERE id = ?", new Date(Date.now() - 1000).toISOString(), pedirV.data?.solicitud?.id);
@@ -279,6 +296,8 @@ const cadena = async (prefijo, token = QA) => {
 
   // Anular un informe autorizado: segundo usuario con AN en informes.
   const c5 = await cadena("SOLI");
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${c5.A}/enviar-revision`, {}, QA);
   await api("POST", `/samples/analysis/${c5.A}/revisar`, {}, tR);
   await api("POST", `/samples/analysis/${c5.A}/aprobar`, {}, tR);
   const inf = await api("POST", "/informes", { recepcion_id: c5.R, analisis_ids: [c5.A], cliente: { nombre: "Cliente anulacion" } }, QA);
@@ -291,10 +310,14 @@ const cadena = async (prefijo, token = QA) => {
 
   // Excepcion de segregacion: el Analista revisa su propio analisis por falta de personal.
   const c6 = await cadena("SOLE", tR);
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${c6.A}/enviar-revision`, {}, QA);
   const sinExc = await api("POST", `/samples/analysis/${c6.A}/revisar`, {}, tR);
   const exc = await api("POST", "/solicitudes", { tipo: "excepcion_segregacion", entidad: "muestras_analisis", entidad_id: c6.A, accion: "revisar", motivo: "Única persona disponible esta semana" }, tR);
   const excSinA = await api("POST", `/solicitudes/${exc.data?.solicitud?.id}/aprobar`, { motivo: "Sin permiso de calidad" }, tL);
   const excOk = await api("POST", `/solicitudes/${exc.data?.solicitud?.id}/aprobar`, { motivo: "Aprobada por falta de personal" }, tP);
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${c6.A}/enviar-revision`, {}, QA);
   const conExc = await api("POST", `/samples/analysis/${c6.A}/revisar`, {}, tR);
   const aprSinExc = await api("POST", `/samples/analysis/${c6.A}/aprobar`, {}, tR);
   const bitRev = auditoria("revisar", "muestras_analisis", c6.A);
@@ -305,12 +328,16 @@ const cadena = async (prefijo, token = QA) => {
 
   // La excepcion solo la pide quien podria hacer la accion y a quien la segregacion se la impide; pendiente no bloquea el registro.
   const c7 = await cadena("SOLX", tR);
+  // Fase 6: la excepcion para revisar aplica a lo enviado a revision.
+  await api("POST", `/samples/analysis/${c7.A}/enviar-revision`, {}, tR);
   const excLuis = await api("POST", "/solicitudes", { tipo: "excepcion_segregacion", entidad: "muestras_analisis", entidad_id: c7.A, accion: "revisar", motivo: "Pido revisar sin permiso" }, tL);
   const excInnecesaria = await api("POST", "/solicitudes", { tipo: "excepcion_segregacion", entidad: "muestras_analisis", entidad_id: c7.A, accion: "revisar", motivo: "No elabore este analisis" }, QA);
   const excEstado = await api("POST", "/solicitudes", { tipo: "excepcion_segregacion", entidad: "muestras_analisis", entidad_id: c7.A, accion: "aprobar", motivo: "Aun no esta revisado" }, tR);
   check("excepcion: sin permiso de la accion 403; si la segregacion no lo impide o el estado no aplica, 409", excLuis.status === 403 && excInnecesaria.status === 409 && excInnecesaria.data?.codigo === "excepcion_innecesaria" && excEstado.status === 409, `${excLuis.status} ${excInnecesaria.status} ${excInnecesaria.data?.codigo} ${excEstado.status}`);
   const excPend = await api("POST", "/solicitudes", { tipo: "excepcion_segregacion", entidad: "muestras_analisis", entidad_id: c7.A, accion: "revisar", motivo: "Única persona disponible" }, tR);
   const excDoble = await api("POST", "/solicitudes", { tipo: "excepcion_segregacion", entidad: "muestras_analisis", entidad_id: c7.A, accion: "revisar", motivo: "Otra vez la misma" }, tR);
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${c7.A}/enviar-revision`, {}, QA);
   const revOtro = await api("POST", `/samples/analysis/${c7.A}/revisar`, {}, QA);
   check("una excepcion pendiente no bloquea el registro: otra persona lo revisa; no se duplica la de la misma persona y accion", excPend.status === 202 && excDoble.status === 409 && revOtro.status === 200, `${excPend.status} ${excDoble.status} ${revOtro.status} ${revOtro.data?.message}`);
   await api("POST", `/solicitudes/${excPend.data?.solicitud?.id}/cancelar`, { motivo: "Ya la reviso otra persona" }, tR);
@@ -324,6 +351,7 @@ const cadena = async (prefijo, token = QA) => {
   await api("POST", `/solicitudes/${exc2.data?.solicitud?.id}/aprobar`, { motivo: "Aprobada por calidad" }, tP);
   const revInf = await api("POST", `/informes/${inf2.data?.id}/revisar`, {}, tR);
   const autInf = await api("POST", `/informes/${inf2.data?.id}/autorizar`, {}, QA);
+  await liberar(BASE, QA, inf2.data?.id);
   const pdf = await api("GET", `/informes/${inf2.data?.id}/pdf`, undefined, QA);
   const texto = textoPdf(pdf.data);
   check("excepcion aprobada en un informe: la revision procede y el PDF la declara", revInf.status === 200 && autInf.status === 200 && texto.includes(`solicitud #${exc2.data?.solicitud?.id}`), `${revInf.status} ${autInf.status} ${autInf.data?.message} pdf=${texto.includes("excepci")}`);
@@ -334,20 +362,25 @@ const cadena = async (prefijo, token = QA) => {
   const hoyLab = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Tijuana", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   // Informe autorizado sin fecha de emision: la fecha es el dia del laboratorio (no el dia UTC).
   const c = await cadena("REG1");
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${c.A}/enviar-revision`, {}, QA);
   await api("POST", `/samples/analysis/${c.A}/revisar`, {}, tR);
   await api("POST", `/samples/analysis/${c.A}/aprobar`, {}, tR);
   const inf = (await api("POST", "/informes", { recepcion_id: c.R, analisis_ids: [c.A], cliente: { nombre: "Cliente regresion" } }, QA)).data?.id;
   await api("POST", `/informes/${inf}/revisar`, {}, tR);
   const aut = await api("POST", `/informes/${inf}/autorizar`, {}, tR);
   check("autorizar sin fecha de emision fija el dia del laboratorio (America/Tijuana)", aut.status === 200 && aut.data?.item?.fecha_emision === hoyLab, `${aut.data?.item?.fecha_emision} vs ${hoyLab}`);
-  // Con la anulacion del informe pendiente no se entrega ni se enmienda.
+  // Con la anulacion del informe pendiente no se envia ni se enmienda.
+  await liberar(BASE, tR, inf);
   const pedir = await api("POST", `/informes/${inf}/anular`, { motivo: "Cliente equivocado" }, tR);
-  const entregar = await api("POST", `/informes/${inf}/entregar`, { fecha: hoyLab, medio: "correo", a_quien: "Cliente" }, QA);
+  const entregar = await registrarEnvio(BASE, QA, inf);
   const enmendar = await api("POST", `/informes/${inf}/enmienda`, { motivo: "Corregir cliente" }, QA);
   check("informe con anulacion pendiente: no se entrega ni se enmienda (409 solicitud_pendiente)", pedir.status === 202 && entregar.status === 409 && enmendar.status === 409 && entregar.data?.codigo === "solicitud_pendiente", `${pedir.status} ${entregar.status} ${enmendar.status}`);
   await api("POST", `/solicitudes/${pedir.data?.solicitud?.id}/cancelar`, {}, tR);
   // Un analisis con anulacion pendiente no se incluye, revisa ni autoriza en un informe.
   const c2 = await cadena("REG2");
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${c2.A}/enviar-revision`, {}, QA);
   await api("POST", `/samples/analysis/${c2.A}/revisar`, {}, tR);
   await api("POST", `/samples/analysis/${c2.A}/aprobar`, {}, tR);
   const inf2 = (await api("POST", "/informes", { recepcion_id: c2.R, analisis_ids: [c2.A], cliente: { nombre: "Cliente regresion 2" } }, QA)).data?.id;

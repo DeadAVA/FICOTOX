@@ -104,8 +104,11 @@ const ENTORNO_FASE2 = { TRUST_PROXY: "true", JWT_EXPIRES_HOURS: "", CORS_ORIGINS
 
 /* Levanta el servidor sobre la copia y no devuelve hasta confirmar que es esa base. */
 /* Fase 3: la zona horaria del servidor no debe cambiar ninguna fecha (se arranca en Tijuana y, tras reiniciar, en UTC). */
-const arrancarServidor = async (tz = "America/Tijuana") => {
-  server = spawn("npx", ["next", "dev", "-p", String(PORT)], { cwd: root, stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, SQLITE_PATH: testDb, PORT: String(PORT), TZ: tz, ...ENTORNO_FASE2 } });
+/* Fase 6: la primera fase tiene SMTP de prueba (transporte en memoria, sin red); tras reiniciar, sin SMTP. */
+const SMTP_PRUEBA = { SMTP_HOST: "prueba", SMTP_PORT: "2525", SMTP_USER: "ficotox", SMTP_PASS: "prueba", SMTP_FROM: "FICOTOX <informes@ficotox.local>" };
+const SIN_SMTP = { SMTP_HOST: "", SMTP_PORT: "", SMTP_USER: "", SMTP_PASS: "", SMTP_FROM: "" };
+const arrancarServidor = async (tz = "America/Tijuana", smtp = SMTP_PRUEBA) => {
+  server = spawn("npx", ["next", "dev", "-p", String(PORT)], { cwd: root, stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, SQLITE_PATH: testDb, PORT: String(PORT), TZ: tz, ...ENTORNO_FASE2, ...smtp } });
   const salud = await waitFor(`http://localhost:${PORT}/api/health/db`);
   if (!salud) throw new Error("El servidor de pruebas no respondio");
   if (salud.archivo !== esperado) {
@@ -136,7 +139,7 @@ try {
   }
 
   // api-roles corre despues de api-dsp y api-sgc: crea registros y personas de prueba que alterarian los folios que esas suites esperan.
-  for (const file of ["api-dsp.mjs", "api-sgc.mjs", "api-roles.mjs", "api-seguridad.mjs", "api-segregacion.mjs", "api-autorizaciones.mjs", "api-muestras.mjs"]) {
+  for (const file of ["api-dsp.mjs", "api-sgc.mjs", "api-roles.mjs", "api-seguridad.mjs", "api-segregacion.mjs", "api-autorizaciones.mjs", "api-muestras.mjs", "api-informes.mjs"]) {
     console.log(`\n=== ${file}`);
     failed += (await run(path.join(here, file), api)) ? 1 : 0;
   }
@@ -147,11 +150,13 @@ try {
   console.log("\n=== api-permisos.mjs y api-roles.mjs --tras-reinicio (tras reiniciar el servidor)");
   stop();
   await new Promise((r) => setTimeout(r, 1500));
-  await arrancarServidor("UTC");
+  await arrancarServidor("UTC", SIN_SMTP);
   failed += (await run(path.join(here, "api-permisos.mjs"), api)) ? 1 : 0;
   failed += (await run(path.join(here, "api-roles.mjs"), api, ["--tras-reinicio"])) ? 1 : 0;
   console.log("\n=== api-fechas.mjs (servidor en TZ=UTC: los mismos registros muestran las mismas fechas)");
   failed += (await run(path.join(here, "api-fechas.mjs"), api, ["--fase=2"])) ? 1 : 0;
+  console.log("\n=== api-informes.mjs --sin-smtp (servidor sin SMTP_*)");
+  failed += (await run(path.join(here, "api-informes.mjs"), api, ["--sin-smtp"])) ? 1 : 0;
 
   if (!onlyApi) {
     if (!existsSync(chrome)) {

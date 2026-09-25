@@ -85,7 +85,6 @@ const drawSignature = async (label, p = page) => {
   await p.mouse.move(box.x + 220, box.y + 50, { steps: 8 });
   await p.mouse.up();
 };
-const dialogButton = (name) => page.getByRole("dialog").getByRole("button", { name, exact: true });
 
 let token = "";
 try {
@@ -233,6 +232,11 @@ try {
   await page.getByText("Separación de funciones").first().waitFor();
   check("QA no puede revisar su propio análisis (botón deshabilitado con explicación)", await page.getByRole("button", { name: "Marcar revisado" }).isDisabled());
   const analisisUrl = page.url();
+  // Fase 6: el analista lo envía a revisión (desde aquí ya no se edita).
+  await page.getByRole("button", { name: "Enviar a revisión" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /Enviar a revisión/ }).click();
+  await page.locator("[data-sonner-toast]").filter({ hasText: /revisi/i }).last().waitFor({ timeout: 20_000 });
+  check("el analista envía el análisis a revisión", true);
   // La revisa y aprueba otra persona.
   await page2.goto(`${BASE}/login`);
   await page2.fill("#login-email", RICARDO);
@@ -294,8 +298,14 @@ try {
   const avisoAut = (await toast.count()) ? await toast.textContent() : "sin aviso";
   check("la autorización se registra", /Informe autorizado/.test(String(avisoAut)), avisoAut);
   check("informe autorizado", true);
+  // Fase 6: autorizar no genera el PDF final; se libera (puede hacerlo quien autorizó).
+  await page2.getByRole("button", { name: "Liberar", exact: true }).click();
+  if (await page2.locator("#sign-password").count()) await page2.locator("#sign-password").fill(credenciales[RICARDO]);
+  await page2.getByRole("dialog").getByRole("button", { name: "Liberar", exact: true }).click();
+  await page2.locator("[data-sonner-toast]").filter({ hasText: /liberado/i }).last().waitFor({ timeout: 20_000 });
+  check("informe liberado (PDF final)", true);
   await page.goto(`${BASE}/informes/${informeId}`);
-  await page.getByRole("button", { name: "Registrar entrega" }).waitFor();
+  await page.locator("#envio-nombre").waitFor();
   const pdf = await page.evaluate(async ([id, tk]) => {
     const r = await fetch(`/api/informes/${id}/pdf`, { headers: { Authorization: `Bearer ${tk}` } });
     return { status: r.status, type: r.headers.get("content-type"), size: (await r.arrayBuffer()).byteLength };
@@ -303,15 +313,15 @@ try {
   check("PDF del informe descargable", pdf.status === 200 && String(pdf.type).includes("pdf") && pdf.size > 2000, JSON.stringify(pdf));
   // Un <fieldset disabled> desactiva a sus descendientes sin poner el atributo en cada uno: se consulta :disabled.
   await page.waitForFunction(() => !!document.querySelector("#i-cli")?.matches(":disabled"));
-  check("informe autorizado es solo lectura (cliente desactivado)", true);
-  await page.getByRole("button", { name: "Registrar entrega" }).click();
-  await page.fill("#e-fecha", today);
-  await page.selectOption("#e-medio", { index: 1 });
-  await page.fill("#e-quien", "Juan Pérez");
-  await fillPassword("#e-password");
-  await dialogButton("Registrar entrega").click();
-  await page.getByText("Entregado").first().waitFor();
-  check("informe entregado", true);
+  check("informe liberado es solo lectura (cliente desactivado)", true);
+  // Fase 6: envío manual con evidencia (reemplaza la entrega).
+  await page.fill("#envio-nombre", "Juan Pérez");
+  await page.fill("#envio-correo", "juan.perez@ejemplo.mx");
+  await page.locator("#envio-evidencia").setInputFiles({ name: "evidencia.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n% evidencia de envio\n") });
+  await page.getByRole("button", { name: "Registrar envío", exact: true }).click();
+  await page.locator("[data-envio]").first().waitFor();
+  await page.getByText("Enviado").first().waitFor();
+  check("envío registrado con evidencia: el informe queda enviado", (await page.locator("[data-envio]").count()) === 1);
 
   /* ---------- Documentos SGC (módulo apagado: la ruta no existe y no aparece en el menú) ---------- */
   await page.goto(`${BASE}/documentos`);
@@ -331,7 +341,7 @@ try {
   check("bitácora: verificación de integridad OK", true);
   // Cada entrada es una frase en español (actor + verbo), sin JSON ni nombres de columna.
   const firstText = (await timeline.first().textContent()) || "";
-  check("bitácora: entradas en lenguaje llano", /(inició sesión|creó|editó|anuló|restauró|aprobó|autorizó|marcó como revisado|dio de baja|reactivó|registró la entrega|descargó|cambió|acceso fallido|repuso|importó|emitió)/i.test(firstText) && !firstText.includes("_json") && !firstText.includes("{"), firstText.slice(0, 80));
+  check("bitácora: entradas en lenguaje llano", /(inició sesión|creó|editó|anuló|restauró|aprobó|autorizó|marcó como revisado|dio de baja|reactivó|registró la entrega|envió|liberó|descargó|cambió|acceso fallido|repuso|importó|emitió)/i.test(firstText) && !firstText.includes("_json") && !firstText.includes("{"), firstText.slice(0, 80));
   await timeline.filter({ hasText: /\d+ cambios?$/ }).first().click();
   await page.getByText(/Sello/).first().waitFor();
   check("bitácora: detalle con cambios antes → después y sello", true);
@@ -372,7 +382,7 @@ try {
   const flowCards = page.locator("li.group\\/card");
   await flowCards.first().waitFor();
   check("Inicio: lista de muestras en curso con etapas", (await flowCards.count()) >= 1, `tarjetas=${await flowCards.count()}`);
-  const nextStep = flowCards.first().getByRole("link", { name: /Registrar|Revisar|Aprobar|Crear|Autorizar/ });
+  const nextStep = flowCards.first().getByRole("link", { name: /Registrar|Revisar|Aprobar|Crear|Autorizar|Enviar|Liberar/ });
   check("Inicio: cada tarjeta ofrece el siguiente paso", (await nextStep.count()) >= 1, await nextStep.first().textContent());
   await page.getByRole("heading", { name: "Avisos" }).waitFor();
   const avisoRows = page.locator("#avisos a");

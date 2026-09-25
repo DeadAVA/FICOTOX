@@ -21,13 +21,13 @@ import { useDebouncedValue, useParamChange } from "@/lib/client/hooks";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 
-type EstadoFilter = "" | "pendiente" | "borrador" | "en_revision" | "autorizado" | "entregado" | "sustituido";
-const ESTADOS: string[] = ["pendiente", "borrador", "en_revision", "autorizado", "entregado", "sustituido"];
+type EstadoFilter = "" | "pendiente" | "borrador" | "en_revision" | "autorizado" | "liberado" | "enviado" | "requiere_enmienda" | "sustituido";
+const ESTADOS: string[] = ["pendiente", "borrador", "en_revision", "autorizado", "liberado", "enviado", "requiere_enmienda", "sustituido"];
 
 export default function InformesPage() {
   return (
     <PageBody>
-      <PageHeader title="Informes de resultados" description="Elaboración, revisión, autorización y entrega de informes al cliente (ISO/IEC 17025 7.8)." />
+      <PageHeader title="Informes de resultados" description="Elaboración, revisión, autorización, liberación y envío por correo de informes al cliente (ISO/IEC 17025 7.8)." />
       <RequireModule modules="informes">
         <Suspense fallback={<Skeleton className="h-64 w-full" />}>
           <InformesContent />
@@ -77,8 +77,10 @@ function InformesContent() {
         { value: "pendiente", label: "Por revisar o autorizar", count: resource.data ? Number(summary.borrador || 0) + Number(summary.en_revision || 0) : null, tone: Number(summary.borrador || 0) + Number(summary.en_revision || 0) ? "warning" : "neutral" },
         { value: "borrador", label: "Borradores", count: resource.data ? Number(summary.borrador || 0) : null },
         { value: "en_revision", label: "En revisión", count: resource.data ? Number(summary.en_revision || 0) : null, tone: summary.en_revision ? "warning" : "neutral" },
-        { value: "autorizado", label: "Autorizados por entregar", count: resource.data ? Number(summary.autorizados || 0) : null },
-        { value: "entregado", label: "Entregados", count: resource.data ? Number(summary.entregados || 0) : null },
+        { value: "autorizado", label: "Autorizados por liberar", count: resource.data ? Number(summary.autorizados || 0) : null },
+        { value: "liberado", label: "Liberados por enviar", count: resource.data ? Number(summary.liberados || 0) : null },
+        { value: "enviado", label: "Enviados", count: resource.data ? Number(summary.enviados || 0) : null },
+        { value: "requiere_enmienda", label: "Requieren enmienda", tone: "danger" },
         { value: "sustituido", label: "Sustituidos por enmienda" },
       ],
     },
@@ -87,7 +89,7 @@ function InformesContent() {
 
   const menuFor = (item: ApiRecord): MenuItem[] => [
     { label: "Abrir", description: "Ver el informe y su historial", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/informes/${item.id}`) },
-    { label: "Ver PDF", description: item.estado === "borrador" || item.estado === "en_revision" ? "Vista previa (sin validez)" : "Documento autorizado con SHA-256", icon: <FilePdf size={16} weight="duotone" />, onSelect: () => openProtectedFile(`${API_BASE_URL}/informes/${item.id}/pdf`, token, `${String(item.folio || "informe").replace(/\s+/g, "-")}.pdf`) },
+    { label: "Ver PDF", description: ["liberado", "enviado", "sustituido", "anulado"].includes(String(item.estado)) ? "Documento liberado con SHA-256" : "Vista previa (sin validez)", icon: <FilePdf size={16} weight="duotone" />, onSelect: () => openProtectedFile(`${API_BASE_URL}/informes/${item.id}/pdf`, token, `${String(item.folio || "informe").replace(/\s+/g, "-")}.pdf`) },
   ];
 
   return (
@@ -148,7 +150,12 @@ function InformesContent() {
                     <StateBadge kind="informe" status={item.estado} />
                     <SupervisionBadge estado={item.supervision_estado} />
                     <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} />
-                    {item.estado === "entregado" && (item.entrega as ApiRecord)?.fecha ? <p className="mt-0.5 text-[11.5px] text-ink-3">Entregado {fmtDate((item.entrega as ApiRecord).fecha)}</p> : null}
+                    {Number(item.requiere_enmienda || 0) ? (
+                      <span className="ml-1" title={String(item.requiere_enmienda_motivo || "")} data-requiere-enmienda>
+                        <Badge tone="danger">Requiere enmienda</Badge>
+                      </span>
+                    ) : null}
+                    {item.liberado_en ? <p className="mt-0.5 text-[11.5px] text-ink-3">Liberado {fmtDate(item.liberado_en)}</p> : null}
                   </Td>
                   <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
                     <ActionMenu items={menuFor(item)} header={String(item.folio || "")} />

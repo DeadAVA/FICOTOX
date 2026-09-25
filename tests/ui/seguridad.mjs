@@ -50,6 +50,8 @@ const A3 = (await api("POST", "/samples/analysis", { tipo_analisis: "toxinas_lip
 // Fase 3: el analisis de QA lo revisa y aprueba otra persona (Coord. del Area Tecnica).
 const credenciales = JSON.parse(readFileSync(process.env.CREDENCIALES_ROLES, "utf8"));
 const TR = (await api("POST", "/auth/login", { email: "ricardo.medina@ficotox.local", password: credenciales["ricardo.medina@ficotox.local"] })).data?.token;
+// Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+await api("POST", `/samples/analysis/${A3}/enviar-revision`, {}, QA);
 await api("POST", `/samples/analysis/${A3}/revisar`, {}, TR);
 await api("POST", `/samples/analysis/${A3}/aprobar`, {}, TR);
 const INF = (await api("POST", "/informes", { recepcion_id: R3, analisis_ids: [A3], cliente: { nombre: "Cliente UI" } }, QA)).data?.id;

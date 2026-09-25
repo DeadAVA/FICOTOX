@@ -6,6 +6,8 @@
  * el CSV, sin el corrimiento de un dia de `new Date("AAAA-MM-DD")`.
  */
 import "./lib/reauth-auto.mjs";
+import { liberar, registrarEnvio } from "./lib/envio.mjs";
+import { hoyLocal } from "../src/lib/shared/fechas.ts";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -63,17 +65,21 @@ if (FASE === "1") {
   const P = (await api("POST", "/samples/processing", { recepcion_id: R, muestra_tipo: "unica", id_interno: idInterno, fecha_procesamiento: RECIBIDA, tipo_organismo: ["bivalvos"], nombre_quien_proceso: "Persona A", nombre_quien_superviso: "Persona B" }, QA)).data?.id;
   const E = (await api("POST", "/samples/extraction", { tipo_registro: "E-D", procesamiento_id: P, tipo_molienda: "fresca", id_interno: idInterno, fecha_extraccion: RECIBIDA, registro_pesos: [{ id_muestra: idInterno, replica: `${idInterno}_R1`, peso_muestra: 2.01 }], nombre_quien_extrajo: "Persona A", nombre_quien_superviso: "Persona B" }, QA)).data?.id;
   const A = (await api("POST", "/samples/analysis", { tipo_analisis: "toxinas_lipofilicas", metodo: "hplc_ms_ms", extraccion_id: E, fecha_analisis: "2026-09-08", analista_nombre: "QA", resultados: [{ id_muestra: idInterno, resultado: 50, unidad: "µg/kg", limite_regulatorio: 160, cumple: "cumple" }] }, QA)).data?.id;
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${A}/enviar-revision`, {}, QA);
   await api("POST", `/samples/analysis/${A}/revisar`, {}, tR);
   await api("POST", `/samples/analysis/${A}/aprobar`, {}, tR);
   const inf = (await api("POST", "/informes", { recepcion_id: R, analisis_ids: [A], fecha_emision: EMITIDO, cliente: { nombre: "Cliente fechas" } }, QA)).data?.id;
   await api("POST", `/informes/${inf}/revisar`, {}, tR);
   const aut = await api("POST", `/informes/${inf}/autorizar`, { fecha_emision: EMITIDO }, tR);
-  const ent = await api("POST", `/informes/${inf}/entregar`, { fecha: ENTREGADO, medio: "correo", a_quien: "Cliente fechas" }, tR);
+  // Fase 6: liberar y registrar el envio (reemplaza a la entrega).
+  const lib = await liberar(BASE, tR, inf);
+  const ent = await registrarEnvio(BASE, tR, inf, { nombre: "Cliente fechas", enviadoEn: `${ENTREGADO}T10:00:00-07:00` });
   // Un borrador aparte: su PDF (vista previa) se genera al vuelo, tambien en la fase 2.
   const borrador = (await api("POST", "/informes", { recepcion_id: R, analisis_ids: [A], fecha_emision: EMITIDO, cliente: { nombre: "Cliente fechas" } }, QA)).data?.id;
   ids = { R, A, inf, borrador, idInterno };
   writeFileSync(IDS_FILE, JSON.stringify(ids));
-  check("datos: recepcion, analisis, informe autorizado y entregado, borrador", !!(R && A && inf && borrador) && aut.status === 200 && ent.status === 200, `${aut.status} ${aut.data?.message} ${ent.status} ${ent.data?.message}`);
+  check("datos: recepcion, analisis, informe autorizado, liberado y enviado, borrador", !!(R && A && inf && borrador) && aut.status === 200 && lib.status === 200 && ent.status === 200, `${aut.status} ${lib.status} ${lib.data?.message} ${ent.status} ${ent.data?.message}`);
 } else {
   ids = existsSync(IDS_FILE) ? JSON.parse(readFileSync(IDS_FILE, "utf8")) : {};
   check("se leen los registros creados con el servidor en otra zona horaria", !!ids.R);
@@ -84,7 +90,8 @@ const ficha = (await api("GET", `/samples/reception/${ids.R}`, undefined, QA)).d
 check("recepcion: lista y ficha dan la misma fecha (2026-09-07)", lista[0]?.fecha_recepcion === RECIBIDA && ficha?.fecha_recepcion === RECIBIDA, `${lista[0]?.fecha_recepcion} ${ficha?.fecha_recepcion}`);
 const informes = (await api("GET", `/informes?recepcion_id=${ids.R}`, undefined, QA)).data?.items || [];
 const informe = informes.find((i) => i.id === ids.inf);
-check("informe: la lista trae emitido 2026-09-10 y entregado 2026-09-09", informe?.fecha_emision === EMITIDO && informe?.entrega?.fecha === ENTREGADO, `${informe?.fecha_emision} ${informe?.entrega?.fecha}`);
+const envio = ((await api("GET", `/informes/${ids.inf}/envios`, undefined, QA)).data?.items || [])[0];
+check("informe: la lista trae emitido 2026-09-10 y el envio es del 2026-09-09 (dia del laboratorio)", informe?.fecha_emision === EMITIDO && hoyLocal(new Date(envio?.enviado_en)) === ENTREGADO, `${informe?.fecha_emision} ${envio?.enviado_en}`);
 const pdf = textoPdf((await api("GET", `/informes/${ids.inf}/pdf`, undefined, QA)).data);
 check("PDF autorizado: recepcion 07/09/2026 y emision 10/09/2026", pdf.includes("07/09/2026") && pdf.includes("10/09/2026"), pdf.slice(0, 160));
 const preview = textoPdf((await api("GET", `/informes/${ids.borrador}/pdf`, undefined, QA)).data);

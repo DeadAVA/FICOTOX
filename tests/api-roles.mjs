@@ -517,6 +517,8 @@ if (!TRAS_REINICIO) {
     const EB = (await api("POST", "/samples/extraction", extraccion(PB, "CARGO-1"), QA)).data?.id;
     const AB = (await api("POST", "/samples/analysis", analisis(EB, "CARGO-1"), QA)).data?.id;
     // Fase 3: lo revisa y aprueba otra persona (QA lo elaboro).
+    // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+    await api("POST", `/samples/analysis/${AB}/enviar-revision`, {}, QA);
     await api("POST", `/samples/analysis/${AB}/revisar`, {}, T("Coordinador/a del Área Técnica"));
     await api("POST", `/samples/analysis/${AB}/aprobar`, {}, T("Coordinador/a del Área Técnica"));
     const inf = await api("POST", "/informes", { recepcion_id: RB, analisis_ids: [AB], cliente: { nombre: "Cliente cargo" } }, QA);

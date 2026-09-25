@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ArrowsClockwise, FilePdf, FloppyDisk, PaperPlaneTilt, Prohibit, SealCheck, Truck } from "@phosphor-icons/react";
+import { ArrowsClockwise, FilePdf, FloppyDisk, LockKey, PaperPlaneTilt, Prohibit, SealCheck } from "@phosphor-icons/react";
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
 import { BotonSegregado, FolioChip, SegregacionCallout, SolicitudCallout, SupervisionCallout } from "@/components/features/samples/status";
 import { SignDialog } from "@/components/features/samples/SignDialog";
@@ -14,23 +14,24 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Checkbox, Field, FormGrid, Input, Select, Textarea } from "@/components/ui/Field";
 import { DateInput } from "@/components/ui/DateInput";
-import { ActionMenu, Dialog, usePrompt, type MenuItem } from "@/components/ui/Overlay";
+import { ActionMenu, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { Badge, EmptyState } from "@/components/ui/Primitives";
-import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
+import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { openProtectedFile } from "@/lib/client/files";
 import { fmtDate, isoDate, parseIntOrNull, todayIso } from "@/lib/client/format";
 import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
-import { ANALYSIS_METHODS, ANALYSIS_TYPES, REPORT_DEFAULT_STATEMENTS, REPORT_DELIVERY_MEDIA, REPORT_STATES } from "@/lib/shared/sgc";
-import { CampoIdentidad } from "@/components/session/Reautenticar";
+import { ANALYSIS_METHODS, ANALYSIS_TYPES, REPORT_DEFAULT_STATEMENTS, REPORT_STATES } from "@/lib/shared/sgc";
+import { EnviosPanel } from "@/components/features/informes/EnviosPanel";
 import { AvisoAutorizacion } from "@/components/features/samples/AvisoAutorizacion";
 import { requisitosInforme } from "@/lib/shared/autorizaciones";
 
 /*
  * Informe de resultados (ISO/IEC 17025 7.8): se arma a partir de una
  * recepcion y sus analisis aprobados; pasa por revision y autorizacion con
- * firma; al autorizarse se congela y se genera el PDF.
+ * firma; al liberarse (Fase 6) se congela y se genera el PDF final, y despues
+ * se envia por correo con su evidencia.
  */
 
 interface InformeState {
@@ -38,6 +39,7 @@ interface InformeState {
   clienteNombre: string;
   clienteContacto: string;
   clienteDireccion: string;
+  clienteCorreo: string;
   analisisIds: number[];
   alcance: string;
   reglaDecision: string;
@@ -57,6 +59,7 @@ const defaultForm = (): InformeState => ({
   clienteNombre: "",
   clienteContacto: "",
   clienteDireccion: "",
+  clienteCorreo: "",
   analisisIds: [],
   alcance: REPORT_DEFAULT_STATEMENTS.alcance,
   reglaDecision: REPORT_DEFAULT_STATEMENTS.regla_decision,
@@ -77,6 +80,7 @@ const formFromItem = (item: ApiRecord): InformeState => {
     clienteNombre: str(cliente.nombre),
     clienteContacto: str(cliente.contacto),
     clienteDireccion: str(cliente.direccion),
+    clienteCorreo: str(cliente.correo),
     analisisIds: Array.isArray(item.analisis_ids) ? item.analisis_ids.map(Number) : [],
     alcance: str(decl.alcance) || REPORT_DEFAULT_STATEMENTS.alcance,
     reglaDecision: str(decl.regla_decision) || REPORT_DEFAULT_STATEMENTS.regla_decision,
@@ -94,7 +98,8 @@ const FLOW_STEPS = [
   { key: "borrador", label: "Borrador" },
   { key: "en_revision", label: "En revisión" },
   { key: "autorizado", label: "Autorizado" },
-  { key: "entregado", label: "Entregado" },
+  { key: "liberado", label: "Liberado" },
+  { key: "enviado", label: "Enviado" },
 ];
 
 function tipoLabel(value: unknown): string {
@@ -117,10 +122,8 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
   const [descargoSugerido, setDescargoSugerido] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sign, setSign] = useState<"revisar" | "autorizar" | null>(null);
+  const [sign, setSign] = useState<"revisar" | "autorizar" | "liberar" | null>(null);
   const [signing, setSigning] = useState(false);
-  const [entrega, setEntrega] = useState<{ open: boolean; fecha: string; medio: string; aQuien: string; observaciones: string }>({ open: false, fecha: todayIso(), medio: "correo", aQuien: "", observaciones: "" });
-  const [claveEntrega, setClaveEntrega] = useState("");
   const editing = !!item?.id;
   const estado = String(item?.estado || "borrador");
   // E solo en borrador (Fase 1): en revisión o después se corrige por enmienda o anulación.
@@ -142,6 +145,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
         recepcionId: String(id),
         clienteNombre: prev.clienteNombre || str(cliente.nombre),
         clienteContacto: prev.clienteContacto || str(cliente.contacto),
+        clienteCorreo: prev.clienteCorreo || str(cliente.correo),
         analisisIds: keepSelection ? prev.analisisIds : ((data.analisis || []) as ApiRecord[]).map((a) => Number(a.id)),
         descargo: prev.descargo || (data.descargo_sugerido as string) || "",
       }));
@@ -169,7 +173,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
   const buildPayload = () => ({
     recepcion_id: parseIntOrNull(form.recepcionId),
     analisis_ids: form.analisisIds,
-    cliente: { nombre: form.clienteNombre.trim() || null, contacto: form.clienteContacto.trim() || null, direccion: form.clienteDireccion.trim() || null },
+    cliente: { nombre: form.clienteNombre.trim() || null, contacto: form.clienteContacto.trim() || null, direccion: form.clienteDireccion.trim() || null, correo: form.clienteCorreo.trim() || null },
     declaraciones: { alcance: form.alcance.trim(), regla_decision: form.reglaDecision.trim(), desviaciones: form.desviaciones.trim() || null, descargo: form.descargo.trim() || null, opiniones: form.opiniones.trim() || null },
     fecha_emision: form.fechaEmision || null,
     elaborado_nombre: form.elaboradoNombre.trim() || null,
@@ -221,7 +225,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
       const body: Record<string, unknown> = { firma: data.firma || null };
       // Segregacion de funciones (Fase 3): el servidor rechaza con 409 "segregacion"; la excepcion se pide aparte.
       await sendJsonAuth("POST", `${API_BASE_URL}/informes/${item.id}/${sign}`, token, body);
-      toast.success(sign === "revisar" ? "Informe revisado" : "Informe autorizado; PDF generado");
+      toast.success(sign === "revisar" ? "Informe revisado" : sign === "autorizar" ? "Informe autorizado; falta liberarlo" : "Informe liberado; PDF final generado");
       invalidate("informes", "muestras", "dashboard");
       setSign(null);
       router.refresh();
@@ -232,30 +236,13 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
     }
   };
 
-  const registrarEntrega = async () => {
-    if (!item) return;
-    if (!entrega.fecha || !entrega.medio || !entrega.aQuien.trim()) return toast.error("Fecha, medio y destinatario son obligatorios");
-    // Registrar la entrega es una accion A: se confirma la identidad en el mismo dialogo.
-    armarReauth(claveEntrega ? { password: claveEntrega } : null);
-    setClaveEntrega("");
-    try {
-      await sendJsonAuth("POST", `${API_BASE_URL}/informes/${item.id}/entregar`, token, { fecha: entrega.fecha, medio: entrega.medio, a_quien: entrega.aQuien.trim(), observaciones: entrega.observaciones.trim() || null });
-      toast.success("Entrega registrada");
-      invalidate("informes", "dashboard");
-      setEntrega({ ...entrega, open: false });
-      router.refresh();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo registrar la entrega");
-    }
-  };
-
   const anular = async () => {
     if (!item) return;
     const motivo = await prompt({ critico: true, title: `Anular informe ${item.folio}`, description: "El informe queda anulado y su PDF marcado como sin validez. Para corregirlo emite una enmienda.", confirmLabel: "Anular", tone: "danger" });
     if (!motivo) return;
     try {
       const data = await sendJsonAuth("POST", `${API_BASE_URL}/informes/${item.id}/anular`, token, { motivo });
-      // Autorizado o entregado: queda en solicitud de un segundo usuario (Fase 3).
+      // Autorizado, liberado o enviado: queda en solicitud de un segundo usuario (Fase 3).
       if (data.solicitud) toast.info(String(data.message || "Anulación solicitada"));
       else toast.success("Informe anulado");
       invalidate("informes", "dashboard", "solicitudes");
@@ -309,7 +296,10 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
     }
   };
   const resultadosCongelados = (item?.resultados || []) as ApiRecord[];
-  const entregaInfo = (item?.entrega || null) as ApiRecord | null;
+  // Fase 6: un analisis incluido se enmendo despues; no se libera ni se envia hasta la enmienda del informe.
+  const requiereEnmienda = !!Number(item?.requiere_enmienda || 0);
+  const bloqueoEnmienda = requiereEnmienda ? `Requiere enmienda: ${String(item?.requiere_enmienda_motivo || "un análisis incluido se enmendó")}. No se puede liberar ni enviar hasta crear y liberar su enmienda.` : null;
+  const enviable = ["liberado", "enviado"].includes(estado);
   const folioLabel = editing ? `${item!.folio} · v${item!.version}` : "Nuevo informe";
 
   const sections: FormSectionDef[] = [
@@ -318,14 +308,13 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
     { id: "sec-analisis", label: "Análisis incluidos", complete: draft ? form.analisisIds.length > 0 : undefined },
     { id: "sec-declaraciones", label: "Declaraciones", complete: draft ? !!form.alcance.trim() && !!form.reglaDecision.trim() && (!descargoSugerido || !!form.descargo.trim()) : undefined },
     { id: "sec-firmas", label: "Elaboró, revisó, autorizó", complete: draft ? !!form.elaboradoNombre.trim() : undefined },
-    { id: "sec-entrega", label: "Entrega", optional: true },
     ...(editing ? [{ id: "sec-historial", label: "Historial", optional: true }] : []),
   ];
 
   // Acciones secundarias (PDF, enmienda, anulación) van en un menú para que la cabecera solo muestre el siguiente paso.
   const moreItems: MenuItem[] = [];
   if (editing) moreItems.push({ label: estado === "borrador" || estado === "en_revision" ? "Vista previa del PDF" : "Ver PDF", description: "Abre el documento en una pestaña nueva", icon: <FilePdf size={16} weight="duotone" />, tone: "brand", onSelect: verPdf });
-  if (editing && ["autorizado", "entregado", "anulado"].includes(estado) && can("informes", "C")) moreItems.push({ label: "Emitir enmienda…", description: "Nueva versión que sustituye a esta", icon: <ArrowsClockwise size={16} weight="duotone" />, onSelect: enmendar });
+  if (editing && ["autorizado", "liberado", "enviado", "anulado"].includes(estado) && can("informes", "C")) moreItems.push({ label: "Emitir enmienda…", description: "Nueva versión que sustituye a esta", icon: <ArrowsClockwise size={16} weight="duotone" />, onSelect: enmendar });
   if (editing && estado !== "anulado" && can("informes", "AN")) moreItems.push({ label: "Anular informe…", description: "El PDF queda sin validez", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: anular });
 
   const failedLabel = estado === "anulado" ? "Anulado" : estado === "sustituido" ? "Sustituido por enmienda" : undefined;
@@ -343,9 +332,19 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
       readOnly={!draft}
       after={
         editing ? (
-          <FormCard id="sec-historial" title="Historial del informe" description="Bitácora de auditoría: creación, revisión, autorización, entrega, enmiendas y descargas.">
-            <RecordHistory entidad="informes" entidadId={item?.id as number | undefined} />
-          </FormCard>
+          <>
+            {/* Fase 6: los envíos se registran con el informe ya en solo lectura (fuera del fieldset desactivado). */}
+            <FormCard id="sec-envios" title="Envíos por correo" description="A quién, cuándo y cómo se envió el informe liberado, con la evidencia de cada envío.">
+              {editing && enviable && token ? (
+                <EnviosPanel item={item!} token={token} puedeEnviar={canAuthorize} bloqueo={bloqueoEnmienda} onCambio={() => router.refresh()} />
+              ) : (
+                <Callout tone="info">{estado === "autorizado" ? "Libera el informe para generar el PDF final; después se registra su envío por correo." : "El envío por correo se registra una vez liberado el informe."}</Callout>
+              )}
+            </FormCard>
+            <FormCard id="sec-historial" title="Historial del informe" description="Bitácora de auditoría: creación, revisión, autorización, entrega, enmiendas y descargas.">
+              <RecordHistory entidad="informes" entidadId={item?.id as number | undefined} />
+            </FormCard>
+          </>
         ) : null
       }
       actions={
@@ -369,8 +368,8 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
             </BotonSegregado>
           ) : null}
           {editing && estado === "autorizado" && canAuthorize ? (
-            <Button icon={<Truck size={16} />} onClick={() => setEntrega({ ...entrega, open: true })}>
-              Registrar entrega
+            <Button icon={<LockKey size={16} />} onClick={() => setSign("liberar")} disabled={requiereEnmienda} title={bloqueoEnmienda || undefined}>
+              Liberar
             </Button>
           ) : null}
           {draft ? (
@@ -391,10 +390,21 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
           Esta versión sustituye a la anterior. Motivo: {String(item.motivo_enmienda || "—")}
         </Callout>
       ) : null}
+      {requiereEnmienda ? (
+        <Callout tone="danger" title="Requiere enmienda">
+          {bloqueoEnmienda}
+        </Callout>
+      ) : null}
+      {item?.pdf_integridad === "alterado" || item?.pdf_integridad === "faltante" ? (
+        <Callout tone="danger" title="Alerta de integridad del PDF">
+          {item.pdf_integridad === "alterado" ? "El SHA-256 del PDF guardado no coincide con el registrado al liberar el informe. Avisa a la coordinación de calidad." : "El PDF final no está en el servidor. Avisa a la coordinación de calidad."}
+        </Callout>
+      ) : null}
       <SupervisionCallout item={item} />
       <SolicitudCallout item={item} />
       {editing && estado === "borrador" && canReview ? <AvisoAutorizacion requisitos={requisitosInforme("revisar")} accion="revisar este informe" /> : null}
       {editing && estado === "en_revision" && canAuthorize ? <AvisoAutorizacion requisitos={requisitosInforme("autorizar")} accion="autorizar este informe" /> : null}
+      {editing && estado === "autorizado" && canAuthorize ? <AvisoAutorizacion requisitos={requisitosInforme("liberar")} accion="liberar este informe" /> : null}
       <SegregacionCallout bloqueo={editing && estado === "borrador" && canReview ? segregacion.revisar : editing && estado === "en_revision" && canAuthorize ? segregacion.autorizar : null} accion={estado === "en_revision" ? "autorizar" : "revisar"} onSolicitar={() => solicitarExcepcion(estado === "en_revision" ? "autorizar" : "revisar")} />
       {item?.motivo_anulacion ? (
         <Callout tone="danger" title="Informe anulado">
@@ -447,6 +457,9 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
           <Field label="Dirección" htmlFor="i-dir">
             <Input id="i-dir" maxLength={240} value={form.clienteDireccion} onChange={(event) => patch({ clienteDireccion: event.target.value })} readOnly={!draft} />
           </Field>
+          <Field label="Correo de contacto" htmlFor="i-correo" hint="Se usa para el envío del informe liberado.">
+            <Input id="i-correo" type="email" maxLength={180} value={form.clienteCorreo} onChange={(event) => patch({ clienteCorreo: event.target.value })} readOnly={!draft} />
+          </Field>
         </FormGrid>
       </FormCard>
 
@@ -481,7 +494,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
         )}
       </FormCard>
 
-      <FormCard id="sec-analisis" title="Análisis incluidos" description={draft ? "Solo análisis aprobados de esta recepción. Los resultados se copian al informe al autorizarlo." : "Resultados congelados al autorizar el informe."}>
+      <FormCard id="sec-analisis" title="Análisis incluidos" description={draft ? "Solo análisis aprobados de esta recepción. Los resultados se copian al informe al liberarlo." : "Resultados congelados al liberar el informe."}>
         {draft ? (
           !disponibles.length ? (
             <EmptyState compact title="No hay análisis aprobados" description="Aprueba los análisis de esta recepción para poder informarlos." />
@@ -565,77 +578,33 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
         </div>
       </FormCard>
 
-      <FormCard id="sec-firmas" title="Elaboró, revisó y autorizó" description="Quien elabora firma aquí; la revisión y la autorización se firman con los botones de la cabecera y quedan en la bitácora.">
+      <FormCard id="sec-firmas" title="Elaboró, revisó, autorizó y liberó" description="Quien elabora firma aquí; la revisión, la autorización y la liberación se firman con los botones de la cabecera y quedan en la bitácora.">
         <div className="flex flex-col gap-4">
           <PersonCard title="Elaboró" requires="informes" name={form.elaboradoNombre} onName={(v) => patch({ elaboradoNombre: v })} cargo={item?.elaborado_cargo ? String(item.elaborado_cargo) : undefined} signature={form.elaboradoFirma} onSignature={(v) => patch({ elaboradoFirma: v })} />
           <div className="grid gap-3 sm:grid-cols-2">
             <SignoffCard title="Revisó" name={item?.revisado_nombre} cargo={item?.revisado_cargo} at={item?.revisado_en} note={excepcionDe("revisar") ? `Revisión autorizada por excepción, solicitud #${excepcionDe("revisar")!.solicitud_id}` : null} hint={editing ? "Se firma con “Marcar revisado”." : "Después de crear el borrador."} />
-            <SignoffCard title="Autorizó" name={item?.autorizado_nombre} cargo={item?.autorizado_cargo} at={item?.autorizado_en} note={excepcionDe("autorizar") ? `Autorización autorizada por excepción, solicitud #${excepcionDe("autorizar")!.solicitud_id}` : null} hint={editing ? "Se firma con “Autorizar” tras la revisión." : "Después de la revisión."}>
+            <SignoffCard title="Autorizó" name={item?.autorizado_nombre} cargo={item?.autorizado_cargo} at={item?.autorizado_en} note={excepcionDe("autorizar") ? `Autorización autorizada por excepción, solicitud #${excepcionDe("autorizar")!.solicitud_id}` : null} hint={editing ? "Se firma con “Autorizar” tras la revisión." : "Después de la revisión."} />
+            <SignoffCard title="Liberó" name={item?.liberado_nombre} cargo={item?.liberado_cargo} at={item?.liberado_en} hint={editing ? "Se firma con “Liberar”: genera el PDF final." : "Después de la autorización."}>
               {item?.pdf_sha256 ? <p className="code mt-1 text-[11px] text-ink-4">SHA-256 {String(item.pdf_sha256).slice(0, 16)}…</p> : null}
             </SignoffCard>
           </div>
         </div>
       </FormCard>
 
-      <FormCard id="sec-entrega" title="Entrega al cliente" description="Cuándo, cómo y a quién se entregó el informe autorizado.">
-        {entregaInfo ? (
-          <SignoffCard title="Entregado a" name={entregaInfo.a_quien} cargo={REPORT_DELIVERY_MEDIA.find((m) => m.value === entregaInfo.medio)?.label || String(entregaInfo.medio)} at={entregaInfo.fecha} note={[entregaInfo.observaciones, entregaInfo.entregado_cargo ? `Registró la entrega como ${String(entregaInfo.entregado_cargo)}` : null].filter(Boolean).join(" · ") || null} />
-        ) : (
-          <Callout tone="info">{estado === "autorizado" ? "Registra la entrega con el botón «Registrar entrega»." : "La entrega se registra una vez autorizado el informe."}</Callout>
-        )}
-      </FormCard>
 
       <SignDialog
         key={sign || "sin-firma"}
         open={sign !== null}
         onOpenChange={(open) => !open && setSign(null)}
-        title={sign === "revisar" ? "Marcar informe como revisado" : "Autorizar informe"}
-        description={sign === "revisar" ? `Quedará registrado a nombre de ${user?.nombre || user?.email || "tu usuario"}.` : "Al autorizar se congelan los resultados, se genera el PDF y la recepción pasa a liberada."}
-        confirmLabel={sign === "revisar" ? "Marcar revisado" : "Autorizar"}
+        title={sign === "revisar" ? "Marcar informe como revisado" : sign === "autorizar" ? "Autorizar informe" : "Liberar informe"}
+        description={sign === "revisar" ? `Quedará registrado a nombre de ${user?.nombre || user?.email || "tu usuario"}.` : sign === "autorizar" ? "La autorización queda firmada; después se libera el informe para generar el PDF final." : "Al liberar se congelan los resultados, se genera el PDF final con su SHA-256 y la recepción pasa a liberada. Ya no se podrá editar."}
+        confirmLabel={sign === "revisar" ? "Marcar revisado" : sign === "autorizar" ? "Autorizar" : "Liberar"}
         requireSignature={sign === "autorizar"}
         loading={signing}
-        critico={sign === "autorizar"}
+        critico={sign === "autorizar" || sign === "liberar"}
         onConfirm={doSign}
       />
 
-      <Dialog
-        open={entrega.open}
-        onOpenChange={(open) => setEntrega({ ...entrega, open })}
-        title="Registrar entrega del informe"
-        description="Queda constancia de la entrega en la bitácora."
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setEntrega({ ...entrega, open: false })}>
-              Cancelar
-            </Button>
-            <Button onClick={registrarEntrega}>Registrar entrega</Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-4">
-          <FormGrid>
-            <Field label="Fecha" htmlFor="e-fecha" required>
-              <DateInput id="e-fecha" value={entrega.fecha} onChange={(value) => setEntrega({ ...entrega, fecha: value })} />
-            </Field>
-            <Field label="Medio" htmlFor="e-medio" required>
-              <Select id="e-medio" value={entrega.medio} onChange={(event) => setEntrega({ ...entrega, medio: event.target.value })}>
-                {REPORT_DELIVERY_MEDIA.map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </FormGrid>
-          <CampoIdentidad value={claveEntrega} onChange={setClaveEntrega} id="e-password" />
-          <Field label="Entregado a" htmlFor="e-quien" required>
-            <Input id="e-quien" maxLength={180} value={entrega.aQuien} onChange={(event) => setEntrega({ ...entrega, aQuien: event.target.value })} />
-          </Field>
-          <Field label="Observaciones" htmlFor="e-obs">
-            <Textarea id="e-obs" rows={2} value={entrega.observaciones} onChange={(event) => setEntrega({ ...entrega, observaciones: event.target.value })} />
-          </Field>
-        </div>
-      </Dialog>
     </FormPage>
   );
 }

@@ -129,6 +129,8 @@ const temporal = (extra = {}) => ({ tipo_cuenta: "temporal", vigente_hasta: "209
   const A = conExt.data?.id;
   // Fase 3: el analisis de QA lo revisa y aprueba otra persona.
   const tRev = await token(RICARDO);
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${A}/enviar-revision`, {}, QA);
   await api("POST", `/samples/analysis/${A}/revisar`, {}, tRev);
   await api("POST", `/samples/analysis/${A}/aprobar`, {}, tRev);
   const inf = await api("POST", "/informes", { recepcion_id: R, analisis_ids: [A], cliente: { nombre: "Cliente cargo" } }, QA);
@@ -311,6 +313,8 @@ const temporal = (extra = {}) => ({ tipo_cuenta: "temporal", vigente_hasta: "209
   const A = (await api("POST", "/samples/analysis", analisis(E, "SEG-RE"), QA)).data?.id;
   // Fase 3: lo revisa y aprueba otra persona (Ricardo); QA lo elaboro.
   const tR = await token(RICARDO);
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${A}/enviar-revision`, {}, QA);
   await api("POST", `/samples/analysis/${A}/revisar`, {}, tR);
   const aprobarSin = await api("POST", `/samples/analysis/${A}/aprobar`, {}, tR, SIN_AUTO);
   const anularSin = await api("POST", `/samples/extraction/${E}/anular`, { motivo: "Prueba sin token" }, QA, SIN_AUTO);

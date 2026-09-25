@@ -18,7 +18,8 @@ import { ensureSupervisionColumns } from "../../supervision";
 import { exigirAutorizaciones, requisitosEquipos } from "../../autorizaciones";
 import { requisitosAnalisis, requisitosRevisionResultados } from "../../../shared/autorizaciones";
 import { exigirAsignacion, filtroAsignadas } from "../../asignaciones";
-import { ensureColumnasFirma, guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
+import { ensureColumnasFirma, firmanteElegido, guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
+import { marcarRequiereEnmienda } from "../informes";
 
 /*
  * Etapa de analisis (ISO/IEC 17025 7.5, 7.7 y 7.8; diagrama de flujo del
@@ -371,7 +372,7 @@ export async function listAnalyses({ request, s }: RouteContext): Promise<Respon
     `
     SELECT a.id, a.folio_num, a.tipo_analisis, a.metodo, a.metodo_otro, a.metodo_referencia,
            a.recepcion_id, a.procesamiento_id, a.extraccion_id, a.fecha_analisis, a.equipo_nombre,
-           a.analista_nombre, a.revisado_nombre, a.aprobado_nombre, a.estado, a.motivo_anulacion,
+           a.analista_nombre, a.revisado_nombre, a.aprobado_nombre, a.estado, a.motivo_anulacion, a.version, a.sustituye_a,
            a.resultados_json, a.creado_en, a.supervision_estado, a.supervisor_id,
            r.folio_num AS folio_recepcion_num, r.solicitante, r.id_interno AS recepcion_id_interno,
            e.folio_num AS folio_extraccion_num, e.tipo_registro AS tipo_extraccion
@@ -440,6 +441,8 @@ export async function createAnalysis({ request, s }: RouteContext): Promise<Resp
   // Fase 4: autorizacion FX-THF-AP: analisis, metodo del tipo de analisis y equipo usado (si esta en el inventario).
   await exigirAutorizaciones(s, user, [...requisitosAnalisis(data.tipo_analisis), ...(await requisitosEquipos(s, [data.equipo_id]))]);
   if (!data.folio_num) data.folio_num = await nextFolioNum(s, TABLE);
+  // Fase 6: con firmantes.analista basta (el nombre lo pone la cuenta al resolver la firma).
+  if (!data.analista_nombre && firmanteElegido(payload, "analista")) data.analista_nombre = "(cuenta del firmante)";
   const invalid = validate(data);
   if (invalid) return json({ message: invalid }, 400);
   await resolveChain(s, data);
@@ -504,6 +507,8 @@ export async function updateAnalysis({ request, s, params }: RouteContext): Prom
   // Fase 4: autorizacion FX-THF-AP: analisis, metodo del tipo de analisis y equipo usado (si esta en el inventario).
   await exigirAutorizaciones(s, user, [...requisitosAnalisis(data.tipo_analisis), ...(await requisitosEquipos(s, [data.equipo_id]))]);
   if (!data.folio_num) return json({ message: "El folio es obligatorio" }, 400);
+  // Fase 6: con firmantes.analista basta (el nombre lo pone la cuenta al resolver la firma).
+  if (!data.analista_nombre && firmanteElegido(payload, "analista")) data.analista_nombre = "(cuenta del firmante)";
   const invalid = validate(data);
   if (invalid) return json({ message: invalid }, 400);
   await resolveChain(s, data);
@@ -563,7 +568,8 @@ export async function violacionParaExcepcionAnalisis(s: Session, user: CurrentUs
   await ensureAnalysisSchema(s);
   const row = await snapshotRow(s, TABLE, id);
   if (!row) throw new HttpError(404, { message: "Análisis no encontrado" });
-  const estado = accion === "revisar" ? "registrado" : "revisado";
+  // Fase 6: se revisa lo enviado a revision.
+  const estado = accion === "revisar" ? "en_revision" : "revisado";
   if (String(row.estado) !== estado) throw new HttpError(409, { message: `El análisis ${folioLabel(TABLE, row)} no está ${estado}; no hay nada que ${accion}` });
   return { violacion: evaluarAnalisis(userIdFromClaims(user) as number, await elaboradoresDe(s, TABLE, id, row.creado_por), accion), row };
 }
@@ -576,8 +582,8 @@ export async function reviewAnalysis({ request, s, params }: RouteContext): Prom
   await ensureAnalysisSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   await assertEditableAsync(s, antes, TABLE, "revisar");
-  // Fase 5: se revisa lo enviado a revision (o un registrado, que al revisarse se da por enviado).
-  if (!["registrado", "en_revision"].includes(String(antes?.estado))) return json({ message: "Solo se revisan analisis enviados a revision" }, 409);
+  // Fase 6: solo se revisa lo que el analista envio a revision.
+  if (String(antes?.estado) !== "en_revision") return json({ message: String(antes?.estado) === "registrado" ? "El analista aún no lo envía a revisión" : "Solo se revisan analisis enviados a revision", codigo: "no_enviado" }, 409);
   exigirSinSupervisionPendiente(antes, `El analisis ${folioLabel(TABLE, antes)}`, "revisar");
   await exigirAutorizaciones(s, user, requisitosRevisionResultados(antes?.tipo_analisis, "revisar"));
   const payload = await readJson(request);
@@ -625,6 +631,8 @@ export async function approveAnalysis({ request, s, params }: RouteContext): Pro
     if (original && String(original.estado) === "aprobado") {
       await s.execute(`UPDATE ${TABLE} SET estado = 'sustituido' WHERE id = :id`, { id: original.id });
       await registrarAuditoria(s, user, { accion: "sustituir", entidad: TABLE, entidadId: Number(original.id), referencia: folioLabel(TABLE, original), antes: original, despues: await snapshotRow(s, TABLE, Number(original.id)), motivo: strippedOrNull(antes.motivo_enmienda), detalle: { sustituido_por: id, version: antes.version } });
+      // Fase 6: los informes autorizados, liberados o enviados que lo incluyen quedan "requiere enmienda".
+      await marcarRequiereEnmienda(s, user, Number(original.id), folioLabel(TABLE, original));
     }
   }
   await validarRecepcionSiCompleta(s, toIntOrNull(antes?.recepcion_id));

@@ -25,7 +25,7 @@ Si no puede ingresar, contacte al administrador del sistema para validar que su 
 
 - **Intentos fallidos**: despues de 5 intentos fallidos en 15 minutos la cuenta se bloquea 15 minutos (tambien cuentan las confirmaciones de contrasena fallidas). El mensaje es siempre "Correo o contraseña incorrectos...". La administracion puede desbloquearla antes.
 - **Inactividad**: tras 30 minutos sin usar el sistema, la sesion se cierra. Un minuto antes aparece el aviso **"Tu sesión está por cerrarse"** con el boton **Seguir trabajando**. Si se cierra, vera **"Sesión cerrada por inactividad"**: escriba su contrasena y presione **Volver a entrar**; lo que estaba capturando sigue ahi. En todo caso la sesion dura como maximo 8 horas.
-- **Confirmar identidad**: las acciones criticas (aprobar, autorizar, entregar, anular, restaurar, dar de baja, cancelar, cerrar una muestra, dar visto bueno y los cambios de usuarios) piden su contrasena en el mismo dialogo donde escribe el motivo o firma. Si una accion no la pidio, aparece el dialogo **"Confirma tu identidad"** sin salir del formulario. 
+- **Confirmar identidad**: las acciones criticas (aprobar, autorizar, liberar, anular, restaurar, dar de baja, cancelar, cerrar una muestra, dar visto bueno y los cambios de usuarios) piden su contrasena en el mismo dialogo donde escribe el motivo o firma. Si una accion no la pidio, aparece el dialogo **"Confirma tu identidad"** sin salir del formulario. 
 - **Cuenta fuera de vigencia**: si su cuenta aun no inicia o ya termino, vera "Tu acceso no está vigente; contacta al administrador". Si vence con la sesion abierta, el sistema lo regresa a la pantalla de acceso.
 - **Mi cuenta** (menu de usuario, abajo a la izquierda): **Cambiar contraseña** (minimo 10 caracteres, distinta de su correo y de su nombre; cierra sus otras sesiones), **Cargo predeterminado** (si tiene varios roles) y **Cerrar sesión en todos los dispositivos**.
 - Si la administracion restablece su contrasena, al entrar con la contrasena temporal debera elegir una nueva antes de continuar.
@@ -58,7 +58,7 @@ Atajos y ayudas:
 - **Quien hizo que** se elige de una lista del personal autorizado (quien puede capturar muestras, quien puede aprobar, quien puede elaborar informes); el campo viene prellenado con la persona que tiene la sesion. Para alguien sin cuenta (alumnos, personal externo) elija **Otra persona...** y escriba el nombre.
 - **Autollenado.** El sistema completa lo que ya sabe: folios consecutivos, fecha y hora, la muestra y el ID desde el paso anterior, la bolsa y los reactivos del protocolo, el **equipo operativo unico** que corresponde a cada paso (si hay dos cronometros y solo uno esta vigente, pone ese), el **lote de la solucion preparada** como folio de preparacion, el **siguiente folio de bitacora** de cada equipo (el ultimo anotado + 1) y, en analisis, el metodo, la referencia del procedimiento y el instrumento segun el tipo. Todo se puede cambiar; solo se llenan los campos vacios.
 - **No se puede guardar sin la informacion minima.** Cada formato tiene secciones obligatorias y opcionales (marcadas "opcional" en la guia: por ejemplo Insumos adicionales, Equipos utilizados, Controles de calidad, la Decision de aceptacion al registrar una recepcion). Si falta algo obligatorio, al pulsar Guardar el sistema avisa "Falta informacion en ..." y abre la primera seccion incompleta; la guia marca en ambar todas las que faltan. La barra "n de m" cuenta solo las obligatorias; una opcional se pone en verde cuando se llena.
-- En cada formato la cabecera muestra solo el siguiente paso (por ejemplo "Marcar revisado", "Aprobar", "Registrar entrega") y **Guardar**; anular, restaurar, emitir enmienda o ver el PDF estan en el menu **Mas acciones** (icono de tres puntos).
+- En cada formato la cabecera muestra solo el siguiente paso (por ejemplo "Marcar revisado", "Aprobar", "Liberar") y **Guardar**; anular, restaurar, emitir enmienda o ver el PDF estan en el menu **Mas acciones** (icono de tres puntos).
 - En las listas, el boton **Filtros** junto a la busqueda abre un panel con las opciones de esa lista (etapa, formato, existencia, estado...) y los conmutadores "Mostrar anuladas" o "Mostrar bajas"; el numero en el boton indica cuantos filtros hay activos y cada filtro activo aparece como una ficha que se quita con un clic. Las opciones en gris con "Proximamente" (PSP, pigmentos, sedimentos) todavia no estan disponibles.
 - Cada fila tiene un boton **⋯ Acciones** que agrupa todo lo que se puede hacer con ese registro: abrir, editar, procesar/extraer/analizar, rellenar, dar de baja, anular o restaurar. Hacer clic en la fila abre el registro.
 
@@ -67,8 +67,8 @@ Atajos y ayudas:
 La pantalla de Inicio muestra solo lo importante:
 
 - El **buscador** al centro: escriba y elija el resultado; lo lleva al registro, a la seccion, a una lista filtrada o abre un formato nuevo. Debajo hay tres ejemplos ("R 0000001", "metanol", "nueva recepcion"): al hacer clic se escriben en el buscador para probar.
-- **En curso**: una tarjeta por cada muestra que aun no termina su flujo, con su folio, solicitante, tipo (ASP/DSP), numero de muestras, dias desde la recepcion y la **linea de etapas** (Recepcion → Procesamiento → Extraccion → Analisis → Informe) con la etapa actual marcada. A la derecha, el **siguiente paso** como boton (por ejemplo "Registrar extraccion", "Aprobar analisis", "Registrar entrega", "Registrar disposicion final"): abre el formato con el folio ya vinculado. Al pasar el cursor por la tarjeta (en el celular, "Detalle") se ve el detalle de cada etapa con su folio y estado; cada punto de la linea tiene su ayuda emergente y enlace. El titulo indica cuantas hay y cuantas esperan firma; lo que espera firma va primero.
-- **Avisos**: solo lo que conviene atender (mantenimientos vencidos, equipos con alerta de calibracion, reactivos y consumibles con stock bajo, analisis e informes esperando firma, informes autorizados sin entregar, mantenimientos en los proximos 30 dias). Al pasar el cursor por un aviso se ve **cuales** son (los primeros seis, con enlace directo); al hacer clic se abre la lista ya filtrada con la misma cuenta. El titulo indica el total y cuantos son urgentes. Si no hay nada, dice "Todo en orden".
+- **En curso**: una tarjeta por cada muestra que aun no termina su flujo, con su folio, solicitante, tipo (ASP/DSP), numero de muestras, dias desde la recepcion y la **linea de etapas** (Recepcion → Procesamiento → Extraccion → Analisis → Informe) con la etapa actual marcada. A la derecha, el **siguiente paso** como boton (por ejemplo "Registrar extraccion", "Aprobar analisis", "Liberar informe", "Enviar informe por correo", "Registrar disposicion final"). Las muestras cuyo informe ya se libero van al final con la etiqueta **Falta disposicion final**: abre el formato con el folio ya vinculado. Al pasar el cursor por la tarjeta (en el celular, "Detalle") se ve el detalle de cada etapa con su folio y estado; cada punto de la linea tiene su ayuda emergente y enlace. El titulo indica cuantas hay y cuantas esperan firma; lo que espera firma va primero.
+- **Avisos**: solo lo que conviene atender (mantenimientos vencidos, equipos con alerta de calibracion, reactivos y consumibles con stock bajo, analisis e informes esperando firma, informes por liberar o enviar, informes que requieren enmienda, mantenimientos en los proximos 30 dias). Al pasar el cursor por un aviso se ve **cuales** son (los primeros seis, con enlace directo); al hacer clic se abre la lista ya filtrada con la misma cuenta. El titulo indica el total y cuantos son urgentes. Si no hay nada, dice "Todo en orden".
 - Una linea al pie de los avisos lleva a la **ayuda** ("Como se usa").
 
 ## 5. Reactivos
@@ -194,7 +194,7 @@ Reglas que aplican a todas las etapas:
 - **Nada se borra.** Un registro con error se **anula** con motivo (Mas acciones > Anular). Queda visible con la casilla **Mostrar anuladas**, se puede **restaurar** con motivo y todo queda en la bitacora de auditoria. Al anular un procesamiento, extraccion o analisis, el inventario que descontaron se repone automaticamente.
 - No se puede anular un registro que tenga etapas posteriores vigentes (por ejemplo una recepcion con procesamientos): primero se anulan esas etapas. Tampoco se puede restaurar un registro cuya etapa de origen esta anulada.
 - Un reactivo o consumible dado de baja no se puede **elegir** en un formato nuevo: hay que reactivarlo o usar otro. Los registros anteriores que ya lo usaban se siguen abriendo y guardando con normalidad.
-- Los estados avanzan solos: la recepcion pasa a **En proceso** al procesarla, a **Analizada** al aprobar el analisis, a **Informada** al autorizar el informe y a **Cerrada** al registrar la disposicion final. Un registro anulado o cerrado se abre en **solo lectura**.
+- Los estados avanzan solos (ver 13.12): la recepcion pasa a **En procesamiento** al procesarla, a **Validada** al aprobarse todos sus analisis, a **Liberada** al liberar el informe y a **Cerrada** al registrar la disposicion final. Un registro anulado o cerrado se abre en **solo lectura**.
 - Cada formato tiene al final una seccion **Historial**: una linea de tiempo en frases sencillas ("Daniela Cortes aprobo el analisis A 0000004", "Ana Ramirez anulo la recepcion R 0000011"), con el motivo entre comillas, los hechos clave (por ejemplo "Estado: Registrada -> Anulada") y el boton **Ver cambios** para ver cada dato con su valor anterior y el nuevo, en español y sin codigos.
 
 ### 8.1 Recepcion de muestras
@@ -281,9 +281,19 @@ La seccion **Informes** emite el informe de resultados para el cliente (folio **
 
 1. Presione **Nuevo informe** y elija la recepcion. Se cargan el cliente, los items ensayados y los **analisis aprobados** de esa recepcion; marque los que se incluyen.
 2. Revise las declaraciones (alcance de los resultados, regla de decision, desviaciones del metodo, descargo cuando la muestra se acepto con desviacion, opiniones e interpretaciones) y presione **Crear borrador**. Con **Vista previa PDF** puede ver como quedara.
-3. **Marcar revisado** (Informes: R) y luego **Autorizar** (Informes: A; con firma obligatoria). No puede hacerlo quien elaboro el informe ni quien elaboro alguno de sus analisis (ver 13.7); revisor y autorizador si pueden ser la misma persona. El cargo que aparece en el informe es el del rol con el que actuo cada persona. Al autorizar, los resultados quedan **congelados** en el informe, se genera el PDF definitivo con su huella SHA-256 y la recepcion pasa a **Informada**.
-4. **Registrar entrega**: fecha, medio (correo, impreso, entrega en mano...) y a quien se entrego.
-5. Si hay que corregir un informe ya autorizado o entregado, use **Enmienda**: se crea la version siguiente (v2, v3...) en borrador que sustituye a la anterior y la indica en el PDF. Al autorizar la enmienda, el informe original pasa a **Sustituido** y su PDF se regenera con la leyenda "sin validez" (se conserva para el expediente). **Anular** marca el PDF como sin validez.
+El ciclo del informe es: **Borrador → En revision → Autorizado → Liberado → Enviado** (ademas de Anulado y Sustituido).
+
+3. **Marcar revisado** (Informes: R) y luego **Autorizar** (Informes: A; con firma obligatoria y su contrasena). No puede hacerlo quien elaboro el informe ni quien elaboro alguno de sus analisis (ver 13.7); revisor y autorizador si pueden ser la misma persona. El cargo que aparece en el informe es el del rol con el que actuo cada persona. Autorizar solo firma: todavia no se genera el PDF final.
+4. **Liberar** (Informes: A y la autorizacion FX-THF-AP **Liberacion de informes**; con su contrasena). Puede hacerlo la misma persona que autorizo. Al liberar, los resultados quedan **congelados** en el informe, se genera el **PDF final** con su huella SHA-256 y la recepcion pasa a **Liberada**. Un informe liberado ya no se edita.
+5. **Enviar por correo** (Informes: A), en el panel **Envios por correo** de la ficha (solo informes liberados o ya enviados):
+   - **Envio manual** (siempre disponible): envie el PDF desde su correo institucional (el boton **Abrir en mi correo** prepara el asunto y el texto; el PDF se adjunta a mano) y registre en la plataforma el destinatario, su correo, la fecha y hora del envio y la **evidencia** del correo enviado (PDF, imagen o archivo .eml). La evidencia se guarda con su huella SHA-256.
+   - **Enviar desde la plataforma**: solo aparece si el administrador configuro el servidor de correo; envia el PDF adjunto y guarda como evidencia el identificador del mensaje y la respuesta del servidor.
+   - El primer envio pasa el informe a **Enviado**. Puede registrar mas envios (reenvios u otros destinatarios) y, despues, en cada envio, la **confirmacion de recepcion** (fecha y nota).
+   - Los correos y las evidencias solo los ve quien puede ver informes; en la bitacora el correo del destinatario aparece parcialmente oculto (por ejemplo, h***@cofepris.gob.mx). El envio no modifica el informe ni sus resultados.
+   - En los datos del cliente del informe hay un **correo de contacto**, prellenado desde la recepcion si existe.
+6. Si hay que corregir un informe ya autorizado, liberado o enviado, use **Enmienda**: se crea la version siguiente (v2, v3...) en borrador que sustituye a la anterior y la indica en el PDF. Al liberar la enmienda, el informe original pasa a **Sustituido** y su PDF se regenera con la leyenda "sin validez" (se conserva para el expediente). **Anular** marca el PDF como sin validez.
+7. **Requiere enmienda**: si se aprueba la enmienda de un analisis incluido en un informe autorizado, liberado o enviado, ese informe queda marcado **Requiere enmienda** (aviso en su ficha, en la lista y en el Inicio). No se puede liberar ni enviar hasta crear y liberar su enmienda; la enmienda del informe toma automaticamente la version aprobada del analisis.
+8. **Integridad del PDF**: al descargar el PDF final se comprueba su huella SHA-256. Si no coincide con la guardada al liberar, la ficha muestra un aviso y queda una alerta en la bitacora; avise a la coordinacion.
 
 ## 9. Movimientos
 
@@ -335,7 +345,7 @@ Cada documento tiene **Ver detalle e historial** con sus revisiones, la huella S
 
 ## 11.1 Bitacora de auditoria
 
-En la barra lateral, grupo **Calidad**, **Auditoria** (permiso Calidad: V) muestra quien hizo que, cuando y por que en todo el sistema: altas, ediciones (con el valor anterior y el nuevo), anulaciones, bajas, revisiones, aprobaciones, autorizaciones, entregas, inicios de sesion e intentos fallidos. Se presenta como la lista de Movimientos: una tabla con fecha y hora, usuario, accion (etiqueta de color), **que paso** en una frase ("Dio de baja el reactivo CH-3B" con el motivo y los hechos clave debajo), el registro afectado con enlace **Abrir**, y a la derecha "n cambios": al hacer clic en la fila se despliega el detalle de cada dato con su valor anterior y el nuevo. Arriba a la derecha van los contadores (total, 30 dias, anulaciones, accesos fallidos). Se filtra por entidad, accion, usuario, fecha y texto. La bitacora no se puede editar ni borrar; **Verificar integridad** comprueba la cadena de hashes, que no falten entradas al final y que la proteccion de la tabla siga activa, y avisa si algo fue alterado. Cada formato muestra su propio **Historial** a quien puede leer ese modulo.
+En la barra lateral, grupo **Calidad**, **Auditoria** (permiso Calidad: V) muestra quien hizo que, cuando y por que en todo el sistema: altas, ediciones (con el valor anterior y el nuevo), anulaciones, bajas, revisiones, aprobaciones, autorizaciones, liberaciones, envios de informes, inicios de sesion e intentos fallidos. Se presenta como la lista de Movimientos: una tabla con fecha y hora, usuario, accion (etiqueta de color), **que paso** en una frase ("Dio de baja el reactivo CH-3B" con el motivo y los hechos clave debajo), el registro afectado con enlace **Abrir**, y a la derecha "n cambios": al hacer clic en la fila se despliega el detalle de cada dato con su valor anterior y el nuevo. Arriba a la derecha van los contadores (total, 30 dias, anulaciones, accesos fallidos). Se filtra por entidad, accion, usuario, fecha y texto. La bitacora no se puede editar ni borrar; **Verificar integridad** comprueba la cadena de hashes, que no falten entradas al final y que la proteccion de la tabla siga activa, y avisa si algo fue alterado. Cada formato muestra su propio **Historial** a quien puede leer ese modulo.
 
 ## 12. Roles y permisos
 
@@ -403,7 +413,7 @@ Edite el usuario y cambie su estado a activo o inactivo. Un usuario inactivo no 
 
 ### 13.4 Con que cargo firmo
 
-Cuando firma, revisa, aprueba, autoriza, entrega o anula, el sistema guarda el **cargo** con el que actuo (el nombre de su rol). Si solo uno de sus roles permite esa accion se usa ese. Si varios lo permiten, se usa su **cargo predeterminado** (Mi cuenta › Cargo predeterminado) cuando ese cargo permite la accion; si no lo tiene o no la permite, el sistema le pregunta **"¿Con qué cargo actúas?"**. El cargo aparece junto a su firma en el registro y en el PDF del informe.
+Cuando firma, revisa, aprueba, autoriza, libera, envia o anula, el sistema guarda el **cargo** con el que actuo (el nombre de su rol). Si solo uno de sus roles permite esa accion se usa ese. Si varios lo permiten, se usa su **cargo predeterminado** (Mi cuenta › Cargo predeterminado) cuando ese cargo permite la accion; si no lo tiene o no la permite, el sistema le pregunta **"¿Con qué cargo actúas?"**. El cargo aparece junto a su firma en el registro y en el PDF del informe.
 
 ### 13.5 Revision de accesos
 
@@ -432,7 +442,7 @@ Algunas acciones criticas no se ejecutan al pedirlas: quedan como **solicitud** 
 | Accion | La aprueba |
 | --- | --- |
 | Anular o restaurar una recepcion, procesamiento, extraccion o analisis que ya no esta en borrador | Quien tiene "anular" en ese modulo |
-| Anular un informe autorizado o entregado | Quien tiene "anular" en informes |
+| Anular un informe autorizado, liberado o enviado | Quien tiene "anular" en informes |
 | Excepcion de separacion de funciones | Responsable General / Mejora Continua |
 | Asignar un rol (tambien el rol inicial de una cuenta nueva) | Responsable General |
 | Reactivar una cuenta dada de baja | Responsable General |
@@ -483,7 +493,7 @@ Los botones y acciones de cada fila dependen del estado y de su permiso. Una rec
 
 ### 13.13 Enviar a revision, devolver y enmiendas de analisis
 
-- **Enviar a revision**: cuando el analista termina, usa **Enviar a revision**. Desde ese momento ya no puede editarlo.
+- **Enviar a revision**: cuando el analista termina, usa **Enviar a revision**. Desde ese momento ya no puede editarlo. El revisor solo puede revisar un analisis que el analista ya envio a revision.
 - **Devolver con observaciones**: el revisor puede devolver un analisis enviado a revision, con observaciones, para que el analista lo corrija antes de aprobarlo. Al devolverlo vuelve a quedar editable.
 - **Enmienda**: un analisis aprobado no se edita. Para corregirlo se usa **Enmendar**, con motivo obligatorio: se crea una nueva version (mismo folio, "v2", "v3"...) que sigue el flujo normal (enviar a revision, revisar, aprobar). Al aprobarse la enmienda, la version original queda **Sustituida** y se conserva. La enmienda no vuelve a descontar inventario.
 
@@ -558,6 +568,14 @@ El equipo elegido esta fuera de servicio, en mantenimiento o con la calibracion 
 ### La importacion Excel muestra errores
 
 Revise que el archivo tenga hojas y columnas compatibles. El sistema puede importar filas validas aunque existan errores en otras filas.
+
+### "No se puede enviar: el informe requiere enmienda"
+
+Un analisis incluido en el informe se enmendo despues. Cree la enmienda del informe (**Enmienda**), revisela, autoricela y liberela; despues envie la nueva version.
+
+### "Solo se envian informes liberados"
+
+Autorizar ya no genera el PDF final: falta **Liberar** el informe (Informes: A y la autorizacion FX-THF-AP de liberacion de informes).
 
 ## 16. Soporte
 

@@ -172,7 +172,7 @@ export default function AyudaPage() {
                 <b>Acciones:</b> «nueva» lista todo lo que puedes crear; «nueva extracción ASP» abre directo ese formato.
               </li>
               <li>
-                <b>Vistas por estado:</b> «stock bajo», «por revisar», «calibración», «mantenimientos vencidos», «entregados».
+                <b>Vistas por estado:</b> «stock bajo», «por revisar», «calibración», «mantenimientos vencidos», «enviados».
               </li>
               <li>
                 <b>Ayuda:</b> «cómo anular», «atajos» abren la sección de esta guía.

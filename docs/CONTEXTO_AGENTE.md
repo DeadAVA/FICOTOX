@@ -97,9 +97,10 @@ mantenimientos y movimientos de entrada/salida. Importación desde Excel.
   controles de calidad (blanco, material de referencia, duplicado), revisión y
   aprobación.
 - **Informe de resultados** (folio `IR`, versionado): borrador → en revisión →
-  autorizado (congela resultados, genera el PDF con SHA-256, marca la recepción
-  como informada) → entregado. Correcciones por **enmienda** (v+1); el original
-  pasa a `sustituido` y su PDF se regenera con la leyenda "sin validez" (7.8.8).
+  autorizado (solo firma) → liberado (congela resultados, genera el PDF final con
+  SHA-256, marca la recepción como liberada) → enviado (por correo, con evidencia).
+  Correcciones por **enmienda** (v+1); al liberarla, el original pasa a
+  `sustituido` y su PDF se regenera con la leyenda "sin validez" (7.8.8).
 - **Disposición final** de remanentes (7.4.4): cierra la muestra. También se
   registra en muestras rechazadas (p. ej. devuelta al cliente).
 
@@ -406,7 +407,7 @@ npm run test:reset-db # solo regenerar la base de prueba
 - Estados de la recepción: `RECEPTION_STATE_RANK` en `src/lib/shared/sgc.ts`;
   `advanceState`, `avanzarRecepcion`, `validarRecepcionSiCompleta` en
   `src/lib/server/samples-flow.ts`. Solo hacia adelante; estados viejos se mapean
-  al arrancar. Autorizar informe = liberar (hasta la Fase 6).
+  al arrancar. La recepción pasa a `liberada` al liberar el informe (Fase 6).
 - Análisis: `enviar-revision`, `devolver`, `enmendar` (versión + 1, mismo folio,
   `UNIQUE(folio_num, version)`; la original queda `sustituido` al aprobarse).
 - Decisiones de recepción por solicitud (`decision_recepcion`, `cambiar_folio`,
@@ -416,6 +417,22 @@ npm run test:reset-db # solo regenerar la base de prueba
   uso; `GET /api/cuentas/activas`). La regla 3 compara `<rol>_usuario_id`.
 - Etiquetas: `src/lib/server/modules/samples/etiquetas.ts` y
   `/muestras/recepcion/<id>/etiquetas`.
+
+## 8 octies. Fase 6 — informes: autorizar, liberar y enviar por correo (rama `fase-6-informes`)
+
+- Informe: `borrador → en_revision → autorizado → liberado → enviado`.
+  `liberarInforme` en `src/lib/server/modules/informes.ts` (informes:A +
+  FX-THF-AP `liberacion_informe` + reautenticación) genera el PDF final y su
+  SHA-256; `integridadPdf` lo verifica al descargar (`X-Integridad-Pdf`,
+  bitácora `alerta_integridad`). `/entregar` ya no existe (`entregado` → `enviado`).
+- Envíos: `src/lib/server/envios.ts` (tabla `envios_informe`, evidencia en
+  `instance/informes/envios/` con SHA-256; manual siempre, SMTP con `nodemailer`
+  si están todas las `SMTP_*`; `SMTP_HOST=prueba` = transporte en memoria).
+  Correo oculto en la bitácora con `correoOculto`.
+- Requiere enmienda: `marcarRequiereEnmienda` (al aprobar la enmienda de un
+  análisis incluido); `exigirSinRequiereEnmienda` bloquea liberar y enviar;
+  `analisisVigentes` sustituye análisis enmendados en la enmienda del informe.
+- Revisar un análisis exige `en_revision` (el analista lo envía).
 
 ## 9. Pendientes conocidos
 
