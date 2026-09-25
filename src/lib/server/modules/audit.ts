@@ -1,8 +1,8 @@
 import { requireUser } from "../auth";
-import { ensureAuditSchema, verifyAuditChain } from "../audit";
+import { advertenciaLlaveBitacora, ensureAuditSchema, origenLlaveBitacora, verifyAuditChain } from "../audit";
 import { type Row } from "../db";
 import { json, type RouteContext } from "../http";
-import { cargarAutorizacion, permisoDe, requirePermission, soloEstado, type Autorizacion } from "../rbac";
+import { cargarAutorizacion, finDiaLocal, inicioDiaLocal, permisoDe, requirePermission, soloEstado, type Autorizacion } from "../rbac";
 import type { Modulo } from "../../shared/permisos";
 import { safeJsonLoad, searchParam } from "./helpers";
 
@@ -90,7 +90,7 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
       AND (:accion = '' OR accion = :accion)
       AND (:usuario = '' OR usuario_email LIKE :usuario_like OR usuario_nombre LIKE :usuario_like)
       AND (:search = '' OR referencia LIKE :search_like OR motivo LIKE :search_like)
-      AND (:desde = '' OR fecha_hora >= :desde)
+      AND (:desde = '' OR fecha_hora >= :desde_ini)
       AND (:hasta = '' OR fecha_hora <= :hasta_fin)
     ORDER BY id DESC
     LIMIT ${limit}
@@ -104,8 +104,9 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
       search,
       search_like: `%${search}%`,
       desde,
+      desde_ini: /^\d{4}-\d{2}-\d{2}$/.test(desde) ? inicioDiaLocal(desde) : desde,
       hasta,
-      hasta_fin: hasta ? `${hasta}T23:59:59.999Z` : "",
+      hasta_fin: /^\d{4}-\d{2}-\d{2}$/.test(hasta) ? finDiaLocal(hasta) : hasta ? `${hasta}T23:59:59.999Z` : "",
     },
   );
   return json({ items: rows.map((row) => recortar(serialize(row), datosVisibles(auth, row.entidad))), total: rows.length });
@@ -132,7 +133,8 @@ export async function getAuditEntry({ request, s, params }: RouteContext): Promi
 export async function verifyAudit({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "calidad", "V");
-  return json(await verifyAuditChain(s));
+  // Origen de la llave (nunca la llave) y advertencias para /auditoria.
+  return json({ ...(await verifyAuditChain(s)), llave: { origen: origenLlaveBitacora(), advertencias: advertenciaLlaveBitacora() } });
 }
 
 export async function auditSummary({ request, s }: RouteContext): Promise<Response> {

@@ -3,6 +3,8 @@ import { isSqlite, type Row } from "../db";
 import { json, type RouteContext } from "../http";
 import { cargarAutorizacion, permisoDe, requirePermission, soloEstado } from "../rbac";
 import type { Accion, ContextoAlcance, Modulo } from "../../shared/permisos";
+import { contarPorSupervisar } from "../supervision";
+import { vencimientosProximos } from "./admin";
 import { ensureConsumiblesSchema } from "./consumables";
 import { ensureInformesSchema } from "./informes";
 import { ensureEquiposSchema, ensureMantenimientosSchema, ensureReactivosSchema } from "./inventory";
@@ -314,6 +316,24 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
     build("informes_entrega", "Informes autorizados sin entregar", "info", "/informes?filtro=autorizado", informesEntrega, (i) => ({ label: `IR ${pad(i.folio_num)}${Number(i.version || 1) > 1 ? ` v${i.version}` : ""}`, sub: cliente(i) || "Falta registrar la entrega", href: `/informes/${i.id}` })),
     build("mant_proximos", "Mantenimientos en los próximos 30 días", "info", "/inventario/mantenimiento?filtro=proximo", mantProximos, (m) => ({ label: String(m.equipo || "Equipo"), sub: `${TIPO_MANT[String(m.tipo)] || m.tipo || "Mantenimiento"} · ${fmtDate(m.fecha_programada)}`, href: "/inventario/mantenimiento?filtro=proximo" })),
   ].filter((a) => a.count > 0 && !!permisoDe(auth, MODULO_AVISO[a.key], "V"));
+
+  // Fase 2: lo que me toca supervisar y los accesos que vencen pronto.
+  const porSupervisar = await contarPorSupervisar(s, auth.userId);
+  if (porSupervisar.length) {
+    avisos.unshift({ key: "por_supervisar", label: "Por supervisar", tone: "warning", count: porSupervisar.length, href: "/supervision", items: porSupervisar.slice(0, MAX_ITEMS).map((r) => ({ label: `${r.tipo} ${r.referencia}`, sub: "Pendiente de tu visto bueno", href: String(r.href) })) });
+  }
+  const administra = !!permisoDe(auth, "usuarios", "G");
+  const vencen = administra ? await vencimientosProximos(s, 7) : await vencimientosProximos(s, 7, auth.userId);
+  if (vencen.length) {
+    avisos.push({
+      key: "accesos_vencen",
+      label: administra ? "Accesos que vencen en 7 días" : "Accesos de tus supervisados que vencen en 7 días",
+      tone: "warning",
+      count: vencen.length,
+      href: administra ? "/administracion/accesos" : "/supervision",
+      items: vencen.slice(0, MAX_ITEMS).map((v) => ({ label: String(v.nombre || v.email), sub: `${v.rol ? `Rol ${v.rol}` : "Cuenta"} vence el ${fmtDate(v.vigente_hasta)}`, href: administra ? "/administracion/accesos" : "/supervision" })),
+    });
+  }
 
   return json({ items: avisos, total: avisos.reduce((sum, a) => sum + a.count, 0) });
 }

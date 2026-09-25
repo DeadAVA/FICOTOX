@@ -5,6 +5,7 @@
  *
  * Corre al final de todo porque deja la cadena rota a proposito.
  */
+import "./lib/reauth-auto.mjs";
 import { createRequire } from "node:module";
 
 const BASE = process.env.BASE || "http://localhost:3100/api";

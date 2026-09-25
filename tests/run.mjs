@@ -27,6 +27,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 const PORT = Number(process.env.TEST_PORT || 3100);
 const onlyApi = process.argv.includes("--api");
+/* --solo=ui/seguridad.mjs (o api-seguridad.mjs): solo datos de apoyo y esa suite, para depurar. */
+const solo = (process.argv.find((a) => a.startsWith("--solo=")) || "").slice(7);
 /* Chrome de Playwright: CHROME_PATH o la version mas reciente instalada en la cache de Playwright (macOS). */
 const chromeDePlaywright = () => {
   const cache = path.join(os.homedir(), "Library/Caches/ms-playwright");
@@ -93,9 +95,16 @@ process.on("SIGINT", () => {
   process.exit(130);
 });
 
+/*
+ * Fase 2: el servidor de prueba confia en X-Forwarded-For (las pruebas de bloqueo
+ * por IP simulan varios equipos) y usa los valores por omision de la sesion y de
+ * CORS aunque el .env local los cambie (Next no pisa variables ya definidas).
+ */
+const ENTORNO_FASE2 = { TRUST_PROXY: "true", JWT_EXPIRES_HOURS: "", CORS_ORIGINS: "", SESION_INACTIVIDAD_MIN: "" };
+
 /* Levanta el servidor sobre la copia y no devuelve hasta confirmar que es esa base. */
 const arrancarServidor = async () => {
-  server = spawn("npx", ["next", "dev", "-p", String(PORT)], { cwd: root, stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, SQLITE_PATH: testDb, PORT: String(PORT) } });
+  server = spawn("npx", ["next", "dev", "-p", String(PORT)], { cwd: root, stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, SQLITE_PATH: testDb, PORT: String(PORT), ...ENTORNO_FASE2 } });
   const salud = await waitFor(`http://localhost:${PORT}/api/health/db`);
   if (!salud) throw new Error("El servidor de pruebas no respondio");
   if (salud.archivo !== esperado) {
@@ -112,8 +121,15 @@ try {
   console.log("\n=== datos-apoyo.mjs");
   if (await run(path.join(here, "datos-apoyo.mjs"), api)) throw new Error("No se pudieron crear los datos de apoyo de las pruebas");
 
+  if (solo) {
+    console.log(`\n=== ${solo}`);
+    const esUi = solo.startsWith("ui/");
+    failed += (await run(path.join(here, solo), esUi ? { BASE: `http://localhost:${PORT}`, CHROME_PATH: chrome, CREDENCIALES_ROLES: CREDENCIALES, DATOS_APOYO_FILE: datosApoyo } : api)) ? 1 : 0;
+    throw new Error("__solo__");
+  }
+
   // api-roles corre despues de api-dsp y api-sgc: crea registros y personas de prueba que alterarian los folios que esas suites esperan.
-  for (const file of ["api-dsp.mjs", "api-sgc.mjs", "api-roles.mjs"]) {
+  for (const file of ["api-dsp.mjs", "api-sgc.mjs", "api-roles.mjs", "api-seguridad.mjs"]) {
     console.log(`\n=== ${file}`);
     failed += (await run(path.join(here, file), api)) ? 1 : 0;
   }
@@ -130,7 +146,7 @@ try {
     if (!existsSync(chrome)) {
       console.log(`\n(navegador omitido: no se encontro Chrome en ${chrome}; define CHROME_PATH)`);
     } else {
-      for (const file of ["roles.mjs", "dsp.mjs", "sgc.mjs"]) {
+      for (const file of ["roles.mjs", "dsp.mjs", "sgc.mjs", "seguridad.mjs"]) {
         console.log(`\n=== ui/${file}`);
         failed += (await run(path.join(here, "ui", file), { BASE: `http://localhost:${PORT}`, CHROME_PATH: chrome, CREDENCIALES_ROLES: CREDENCIALES, DATOS_APOYO_FILE: datosApoyo })) ? 1 : 0;
       }
@@ -140,6 +156,8 @@ try {
   // Al final: rompe la bitacora a proposito, asi que nada puede correr despues.
   console.log("\n=== api-integridad.mjs");
   failed += (await run(path.join(here, "api-integridad.mjs"), api)) ? 1 : 0;
+} catch (error) {
+  if (error.message !== "__solo__") throw error;
 } finally {
   stop();
 }

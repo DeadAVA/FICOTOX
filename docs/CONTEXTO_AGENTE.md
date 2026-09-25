@@ -340,9 +340,37 @@ npm run test:reset-db # solo regenerar la base de prueba
 - Detalle y decisiones pendientes de validar con Mejora Continua:
   `docs/CATALOGO_PERMISOS.md`.
 
+## 8 quater. Fase 2 — seguridad de cuentas y sesiones (2026-09-24, rama `fase-2-seguridad`)
+
+- Git: `fase-1-permisos` se integró a `main` por fast-forward (local, sin push).
+- Cuentas temporales (`tipo_cuenta`, `vigente_desde/hasta`, `supervisor_id`),
+  vigencia validada en cada petición, rol ≤ vigencia de la cuenta, estudiante solo
+  temporal.
+- Alcance `supervisado` aplicado (`src/lib/server/supervision.ts`): pendiente de
+  visto bueno, no avanza; bandeja `/supervision`; también toda cuenta temporal con
+  supervisor.
+- Bloqueo por cuenta e IP (`src/lib/server/seguridad.ts`, `intentos_acceso`),
+  reautenticación de un solo uso (`reautenticaciones`, encabezado `X-Reauth`) en
+  todas las acciones A/AN/visto bueno/usuarios; `token_version` en el JWT (`tv`);
+  JWT 8 h; cierre por inactividad en el cliente; contraseñas de 10+.
+- Origen obligatorio en toda la cadena (antes un procesamiento podía crearse sin
+  recepción).
+- Alcances diferidos: en calidad = sin acceso; en usuarios = solo propia cuenta.
+- Secretos: en producción no arranca con `JWT_SECRET` inseguro
+  (`src/instrumentation.ts`, `scripts/start-ficotox.mjs`). La llave de la bitácora
+  NO se toca (la cadena actual se sella con `SECRET_KEY` del `.env`).
+- Revisión de accesos: `/administracion/accesos` y `GET /api/admin/accesos` (CSV).
+- Pruebas: `tests/api-seguridad.mjs`, `tests/ui/seguridad.mjs`,
+  `tests/lib/reauth-auto.mjs` (las suites anteriores se reautentican solas);
+  `npm test -- --solo=ui/seguridad.mjs` corre una sola suite. El servidor de
+  pruebas usa `TRUST_PROXY=true` y los valores por omisión de sesión y CORS.
+
 ## 9. Pendientes conocidos
 
-- (Visto en la revisión de la Fase 1, anterior a ella) `POST /samples/processing` sin `recepcion_id` crea un procesamiento sin recepción: exigir la recepción en una fase posterior.
+- El `.env` local tiene `JWT_EXPIRES_HOURS=12` y `CORS_ORIGINS=*`, que anulan los
+  nuevos valores por omisión (8 h, mismo origen): ajustarlos al desplegar.
+- Regla de dos personas y segundo usuario en anulaciones (Fase 3), FX-THF-AP
+  (Fase 4), asignación de muestras (Fase 5).
 
 
 1. **Confirmar con la coordinación técnica** los límites regulatorios precargados

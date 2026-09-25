@@ -7,12 +7,15 @@ import { isSqlite, type Row, type Session } from "../../db";
 import { intParam, json, readJson, type RouteContext } from "../../http";
 import { restoreInventoryUsage } from "../../inventory-usage";
 import { cargoActuante, requirePermission } from "../../rbac";
+import { exigirReauth } from "../../seguridad";
+import { aplicarSupervision, filtroSupervision, marcaSupervision } from "../../supervision";
 import { recordBitacoraFolios } from "../inventory";
 import { addColumnIfMissing, getTableColumns, markSchemaReady, schemaReady } from "../../schema";
 import { advanceState, anularRegistro, applyStageInventory, assertEditable, assertOrigin, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarRegistro } from "../../samples-flow";
 import { EXTRACTION_TYPES, claveForType, normalizeExtractionType, parseExtractionFolioSearch, type ExtractionType } from "../../../shared/extraction";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
 import { ensureEquiposSchema } from "../inventory";
+import { ensureSupervisionColumns } from "../../supervision";
 
 /*
  * Portado de modules/samples/extraccion.py del backend Flask original.
@@ -146,6 +149,8 @@ const MYSQL_CREATE = `
 
 let folioPerTypeVerified = false;
 
+const ORIGEN_REQUERIDO = "La extracción debe partir de un procesamiento de muestra";
+
 export async function ensureSamplesExtraccionSchema(s: Session): Promise<void> {
   if (schemaReady("muestras_extraccion")) return;
   await s.execute(isSqlite() ? `CREATE TABLE IF NOT EXISTS ${TABLE} (${SQLITE_COLUMNS})` : MYSQL_CREATE);
@@ -160,6 +165,7 @@ export async function ensureSamplesExtraccionSchema(s: Session): Promise<void> {
   if (!folioPerTypeVerified) {
     await ensureFolioPerType(s);
   }
+  await ensureSupervisionColumns(s, "muestras_extraccion");
   markSchemaReady("muestras_extraccion");
   // Solo se marca como verificada cuando la migracion ya quedo confirmada.
   folioPerTypeVerified = true;
@@ -372,7 +378,8 @@ export async function getNextFolio({ request, s }: RouteContext): Promise<Respon
 
 export async function listExtractionSamples({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "ensayos", "V");
+  const permiso = await requirePermission(s, user, "ensayos", "V");
+  const supFiltro = filtroSupervision(request, "e", permiso.auth.userId);
   await ensureSamplesExtraccionSchema(s);
 
   const search = searchParam(request, "search");
@@ -388,9 +395,10 @@ export async function listExtractionSamples({ request, s }: RouteContext): Promi
     `
     SELECT e.id, e.folio_num, e.tipo_registro, e.clave_revision, e.fecha_extraccion,
            e.hora_extraccion, e.procesamiento_id, e.folio_procesamiento_num, e.id_interno,
-           e.muestra_tipo, e.tipo_molienda, e.estado, e.motivo_anulacion, e.anulado_en, e.creado_en
+           e.muestra_tipo, e.tipo_molienda, e.estado, e.motivo_anulacion, e.anulado_en, e.creado_en, e.supervision_estado, e.supervisor_id
     FROM ${TABLE} e
     WHERE (:tipo = '' OR e.tipo_registro = :tipo)
+      ${supFiltro.sql}
       AND (:incluir_anuladas = 1 OR e.estado <> 'anulada')
       AND (
         :search = ''
@@ -414,6 +422,7 @@ export async function listExtractionSamples({ request, s }: RouteContext): Promi
       exact_tipo: exactFolio !== null ? folioSearch.tipo : "",
       exact_folio: exactFolio ?? 0,
       incluir_anuladas: searchParam(request, "anuladas") === "1" ? 1 : 0,
+      ...supFiltro.params,
     },
   );
   return json({ items: rows, total: rows.length });
@@ -435,7 +444,8 @@ export async function getExtractionSample({ request, s, params }: RouteContext):
            nombre_quien_limpieza, nombre_quien_superviso,
            firma_quien_extrajo, firma_quien_limpieza,
            firma_quien_superviso, uso_inventario_json,
-           estado, creado_en, actualizado_en
+           estado, creado_en, actualizado_en,
+           requiere_supervision, supervision_estado, supervisor_id, supervision_observaciones
     FROM ${TABLE}
     WHERE id = :id
     `,
@@ -464,7 +474,8 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
     data.folio_num = await nextFolioNum(s, TABLE, "tipo_registro = :tipo", { tipo });
   }
   // Solo se extrae a partir de un procesamiento vigente.
-  await assertOrigin(s, "muestras_procesamiento", data.procesamiento_id);
+  await assertOrigin(s, "muestras_procesamiento", data.procesamiento_id, { requerido: ORIGEN_REQUERIDO });
+  const supervision = marcaSupervision(permiso);
   if (data.estado === "anulada") data.estado = "registrada";
   data.equipos_json = jsonText(await snapshotEquipos(s, normalizeEquipos(payload.equipos)));
   const userId = userIdFromClaims(user);
@@ -498,6 +509,7 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
     );
     const id = result.lastrowid as number;
     await applyStageInventory(s, "EXT", id, data.uso_inventario_json, `Extraccion ${data.tipo_registro} folio ${data.folio_num}`, userId);
+    await aplicarSupervision(s, TABLE, id, supervision, userId);
     await advanceState(s, "muestras_procesamiento", data.procesamiento_id, "en_proceso");
     const despues = await snapshotRow(s, TABLE, id);
     await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues, detalle: { actuo_como: actuo } });
@@ -531,9 +543,9 @@ export async function updateExtractionSample({ request, s, params }: RouteContex
   if (!data.folio_num) {
     return json({ message: "El folio de extraccion es obligatorio" }, 400);
   }
-  if (data.procesamiento_id !== toIntOrNull(antes?.procesamiento_id)) {
-    await assertOrigin(s, "muestras_procesamiento", data.procesamiento_id);
-  }
+  // El origen se valida tambien al editar.
+  await assertOrigin(s, "muestras_procesamiento", data.procesamiento_id, { requerido: ORIGEN_REQUERIDO });
+  const supervision = marcaSupervision(permiso);
   if (data.estado === "anulada" || ["completada", "analizada"].includes(String(antes?.estado || ""))) data.estado = String(antes?.estado || "registrada");
   data.equipos_json = jsonText(await snapshotEquipos(s, normalizeEquipos(payload.equipos)));
   const userId = userIdFromClaims(user);
@@ -575,6 +587,7 @@ export async function updateExtractionSample({ request, s, params }: RouteContex
       return json({ message: "Registro no encontrado" }, 404);
     }
     await replaceInventoryUsage(s, extractionId, data, userId, insumosDeclarados(antes?.uso_inventario_json));
+    await aplicarSupervision(s, TABLE, extractionId, supervision, userId);
     await advanceState(s, "muestras_procesamiento", data.procesamiento_id, "en_proceso");
     const despues = await snapshotRow(s, TABLE, extractionId);
     await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: extractionId, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { actuo_como: actuo } });
@@ -603,6 +616,7 @@ export async function anularExtractionSample({ request, s, params }: RouteContex
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "AN"));
   await ensureSamplesExtraccionSchema(s);
   const motivo = await readMotivo(request);
+  await exigirReauth(s, request, user, "ensayos:AN");
   const row = await anularRegistro(s, user, TABLE, extractionId, motivo, {
     actuo,
     movimientosPrefix: `EXT-${extractionId}-INS-`,
@@ -620,6 +634,7 @@ export async function restaurarExtractionSample({ request, s, params }: RouteCon
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "AN"));
   await ensureSamplesExtraccionSchema(s);
+  await exigirReauth(s, request, user, "ensayos:AN");
   const row = await restaurarRegistro(s, user, TABLE, extractionId, await readMotivo(request), actuo);
   await s.commit();
   return json({ message: "Extraccion restaurada. El inventario no se vuelve a descontar: revisa los insumos y guarda de nuevo si aplica", item: serializeRow(row) });

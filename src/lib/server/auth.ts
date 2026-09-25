@@ -9,6 +9,8 @@ export interface CurrentUser extends JWTPayload {
   sub: string;
   email?: string;
   nombre?: string;
+  /* token_version de la cuenta al emitir el token (Fase 2: revocacion del lado del servidor). */
+  tv?: number;
 }
 
 function secretKey(): Uint8Array {

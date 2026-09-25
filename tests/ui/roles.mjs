@@ -5,8 +5,10 @@
  * repite aqui a proposito (independiente de scripts/roles-catalogo.json).
  * Documentos sigue apagado (FEATURES.documentos = false): nunca aparece.
  *
- * Nota: los alcances diferidos se comportan como "total" (Fase 1), asi que una C
- * con alcance "incidencias" en calidad implica ver la bitacora.
+ * Nota (Fase 2): los alcances diferidos se comportan como "total" salvo en
+ * calidad (sin acceso: una C "incidencias" ya no abre la bitacora) y en usuarios
+ * (solo la propia cuenta). Muestras incluye "Por supervisar" y Administracion
+ * "Revision de accesos".
  */
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -32,11 +34,11 @@ const USUARIOS = [
   ["Coordinador/a de Mejora Continua", "ana.torres@ficotox.local", TODOS],
   ["Coordinador/a del Área Técnica", "ricardo.medina@ficotox.local", TODOS],
   ["Coordinador/a de Investigación y Desarrollo", "gabriela.ortiz@ficotox.local", TODOS],
-  ["Técnico Analista", "luis.castro@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "informes", "equipos", "inventario", "calidad"]],
-  ["Técnico Auxiliar", "mariana.delgado@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "equipos", "inventario", "calidad"]],
-  ["Administrador/a Auxiliar", "carmen.aguilar@ficotox.local", ["usuarios", "muestras", "equipos", "inventario", "calidad"]],
+  ["Técnico Analista", "luis.castro@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "informes", "equipos", "inventario"]],
+  ["Técnico Auxiliar", "mariana.delgado@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "equipos", "inventario"]],
+  ["Administrador/a Auxiliar", "carmen.aguilar@ficotox.local", ["usuarios:propio", "muestras", "equipos", "inventario"]],
   ["Auditor Interno", "hector.navarro@ficotox.local", TODOS],
-  ["Estudiante / personal en formación", "diego.salinas@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "equipos", "inventario", "calidad"]],
+  ["Estudiante / personal en formación", "diego.salinas@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "equipos", "inventario"]],
 ];
 
 /* Botones de alta esperados por rol: [ruta, texto, visible?]. */
@@ -79,6 +81,7 @@ function enlacesEsperados(modulos) {
   const propio = modulos.includes("usuarios:propio");
   const out = new Set(["/", "/ayuda"]);
   if (set.has("muestras")) out.add("/muestras/recepcion");
+  if (set.has("muestras") || set.has("ensayos")) out.add("/supervision");
   if (set.has("ensayos")) ["/muestras/procesamiento", "/muestras/extraccion", "/muestras/analisis"].forEach((h) => out.add(h));
   if (set.has("informes")) out.add("/informes");
   if (set.has("inventario")) ["/inventario/reactivos", "/inventario/consumibles", "/movimientos"].forEach((h) => out.add(h));
@@ -86,6 +89,7 @@ function enlacesEsperados(modulos) {
   if (set.has("calidad")) out.add("/auditoria");
   if (set.has("usuarios")) {
     out.add("/administracion/usuarios");
+    out.add("/administracion/accesos");
     if (!propio) out.add("/administracion/roles");
   }
   return out;

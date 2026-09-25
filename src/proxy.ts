@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 
 /*
  * Equivalente de Flask-CORS (resources /api/*, origins = CORS_ORIGINS):
+ * 0. CORS_ORIGINS vacio (valor por omision): mismo origen, sin encabezados CORS.
  * 1. Sin encabezado Origin y CORS_ORIGINS="*": Access-Control-Allow-Origin: *.
  * 2. Con Origin permitido: se refleja el Origin y se agrega Vary: Origin.
  * 3. Preflight OPTIONS: 200 con el Origin, los metodos completos y los
@@ -14,7 +15,8 @@ import type { NextRequest } from "next/server";
 const CORS_METHODS = "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT";
 
 function allowedOrigin(requestOrigin: string | null): string | null {
-  const configured = (process.env.CORS_ORIGINS || "*").trim();
+  // Fase 2: por omision solo el mismo origen (sin encabezados CORS). CORS_ORIGINS="*" o una lista lo abren.
+  const configured = (process.env.CORS_ORIGINS ?? "").trim();
   if (!configured) return null;
   if (configured === "*") return requestOrigin || "*";
   if (!requestOrigin) return null;

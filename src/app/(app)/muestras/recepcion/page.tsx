@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ArrowCounterClockwise, ArrowSquareOut, Flask, PencilSimple, Plus, Prohibit, TestTube } from "@phosphor-icons/react";
-import { FolioChip, SampleStatus } from "@/components/features/samples/status";
+import { FolioChip, SampleStatus, SupervisionBadge } from "@/components/features/samples/status";
 import { useAnulacion } from "@/components/features/samples/useAnulacion";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
@@ -188,6 +188,7 @@ function RecepcionList() {
                     <Td>{dec ? <Badge tone={DECISION_TONE[dec]}>{DECISION_SHORT[dec] || dec}</Badge> : <span className="text-[12.5px] text-ink-3">Sin decisión</span>}</Td>
                     <Td>
                       <SampleStatus status={item.estado} />
+                      <SupervisionBadge estado={item.supervision_estado} />
                     </Td>
                     <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
                       <ActionMenu items={menuFor(item)} header={`${formatSampleFolio(item)} · ${item.id_interno || "lote"}`} />

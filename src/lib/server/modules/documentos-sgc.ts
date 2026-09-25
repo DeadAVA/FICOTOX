@@ -7,6 +7,7 @@ import { getConfig } from "../config";
 import { isIntegrityError, isSqlite, type Row, type Session } from "../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
 import { requirePermission } from "../rbac";
+import { exigirReauth } from "../seguridad";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
 import { readMotivo } from "../samples-flow";
 import { DOCUMENT_AREAS, DOCUMENT_KEY_RE, DOCUMENT_REVIEW_YEARS, DOCUMENT_TYPES, parseDocumentKey } from "../../shared/sgc";
@@ -409,6 +410,7 @@ export async function aprobarDocumento({ request, s, params }: RouteContext): Pr
   if (String(antes.estado) !== "en_revision") return json({ message: "Solo se aprueban documentos en revision; envialo a revision primero" }, 409);
   if (!antes.archivo_nombre && !Number(antes.es_externo)) return json({ message: "El documento no tiene archivo adjunto; no puede quedar vigente sin el" }, 409);
   const payload = await readJson(request);
+  await exigirReauth(s, request, user, "documentos:A");
   const today = new Date().toISOString().slice(0, 10);
   const vigencia = strippedOrNull(payload.fecha_vigencia, 10) || (antes.fecha_vigencia as string | null) || today;
   const aprobo = { ...persona(payload.aprobo, { nombre: String(user.nombre || user.email || "") }), fecha: strippedOrNull((payload.aprobo as Record<string, unknown> | undefined)?.fecha, 10) || today, usuario_id: userIdFromClaims(user) };
@@ -438,6 +440,7 @@ export async function obsoletarDocumento({ request, s, params }: RouteContext): 
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Documento no encontrado" }, 404);
   if (String(antes.estado) !== "vigente") return json({ message: "Solo un documento vigente se declara obsoleto" }, 409);
+  await exigirReauth(s, request, user, "documentos:AN");
   await s.execute(`UPDATE ${TABLE} SET estado = 'obsoleto', motivo_estado = :motivo, actualizado_por = :usuario WHERE id = :id`, { motivo, usuario: userIdFromClaims(user), id });
   const despues = await snapshotRow(s, TABLE, id);
   await registrarAuditoria(s, user, { accion: "baja", entidad: TABLE, entidadId: id, referencia: docRef(despues), antes, despues, motivo });
@@ -455,6 +458,7 @@ export async function cancelarDocumento({ request, s, params }: RouteContext): P
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Documento no encontrado" }, 404);
   if (!["borrador", "en_revision"].includes(String(antes.estado))) return json({ message: "Solo se cancelan borradores o revisiones en curso" }, 409);
+  await exigirReauth(s, request, user, "documentos:AN");
   await s.execute(`UPDATE ${TABLE} SET estado = 'cancelado', motivo_estado = :motivo, actualizado_por = :usuario WHERE id = :id`, { motivo, usuario: userIdFromClaims(user), id });
   const despues = await snapshotRow(s, TABLE, id);
   await registrarAuditoria(s, user, { accion: "anular", entidad: TABLE, entidadId: id, referencia: docRef(despues), antes, despues, motivo });

@@ -48,7 +48,7 @@ export const SAMPLE_TABS: NavChild[] = [
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Inicio", modules: [], description: "Búsqueda y lo pendiente", icon: "house" },
-  { href: "/muestras", label: "Muestras", modules: ["muestras", "ensayos"], description: "Recepción, procesamiento, extracción y análisis", icon: "testtube", children: SAMPLE_TABS },
+  { href: "/muestras", label: "Muestras", modules: ["muestras", "ensayos"], description: "Recepción, procesamiento, extracción y análisis", icon: "testtube", children: [...SAMPLE_TABS, { href: "/supervision", label: "Por supervisar" }] },
   { href: "/informes", label: "Informes", modules: ["informes"], description: "Informes de resultados para el cliente", icon: "report" },
   {
     href: "/inventario",
@@ -78,6 +78,7 @@ export const NAV_ITEMS: NavItem[] = [
     children: [
       { href: "/administracion/usuarios", label: "Usuarios", module: "usuarios" },
       { href: "/administracion/roles", label: "Roles", module: "usuarios", hideForScopes: ["propio"] },
+      { href: "/administracion/accesos", label: "Revisión de accesos", module: "usuarios" },
     ],
   },
 ];

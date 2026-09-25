@@ -117,7 +117,7 @@ function EquiposContent() {
 
   // Baja logica con motivo: el equipo conserva mantenimientos, bitacoras y registros que lo citan.
   const deleteEquipo = async (item: ApiRecord) => {
-    const motivo = await prompt({ title: `Dar de baja "${item.nombre}"`, description: "El equipo deja de ofrecerse en los formatos; sus mantenimientos y los registros que lo citan se conservan.", confirmLabel: "Dar de baja", tone: "danger" });
+    const motivo = await prompt({ critico: true, title: `Dar de baja "${item.nombre}"`, description: "El equipo deja de ofrecerse en los formatos; sus mantenimientos y los registros que lo citan se conservan.", confirmLabel: "Dar de baja", tone: "danger" });
     if (!motivo) return;
     try {
       await sendJsonAuth("DELETE", `${API_BASE_URL}/inventory/equipos/${item.id}`, token, { motivo });
@@ -130,7 +130,7 @@ function EquiposContent() {
   };
 
   const reactivarEquipo = async (item: ApiRecord) => {
-    const motivo = await prompt({ title: `Reactivar "${item.nombre}"`, confirmLabel: "Reactivar" });
+    const motivo = await prompt({ critico: true, title: `Reactivar "${item.nombre}"`, confirmLabel: "Reactivar" });
     if (!motivo) return;
     try {
       await sendJsonAuth("POST", `${API_BASE_URL}/inventory/equipos/${item.id}/reactivar`, token, { motivo });

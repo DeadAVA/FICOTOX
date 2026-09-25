@@ -85,19 +85,24 @@ Un permiso es `(rol, módulo, acción, alcance)`. `total` = sin límite.
 | `uso` | En equipos: solo registrar uso y folio de bitácora al capturar extracciones y análisis; no edita el catálogo ni los mantenimientos. |
 | `mantenimiento` | En equipos: solo mantenimientos (y su reporte); no el catálogo. |
 | `movimientos` | En inventario: solo movimientos y reposiciones; no el catálogo. |
+| `supervisado` | (Fase 2) Se permite crear y editar, pero lo capturado queda **pendiente del visto bueno** del supervisor de la cuenta: no sirve de origen de la etapa siguiente, no se cierra, revisa, aprueba ni autoriza, y un mantenimiento no se marca completado hasta el visto bueno. Lo mismo aplica a todo lo que capture una **cuenta temporal con supervisor**. Su V implícita es `total`. |
 
 ### Diferidos (se guardan; se aplican en fases posteriores)
 
 | Alcance | Fase |
 | --- | --- |
 | `asignado` | 5 |
-| `supervisado` | 2/5 |
 | `proyecto` | 8 |
 | `tecnico`, `investigacion`, `autorizados`, `administrativo` | 7/8 |
 | `incidencias`, `auditoria` | 8 |
 | `limitado` | posterior |
 
-Mientras no se apliquen se comportan como `total`, **excepto en el módulo usuarios**, donde cualquier alcance diferido se comporta como solo V. La pantalla de roles los muestra con la etiqueta "se aplica en Fase X".
+Mientras no se apliquen se comportan como `total`, con dos excepciones (Fase 2, `MODULOS_DIFERIDO_RESTRINGIDO` en `src/lib/shared/permisos.ts`):
+
+- **usuarios**: cualquier alcance diferido se comporta como **solo V de la propia cuenta** (`propio`). Afecta al Administrador/a Auxiliar (`V (limitado)`).
+- **calidad**: cualquier alcance diferido se comporta como **sin acceso** (ni la acción ni su V implícita). Así `C (incidencias)` y `C E (auditoria)` no abren la bitácora: el Técnico Analista, el Técnico Auxiliar, el Administrador/a Auxiliar y el Estudiante no ven la bitácora (403); el Auditor Interno la sigue viendo por su `V` total.
+
+Revisión del resto de módulos: en documentos, muestras, ensayos, informes, equipos e inventario un diferido como `total` no expone datos que el rol no deba ver según la matriz (sus celdas ya incluyen V), por lo que se mantiene hasta su fase. La pantalla de roles muestra los diferidos con la etiqueta "se aplica en Fase X".
 
 ### Implicaciones y unión
 
@@ -154,4 +159,5 @@ Las reglas 1 y 2 usan un permiso "ancla" para identificar el lado administrativo
 5. **Anclas de las reglas 1 y 2** (`usuarios:G` y `compras:G`) y la lectura de las celdas con paréntesis (sección 3).
 6. **Reportes de mantenimiento**: pasan del módulo documentos (apagado) a `equipos` (V para verlos, C con alcance `mantenimiento` para generarlos).
 7. **Uso de equipos e insumos al capturar**: se exige `equipos:C` / `inventario:C` además de `ensayos:C`.
-8. **Consecuencia de los alcances diferidos**: como se comportan como `total` hasta su fase, una C con alcance `incidencias` en calidad (Técnico Analista, Técnico Auxiliar, Administrador/a Auxiliar, Estudiante) implica ver la bitácora de auditoría completa hasta la Fase 8. Si no se desea, bastaría con quitar esa celda de la matriz mientras tanto.
+8. **Alcances diferidos en calidad** (resuelto en la Fase 2): en calidad un diferido es *sin acceso*, así que `C (incidencias)` ya no abre la bitácora. Cuando se implemente el registro de incidencias (Fase 8) se aplicará el alcance real.
+9. **Supervisión de cuentas temporales** (Fase 2): además del alcance `supervisado`, todo lo que captura una cuenta temporal con supervisor queda pendiente de visto bueno. Validar si una estancia temporal con rol de Técnico Analista debe quedar supervisada o no.

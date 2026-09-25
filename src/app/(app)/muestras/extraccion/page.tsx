@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { ArrowCounterClockwise, ArrowSquareOut, CaretDown, Flask, PencilSimple, Plus, Prohibit, TestTube } from "@phosphor-icons/react";
-import { FolioChip, SampleStatus } from "@/components/features/samples/status";
+import { FolioChip, SampleStatus, SupervisionBadge } from "@/components/features/samples/status";
 import { useAnulacion } from "@/components/features/samples/useAnulacion";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
@@ -194,6 +194,7 @@ function ExtraccionList() {
                     </Td>
                     <Td>
                       <SampleStatus status={item.estado} />
+                      <SupervisionBadge estado={item.supervision_estado} />
                     </Td>
                     <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
                       <ActionMenu items={menuFor(item)} header={`${formatExtractionFolio(item)} · ${meta.short}`} />

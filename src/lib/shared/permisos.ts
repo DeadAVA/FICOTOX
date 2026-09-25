@@ -41,8 +41,12 @@ export const ACCION_KEYS: Accion[] = ACCIONES.map((a) => a.clave);
 
 /*
  * Alcances. `fase` null = se aplica ya. Los diferidos se guardan y se muestran
- * con su fase; mientras no se apliquen se comportan como "total", salvo en el
- * modulo usuarios, donde cualquier alcance diferido se comporta como solo V.
+ * con su fase. Mientras no se aplican (privilegio minimo, Fase 2):
+ * - en calidad y en usuarios NO dan acceso a datos de terceros: en calidad no
+ *   dan ningun permiso y en usuarios equivalen a V "propio" (solo su cuenta);
+ * - en los demas modulos se comportan como "total" (son necesarios para el
+ *   trabajo diario y no exponen datos fuera del laboratorio). Ver
+ *   docs/CATALOGO_PERMISOS.md.
  */
 export const ALCANCES = [
   { clave: "total", nombre: "Total", fase: null, descripcion: "Sin limite" },
@@ -56,7 +60,7 @@ export const ALCANCES = [
   { clave: "mantenimiento", nombre: "Mantenimiento", fase: null, descripcion: "Solo mantenimientos; no el catalogo de equipos" },
   { clave: "movimientos", nombre: "Movimientos", fase: null, descripcion: "Solo movimientos y reposiciones; no el catalogo" },
   { clave: "asignado", nombre: "Asignado", fase: "5", descripcion: "Solo lo que tiene asignado" },
-  { clave: "supervisado", nombre: "Supervisado", fase: "2/5", descripcion: "Bajo supervision" },
+  { clave: "supervisado", nombre: "Supervisado", fase: null, descripcion: "Lo que crea o edita queda pendiente del visto bueno de su supervisor" },
   { clave: "proyecto", nombre: "Proyecto", fase: "8", descripcion: "Solo su proyecto" },
   { clave: "tecnico", nombre: "Técnico", fase: "7/8", descripcion: "Solo documentos tecnicos" },
   { clave: "investigacion", nombre: "Investigación", fase: "7/8", descripcion: "Solo documentos de investigacion" },
@@ -70,6 +74,12 @@ export const ALCANCES = [
 export type Alcance = (typeof ALCANCES)[number]["clave"];
 export const ALCANCE_KEYS: Alcance[] = ALCANCES.map((a) => a.clave);
 export const ALCANCES_DIFERIDOS = new Set<Alcance>(ALCANCES.filter((a) => a.fase !== null).map((a) => a.clave));
+
+/* Modulos donde un alcance diferido NO abre datos mientras no se aplica. */
+export const MODULOS_DIFERIDO_RESTRINGIDO: Record<string, "sin_acceso" | "propio"> = {
+  calidad: "sin_acceso",
+  usuarios: "propio",
+};
 
 /* Alcances que limitan tambien lo que se ve; los demas solo limitan la operacion. */
 const LIMITAN_VISTA = new Set<Alcance>(["propio", "estado", "bitacora"]);
@@ -118,8 +128,10 @@ export function expandirPermisos(filas: PermisoFila[]): PermisosEfectivos {
     if (!isModulo(fila.modulo) || !isAccion(fila.accion)) continue;
     const alcance: Alcance = isAlcance(fila.alcance) ? fila.alcance : "total";
     const modulo = fila.modulo;
-    if (modulo === "usuarios" && ALCANCES_DIFERIDOS.has(alcance)) {
-      add(out, modulo, "V", "total");
+    const restriccion = ALCANCES_DIFERIDOS.has(alcance) ? MODULOS_DIFERIDO_RESTRINGIDO[modulo] : undefined;
+    if (restriccion === "sin_acceso") continue;
+    if (restriccion === "propio") {
+      add(out, modulo, "V", "propio");
       continue;
     }
     const acciones: Accion[] = fila.accion === "G" ? ACCION_KEYS : [fila.accion];
@@ -181,6 +193,9 @@ export function alcancePermite(alcance: Alcance, ctx: ContextoAlcance = {}): boo
   switch (alcance) {
     case "propio":
       return ctx.propio === true;
+    case "supervisado":
+      // Se permite; lo que se crea o edita queda pendiente del visto bueno del supervisor.
+      return true;
     case "estado":
       // Solo acota lo que se devuelve; la vista se permite y se recorta en el servidor.
       return true;

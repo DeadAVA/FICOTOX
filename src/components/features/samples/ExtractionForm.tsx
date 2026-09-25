@@ -26,6 +26,7 @@ import { DSP_PROTOCOL } from "./extraction/dsp";
 import { EquiposUsados, newEquipoExtra, type EquipoUsadoRow } from "./extraction/EquiposUsados";
 import { WeightTable, blancoRow, newWeightRow } from "./extraction/WeightTable";
 import type { ExtractionProtocol, ExtractionState, FixedField, ProtocolContext, WeightColumnPair, WeightRow } from "./extraction/types";
+import { SupervisionCallout } from "./status";
 
 /*
  * Formato de extraccion como pagina completa. El formulario es comun; el
@@ -740,6 +741,7 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
         </>
       }
     >
+      <SupervisionCallout item={item} />
       {readOnly && item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}

@@ -290,6 +290,17 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   asignar_rol: "Asignó rol",
   revocar_rol: "Revocó rol",
   vencer_rol: "Venció rol",
+  acotar_rol: "Acotó rol a la vigencia de la cuenta",
+  reauth_fallida: "Confirmación de identidad fallida",
+  bloquear: "Bloqueó la cuenta",
+  desbloquear: "Desbloqueó la cuenta",
+  cambiar_password: "Cambió su contraseña",
+  restablecer_password: "Restableció la contraseña",
+  cerrar_sesiones: "Cerró sesión en todos los dispositivos",
+  cambiar_vigencia: "Cambió la vigencia",
+  visto_bueno: "Dio visto bueno",
+  regresar_supervision: "Regresó con observaciones",
+  cambiar_cargo: "Cambió su cargo predeterminado",
 };
 
 export const AUDIT_ENTITIES: Record<string, string> = {

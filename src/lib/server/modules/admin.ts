@@ -1,6 +1,6 @@
 import { randomAvatar } from "../../shared/avatars";
 import { evaluarCombinacion } from "../../shared/combinaciones-roles";
-import { ACCIONES, ALCANCES, MODULOS, firmaFilas } from "../../shared/permisos";
+import { ACCIONES, ALCANCES, MODULOS, expandirPermisos, firmaFilas, permite } from "../../shared/permisos";
 import { requireUser, userIdFromClaims, type CurrentUser } from "../auth";
 import { registrarAuditoria, snapshotRow } from "../audit";
 import { getConfig } from "../config";
@@ -10,7 +10,10 @@ import {
   afectadosPorCambioDeRol,
   assertAdministratorRemains,
   countActiveAdministrators,
+  cuentaVigente,
   ensureRbacSchema,
+  finDiaLocal,
+  inicioDiaLocal,
   filasDeRoles,
   guardarFilasRol,
   hoy,
@@ -18,11 +21,14 @@ import {
   normalizarFilas,
   requirePermission,
   rolesComprometidos,
+  rolesVigentes,
   toBit,
   type Permiso,
 } from "../rbac";
 import { ensureUsuariosSchema, normalizeUserPayload } from "../users";
 import { hashPassword, validatePasswordStrength } from "../password";
+import { exigirReauth } from "../seguridad";
+import { randomBytes } from "node:crypto";
 
 /*
  * Usuarios y roles (modulo "usuarios", Fase 1):
@@ -180,6 +186,7 @@ export async function updateRole({ request, s, params }: RouteContext): Promise<
     );
   }
 
+  if (cambiaPermisos) await exigirReauth(s, request, user, "usuarios:permisos");
   const adminsAntes = await countActiveAdministrators(s);
   await s.execute("UPDATE roles SET nombre = :nombre, descripcion = :descripcion, activo = :activo WHERE id = :id", { nombre: data.nombre, descripcion: data.descripcion, activo: data.activo, id: roleId });
   await guardarFilasRol(s, roleId, data.permisos);
@@ -223,8 +230,11 @@ export async function deleteRole({ request, s, params }: RouteContext): Promise<
 const USUARIO_SELECT = `
   SELECT u.id, u.nombre, u.email, u.activo, u.departamento, u.auth_provider, u.microsoft_oid, u.avatar,
          u.creado_en, u.ultimo_acceso,
-         CASE WHEN u.password_hash IS NULL THEN 0 ELSE 1 END AS tiene_password
+         CASE WHEN u.password_hash IS NULL THEN 0 ELSE 1 END AS tiene_password,
+         u.tipo_cuenta, u.vigente_desde, u.vigente_hasta, u.supervisor_id, sup.nombre AS supervisor_nombre,
+         u.motivo_ultimo_cambio, u.bloqueado_hasta, u.debe_cambiar_password, u.cargo_predeterminado
   FROM usuarios u
+  LEFT JOIN usuarios sup ON sup.id = u.supervisor_id
 `;
 
 /* Asignaciones de rol de varias personas, con su estado a hoy. */
@@ -257,7 +267,9 @@ async function asignacionesDe(s: Session, userIds: number[]): Promise<Map<number
 
 function conRoles(row: Row, asignaciones: Row[]): Row {
   const vigentes = asignaciones.filter((a) => a.estado === "vigente" && Number(a.rol_activo) === 1);
-  return { ...row, roles: vigentes.map((a) => ({ id: Number(a.rol_id), nombre: a.rol, vigente_hasta: a.vigente_hasta ?? null })), rol: vigentes.map((a) => a.rol).join(", ") || null };
+  // Bloqueo vigente (vencido = ya no bloqueada) y vigencia de la cuenta a hoy.
+  const bloqueada = row.bloqueado_hasta && Date.parse(String(row.bloqueado_hasta)) > Date.now() ? String(row.bloqueado_hasta) : null;
+  return { ...row, bloqueado_hasta: bloqueada, cuenta_vigente: cuentaVigente(row), roles: vigentes.map((a) => ({ id: Number(a.rol_id), nombre: a.rol, vigente_hasta: a.vigente_hasta ?? null })), rol: vigentes.map((a) => a.rol).join(", ") || null };
 }
 
 export async function listUsuarios({ request, s }: RouteContext): Promise<Response> {
@@ -295,10 +307,68 @@ function validateUsuarioPayload(payload: Record<string, unknown>, options: { pas
   if (!emailSinCambio && !emailDomainAllowed(data.email)) return { error: json({ message: domainErrorMessage() }, 400) };
   if (options.passwordRequired && !password) return { error: json({ message: "La contraseña es obligatoria" }, 400) };
   if (password) {
-    const weak = validatePasswordStrength(password);
+    const weak = validatePasswordStrength(password, { email: data.email, nombre: data.nombre });
     if (weak) return { error: json({ message: weak }, 400) };
   }
   return { data, passwordHash: password ? hashPassword(password) : null };
+}
+
+/* ---------- Vigencia de la cuenta y supervisor (Fase 2) ---------- */
+
+interface DatosCuenta {
+  tipo_cuenta: "permanente" | "temporal";
+  vigente_desde: string | null;
+  vigente_hasta: string | null;
+  supervisor_id: number | null;
+}
+
+function datosCuenta(payload: Record<string, unknown>, actual?: Row | null): DatosCuenta {
+  const tipo = String(payload.tipo_cuenta ?? actual?.tipo_cuenta ?? "permanente") === "temporal" ? "temporal" : "permanente";
+  const leer = (campo: string) => (campo in payload ? payload[campo] : actual?.[campo]);
+  const desde = leer("vigente_desde");
+  const hasta = leer("vigente_hasta");
+  const supervisor = leer("supervisor_id");
+  if (desde && !fechaValida(desde)) throw new HttpError(400, { message: "La fecha de inicio de la cuenta no es válida" });
+  if (hasta && !fechaValida(hasta)) throw new HttpError(400, { message: "La fecha de fin de la cuenta no es válida" });
+  const supervisorId = supervisor === null || supervisor === undefined || supervisor === "" ? null : Number.parseInt(String(supervisor), 10);
+  return { tipo_cuenta: tipo, vigente_desde: fechaValida(desde), vigente_hasta: fechaValida(hasta), supervisor_id: Number.isFinite(supervisorId) ? supervisorId : null };
+}
+
+/*
+ * Reglas de la cuenta: temporal => fecha de fin y supervisor obligatorios. El
+ * supervisor es una persona activa, vigente, con cuenta permanente y con un rol
+ * que tenga R o A en ensayos o muestras (por permisos, no por nombre); nadie se
+ * supervisa a si mismo.
+ */
+async function validarCuenta(s: Session, cuenta: DatosCuenta, usuarioId: number | null): Promise<void> {
+  if (cuenta.vigente_desde && cuenta.vigente_hasta && cuenta.vigente_hasta < cuenta.vigente_desde) throw new HttpError(400, { message: "La vigencia de la cuenta termina antes de empezar" });
+  if (cuenta.tipo_cuenta === "temporal") {
+    if (!cuenta.vigente_hasta) throw new HttpError(400, { message: "Una cuenta temporal necesita fecha de fin de vigencia" });
+    if (!cuenta.supervisor_id) throw new HttpError(400, { message: "Una cuenta temporal necesita un supervisor" });
+  }
+  if (!cuenta.supervisor_id) return;
+  if (usuarioId !== null && cuenta.supervisor_id === usuarioId) throw new HttpError(400, { message: "Nadie puede supervisarse a sí mismo" });
+  const sup = await s.queryOne<Row>("SELECT id, email, activo, tipo_cuenta, vigente_desde, vigente_hasta FROM usuarios WHERE id = :id", { id: cuenta.supervisor_id });
+  if (!sup || !Number(sup.activo ?? 1) || !cuentaVigente(sup)) throw new HttpError(400, { message: "El supervisor debe ser una persona activa y vigente" });
+  if (String(sup.tipo_cuenta || "permanente") === "temporal" || sup.vigente_hasta) throw new HttpError(400, { message: "El supervisor debe tener una cuenta permanente" });
+  const efectivos = expandirPermisos((await rolesVigentes(s, Number(sup.id))).flatMap((r) => r.filas));
+  const puede = (["ensayos", "muestras"] as const).some((m) => permite(efectivos, m, "R") || permite(efectivos, m, "A"));
+  if (!puede) throw new HttpError(400, { message: "El supervisor debe tener un rol con R o A en ensayos o muestras" });
+}
+
+/* ¿Alguno de los roles (vigentes o por comenzar) de la persona es el de Estudiante / formación? */
+async function tieneRolEstudiante(s: Session, usuarioId: number): Promise<boolean> {
+  return (await rolesComprometidos(s, usuarioId)).some((r) => r.clave === "estudiante");
+}
+
+function cambioDeCuenta(antes: Row, cuenta: DatosCuenta): Record<string, { antes: unknown; despues: unknown }> {
+  const cambios: Record<string, { antes: unknown; despues: unknown }> = {};
+  const previo: Record<string, unknown> = { tipo_cuenta: antes.tipo_cuenta || "permanente", vigente_desde: antes.vigente_desde || null, vigente_hasta: antes.vigente_hasta || null, supervisor_id: antes.supervisor_id === null || antes.supervisor_id === undefined ? null : Number(antes.supervisor_id) };
+  for (const campo of Object.keys(previo)) {
+    const nuevo = cuenta[campo as keyof DatosCuenta] ?? null;
+    if ((previo[campo] ?? null) !== nuevo) cambios[campo] = { antes: previo[campo] ?? null, despues: nuevo };
+  }
+  return cambios;
 }
 
 /* Alta de una asignacion de rol (con reglas de combinacion y bitacora). */
@@ -307,11 +377,17 @@ async function asignarRol(s: Session, actor: CurrentUser, usuario: Row, payload:
   const rol = Number.isFinite(rolId) ? await s.queryOne<{ id: number; nombre: string; clave: string | null; activo: number }>("SELECT id, nombre, clave, activo FROM roles WHERE id = :id", { id: rolId }) : null;
   if (!rol) throw new HttpError(400, { message: "Selecciona un rol que exista" });
   if (!Number(rol.activo)) throw new HttpError(409, { message: `El rol "${rol.nombre}" esta inactivo` });
-  const desde = fechaValida(payload.vigente_desde) || hoy();
-  const hasta = payload.vigente_hasta ? fechaValida(payload.vigente_hasta) : null;
+  // Fase 2: la vigencia del rol cabe dentro de la de la cuenta (sin fechas: toma las de la cuenta).
+  const cuentaDesde = usuario.vigente_desde ? String(usuario.vigente_desde) : null;
+  const cuentaHasta = usuario.vigente_hasta ? String(usuario.vigente_hasta) : null;
+  const desde = fechaValida(payload.vigente_desde) || (cuentaDesde && cuentaDesde > hoy() ? cuentaDesde : hoy());
+  const hasta = payload.vigente_hasta ? fechaValida(payload.vigente_hasta) : cuentaHasta;
   if (payload.vigente_hasta && !hasta) throw new HttpError(400, { message: "La fecha de fin de vigencia no es valida" });
   if (hasta && hasta < desde) throw new HttpError(400, { message: "La vigencia termina antes de empezar" });
   if (hasta && hasta < hoy()) throw new HttpError(400, { message: "La vigencia de la asignación ya terminó; indica una fecha de fin de hoy en adelante" });
+  if (cuentaHasta && hasta && hasta > cuentaHasta) throw new HttpError(400, { message: `El rol no puede quedar vigente más allá de la vigencia de la cuenta (${cuentaHasta})` });
+  if (cuentaDesde && desde < cuentaDesde) throw new HttpError(400, { message: `El rol no puede empezar antes que la cuenta (${cuentaDesde})` });
+  if (rol.clave === "estudiante" && String(usuario.tipo_cuenta || "permanente") !== "temporal") throw new HttpError(400, { message: "El rol de estudiante / personal en formación solo se asigna a cuentas temporales (con fecha de fin y supervisor)" });
   const motivo = motivoDe(payload) || motivoPorOmision || "";
   exigirMotivo(motivo, "de la asignación");
 
@@ -347,13 +423,18 @@ export async function createUsuario({ request, s }: RouteContext): Promise<Respo
   // Toda cuenta nace con un rol inicial (usuarios.id_rol lo conserva como dato historico).
   const rolInicial = Number.parseInt(String(payload.rol_id ?? payload.id_rol ?? ""), 10);
   if (!Number.isFinite(rolInicial) || !(await s.scalar("SELECT id FROM roles WHERE id = :id", { id: rolInicial }))) return json({ message: "Selecciona el rol inicial de la cuenta" }, 400);
+  const cuenta = datosCuenta(payload);
+  await validarCuenta(s, cuenta, null);
+  // Dar de alta una cuenta asigna un rol: exige reautenticacion.
+  await exigirReauth(s, request, user, "usuarios:roles");
 
   let insertedId: number;
   try {
     const result = await s.execute(
-      "INSERT INTO usuarios (nombre, email, activo, id_rol, departamento, auth_provider, password_hash, avatar) VALUES (:nombre, :email, :activo, :id_rol, :departamento, 'local', :password_hash, :avatar)",
+      `INSERT INTO usuarios (nombre, email, activo, id_rol, departamento, auth_provider, password_hash, avatar, tipo_cuenta, vigente_desde, vigente_hasta, supervisor_id, motivo_ultimo_cambio)
+       VALUES (:nombre, :email, :activo, :id_rol, :departamento, 'local', :password_hash, :avatar, :tipo_cuenta, :vigente_desde, :vigente_hasta, :supervisor_id, :motivo_cuenta)`,
       // Cada cuenta nace con un avatar al azar del catalogo; la persona puede cambiarlo en "Mi cuenta".
-      { ...data, id_rol: rolInicial, password_hash: validated.passwordHash, avatar: data.avatar ?? randomAvatar() },
+      { ...data, ...cuenta, id_rol: rolInicial, password_hash: validated.passwordHash, avatar: data.avatar ?? randomAvatar(), motivo_cuenta: motivoDe(payload, "motivo_cuenta") || null },
     );
     insertedId = result.lastrowid as number;
   } catch (error) {
@@ -381,6 +462,28 @@ export async function updateUsuario({ request, s, params }: RouteContext): Promi
   const validated = validateUsuarioPayload(payload, { passwordRequired: false, currentEmail: String(antesUsuario.email || "") });
   if (validated.error) return validated.error;
   const data = validated.data;
+  const cuenta = datosCuenta(payload, antesUsuario);
+  await validarCuenta(s, cuenta, userId);
+  const cambiosCuenta = cambioDeCuenta(antesUsuario, cuenta);
+  const cambiaCuenta = Object.keys(cambiosCuenta).length > 0;
+  const motivoCuenta = motivoDe(payload, "motivo_cuenta") || motivoDe(payload);
+  if (cambiaCuenta) {
+    exigirMotivo(motivoCuenta, "del cambio de vigencia o supervisor");
+    if (cuenta.tipo_cuenta !== "temporal" && (await tieneRolEstudiante(s, userId))) throw new HttpError(400, { message: "Una cuenta con el rol de estudiante / personal en formación debe ser temporal" });
+  }
+  const seDaDeBaja = Number(antesUsuario.activo ?? 1) === 1 && !data.activo;
+  // Reactivar una cuenta dada de baja tambien es critico (le devuelve el acceso).
+  const seReactiva = Number(antesUsuario.activo ?? 1) === 0 && !!data.activo;
+  // Fijar la contrasena de otra persona equivale a restablecerla: reautenticacion y cambio obligatorio.
+  const otraPersona = String(user.sub) !== String(userId);
+  // La propia contrasena solo se cambia en "Mi cuenta" (pide la actual); aqui no.
+  if (validated.passwordHash && !otraPersona) throw new HttpError(400, { message: "Tu propia contraseña se cambia en Mi cuenta › Cambiar contraseña (pide la actual)" });
+  /*
+   * Una sola reautenticacion por guardado (el token es de un solo uso): la accion
+   * es la del cambio mas critico que incluye (vigencia, baja, reactivacion o contrasena).
+   */
+  const accionCritica = cambiaCuenta ? "usuarios:vigencia" : seDaDeBaja ? "usuarios:baja" : seReactiva ? "usuarios:reactivar" : validated.passwordHash && otraPersona ? "usuarios:password" : null;
+  if (accionCritica) await exigirReauth(s, request, user, accionCritica);
   const adminsAntes = await countActiveAdministrators(s);
   try {
     // Los roles no se cambian aqui: se asignan y revocan con motivo (asignarRolUsuario / revocarRolUsuario).
@@ -389,10 +492,26 @@ export async function updateUsuario({ request, s, params }: RouteContext): Promi
       UPDATE usuarios
       SET nombre = :nombre, email = :email, activo = :activo, departamento = :departamento,
           password_hash = COALESCE(:password_hash, password_hash),
-          avatar = CASE WHEN :avatar_set = 1 THEN :avatar ELSE avatar END
+          avatar = CASE WHEN :avatar_set = 1 THEN :avatar ELSE avatar END,
+          tipo_cuenta = :tipo_cuenta, vigente_desde = :vigente_desde, vigente_hasta = :vigente_hasta, supervisor_id = :supervisor_id,
+          motivo_ultimo_cambio = CASE WHEN :cambia_cuenta = 1 THEN :motivo_cuenta ELSE motivo_ultimo_cambio END,
+          debe_cambiar_password = CASE WHEN :forzar_cambio = 1 THEN 1 ELSE debe_cambiar_password END,
+          token_version = COALESCE(token_version, 0) + :revocar
       WHERE id = :user_id
       `,
-      { ...data, avatar: data.avatar ?? null, avatar_set: data.avatar === undefined ? 0 : 1, password_hash: validated.passwordHash, user_id: userId },
+      {
+        ...data,
+        ...cuenta,
+        avatar: data.avatar ?? null,
+        avatar_set: data.avatar === undefined ? 0 : 1,
+        password_hash: validated.passwordHash,
+        cambia_cuenta: cambiaCuenta ? 1 : 0,
+        motivo_cuenta: motivoCuenta || null,
+        // Dar de baja o cambiar la contrasena cierra sus sesiones abiertas.
+        revocar: seDaDeBaja || validated.passwordHash ? 1 : 0,
+        forzar_cambio: validated.passwordHash && otraPersona ? 1 : 0,
+        user_id: userId,
+      },
     );
   } catch (error) {
     if (isIntegrityError(error)) {
@@ -401,10 +520,47 @@ export async function updateUsuario({ request, s, params }: RouteContext): Promi
     }
     throw error;
   }
+  /*
+   * La vigencia de sus roles no puede exceder la de la cuenta. Cada rol afectado
+   * queda en la bitacora: si empezaba despues del nuevo fin se revoca (no queda
+   * un rango invertido); si no, se acota a la nueva fecha. Extender despues la
+   * cuenta no los devuelve: se reasignan con motivo.
+   */
+  const rolesAjustados: Array<{ rol: unknown; asignacion_id: number; antes: unknown; despues: string | null; revocado: boolean }> = [];
+  if (cuenta.vigente_hasta) {
+    const afectados = await s.query<Row>(
+      `SELECT ur.id, ur.rol_id, ur.vigente_desde, ur.vigente_hasta, r.nombre AS rol FROM usuario_roles ur LEFT JOIN roles r ON r.id = ur.rol_id
+       WHERE ur.usuario_id = :id AND ur.revocado_en IS NULL AND (ur.vigente_hasta IS NULL OR ur.vigente_hasta > :hasta)`,
+      { id: userId, hasta: cuenta.vigente_hasta },
+    );
+    const ahora = new Date().toISOString();
+    for (const a of afectados) {
+      const revocar = String(a.vigente_desde) > cuenta.vigente_hasta;
+      const motivoRol = revocar ? `La cuenta termina (${cuenta.vigente_hasta}) antes de que iniciara el rol` : `Se acota a la vigencia de la cuenta (${cuenta.vigente_hasta})`;
+      if (revocar) {
+        await s.execute("UPDATE usuario_roles SET revocado_en = :en, revocado_por = :por, motivo_revocacion = :motivo WHERE id = :id", { en: ahora, por: userIdFromClaims(user), motivo: motivoRol, id: a.id });
+      } else {
+        await s.execute("UPDATE usuario_roles SET vigente_hasta = :hasta WHERE id = :id", { hasta: cuenta.vigente_hasta, id: a.id });
+      }
+      await registrarAuditoria(s, user, {
+        accion: revocar ? "revocar_rol" : "acotar_rol",
+        entidad: "usuarios",
+        entidadId: userId,
+        referencia: String(data.email),
+        motivo: motivoRol,
+        detalle: { rol: a.rol, rol_id: a.rol_id, asignacion_id: Number(a.id), vigente_desde: a.vigente_desde, vigente_hasta_antes: a.vigente_hasta ?? null, vigente_hasta: revocar ? a.vigente_hasta ?? null : cuenta.vigente_hasta },
+      });
+      rolesAjustados.push({ rol: a.rol, asignacion_id: Number(a.id), antes: a.vigente_hasta ?? null, despues: revocar ? null : cuenta.vigente_hasta, revocado: revocar });
+    }
+  }
   await assertAdministratorRemains(s, adminsAntes);
-  await registrarAuditoria(s, user, { accion: "editar", entidad: "usuarios", entidadId: userId, referencia: String(data.email), antes: antesUsuario, despues: await snapshotRow(s, "usuarios", userId), detalle: validated.passwordHash ? { contrasena: "cambiada" } : null });
+  const despues = await snapshotRow(s, "usuarios", userId);
+  await registrarAuditoria(s, user, { accion: "editar", entidad: "usuarios", entidadId: userId, referencia: String(data.email), antes: antesUsuario, despues, detalle: validated.passwordHash ? { contrasena: "cambiada" } : null });
+  if (cambiaCuenta) {
+    await registrarAuditoria(s, user, { accion: "cambiar_vigencia", entidad: "usuarios", entidadId: userId, referencia: String(data.email), motivo: motivoCuenta, detalle: { cambios: cambiosCuenta, roles_acotados: rolesAjustados.length } });
+  }
   await s.commit();
-  return json({ message: "Usuario actualizado" });
+  return json({ message: rolesAjustados.length ? `Usuario actualizado; ${rolesAjustados.length} rol(es) se ajustaron a la vigencia de la cuenta` : "Usuario actualizado", roles_acotados: rolesAjustados.length, roles_ajustados: rolesAjustados });
 }
 
 export async function deleteUsuario({ request, s, params }: RouteContext): Promise<Response> {
@@ -419,12 +575,62 @@ export async function deleteUsuario({ request, s, params }: RouteContext): Promi
   if (motivo.length < MOTIVO_MIN) return json({ message: "Indica el motivo de la baja del usuario (al menos 5 caracteres)" }, 400);
   const antes = await snapshotRow(s, "usuarios", userId);
   if (!antes) return json({ message: "Usuario no encontrado" }, 404);
+  await exigirReauth(s, request, user, "usuarios:baja");
   const adminsAntes = await countActiveAdministrators(s);
-  await s.execute("UPDATE usuarios SET activo = 0 WHERE id = :user_id", { user_id: userId });
+  // La baja cierra sus sesiones abiertas (token_version).
+  await s.execute("UPDATE usuarios SET activo = 0, token_version = COALESCE(token_version, 0) + 1 WHERE id = :user_id", { user_id: userId });
   await assertAdministratorRemains(s, adminsAntes);
   await registrarAuditoria(s, user, { accion: "baja", entidad: "usuarios", entidadId: userId, referencia: String(antes.email || userId), motivo, antes, despues: await snapshotRow(s, "usuarios", userId) });
   await s.commit();
   return json({ message: "Usuario dado de baja (inactivo); su historial se conserva" });
+}
+
+/* ---------- Bloqueo y contrasenas (Fase 2) ---------- */
+
+export async function desbloquearUsuario({ request, s, params }: RouteContext): Promise<Response> {
+  const userId = intParam(params.id);
+  const user = await requireUser(request);
+  await requirePermission(s, user, "usuarios", "G");
+  await ensureUsuariosSchema(s);
+  const usuario = await snapshotRow(s, "usuarios", userId);
+  if (!usuario) return json({ message: "Usuario no encontrado" }, 404);
+  const motivo = motivoDe(await readJson(request));
+  exigirMotivo(motivo, "del desbloqueo");
+  await exigirReauth(s, request, user, "usuarios:desbloquear");
+  // Se levanta el bloqueo y los intentos anteriores dejan de contar.
+  await s.execute("UPDATE usuarios SET bloqueado_hasta = NULL, intentos_desde = :ahora WHERE id = :id", { ahora: new Date().toISOString(), id: userId });
+  await registrarAuditoria(s, user, { accion: "desbloquear", entidad: "usuarios", entidadId: userId, referencia: String(usuario.email), motivo, detalle: { bloqueado_hasta: usuario.bloqueado_hasta ?? null } });
+  await s.commit();
+  return json({ message: "Cuenta desbloqueada" });
+}
+
+/* Genera una contrasena temporal que cumple las reglas (10+ caracteres, mezcla de tipos). */
+function passwordTemporal(): string {
+  const alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const bytes = randomBytes(14);
+  let out = "";
+  for (const b of bytes) out += alfabeto[b % alfabeto.length];
+  return `${out.slice(0, 6)}-${out.slice(6, 12)}#${(bytes[12] % 90) + 10}`;
+}
+
+export async function restablecerPassword({ request, s, params }: RouteContext): Promise<Response> {
+  const userId = intParam(params.id);
+  const user = await requireUser(request);
+  await requirePermission(s, user, "usuarios", "G");
+  await ensureUsuariosSchema(s);
+  if (String(user.sub) === String(userId)) return json({ message: "Para tu propia cuenta usa Cambiar contraseña en Mi cuenta" }, 403);
+  const usuario = await snapshotRow(s, "usuarios", userId);
+  if (!usuario) return json({ message: "Usuario no encontrado" }, 404);
+  const motivo = motivoDe(await readJson(request));
+  exigirMotivo(motivo, "del restablecimiento");
+  await exigirReauth(s, request, user, "usuarios:password");
+  const temporal = passwordTemporal();
+  // Obliga a cambiarla al entrar y cierra las sesiones abiertas.
+  await s.execute("UPDATE usuarios SET password_hash = :hash, debe_cambiar_password = 1, token_version = COALESCE(token_version, 0) + 1, auth_provider = COALESCE(auth_provider, 'local') WHERE id = :id", { hash: hashPassword(temporal), id: userId });
+  // La contrasena temporal se entrega una sola vez en la respuesta; nunca se escribe en la bitacora.
+  await registrarAuditoria(s, user, { accion: "restablecer_password", entidad: "usuarios", entidadId: userId, referencia: String(usuario.email), motivo, detalle: { cambio_obligatorio: true, sesiones: "cerradas" } });
+  await s.commit();
+  return json({ message: "Contraseña restablecida: la persona deberá cambiarla al entrar", password_temporal: temporal });
 }
 
 /* ---------- Asignacion y revocacion de roles ---------- */
@@ -441,7 +647,9 @@ export async function asignarRolUsuario({ request, s, params }: RouteContext): P
   noASiMismo(user, userId);
   const usuario = await snapshotRow(s, "usuarios", userId);
   if (!usuario) return json({ message: "Usuario no encontrado" }, 404);
-  const id = await asignarRol(s, user, usuario, await readJson(request));
+  const payload = await readJson(request);
+  await exigirReauth(s, request, user, "usuarios:roles");
+  const id = await asignarRol(s, user, usuario, payload);
   await s.commit();
   return json({ message: "Rol asignado", id }, 201);
 }
@@ -462,6 +670,7 @@ export async function revocarRolUsuario({ request, s, params }: RouteContext): P
   const payload = await readJson(request);
   const motivo = motivoDe(payload);
   exigirMotivo(motivo, "de la revocación");
+  await exigirReauth(s, request, user, "usuarios:roles");
   const adminsAntes = await countActiveAdministrators(s);
   await s.execute("UPDATE usuario_roles SET revocado_en = :en, revocado_por = :por, motivo_revocacion = :motivo WHERE id = :id", { en: new Date().toISOString(), por: userIdFromClaims(user), motivo, id: asignacionId });
   await assertAdministratorRemains(s, adminsAntes);
@@ -475,4 +684,150 @@ export async function revocarRolUsuario({ request, s, params }: RouteContext): P
   });
   await s.commit();
   return json({ message: "Rol revocado" });
+}
+
+/* ---------- Revision de accesos (Fase 2) ---------- */
+
+const ACCIONES_ACCESO = ["bloquear", "desbloquear", "asignar_rol", "revocar_rol", "vencer_rol", "acotar_rol", "cambiar_vigencia", "restablecer_password", "baja", "reactivar", "cerrar_sesiones", "crear"];
+
+const sumarDias = (fecha: string, dias: number) => new Date(Date.parse(`${fecha}T00:00:00Z`) + dias * 86_400_000).toISOString().slice(0, 10);
+
+function csvCelda(value: unknown): string {
+  const text = value === null || value === undefined ? "" : String(value);
+  // Evita que Excel interprete formulas (inyeccion CSV).
+  const seguro = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return /[",\n;]/.test(seguro) ? `"${seguro.replace(/"/g, '""')}"` : seguro;
+}
+
+function csv(encabezados: string[], filas: unknown[][]): string {
+  return `﻿${[encabezados, ...filas].map((f) => f.map(csvCelda).join(",")).join("\r\n")}\r\n`;
+}
+
+/*
+ * Revision periodica de accesos (usuarios:V): cuentas y roles vigentes,
+ * cuentas temporales con su supervisor, vencimientos proximos, bloqueos y
+ * cambios de roles o vigencia en un periodo. `formato=csv&seccion=cuentas|eventos`
+ * exporta cada seccion.
+ */
+export async function revisionAccesos({ request, s }: RouteContext): Promise<Response> {
+  const user = await requireUser(request);
+  const permiso = await requirePermission(s, user, "usuarios", "V");
+  await ensureUsuariosSchema(s);
+  const url = new URL(request.url);
+  const fecha = hoy();
+  const desde = fechaValida(url.searchParams.get("desde")) || sumarDias(fecha, -30);
+  const hasta = fechaValida(url.searchParams.get("hasta")) || fecha;
+  const dias = Math.min(Math.max(Number.parseInt(url.searchParams.get("dias") || "30", 10) || 30, 1), 365);
+  const limite = sumarDias(fecha, dias);
+  const propio = soloPropio(permiso);
+
+  const rows = propio ? await s.query(`${USUARIO_SELECT} WHERE u.id = :id`, { id: permiso.auth.userId }) : await s.query(`${USUARIO_SELECT} ORDER BY u.nombre ASC`);
+  const asignaciones = await asignacionesDe(s, rows.map((r) => Number(r.id)));
+  const cuentas = rows.map((row) => {
+    const conR = conRoles(row, asignaciones.get(Number(row.id)) || []);
+    const propias = asignaciones.get(Number(row.id)) || [];
+    return {
+      id: Number(row.id),
+      nombre: row.nombre,
+      email: row.email,
+      activo: Number(row.activo ?? 1) === 1,
+      tipo_cuenta: row.tipo_cuenta || "permanente",
+      vigente_desde: row.vigente_desde || null,
+      vigente_hasta: row.vigente_hasta || null,
+      cuenta_vigente: conR.cuenta_vigente,
+      supervisor_id: row.supervisor_id ?? null,
+      supervisor_nombre: row.supervisor_nombre || null,
+      bloqueado_hasta: conR.bloqueado_hasta,
+      ultimo_acceso: row.ultimo_acceso || null,
+      roles: propias.filter((a) => a.estado === "vigente" || a.estado === "futuro").map((a) => ({ rol: a.rol, estado: a.estado, vigente_desde: a.vigente_desde, vigente_hasta: a.vigente_hasta ?? null })),
+    };
+  });
+  const activas = cuentas.filter((c) => c.activo);
+  const vencimientos: Array<{ tipo: "cuenta" | "rol"; usuario_id: number; nombre: unknown; email: unknown; rol: unknown; vigente_hasta: string }> = [];
+  for (const c of activas) {
+    if (c.vigente_hasta && c.vigente_hasta >= fecha && c.vigente_hasta <= limite) vencimientos.push({ tipo: "cuenta", usuario_id: c.id, nombre: c.nombre, email: c.email, rol: null, vigente_hasta: String(c.vigente_hasta) });
+    for (const r of c.roles) {
+      if (r.vigente_hasta && String(r.vigente_hasta) >= fecha && String(r.vigente_hasta) <= limite) vencimientos.push({ tipo: "rol", usuario_id: c.id, nombre: c.nombre, email: c.email, rol: r.rol, vigente_hasta: String(r.vigente_hasta) });
+    }
+  }
+  vencimientos.sort((a, b) => a.vigente_hasta.localeCompare(b.vigente_hasta));
+
+  const placeholders = ACCIONES_ACCESO.map((_, i) => `:a${i}`).join(", ");
+  const eventos = await s.query<Row>(
+    `
+    SELECT id, fecha_hora, usuario_nombre, usuario_email, accion, entidad, entidad_id, referencia, motivo, cambios_json
+    FROM auditoria
+    WHERE entidad IN ('usuarios', 'roles') AND accion IN (${placeholders})
+      AND fecha_hora >= :desde AND fecha_hora <= :hasta_fin
+      ${propio ? "AND entidad = 'usuarios' AND entidad_id = :propio" : ""}
+    ORDER BY id DESC
+    LIMIT 2000
+    `,
+    { ...Object.fromEntries(ACCIONES_ACCESO.map((a, i) => [`a${i}`, a])), desde: inicioDiaLocal(desde), hasta_fin: finDiaLocal(hasta), propio: String(permiso.auth.userId) },
+  );
+  const eventosItems = eventos.map((e) => {
+    let detalle: Record<string, unknown> = {};
+    try {
+      detalle = (JSON.parse(String(e.cambios_json || "{}"))._detalle as Record<string, unknown>) || {};
+    } catch {
+      detalle = {};
+    }
+    return { id: Number(e.id), fecha_hora: e.fecha_hora, accion: e.accion, entidad: e.entidad, referencia: e.referencia, motivo: e.motivo, por: e.usuario_nombre || e.usuario_email || "Sistema", rol: detalle.rol ?? null, detalle };
+  });
+
+  const formato = url.searchParams.get("formato");
+  if (formato === "csv") {
+    const seccion = url.searchParams.get("seccion") === "eventos" ? "eventos" : "cuentas";
+    const cuerpo =
+      seccion === "eventos"
+        ? csv(
+            ["fecha_hora", "accion", "referencia", "rol", "motivo", "realizado_por"],
+            eventosItems.map((e) => [e.fecha_hora, e.accion, e.referencia, e.rol, e.motivo, e.por]),
+          )
+        : csv(
+            ["nombre", "email", "activa", "tipo_cuenta", "vigente_desde", "vigente_hasta", "vigente_hoy", "supervisor", "bloqueada_hasta", "ultimo_acceso", "roles"],
+            cuentas.map((c) => [c.nombre, c.email, c.activo ? "si" : "no", c.tipo_cuenta, c.vigente_desde, c.vigente_hasta, c.cuenta_vigente ? "si" : "no", c.supervisor_nombre, c.bloqueado_hasta, c.ultimo_acceso, c.roles.map((r) => `${r.rol}${r.vigente_hasta ? ` (hasta ${r.vigente_hasta})` : ""}${r.estado === "futuro" ? " [por comenzar]" : ""}`).join(" | ")]),
+          );
+    return new Response(cuerpo, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="revision-accesos-${seccion}-${fecha}.csv"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+  return json({
+    periodo: { desde, hasta },
+    dias_vencimiento: dias,
+    cuentas,
+    temporales: cuentas.filter((c) => c.tipo_cuenta === "temporal"),
+    vencimientos,
+    bloqueadas: cuentas.filter((c) => c.bloqueado_hasta),
+    eventos: eventosItems,
+  });
+}
+
+/*
+ * Cuentas o roles que vencen en los proximos `dias` (para el aviso del Inicio).
+ * `supervisorId`: solo las cuentas que esa persona supervisa.
+ */
+export async function vencimientosProximos(s: Session, dias: number, supervisorId?: number): Promise<Row[]> {
+  await ensureUsuariosSchema(s);
+  const fecha = hoy();
+  const limite = sumarDias(fecha, dias);
+  const filtro = supervisorId ? "AND u.supervisor_id = :sup" : "";
+  const cuentas = await s.query<Row>(
+    `SELECT u.id, u.nombre, u.email, u.vigente_hasta, NULL AS rol FROM usuarios u
+     WHERE COALESCE(u.activo, 1) = 1 AND u.vigente_hasta IS NOT NULL AND u.vigente_hasta >= :hoy AND u.vigente_hasta <= :limite ${filtro}`,
+    { hoy: fecha, limite, sup: supervisorId ?? 0 },
+  );
+  const roles = await s.query<Row>(
+    `SELECT u.id, u.nombre, u.email, ur.vigente_hasta, r.nombre AS rol FROM usuario_roles ur
+     JOIN usuarios u ON u.id = ur.usuario_id JOIN roles r ON r.id = ur.rol_id
+     WHERE COALESCE(u.activo, 1) = 1 AND ur.revocado_en IS NULL AND ur.vigente_hasta IS NOT NULL
+       AND ur.vigente_hasta >= :hoy AND ur.vigente_hasta <= :limite
+       AND (u.vigente_hasta IS NULL OR ur.vigente_hasta < u.vigente_hasta) ${filtro}`,
+    { hoy: fecha, limite, sup: supervisorId ?? 0 },
+  );
+  return [...cuentas, ...roles].sort((a, b) => String(a.vigente_hasta).localeCompare(String(b.vigente_hasta)));
 }

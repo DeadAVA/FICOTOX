@@ -19,6 +19,7 @@ import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { Callout, ChoiceCard, ChoiceGrid, FormCard, FormPage, FormTable, PersonCard, StepRow, formTd, formTh, missingMessage, missingSections, openFormSection, type FormSectionDef } from "./FormLayout";
 import { InsumoSearch, InventarioRows, collectInventarioRows, newInventarioRow } from "./InsumoSearch";
+import { SupervisionCallout } from "./status";
 
 /* Formato de procesamiento de muestras (FX-TCF-GMP) como pagina completa. */
 
@@ -494,6 +495,7 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
         </>
       }
     >
+      <SupervisionCallout item={item} />
       {readOnly && item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}

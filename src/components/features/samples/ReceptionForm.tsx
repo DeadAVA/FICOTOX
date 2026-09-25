@@ -20,7 +20,7 @@ import { ACCEPTANCE_DECISIONS, DISPOSAL_TYPES, LEGACY_INSPECTION_REQUIREMENTS, L
 import { Callout, ChoiceCard, ChoiceGrid, EditableScope, FieldGroup, FormCard, FormPage, Panel, PersonCard, missingMessage, missingSections, openFormSection, type FormSectionDef } from "./FormLayout";
 import { PersonSelect } from "./PersonSelect";
 import { SignaturePad } from "./SignaturePad";
-import { FolioChip, SampleStatus } from "./status";
+import { FolioChip, SampleStatus, SupervisionCallout } from "./status";
 
 /*
  * Formato de recepcion de muestras (FX-TCF-GMR) como pagina completa, con
@@ -536,6 +536,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
         </>
       }
     >
+      <SupervisionCallout item={item} />
       {readOnly && item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}

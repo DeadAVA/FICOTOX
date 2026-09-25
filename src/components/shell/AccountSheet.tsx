@@ -6,7 +6,10 @@ import { useSession } from "@/components/session/SessionProvider";
 import { AvatarArt, AVATARS, resolveAvatarKey } from "@/components/ui/AvatarArt";
 import { AvatarPicker } from "@/components/ui/AvatarPicker";
 import { Button } from "@/components/ui/Button";
-import { Sheet } from "@/components/ui/Overlay";
+import { Sheet, useConfirm } from "@/components/ui/Overlay";
+import { Field, Select } from "@/components/ui/Field";
+import { FormCambiarPassword } from "@/components/session/CambiarPassword";
+import { Key, SignOut } from "@phosphor-icons/react";
 import { API_BASE_URL, sendJsonAuth } from "@/lib/client/api";
 import { fmtDate } from "@/lib/client/format";
 import { invalidate } from "@/lib/client/store";
@@ -14,9 +17,40 @@ import { invalidate } from "@/lib/client/store";
 /*
  * "Mi cuenta": quien soy (nombre, correo, roles vigentes) y mi avatar. La persona elige
  * uno del catalogo; el cambio queda en la bitacora como edicion de su usuario.
+ * Fase 2: cargo predeterminado (con el que actua cuando varios roles permiten
+ * una accion, sin preguntar), cambio de contrasena y cerrar la sesion en todos
+ * los dispositivos.
  */
 export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { user, token, refreshMe, roles } = useSession();
+  const { user, token, refreshMe, roles, logoutAll, authConfig } = useSession();
+  const confirm = useConfirm();
+  const [cargo, setCargo] = useState<string>(user?.cargo_predeterminado ? String(user.cargo_predeterminado) : "");
+  const [savingCargo, setSavingCargo] = useState(false);
+  const [cambiarClave, setCambiarClave] = useState(false);
+
+  const guardarCargo = async (valor: string) => {
+    setCargo(valor);
+    setSavingCargo(true);
+    try {
+      await sendJsonAuth("PUT", `${API_BASE_URL}/auth/me/cargo`, token, { rol_id: valor ? Number(valor) : null });
+      await refreshMe();
+      toast.success(valor ? "Cargo predeterminado guardado" : "Se te preguntará el cargo cada vez");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo guardar el cargo");
+    } finally {
+      setSavingCargo(false);
+    }
+  };
+
+  const cerrarTodas = async () => {
+    const ok = await confirm({ title: "Cerrar sesión en todos los dispositivos", description: "Se cerrarán todas tus sesiones abiertas, incluida esta. Tendrás que volver a entrar.", confirmLabel: "Cerrar todas", tone: "danger" });
+    if (!ok) return;
+    try {
+      await logoutAll();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudieron cerrar las sesiones");
+    }
+  };
   const seed = (user?.email || user?.nombre || "?").trim().toLowerCase();
   const current = resolveAvatarKey(user?.avatar, seed);
   const [choice, setChoice] = useState<string>(current);
@@ -76,6 +110,51 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
             <p className="mt-1 text-[12px] text-ink-4">{AVATARS[resolveAvatarKey(choice, seed)].label}</p>
           </div>
         </div>
+        {user?.tipo_cuenta === "temporal" ? (
+          <p className="rounded-[10px] bg-surface-2 px-3 py-2 text-[12.5px] text-ink-2 ring-1 ring-line">
+            Cuenta temporal{user.vigente_hasta ? ` vigente hasta el ${fmtDate(user.vigente_hasta)}` : ""}. Lo que capturas queda pendiente del visto bueno de tu supervisor.
+          </p>
+        ) : null}
+        {roles.length > 1 ? (
+          <section className="flex flex-col gap-2">
+            <div>
+              <h3 className="title-3 text-ink">Cargo predeterminado</h3>
+              <p className="text-[13px] text-ink-3">Con qué cargo actúas cuando varios de tus roles permiten la misma acción. Si ese cargo no la permite, se te preguntará.</p>
+            </div>
+            <Field label="Actuar como" htmlFor="cuenta-cargo">
+              <Select id="cuenta-cargo" value={cargo} disabled={savingCargo} onChange={(event) => void guardarCargo(event.target.value)}>
+                <option value="">Preguntar cada vez</option>
+                {roles.map((rol) => (
+                  <option key={rol.id} value={String(rol.id)}>
+                    {rol.nombre}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </section>
+        ) : null}
+        <section className="flex flex-col gap-2">
+          <div>
+            <h3 className="title-3 text-ink">Seguridad</h3>
+            <p className="text-[13px] text-ink-3">
+              Tu sesión se cierra tras {authConfig.sesion?.inactividad_min ?? 30} minutos sin actividad y, en todo caso, a las {authConfig.sesion?.expira_horas ?? 8} horas.
+            </p>
+          </div>
+          {user?.tiene_password !== false ? (
+            cambiarClave ? (
+              <FormCambiarPassword onDone={() => setCambiarClave(false)} />
+            ) : (
+              <Button variant="secondary" icon={<Key size={16} />} onClick={() => setCambiarClave(true)}>
+                Cambiar contraseña
+              </Button>
+            )
+          ) : (
+            <p className="text-[12.5px] text-ink-3">Entras con Microsoft: tu contraseña se administra allí.</p>
+          )}
+          <Button variant="secondary" icon={<SignOut size={16} />} onClick={cerrarTodas}>
+            Cerrar sesión en todos los dispositivos
+          </Button>
+        </section>
         <section className="flex flex-col gap-3">
           <div>
             <h3 className="title-3 text-ink">Elige tu avatar</h3>

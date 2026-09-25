@@ -101,7 +101,7 @@ function ReactivosContent() {
 
   // Baja logica con motivo: el reactivo deja de ofrecerse, sus movimientos se conservan.
   const deleteReactivo = async (item: ApiRecord) => {
-    const motivo = await prompt({ title: `Dar de baja "${formatReactivoName(item)}"`, description: "El reactivo deja de aparecer en el inventario y en los formatos; sus movimientos y registros se conservan.", confirmLabel: "Dar de baja", tone: "danger" });
+    const motivo = await prompt({ critico: true, title: `Dar de baja "${formatReactivoName(item)}"`, description: "El reactivo deja de aparecer en el inventario y en los formatos; sus movimientos y registros se conservan.", confirmLabel: "Dar de baja", tone: "danger" });
     if (!motivo) return;
     try {
       await sendJsonAuth("DELETE", `${API_BASE_URL}/inventory/reactivos/${item.id}`, token, { motivo });
@@ -114,7 +114,7 @@ function ReactivosContent() {
   };
 
   const reactivarReactivo = async (item: ApiRecord) => {
-    const motivo = await prompt({ title: `Reactivar "${formatReactivoName(item)}"`, confirmLabel: "Reactivar" });
+    const motivo = await prompt({ critico: true, title: `Reactivar "${formatReactivoName(item)}"`, confirmLabel: "Reactivar" });
     if (!motivo) return;
     try {
       await sendJsonAuth("POST", `${API_BASE_URL}/inventory/reactivos/${item.id}/reactivar`, token, { motivo });

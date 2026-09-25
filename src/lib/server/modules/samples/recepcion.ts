@@ -3,10 +3,13 @@ import { registrarAuditoria, snapshotRow } from "../../audit";
 import { isSqlite, type Row, type Session } from "../../db";
 import { intParam, json, readJson, type RouteContext } from "../../http";
 import { cargoActuante, requirePermission, soloEstado } from "../../rbac";
+import { exigirReauth } from "../../seguridad";
+import { aplicarSupervision, exigirSinSupervisionPendiente, filtroSupervision, marcaSupervision } from "../../supervision";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../../schema";
 import { anularRegistro, assertEditable, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, folioLabel, isFolioConflict, nextFolioNum, readMotivo, restaurarRegistro } from "../../samples-flow";
 import { ACCEPTANCE_DECISIONS, DISPOSAL_TYPES } from "../../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
+import { ensureSupervisionColumns } from "../../supervision";
 
 /*
  * Portado de modules/samples/recepcion.py del backend Flask original.
@@ -98,6 +101,7 @@ export async function ensureSamplesRecepcionSchema(s: Session): Promise<void> {
   await addColumnIfMissing(s, TABLE, "disposicion_json", "LONGTEXT");
   await ensureAnulacionColumns(s, TABLE);
   await ensureActuoColumns(s, TABLE);
+  await ensureSupervisionColumns(s, "muestras_recepcion");
   markSchemaReady("muestras_recepcion");
 }
 
@@ -236,14 +240,16 @@ export async function listReceptionSamples({ request, s }: RouteContext): Promis
 
   const search = searchParam(request, "search");
   const includeAnuladas = searchParam(request, "anuladas") === "1";
+  const supFiltro = filtroSupervision(request, "", permiso.auth.userId);
   const rows = await s.query(
     `
     SELECT id, folio_num, tipo_registro, clave_revision, fecha_emision,
            fecha_recepcion, hora_recepcion, recibido_por, medio_recepcion,
            solicitante, id_interno, muestra_unica, analisis_json, decision_aceptacion,
-           estado, motivo_anulacion, anulado_en, creado_en
+           estado, motivo_anulacion, anulado_en, creado_en, supervision_estado, supervisor_id
     FROM muestras_recepcion
     WHERE (:incluir_anuladas = 1 OR estado <> 'anulada')
+      ${supFiltro.sql}
       AND (:search = ''
        OR solicitante LIKE :search_like
        OR recibido_por LIKE :search_like
@@ -252,7 +258,7 @@ export async function listReceptionSamples({ request, s }: RouteContext): Promis
     ORDER BY folio_num DESC
     LIMIT 400
     `,
-    { search, search_like: `%${search}%`, incluir_anuladas: includeAnuladas ? 1 : 0 },
+    { search, search_like: `%${search}%`, incluir_anuladas: includeAnuladas ? 1 : 0, ...supFiltro.params },
   );
   return json({
     items: rows.map((row) => {
@@ -283,7 +289,9 @@ export async function getReceptionSample({ request, s, params }: RouteContext): 
 
 export async function createReceptionSample({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "C", { objeto: "recepcion", borrador: true }));
+  const permiso = await requirePermission(s, user, "muestras", "C", { objeto: "recepcion", borrador: true });
+  const actuo = cargoActuante(request, permiso);
+  const supervision = marcaSupervision(permiso);
   await ensureSamplesRecepcionSchema(s);
 
   const data = normalizePayload(await readJson(request));
@@ -321,6 +329,7 @@ export async function createReceptionSample({ request, s }: RouteContext): Promi
       { ...data, creado_por: userId, actualizado_por: userId, creado_rol_id: actuo.rol_id, creado_cargo: actuo.cargo },
     );
     const id = result.lastrowid as number;
+    await aplicarSupervision(s, TABLE, id, supervision, userId);
     const despues = await snapshotRow(s, TABLE, id);
     await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues, detalle: { actuo_como: actuo } });
     if (data.decision_aceptacion) {
@@ -345,6 +354,7 @@ export async function updateReceptionSample({ request, s, params }: RouteContext
   const antes = await snapshotRow(s, TABLE, sampleId);
   const permiso = await requirePermission(s, user, "muestras", "E", { objeto: "recepcion", borrador: String(antes?.estado || "registrada") === "registrada" });
   const actuo = cargoActuante(request, permiso);
+  const supervision = marcaSupervision(permiso);
   assertEditable(antes, TABLE);
   const data = normalizePayload(await readJson(request));
   if (!data.folio_num) {
@@ -389,6 +399,7 @@ export async function updateReceptionSample({ request, s, params }: RouteContext
       await s.rollback();
       return json({ message: "Registro no encontrado" }, 404);
     }
+    await aplicarSupervision(s, TABLE, sampleId, supervision, userId);
     const despues = await snapshotRow(s, TABLE, sampleId);
     await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { actuo_como: actuo } });
     if (data.decision_aceptacion && data.decision_aceptacion !== String(antes?.decision_aceptacion || "")) {
@@ -418,6 +429,7 @@ export async function anularReceptionSample({ request, s, params }: RouteContext
   const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "AN"));
   await ensureSamplesRecepcionSchema(s);
   const motivo = await readMotivo(request);
+  await exigirReauth(s, request, user, "muestras:AN");
   const row = await anularRegistro(s, user, TABLE, sampleId, motivo, {
     actuo,
     bloqueaSi: async () => {
@@ -434,6 +446,7 @@ export async function restaurarReceptionSample({ request, s, params }: RouteCont
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "AN"));
   await ensureSamplesRecepcionSchema(s);
+  await exigirReauth(s, request, user, "muestras:AN");
   const row = await restaurarRegistro(s, user, TABLE, sampleId, await readMotivo(request), actuo);
   await s.commit();
   return json({ message: "Recepcion restaurada", item: serializeRow(row) });
@@ -452,12 +465,14 @@ export async function registrarDisposicion({ request, s, params }: RouteContext)
   if (!antes) return json({ message: "Recepcion no encontrada" }, 404);
   // Una muestra rechazada tambien se dispone (p. ej. se devuelve al cliente); una cerrada o anulada ya no.
   if (["cerrada", "anulada"].includes(String(antes.estado))) return json({ message: `La recepcion ${folioLabel(TABLE, antes)} ya esta ${antes.estado}; no admite otra disposicion` }, 409);
+  exigirSinSupervisionPendiente(antes, `La recepcion ${folioLabel(TABLE, antes)}`, "cerrar");
   const payload = await readJson(request);
   const tipo = String(payload.tipo || "").trim();
   if (!DISPOSALS.has(tipo)) return json({ message: "Selecciona el tipo de disposicion final" }, 400);
   const fecha = strippedOrNull(payload.fecha, 10);
   const responsable = strippedOrNull(payload.responsable, 180);
   if (!fecha || !responsable) return json({ message: "La fecha y el responsable de la disposicion son obligatorios" }, 400);
+  await exigirReauth(s, request, user, "muestras:A");
   const disposicion = {
     tipo,
     tipo_otro: tipo === "otro" ? strippedOrNull(payload.tipo_otro, 120) : null,

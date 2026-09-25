@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ArrowSquareOut, CaretDown, ShieldCheck, ShieldWarning } from "@phosphor-icons/react";
 import { ChangeList } from "@/components/features/audit/AuditTimeline";
+import { Callout } from "@/components/features/samples/FormLayout";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
@@ -32,6 +33,8 @@ interface Integridad {
   filas_faltantes_al_final?: number;
   filas_faltantes_intermedias?: number;
   triggers_ok?: boolean;
+  /* Fase 2: de donde sale la llave del sello (nunca la llave) y avisos sobre ella. */
+  llave?: { origen: "SECRET_KEY" | "auditoria.key"; advertencias: string[] };
 }
 
 /* Qué falló exactamente en la verificación, en una frase. */
@@ -93,6 +96,14 @@ function AuditoriaContent() {
     { key: "accion", label: "Acción", value: accion, defaultValue: "", onChange: setAccion, options: [{ value: "", label: "Todas" }, ...Object.entries(AUDIT_ACTIONS).map(([value, label]) => ({ value, label }))] },
   ];
 
+  // Al abrir se verifica en silencio para mostrar los avisos sobre la llave de la bitacora.
+  useEffect(() => {
+    if (!token) return;
+    getJsonAuth(`${API_BASE_URL}/audit/verify`, token)
+      .then((data) => setIntegridad(data as Integridad))
+      .catch(() => undefined);
+  }, [token]);
+
   const verificar = async () => {
     setVerificando(true);
     try {
@@ -117,6 +128,7 @@ function AuditoriaContent() {
           <>
             {integridad ? (
               <Badge tone={integridad.ok ? "success" : "danger"} dot>
+                {integridad.llave ? <span className="sr-only">Llave: {integridad.llave.origen}. </span> : null}
                 {integridad.ok ? `Íntegra · ${fmt(integridad.total)} entradas` : integridadDetalle(integridad)}
               </Badge>
             ) : null}
@@ -126,6 +138,19 @@ function AuditoriaContent() {
           </>
         }
       />
+
+      {integridad?.llave?.advertencias?.length ? (
+        <Callout tone="warning" title="Llave de la bitácora" className="mb-4">
+          {integridad.llave.advertencias.map((texto) => (
+            <span key={texto} className="block">
+              {texto}
+            </span>
+          ))}
+          <span className="mt-1 block text-[12.5px] text-ink-3">
+            La cadena se sella con {integridad.llave.origen === "SECRET_KEY" ? "SECRET_KEY (variable de entorno)" : "el archivo instance/auditoria.key"}. No cambies la llave sin migrarla: ver «Llave de la bitácora» en MANUAL_TECNICO.md.
+          </span>
+        </Callout>
+      ) : null}
 
       <Toolbar
         end={

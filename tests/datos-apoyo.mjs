@@ -12,6 +12,7 @@
  * Solo corre contra el servidor de pruebas. Escribe los ids creados en
  * `instance/test/datos-apoyo.json` para las pruebas de navegador.
  */
+import "./lib/reauth-auto.mjs";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 

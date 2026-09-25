@@ -5,6 +5,8 @@ import { Dialog as RadixDialog, DropdownMenu as RadixDropdown, HoverCard as Radi
 import { DotsThreeCircle, X } from "@phosphor-icons/react";
 import { Button, IconButton } from "./Button";
 import { cn } from "./cn";
+import { CampoIdentidad, useConfirmaConPassword } from "@/components/session/Reautenticar";
+import { armarCargo, armarReauth } from "@/lib/client/api";
 
 /*
  * Capas: Sheet (panel lateral), Dialog (centrado), ConfirmDialog (con hook
@@ -183,6 +185,11 @@ interface PromptOptions {
   /* Longitud minima del texto (los motivos de anulacion requieren al menos 5 caracteres). */
   minLength?: number;
   defaultValue?: string;
+  /*
+   * Accion critica (Fase 2): el mismo dialogo pide la contrasena para confirmar
+   * la identidad; se usa en la reautenticacion de la peticion que sigue.
+   */
+  critico?: boolean;
 }
 
 type PromptFn = (options: PromptOptions) => Promise<string | null>;
@@ -193,12 +200,17 @@ export function PromptProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<(PromptOptions & { open: boolean }) | null>(null);
   const [value, setValue] = useState("");
   const [touched, setTouched] = useState(false);
+  const [password, setPassword] = useState("");
+  const [cargo, setCargo] = useState("");
+  const conPassword = useConfirmaConPassword();
   const resolver = useRef<((value: string | null) => void) | null>(null);
 
   const prompt = useCallback<PromptFn>((options) => {
     return new Promise<string | null>((resolve) => {
       resolver.current = resolve;
       setValue(options.defaultValue || "");
+      setPassword("");
+      setCargo("");
       setTouched(false);
       setState({ ...options, open: true });
     });
@@ -211,7 +223,8 @@ export function PromptProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const minLength = state?.minLength ?? 5;
-  const valid = value.trim().length >= minLength;
+  const pideClave = !!state?.critico && conPassword;
+  const valid = value.trim().length >= minLength && (!pideClave || password.length > 0);
   const fieldId = "prompt-motivo";
 
   return (
@@ -234,7 +247,12 @@ export function PromptProvider({ children }: { children: ReactNode }) {
               variant={state?.tone === "danger" ? "danger" : "primary"}
               onClick={() => {
                 setTouched(true);
-                if (valid) settle(value.trim());
+                if (!valid) return;
+                if (state?.critico) {
+                  armarReauth(pideClave ? { password } : null);
+                  armarCargo(cargo ? Number(cargo) : null);
+                }
+                settle(value.trim());
               }}
             >
               {state?.confirmLabel || "Confirmar"}
@@ -259,11 +277,16 @@ export function PromptProvider({ children }: { children: ReactNode }) {
         />
         {touched && !valid ? (
           <p className="mt-1.5 text-[12.5px] text-danger" role="alert">
-            Escribe al menos {minLength} caracteres.
+            {value.trim().length < minLength ? `Escribe al menos ${minLength} caracteres.` : "Escribe tu contraseña para confirmar."}
           </p>
         ) : (
           <p className="mt-1.5 text-[12.5px] text-ink-3">Queda registrado con tu usuario, fecha y hora.</p>
         )}
+        {state?.critico ? (
+          <div className="mt-4">
+            <CampoIdentidad value={password} onChange={setPassword} id="prompt-password" cargo={cargo} onCargo={setCargo} />
+          </div>
+        ) : null}
       </Dialog>
     </PromptContext.Provider>
   );

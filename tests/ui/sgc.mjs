@@ -49,9 +49,16 @@ const sign = async (label) => {
   await page.mouse.up();
 };
 
+/* Fase 2: las acciones criticas piden la contrasena en el mismo dialogo. */
+const QA_PASSWORD = "QaFicotox2026!";
+const fillPassword = async (selector) => {
+  const campo = page.locator(selector);
+  if (await campo.count()) await campo.fill(QA_PASSWORD);
+};
 const fillPrompt = async (motivo, confirm) => {
   await page.locator("#prompt-motivo").waitFor();
   await page.fill("#prompt-motivo", motivo);
+  await fillPassword("#prompt-password");
   await page.getByRole("dialog").getByRole("button", { name: confirm, exact: true }).click();
 };
 
@@ -207,6 +214,7 @@ try {
   check("análisis revisado", (await rowA2.textContent()).includes("Revisado"));
   await rowA2.click();
   await page.getByRole("button", { name: "Aprobar", exact: true }).click();
+  await fillPassword("#sign-password");
   await dialogButton("Aprobar").click();
   await page.waitForURL((url) => url.pathname === "/muestras/analisis");
   const rowA3 = page.locator("tbody tr").filter({ hasText: new RegExp(`A\\s*${folioA.padStart(7, "0")}`) }).first();
@@ -239,6 +247,7 @@ try {
   check("informe en revisión", true);
   await page.getByRole("button", { name: "Autorizar", exact: true }).click();
   await drawSignature("Firma: Autorizar informe");
+  await fillPassword("#sign-password");
   await dialogButton("Autorizar").click();
   await page.getByText("Autorizado").first().waitFor();
   check("informe autorizado", true);
@@ -254,6 +263,7 @@ try {
   await page.fill("#e-fecha", today);
   await page.selectOption("#e-medio", { index: 1 });
   await page.fill("#e-quien", "Juan Pérez");
+  await fillPassword("#e-password");
   await dialogButton("Registrar entrega").click();
   await page.getByText("Entregado").first().waitFor();
   check("informe entregado", true);
@@ -374,7 +384,7 @@ try {
   check("menú de usuario permite cerrar sesión", true);
   await page.keyboard.press("Escape");
 
-  const realErrors = consoleErrors.filter((e) => !/favicon|hydrat|Download the React DevTools|status of 409/i.test(e));
+  const realErrors = consoleErrors.filter((e) => !/favicon|hydrat|Download the React DevTools|status of 409|status of 401/i.test(e)); // 409 ELEGIR_CARGO y 401 reauth_required son parte del protocolo
   check("sin errores de consola", realErrors.length === 0, realErrors.slice(0, 3).join(" | "));
 } catch (err) {
   console.error("ERROR", err);

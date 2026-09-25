@@ -21,6 +21,7 @@ export function useAnulacion(stage: Stage, folioOf: (item: ApiRecord) => string)
 
   const anular = async (item: ApiRecord): Promise<boolean> => {
     const motivo = await prompt({
+      critico: true,
       title: `Anular ${LABEL[stage]} ${folioOf(item)}`,
       description: stage === "reception" ? "El registro se conserva marcado como anulado. No se puede anular si tiene procesamientos vigentes." : "El registro se conserva marcado como anulado y el inventario que descontó se repone.",
       confirmLabel: "Anular",
@@ -39,7 +40,7 @@ export function useAnulacion(stage: Stage, folioOf: (item: ApiRecord) => string)
   };
 
   const restaurar = async (item: ApiRecord): Promise<boolean> => {
-    const motivo = await prompt({ title: `Restaurar ${LABEL[stage]} ${folioOf(item)}`, description: "El registro vuelve a su estado anterior. El inventario no se descuenta de nuevo automáticamente.", confirmLabel: "Restaurar" });
+    const motivo = await prompt({ critico: true, title: `Restaurar ${LABEL[stage]} ${folioOf(item)}`, description: "El registro vuelve a su estado anterior. El inventario no se descuenta de nuevo automáticamente.", confirmLabel: "Restaurar" });
     if (!motivo) return false;
     try {
       const data = await sendJsonAuth("POST", `${API_BASE_URL}/samples/${stage}/${item.id}/restaurar`, token, { motivo });

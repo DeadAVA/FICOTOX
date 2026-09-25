@@ -2,14 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Eye, PencilSimple, Plus, Trash, Users } from "@phosphor-icons/react";
+import { Copy, Eye, Key, LockOpen, PencilSimple, Plus, Trash, Users } from "@phosphor-icons/react";
 import { UserSheet } from "@/components/features/admin/AdminSheets";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { FilterChips, FilterMenu, type FilterGroup } from "@/components/ui/FilterMenu";
-import { ActionMenu, usePrompt, type MenuItem } from "@/components/ui/Overlay";
+import { ActionMenu, Dialog, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Avatar, Badge, EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
 import { Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
@@ -36,6 +36,8 @@ function UsuariosContent() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const modal = useOpenState<ApiRecord>();
+  // Contrasena temporal recien generada: se muestra una sola vez.
+  const [temporal, setTemporal] = useState<{ email: string; password: string } | null>(null);
 
   const resource = useResource<ApiRecord[]>(
     "usuarios",
@@ -67,7 +69,7 @@ function UsuariosContent() {
 
   // Las cuentas no se eliminan: se dan de baja (inactivas) con motivo y su historial se conserva.
   const deleteUser = async (item: ApiRecord) => {
-    const motivo = await prompt({ title: `Dar de baja a ${item.email}`, description: "La cuenta queda inactiva y no puede entrar; los registros y la bitácora que la citan se conservan.", confirmLabel: "Dar de baja", tone: "danger" });
+    const motivo = await prompt({ critico: true, title: `Dar de baja a ${item.email}`, description: "La cuenta queda inactiva y no puede entrar; los registros y la bitácora que la citan se conservan.", confirmLabel: "Dar de baja", tone: "danger" });
     if (!motivo) return;
     try {
       await sendJsonAuth("DELETE", `${API_BASE_URL}/admin/usuarios/${item.id}`, token, { motivo });
@@ -75,6 +77,32 @@ function UsuariosContent() {
       invalidate("usuarios", "roles");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo dar de baja");
+    }
+  };
+
+  // Fase 2: levantar un bloqueo por intentos fallidos (motivo y reautenticacion).
+  const desbloquear = async (item: ApiRecord) => {
+    const motivo = await prompt({ critico: true, title: `Desbloquear a ${item.email}`, description: `La cuenta está bloqueada hasta las ${horaBloqueo(item.bloqueado_hasta)} por intentos fallidos. Confirma que verificaste la identidad de la persona.`, confirmLabel: "Desbloquear" });
+    if (!motivo) return;
+    try {
+      await sendJsonAuth("POST", `${API_BASE_URL}/admin/usuarios/${item.id}/desbloquear`, token, { motivo });
+      toast.success("Cuenta desbloqueada");
+      invalidate("usuarios");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo desbloquear");
+    }
+  };
+
+  // Fase 2: contrasena temporal; la persona debe cambiarla al entrar y sus sesiones se cierran.
+  const restablecer = async (item: ApiRecord) => {
+    const motivo = await prompt({ critico: true, title: `Restablecer la contraseña de ${item.email}`, description: "Se genera una contraseña temporal que la persona deberá cambiar al entrar; sus sesiones abiertas se cierran.", confirmLabel: "Restablecer contraseña", tone: "danger" });
+    if (!motivo) return;
+    try {
+      const data = await sendJsonAuth("POST", `${API_BASE_URL}/admin/usuarios/${item.id}/password`, token, { motivo });
+      setTemporal({ email: String(item.email || ""), password: String(data.password_temporal || "") });
+      invalidate("usuarios");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo restablecer la contraseña");
     }
   };
 
@@ -99,6 +127,8 @@ function UsuariosContent() {
     const list: MenuItem[] = [];
     if (canAdmin) list.push({ label: "Editar y roles", description: "Datos de acceso; asignar o revocar roles con vigencia", icon: <PencilSimple size={16} weight="duotone" />, tone: "brand", onSelect: () => editUser(Number(item.id)) });
     else list.push({ label: "Ver ficha", description: "Datos de la cuenta y roles con su vigencia", icon: <Eye size={16} weight="duotone" />, tone: "brand", onSelect: () => editUser(Number(item.id), true) });
+    if (canAdmin && item.bloqueado_hasta) list.push({ label: "Desbloquear…", description: `Bloqueada hasta las ${horaBloqueo(item.bloqueado_hasta)} por intentos fallidos`, icon: <LockOpen size={16} weight="duotone" />, onSelect: () => desbloquear(item) });
+    if (canAdmin && Number(me?.id) !== Number(item.id)) list.push({ label: "Restablecer contraseña…", description: "Contraseña temporal; debe cambiarla al entrar", icon: <Key size={16} weight="duotone" />, disabled: !item.activo, onSelect: () => restablecer(item) });
     if (canAdmin && Number(me?.id) !== Number(item.id)) list.push({ label: "Dar de baja…", description: "La cuenta queda inactiva; su historial se conserva", icon: <Trash size={16} weight="duotone" />, tone: "danger", disabled: !item.activo, separatorBefore: list.length > 0, onSelect: () => deleteUser(item) });
     return list;
   };
@@ -143,7 +173,7 @@ function UsuariosContent() {
               <tr>
                 <Th>Usuario</Th>
                 <Th>Roles vigentes</Th>
-                <Th>Departamento</Th>
+                <Th>Cuenta</Th>
                 <Th>Último acceso</Th>
                 <Th>Estado</Th>
                 <Th align="right" sticky />
@@ -175,14 +205,30 @@ function UsuariosContent() {
                       {!((item.roles || []) as ApiRecord[]).length ? <Badge tone="warning">Sin roles vigentes</Badge> : null}
                     </div>
                   </Td>
-                  <Td muted>{item.departamento || "-"}</Td>
+                  <Td>
+                    <div className="flex flex-col gap-0.5 text-[12.5px]">
+                      <span className={item.tipo_cuenta === "temporal" ? "font-medium text-ink" : "text-ink-2"}>{item.tipo_cuenta === "temporal" ? "Temporal" : "Permanente"}</span>
+                      {item.vigente_desde || item.vigente_hasta ? (
+                        <span className="text-ink-3">
+                          {item.vigente_desde ? `Desde ${fmtDate(item.vigente_desde)}` : ""}
+                          {item.vigente_desde && item.vigente_hasta ? " · " : ""}
+                          {item.vigente_hasta ? `hasta ${fmtDate(item.vigente_hasta)}` : ""}
+                        </span>
+                      ) : null}
+                      {item.supervisor_nombre ? <span className="text-ink-3">Supervisa: {item.supervisor_nombre}</span> : null}
+                      {item.departamento ? <span className="text-ink-4">{item.departamento}</span> : null}
+                    </div>
+                  </Td>
                   <Td muted>{fmtDate(item.ultimo_acceso || item.creado_en)}</Td>
                   <Td>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <Badge tone={item.activo ? "success" : "neutral"} dot>
                         {item.activo ? "Activo" : "Inactivo"}
                       </Badge>
                       {!item.tiene_password ? <Badge tone="warning">Sin contraseña</Badge> : null}
+                      {item.cuenta_vigente === false && item.activo ? <Badge tone="danger">Fuera de vigencia</Badge> : null}
+                      {item.bloqueado_hasta ? <Badge tone="danger">Bloqueada hasta {horaBloqueo(item.bloqueado_hasta)}</Badge> : null}
+                      {Number(item.debe_cambiar_password) ? <Badge tone="warning">Debe cambiar contraseña</Badge> : null}
                     </div>
                   </Td>
                   <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
@@ -195,7 +241,43 @@ function UsuariosContent() {
         )}
       </TableShell>
 
+      <Dialog
+        open={!!temporal}
+        onOpenChange={(open) => !open && setTemporal(null)}
+        title="Contraseña temporal"
+        description={`Entrégala a ${temporal?.email || "la persona"} por un medio seguro. No se volverá a mostrar: al cerrar este aviso ya no podrás verla.`}
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              icon={<Copy size={16} />}
+              onClick={() => {
+                void navigator.clipboard
+                  ?.writeText(temporal?.password || "")
+                  .then(() => toast.success("Contraseña copiada"))
+                  .catch(() => toast.error("No se pudo copiar"));
+              }}
+            >
+              Copiar
+            </Button>
+            <Button onClick={() => setTemporal(null)}>Entendido</Button>
+          </>
+        }
+      >
+        <p className="rounded-[10px] bg-surface-2 px-3 py-3 text-center font-mono text-[17px] tracking-wide text-ink ring-1 ring-line" data-testid="password-temporal">
+          {temporal?.password}
+        </p>
+        <p className="mt-3 text-[12.5px] text-ink-3">La persona deberá cambiarla al iniciar sesión. El cambio queda en la bitácora sin la contraseña.</p>
+      </Dialog>
+
       {modal.key ? <UserSheet key={`modal-${modal.key}`} open={modal.isOpen} item={modal.payload} readOnly={soloLectura} onClose={modal.close} /> : null}
     </>
   );
+}
+
+/* Hora local (HH:MM) hasta la que dura un bloqueo. */
+function horaBloqueo(value: unknown): string {
+  const fecha = new Date(String(value || ""));
+  return Number.isNaN(fecha.getTime()) ? "-" : fecha.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
 }

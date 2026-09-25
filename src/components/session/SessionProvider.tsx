@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { API_BASE_URL, getJsonAuth, postJson } from "@/lib/client/api";
+import { API_BASE_URL, getJsonAuth, postJson, registrarAvisoSesion, sendJsonAuth } from "@/lib/client/api";
 import { logoutMicrosoft } from "@/lib/client/msal";
 import { resetSearchIndex } from "@/lib/client/search-index";
 import { clearSession, getStoredPermissions, getStoredToken, setSession, setStoredPermissions } from "@/lib/client/session";
@@ -34,7 +34,21 @@ export interface SessionValue {
   acceptLogin: (data: ApiRecord) => void;
   logout: () => void;
   refreshMe: () => Promise<void>;
+  /* Fase 2: cerrar la sesion en todos los dispositivos (token_version). */
+  logoutAll: () => Promise<void>;
+  /*
+   * Cierre por inactividad: la sesion se "bloquea" (se descarta el token) pero la
+   * pagina sigue montada, asi lo capturado no se pierde; al volver a entrar
+   * (unlock) se continua donde se quedo.
+   */
+  locked: boolean;
+  lock: () => void;
+  unlock: (password: string) => Promise<void>;
+  unlockWith: (data: ApiRecord) => void;
 }
+
+/* Mensaje para la pantalla de acceso cuando el servidor cerro la sesion. */
+export const AVISO_LOGIN_KEY = "ficotox.aviso-login";
 
 const DEFAULT_AUTH_CONFIG: AuthConfig = { microsoft: { enabled: false }, manualLoginEnabled: true };
 
@@ -49,6 +63,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<RolSesion[]>([]);
   const [authConfig, setAuthConfig] = useState<AuthConfig>(DEFAULT_AUTH_CONFIG);
   const started = useRef(false);
+  const [locked, setLocked] = useState(false);
+  const lockedRef = useRef(false);
 
   const enter = useCallback((nextToken: string, nextUser: SessionUser, nextPermissions: PermissionsMap, nextRoles: RolSesion[] = []) => {
     setStoredPermissions(nextPermissions);
@@ -70,6 +86,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshMe = useCallback(async () => {
+    // Bloqueada por inactividad: no hay token que refrescar; se espera a que vuelva a entrar.
+    if (lockedRef.current) return;
     const stored = getStoredToken();
     if (!stored) {
       leave();
@@ -78,7 +96,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       const data = await getJsonAuth(`${API_BASE_URL}/auth/me`, stored);
       enter(stored, (data.user || {}) as SessionUser, (data.permissions || {}) as PermissionsMap, (data.roles || []) as RolSesion[]);
-    } catch {
+    } catch (err) {
+      // Sesion revocada o cuenta no vigente: el acceso muestra el motivo.
+      const mensaje = err instanceof Error ? err.message : "";
+      if (mensaje && !/token/i.test(mensaje)) {
+        try {
+          window.sessionStorage.setItem(AVISO_LOGIN_KEY, mensaje);
+        } catch {
+          /* sin almacenamiento */
+        }
+      }
       leave();
     }
   }, [enter, leave]);
@@ -122,10 +149,62 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    lockedRef.current = false;
+    setLocked(false);
     leave();
     logoutMicrosoft();
     router.replace("/login");
   }, [leave, router]);
+
+  const logoutAll = useCallback(async () => {
+    await sendJsonAuth("POST", `${API_BASE_URL}/auth/logout-all`, token, {});
+    logout();
+  }, [token, logout]);
+
+  const lock = useCallback(() => {
+    lockedRef.current = true;
+    setLocked(true);
+    clearSession();
+    setToken("");
+  }, []);
+
+  const unlockWith = useCallback(
+    (data: ApiRecord) => {
+      lockedRef.current = false;
+      setLocked(false);
+      setSession(data.token as string, (data.user || {}) as SessionUser);
+      enter(data.token as string, (data.user || {}) as SessionUser, (data.permissions || {}) as PermissionsMap, (data.roles || []) as RolSesion[]);
+    },
+    [enter],
+  );
+
+  const unlock = useCallback(
+    async (password: string) => {
+      const data = await postJson(`${API_BASE_URL}/auth/login`, { email: user?.email || "", password });
+      unlockWith(data);
+    },
+    [user, unlockWith],
+  );
+
+  // El servidor cerro la sesion (token revocado, cuenta fuera de vigencia) o exige cambiar la contrasena.
+  useEffect(() => {
+    registrarAvisoSesion((codigo, mensaje) => {
+      if (codigo === "cambiar_password") {
+        void refreshMe();
+        return;
+      }
+      try {
+        window.sessionStorage.setItem(AVISO_LOGIN_KEY, mensaje);
+      } catch {
+        /* sin almacenamiento */
+      }
+      lockedRef.current = false;
+      setLocked(false);
+      leave();
+      router.replace("/login");
+    });
+    return () => registrarAvisoSesion(null);
+  }, [leave, refreshMe, router]);
 
   // Revocar o vencer un rol tiene efecto inmediato en el servidor; aqui se refleja al volver a la ventana y cada minuto.
   useEffect(() => {
@@ -157,8 +236,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const alcance = useCallback((modulo: Modulo, accion: Accion = "V") => permissions[modulo]?.[accion] ?? null, [permissions]);
 
   const value = useMemo<SessionValue>(
-    () => ({ status, token, user, permissions, roles, authConfig, can, alcance, loginWithEmail, acceptLogin, logout, refreshMe }),
-    [status, token, user, permissions, roles, authConfig, can, alcance, loginWithEmail, acceptLogin, logout, refreshMe],
+    () => ({ status, token, user, permissions, roles, authConfig, can, alcance, loginWithEmail, acceptLogin, logout, refreshMe, logoutAll, locked, lock, unlock, unlockWith }),
+    [status, token, user, permissions, roles, authConfig, can, alcance, loginWithEmail, acceptLogin, logout, refreshMe, logoutAll, locked, lock, unlock, unlockWith],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

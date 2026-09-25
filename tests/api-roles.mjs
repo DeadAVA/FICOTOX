@@ -20,6 +20,7 @@
  *   autorizacion de un informe, y que el PDF lo muestra;
  * - bitacora con motivo e integridad.
  */
+import "./lib/reauth-auto.mjs";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import zlib from "node:zlib";
@@ -58,7 +59,8 @@ for (let i = 0; i < 60; i += 1) {
 
 const MODULOS = ["usuarios", "documentos", "muestras", "ensayos", "informes", "equipos", "inventario", "calidad", "compras"];
 const ACCIONES = ["V", "C", "E", "R", "A", "AN", "G"];
-const DIFERIDOS = new Set(["asignado", "supervisado", "proyecto", "tecnico", "investigacion", "autorizados", "administrativo", "limitado", "incidencias", "auditoria"]);
+/* Fase 2: "supervisado" ya se aplica (queda pendiente del visto bueno), no es diferido. */
+const DIFERIDOS = new Set(["asignado", "proyecto", "tecnico", "investigacion", "autorizados", "administrativo", "limitado", "incidencias", "auditoria"]);
 const f = (modulo, acciones, alcance = "total") => acciones.split(" ").map((accion) => ({ modulo, accion, alcance }));
 
 const MATRIZ = {
@@ -103,15 +105,19 @@ const MATRIZ = {
 
 const firma = (filas) => filas.map((x) => `${x.modulo}:${x.accion}:${x.alcance}`).sort().join("|");
 
-/* Reglas de la especificacion: G -> todas; C/E/R/A/AN -> V; en usuarios un alcance diferido = solo V. */
+/*
+ * Reglas de la especificacion: G -> todas; C/E/R/A/AN -> V. Alcances diferidos
+ * (Fase 2): en usuarios = solo V de la propia cuenta; en calidad = sin acceso.
+ */
 function expandir(filas) {
   const out = {};
   const add = (m, a, al) => ((out[m] ||= {})[a] ||= new Set()).add(al);
   for (const { modulo, accion, alcance } of filas) {
     if (modulo === "usuarios" && DIFERIDOS.has(alcance)) {
-      add(modulo, "V", "total");
+      add(modulo, "V", "propio");
       continue;
     }
+    if (modulo === "calidad" && DIFERIDOS.has(alcance)) continue;
     for (const a of accion === "G" ? ACCIONES : [accion]) {
       add(modulo, a, alcance);
       if (a !== "V") add(modulo, "V", ["propio", "estado", "bitacora"].includes(alcance) || DIFERIDOS.has(alcance) ? alcance : "total");
@@ -134,6 +140,7 @@ function alcancePermite(al, ctx = {}) {
   return {
     propio: ctx.propio === true,
     estado: true,
+    supervisado: true,
     recepcion: ctx.objeto === "recepcion",
     preparacion: ctx.objeto === "procesamiento",
     borrador: ctx.borrador === true,
@@ -148,7 +155,7 @@ const permitido = (filas, modulo, accion, ctx) => [...(expandir(filas)[modulo]?.
 /* ---------- Catalogo (visto por QA) ---------- */
 
 const qaLogin = await api("POST", "/auth/login", { email: "qa@ficotox.local", password: "QaFicotox2026!" });
-const QA = qaLogin.data?.token;
+let QA = qaLogin.data?.token;
 check("login QA (rol de prueba con G en todos los modulos)", qaLogin.status === 200 && !!QA, `status ${qaLogin.status}`);
 
 const catalogo = (await api("GET", "/admin/permissions", undefined, QA)).data || {};
@@ -362,8 +369,10 @@ if (!TRAS_REINICIO) {
   }
 
   /* ---------- Personas de prueba (creadas por QA) ---------- */
+  // Fase 2: el rol de estudiante solo va en cuenta temporal con supervisor (el Coord. del Área Técnica).
+  const temporalDe = (rol) => (rol.startsWith("Estudiante") ? { tipo_cuenta: "temporal", vigente_hasta: "2099-12-31", supervisor_id: usuarioIds["Coordinador/a del Área Técnica"], motivo_cuenta: "Estancia de prueba" } : {});
   const persona = async (email, rol) => {
-    const r = await api("POST", "/admin/usuarios", { nombre: email.split("@")[0], email, activo: true, rol_id: rolId(rol), password: "PruebaRoles2026!", motivo: "Alta de prueba" }, QA);
+    const r = await api("POST", "/admin/usuarios", { nombre: email.split("@")[0], email, activo: true, rol_id: rolId(rol), password: "PruebaRoles2026!", motivo: "Alta de prueba", ...temporalDe(rol) }, QA);
     const t = (await api("POST", "/auth/login", { email, password: "PruebaRoles2026!" })).data?.token;
     return { id: r.data?.id, token: t, status: r.status };
   };
@@ -442,6 +451,8 @@ if (!TRAS_REINICIO) {
     // Restaurar: admin2 devuelve el rol a Jorge, Jorge reactiva a QA y da de baja a admin2.
     const devolver = await asignar(jorgeId, "Administrador técnico del sistema", { motivo: "Fin de la prueba de la guarda" }, admin2.token);
     const qaOn = await api("PUT", `/admin/usuarios/${qa.id}`, payload(qa, { activo: true }), J);
+    // Fase 2: la baja cerro sus sesiones (token_version); vuelve a entrar.
+    QA = (await api("POST", "/auth/login", { email: "qa@ficotox.local", password: "QaFicotox2026!" })).data?.token;
     const baja = await api("DELETE", `/admin/usuarios/${admin2.id}`, { motivo: "Fin de la prueba de la guarda" }, J);
     check("restaurar: Jorge recupera su rol, QA reactivado, admin2 de baja", devolver.status === 201 && qaOn.status === 200 && baja.status === 200, `devolver ${devolver.status} qa ${qaOn.status} baja ${baja.status}`);
 
@@ -455,6 +466,8 @@ if (!TRAS_REINICIO) {
     const jorgeSigue = await api("GET", "/admin/roles", undefined, J);
     check("revocar al unico administrador permanente dejando solo uno con fecha de fin -> 409 (Jorge conserva el rol)", alta.status === 201 && qaOff2.status === 200 && revTemporal.status === 409 && /fecha de fin/i.test(String(revTemporal.data?.message)) && jorgeSigue.status === 200, `alta ${alta.status} qaOff ${qaOff2.status} revocar ${revTemporal.status} ${revTemporal.data?.message || ""} jorge ${jorgeSigue.status}`);
     const qaOn2 = await api("PUT", `/admin/usuarios/${qa.id}`, payload(qa, { activo: true }), J);
+    // Fase 2: la baja cerro sus sesiones (token_version); vuelve a entrar.
+    QA = (await api("POST", "/auth/login", { email: "qa@ficotox.local", password: "QaFicotox2026!" })).data?.token;
     const baja2 = await api("DELETE", `/admin/usuarios/${alta.data?.id}`, { motivo: "Fin de la prueba de la guarda temporal" }, J);
     check("restaurar: QA reactivado y administrador temporal de baja", qaOn2.status === 200 && baja2.status === 200, `qa ${qaOn2.status} baja ${baja2.status}`);
   }

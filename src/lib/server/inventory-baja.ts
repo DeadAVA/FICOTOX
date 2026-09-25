@@ -3,6 +3,7 @@ import { registrarAuditoria, snapshotRow } from "./audit";
 import type { Session } from "./db";
 import { json } from "./http";
 import { addColumnIfMissing } from "./schema";
+import { exigirReauth } from "./seguridad";
 
 /*
  * Baja logica de los catalogos de inventario (reactivos, consumibles,
@@ -26,7 +27,10 @@ export function itemRef(table: BajaTable, row: Record<string, unknown> | null | 
   return String(row.nombre || row.producto || row.id || table).slice(0, 160);
 }
 
-export async function darDeBaja(s: Session, user: CurrentUser, table: BajaTable, id: number, payload: Record<string, unknown>, label: string): Promise<Response> {
+/* Modulo del permiso de cada tabla (para la reautenticacion). */
+const MODULO_BAJA: Record<BajaTable, string> = { reactivos: "inventario", consumibles: "inventario", equipos: "equipos" };
+
+export async function darDeBaja(s: Session, user: CurrentUser, table: BajaTable, id: number, payload: Record<string, unknown>, label: string, request: Request): Promise<Response> {
   const motivo = String(payload.motivo || "").trim();
   if (motivo.length < 5) {
     return json({ message: `Indica el motivo de la baja del ${label.toLowerCase()} (al menos 5 caracteres)` }, 400);
@@ -34,6 +38,7 @@ export async function darDeBaja(s: Session, user: CurrentUser, table: BajaTable,
   const antes = await snapshotRow(s, table, id);
   if (!antes) return json({ message: `${label} no encontrado` }, 404);
   if (Number(antes.activo ?? 1) === 0) return json({ message: `${label} ya esta dado de baja` }, 409);
+  await exigirReauth(s, request, user, `${MODULO_BAJA[table]}:AN`);
   await s.execute(`UPDATE ${table} SET activo = 0, baja_motivo = :motivo, baja_en = :fecha, baja_por = :usuario WHERE id = :id`, { motivo, fecha: new Date().toISOString(), usuario: userIdFromClaims(user), id });
   const despues = await snapshotRow(s, table, id);
   await registrarAuditoria(s, user, { accion: "baja", entidad: table, entidadId: id, referencia: itemRef(table, antes), motivo, antes, despues });
@@ -41,12 +46,13 @@ export async function darDeBaja(s: Session, user: CurrentUser, table: BajaTable,
   return json({ message: `${label} dado de baja` });
 }
 
-export async function reactivarItem(s: Session, user: CurrentUser, table: BajaTable, id: number, payload: Record<string, unknown>, label: string): Promise<Response> {
+export async function reactivarItem(s: Session, user: CurrentUser, table: BajaTable, id: number, payload: Record<string, unknown>, label: string, request: Request): Promise<Response> {
   const motivo = String(payload.motivo || "").trim();
   if (motivo.length < 5) return json({ message: "Indica el motivo de la reactivacion (al menos 5 caracteres)" }, 400);
   const antes = await snapshotRow(s, table, id);
   if (!antes) return json({ message: `${label} no encontrado` }, 404);
   if (Number(antes.activo ?? 1) === 1) return json({ message: `${label} ya esta activo` }, 409);
+  await exigirReauth(s, request, user, `${MODULO_BAJA[table]}:G`);
   await s.execute(`UPDATE ${table} SET activo = 1, baja_motivo = NULL, baja_en = NULL, baja_por = NULL WHERE id = :id`, { id });
   const despues = await snapshotRow(s, table, id);
   await registrarAuditoria(s, user, { accion: "reactivar", entidad: table, entidadId: id, referencia: itemRef(table, antes), motivo, antes, despues });

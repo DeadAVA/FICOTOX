@@ -4,12 +4,15 @@ import { isSqlite, type Row, type Session } from "../../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../../http";
 import { restoreInventoryUsage } from "../../inventory-usage";
 import { cargoActuante, requirePermission } from "../../rbac";
+import { exigirReauth } from "../../seguridad";
+import { aplicarSupervision, exigirSinSupervisionPendiente, filtroSupervision, marcaSupervision } from "../../supervision";
 import { recordBitacoraFolios } from "../inventory";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../../schema";
 import { advanceState, anularRegistro, applyStageInventory, assertEditable, assertOrigin, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarRegistro } from "../../samples-flow";
 import { TWO_PERSON_RULE } from "../../../shared/features";
 import { ANALYSIS_METHODS, ANALYSIS_TYPES, CONFORMITY_OPTIONS } from "../../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toFloatOrNull, toIntOrNull } from "../helpers";
+import { ensureSupervisionColumns } from "../../supervision";
 
 /*
  * Etapa de analisis (ISO/IEC 17025 7.5, 7.7 y 7.8; diagrama de flujo del
@@ -130,6 +133,7 @@ export async function ensureAnalysisSchema(s: Session): Promise<void> {
   await addColumnIfMissing(s, TABLE, "revisado_cargo", "VARCHAR(120) DEFAULT NULL");
   await addColumnIfMissing(s, TABLE, "aprobado_rol_id", "INT DEFAULT NULL");
   await addColumnIfMissing(s, TABLE, "aprobado_cargo", "VARCHAR(120) DEFAULT NULL");
+  await ensureSupervisionColumns(s, "muestras_analisis");
   markSchemaReady("muestras_analisis");
 }
 
@@ -266,8 +270,12 @@ async function resolveChain(s: Session, data: AnalysisData): Promise<void> {
     const procesamiento = await assertOrigin(s, "muestras_procesamiento", data.procesamiento_id);
     const recepcionId = toIntOrNull(procesamiento?.recepcion_id);
     if (recepcionId) data.recepcion_id = recepcionId;
+  } else {
+    // Fase 2: el analisis no parte directo de la recepcion. Los tipos que requieren
+    // extraccion ya la exigen en validate(); plancton y "otro" parten al menos de un procesamiento.
+    throw new HttpError(400, { message: "El analisis debe partir de una extracción (o, para plancton u otro análisis sin extracción, de un procesamiento)", codigo: "origen_requerido" });
   }
-  if (!data.recepcion_id) throw new HttpError(400, { message: "El analisis debe vincularse a una recepcion de muestra (directamente o a traves de la extraccion)" });
+  if (!data.recepcion_id) throw new HttpError(400, { message: "El analisis debe vincularse a una recepcion de muestra (a traves de la extraccion o del procesamiento)" });
   await assertOrigin(s, "muestras_recepcion", data.recepcion_id, { requireAccepted: true });
 }
 
@@ -291,7 +299,8 @@ export async function getNextFolio({ request, s }: RouteContext): Promise<Respon
 
 export async function listAnalyses({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "ensayos", "V");
+  const permiso = await requirePermission(s, user, "ensayos", "V");
+  const supFiltro = filtroSupervision(request, "a", permiso.auth.userId);
   await ensureAnalysisSchema(s);
   const search = searchParam(request, "search");
   const estado = searchParam(request, "estado");
@@ -303,7 +312,7 @@ export async function listAnalyses({ request, s }: RouteContext): Promise<Respon
     SELECT a.id, a.folio_num, a.tipo_analisis, a.metodo, a.metodo_otro, a.metodo_referencia,
            a.recepcion_id, a.procesamiento_id, a.extraccion_id, a.fecha_analisis, a.equipo_nombre,
            a.analista_nombre, a.revisado_nombre, a.aprobado_nombre, a.estado, a.motivo_anulacion,
-           a.resultados_json, a.creado_en,
+           a.resultados_json, a.creado_en, a.supervision_estado, a.supervisor_id,
            r.folio_num AS folio_recepcion_num, r.solicitante, r.id_interno AS recepcion_id_interno,
            e.folio_num AS folio_extraccion_num, e.tipo_registro AS tipo_extraccion
     FROM ${TABLE} a
@@ -313,6 +322,7 @@ export async function listAnalyses({ request, s }: RouteContext): Promise<Respon
       AND (:estado = '' OR a.estado = :estado OR (:estado = 'pendiente' AND a.estado IN ('registrado', 'revisado')))
       AND (:recepcion_id = 0 OR a.recepcion_id = :recepcion_id)
       AND (:extraccion_id = 0 OR a.extraccion_id = :extraccion_id)
+      ${supFiltro.sql}
       AND (:search = ''
         OR CAST(a.folio_num AS CHAR) LIKE :search_like
         OR r.solicitante LIKE :search_like
@@ -322,7 +332,7 @@ export async function listAnalyses({ request, s }: RouteContext): Promise<Respon
     ORDER BY a.folio_num DESC
     LIMIT 400
     `,
-    { search, search_like: `%${search}%`, estado, recepcion_id: recepcionId, extraccion_id: extraccionId, incluir_anulados: includeAnulados ? 1 : 0 },
+    { search, search_like: `%${search}%`, estado, recepcion_id: recepcionId, extraccion_id: extraccionId, incluir_anulados: includeAnulados ? 1 : 0, ...supFiltro.params },
   );
   return json({
     items: rows.map((row) => {
@@ -362,6 +372,7 @@ export async function createAnalysis({ request, s }: RouteContext): Promise<Resp
   if (invalid) return json({ message: invalid }, 400);
   await resolveChain(s, data);
   await snapshotEquipo(s, data);
+  const supervision = marcaSupervision(permiso);
   const userId = userIdFromClaims(user);
   try {
     const result = await s.execute(
@@ -384,6 +395,7 @@ export async function createAnalysis({ request, s }: RouteContext): Promise<Resp
     );
     const id = result.lastrowid as number;
     await applyStageInventory(s, "ANA", id, data.uso_inventario_json, `Analisis folio ${data.folio_num}`, userId);
+    await aplicarSupervision(s, TABLE, id, supervision, userId);
     const despues = await snapshotRow(s, TABLE, id);
     await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues, detalle: { actuo_como: actuo } });
     await recordBitacoraFolios(s, [{ equipoId: data.equipo_id, folio: data.equipo_folio_bitacora }]);
@@ -416,6 +428,7 @@ export async function updateAnalysis({ request, s, params }: RouteContext): Prom
   if (invalid) return json({ message: invalid }, 400);
   await resolveChain(s, data);
   await snapshotEquipo(s, data);
+  const supervision = marcaSupervision(permiso);
   const userId = userIdFromClaims(user);
   // Solo llega aqui un analisis "registrado" (E no aplica tras la revision).
   try {
@@ -437,6 +450,7 @@ export async function updateAnalysis({ request, s, params }: RouteContext): Prom
     );
     await restoreInventoryUsage(s, `ANA-${id}-INS-`);
     await applyStageInventory(s, "ANA", id, data.uso_inventario_json, `Analisis folio ${data.folio_num}`, userId, insumosDeclarados(antes?.uso_inventario_json));
+    await aplicarSupervision(s, TABLE, id, supervision, userId);
     const despues = await snapshotRow(s, TABLE, id);
     await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { actuo_como: actuo } });
     await recordBitacoraFolios(s, [{ equipoId: data.equipo_id, folio: data.equipo_folio_bitacora }]);
@@ -480,6 +494,7 @@ export async function reviewAnalysis({ request, s, params }: RouteContext): Prom
   const antes = await snapshotRow(s, TABLE, id);
   assertEditable(antes, TABLE);
   if (String(antes?.estado) !== "registrado") return json({ message: "Solo se revisan analisis en estado registrado" }, 409);
+  exigirSinSupervisionPendiente(antes, `El analisis ${folioLabel(TABLE, antes)}`, "revisar");
   const payload = await readJson(request);
   // Independencia de la revision: quien capturo el analisis no lo revisa, salvo excepcion con motivo.
   const excepcion = await samePersonException(antes?.creado_por, user, payload, "La revision debe hacerla una persona distinta de quien registro el analisis");
@@ -504,7 +519,9 @@ export async function approveAnalysis({ request, s, params }: RouteContext): Pro
   const antes = await snapshotRow(s, TABLE, id);
   assertEditable(antes, TABLE);
   if (String(antes?.estado) !== "revisado") return json({ message: "El analisis debe estar revisado antes de aprobarse" }, 409);
+  exigirSinSupervisionPendiente(antes, `El analisis ${folioLabel(TABLE, antes)}`, "aprobar");
   const payload = await readJson(request);
+  await exigirReauth(s, request, user, "ensayos:A");
   // Independencia de la aprobacion: quien reviso no aprueba, salvo excepcion con motivo.
   const excepcion = await samePersonException(antes?.revisado_por, user, payload, "La aprobacion debe hacerla una persona distinta de quien reviso");
   if (excepcion instanceof Response) return excepcion;
@@ -528,6 +545,7 @@ export async function anularAnalysis({ request, s, params }: RouteContext): Prom
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "AN"));
   await ensureAnalysisSchema(s);
   const motivo = await readMotivo(request);
+  await exigirReauth(s, request, user, "ensayos:AN");
   const row = await anularRegistro(s, user, TABLE, id, motivo, {
     actuo,
     movimientosPrefix: `ANA-${id}-INS-`,
@@ -546,6 +564,7 @@ export async function restaurarAnalysis({ request, s, params }: RouteContext): P
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "AN"));
   await ensureAnalysisSchema(s);
+  await exigirReauth(s, request, user, "ensayos:AN");
   const row = await restaurarRegistro(s, user, TABLE, id, await readMotivo(request), actuo);
   await s.commit();
   return json({ message: "Analisis restaurado", item: serializeAnalysis(row) });

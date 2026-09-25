@@ -21,14 +21,104 @@ export function registrarSelectorDeCargo(fn: ElegirCargo | null): void {
   elegirCargo = fn;
 }
 
-async function conCargo(send: (extra: Record<string, string>) => Promise<Response>): Promise<Response> {
+/* Cargo elegido en el mismo dialogo de confirmacion (Fase 2): vale solo para la siguiente peticion. */
+let cargoArmado: number | null = null;
+export function armarCargo(rolId: number | null): void {
+  cargoArmado = rolId;
+}
+
+/*
+ * Envia la peticion; si el servidor pide elegir cargo (409 ELEGIR_CARGO), lo
+ * pregunta y repite. Devuelve tambien el cargo usado, para reutilizarlo si hay
+ * que repetir la peticion (p. ej. tras confirmar la identidad).
+ */
+async function conCargo(send: (extra: Record<string, string>) => Promise<Response>, elegido: number | null = null): Promise<{ response: Response; cargo: number | null }> {
+  if (elegido !== null) return { response: await send({ "X-Actuar-Como": String(elegido) }), cargo: elegido };
   const response = await send({});
-  if (response.status !== 409 || !elegirCargo) return response;
+  if (response.status !== 409 || !elegirCargo) return { response, cargo: null };
   const data = await response.clone().json().catch(() => ({}) as ApiRecord);
-  if (data?.codigo !== "ELEGIR_CARGO" || !Array.isArray(data.opciones)) return response;
+  if (data?.codigo !== "ELEGIR_CARGO" || !Array.isArray(data.opciones)) return { response, cargo: null };
   const rolId = await elegirCargo(data.opciones as OpcionCargo[], String(data.message || ""));
   if (rolId === null) throw new Error("Acción cancelada: no se eligió con qué cargo actuar");
-  return send({ "X-Actuar-Como": String(rolId) });
+  return { response: await send({ "X-Actuar-Como": String(rolId) }), cargo: rolId };
+}
+
+/*
+ * Reautenticacion (Fase 2): las acciones criticas (aprobar, anular, dar de baja,
+ * visto bueno, cambios de usuarios) exigen confirmar la identidad. El servidor
+ * responde 401 `reauth_required` con la accion; el cliente obtiene un token de un
+ * solo uso en /auth/reauth y repite la peticion con X-Reauth.
+ * - Si el dialogo de confirmacion ya pidio la contrasena (usePrompt/SignDialog con
+ *   `critico`), se usa esa (armarReauth) sin volver a preguntar.
+ * - Si no, se pide con el dialogo de ReautenticarProvider.
+ */
+export interface CredencialReauth {
+  password?: string;
+  id_token?: string;
+}
+type PedirReauth = (accion: string, mensaje: string) => Promise<CredencialReauth | null>;
+let pedirReauth: PedirReauth | null = null;
+let armada: { credencial: CredencialReauth; hasta: number } | null = null;
+
+export function registrarReautenticador(fn: PedirReauth | null): void {
+  pedirReauth = fn;
+}
+
+/* La contrasena escrita en el mismo dialogo de confirmacion (vale para la siguiente accion critica, 2 min). */
+export function armarReauth(credencial: CredencialReauth | null): void {
+  armada = credencial && (credencial.password || credencial.id_token) ? { credencial, hasta: Date.now() + 120_000 } : null;
+}
+
+async function tokenReauth(token: string, accion: string, credencial: CredencialReauth): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/auth/reauth`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ accion, ...credencial }),
+  });
+  const data = await parseJson(response);
+  if (!response.ok || !data.token) {
+    avisarSesion(response.status, data);
+    throw new Error(data.message || "No se pudo confirmar tu identidad");
+  }
+  return String(data.token);
+}
+
+async function conReauth(token: string, send: (extra: Record<string, string>) => Promise<Response>): Promise<Response> {
+  const elegido = cargoArmado;
+  cargoArmado = null;
+  const { response, cargo } = await conCargo(send, elegido);
+  const data = response.status === 401 ? await response.clone().json().catch(() => ({}) as ApiRecord) : null;
+  // La contrasena escrita en el dialogo solo vale para ESTA accion: si el servidor no la pidio
+  // (p. ej. fallo una validacion antes), se descarta y la siguiente accion critica la vuelve a pedir.
+  let credencial = armada && armada.hasta > Date.now() ? armada.credencial : null;
+  armada = null;
+  if (data?.codigo !== "reauth_required") return response;
+  const accion = String(data.accion || "");
+  if (!credencial) {
+    if (!pedirReauth) return response;
+    credencial = await pedirReauth(accion, String(data.message || ""));
+    if (!credencial) throw new Error("Acción cancelada: no se confirmó tu identidad");
+  }
+  const reauth = await tokenReauth(token, accion, credencial);
+  // Se repite con el mismo cargo (si se eligio) y el token de reautenticacion.
+  return (await conCargo((extra) => send({ ...extra, "X-Reauth": reauth }), cargo)).response;
+}
+
+/*
+ * Sesion cerrada por el servidor (Fase 2): token revocado, cuenta fuera de
+ * vigencia o cambio de contrasena obligatorio. SessionProvider se registra para
+ * reaccionar (volver al acceso con el mensaje, o mostrar el cambio de contrasena).
+ */
+type AvisoSesion = (codigo: string, mensaje: string) => void;
+let avisoSesion: AvisoSesion | null = null;
+export function registrarAvisoSesion(fn: AvisoSesion | null): void {
+  avisoSesion = fn;
+}
+function avisarSesion(status: number, data: ApiRecord): void {
+  const codigo = String(data?.codigo || "");
+  if ((status === 401 && ["sesion_revocada", "cuenta_no_vigente"].includes(codigo)) || (status === 403 && codigo === "cambiar_password")) {
+    avisoSesion?.(codigo, String(data.message || ""));
+  }
 }
 
 async function parseJson(response: Response): Promise<ApiRecord> {
@@ -59,13 +149,14 @@ export const getJsonAuth = async (url: string, token: string): Promise<ApiRecord
   });
   const data = await parseJson(response);
   if (!response.ok) {
+    avisarSesion(response.status, data);
     throw new Error(data.message || "No autorizado");
   }
   return data;
 };
 
 export const sendJsonAuth = async (method: string, url: string, token: string, body?: unknown): Promise<ApiRecord> => {
-  const response = await conCargo((extra) =>
+  const response = await conReauth(token, (extra) =>
     fetch(url, {
       method,
       headers: {
@@ -78,13 +169,14 @@ export const sendJsonAuth = async (method: string, url: string, token: string, b
   );
   const data = await parseJson(response);
   if (!response.ok) {
+    avisarSesion(response.status, data);
     throw new Error(data.message || "No se pudo completar la solicitud");
   }
   return data;
 };
 
 export const sendFormAuth = async (url: string, token: string, formData: FormData, method: string = "POST"): Promise<ApiRecord> => {
-  const response = await conCargo((extra) =>
+  const response = await conReauth(token, (extra) =>
     fetch(url, {
       method,
       headers: {
@@ -96,6 +188,7 @@ export const sendFormAuth = async (url: string, token: string, formData: FormDat
   );
   const data = await parseJson(response);
   if (!response.ok) {
+    avisarSesion(response.status, data);
     throw new Error(data.message || "No se pudo completar la carga");
   }
   return data;

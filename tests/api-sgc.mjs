@@ -4,6 +4,7 @@
  * SGC, bajas de inventario y bitacora de auditoria. Corre contra el dev
  * server apuntando a la COPIA de prueba de la base.
  */
+import "./lib/reauth-auto.mjs";
 const BASE = process.env.BASE || "http://localhost:3100/api";
 let token = "";
 let token2 = "";

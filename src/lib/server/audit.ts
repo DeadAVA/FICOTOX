@@ -1,4 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
 import { construirRegistro, primerEslabonRoto, resolverClaveSello, sellar as sellarRegistro } from "../shared/audit-chain.mjs";
+import { advertenciasLlaveBitacora, SECRET_KEY_DESARROLLO } from "../shared/secretos.mjs";
 import type { CurrentUser } from "./auth";
 import { getConfig } from "./config";
 import { isSqlite, type Row, type Session } from "./db";
@@ -43,7 +46,18 @@ export type AuditAction =
   | "descargar"
   | "asignar_rol"
   | "revocar_rol"
-  | "vencer_rol";
+  | "vencer_rol"
+  | "acotar_rol"
+  | "reauth_fallida"
+  | "bloquear"
+  | "desbloquear"
+  | "cambiar_password"
+  | "restablecer_password"
+  | "cerrar_sesiones"
+  | "cambiar_vigencia"
+  | "visto_bueno"
+  | "regresar_supervision"
+  | "cambiar_cargo";
 
 export interface AuditEntry {
   accion: AuditAction;
@@ -182,6 +196,22 @@ export async function registrarAuditoria(s: Session, user: CurrentUser | null | 
 }
 
 let claveCache: string | null = null;
+
+/*
+ * Advertencias sobre la llave del sello (SECRET_KEY ausente o corta). Solo
+ * avisan: la llave nunca se cambia sola, porque romperia la verificacion de lo
+ * ya sellado. Se muestran en el log al arrancar y en /auditoria.
+ */
+export function advertenciaLlaveBitacora(): string[] {
+  const archivo = path.join(getConfig().INSTANCE_DIR, "auditoria.key");
+  return advertenciasLlaveBitacora(process.env, fs.existsSync(archivo));
+}
+
+/* Origen de la llave con que se sella la bitacora (sin revelar la llave). */
+export function origenLlaveBitacora(): "SECRET_KEY" | "auditoria.key" {
+  const secret = String(process.env.SECRET_KEY || "").trim();
+  return secret && secret !== SECRET_KEY_DESARROLLO ? "SECRET_KEY" : "auditoria.key";
+}
 
 /* Llave del sello (SECRET_KEY o <instance>/auditoria.key); ver audit-chain.mjs. */
 export function claveSello(): string {

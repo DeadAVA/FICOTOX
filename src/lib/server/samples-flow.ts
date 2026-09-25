@@ -5,6 +5,7 @@ import { HttpError, readJson } from "./http";
 import { consumeConsumible, consumeReactivo, restoreInventoryUsage } from "./inventory-usage";
 import { addColumnIfMissing } from "./schema";
 import { requirePermission, type Autorizacion } from "./rbac";
+import { exigirSinSupervisionPendiente } from "./supervision";
 
 /*
  * Reglas comunes del flujo de muestras (ISO/IEC 17025 7.4, 7.5 y la
@@ -123,10 +124,16 @@ export function assertEditable(row: Row | null | undefined, table: SampleTable):
 }
 
 /* Antes de crear la siguiente etapa a partir de este registro (o de restaurar una que depende de el). */
-export async function assertOrigin(s: Session, table: SampleTable, id: number | null | undefined, options: { requireAccepted?: boolean } = {}): Promise<Row | null> {
-  if (!id) return null;
+export async function assertOrigin(s: Session, table: SampleTable, id: number | null | undefined, options: { requireAccepted?: boolean; requerido?: string } = {}): Promise<Row | null> {
+  // Fase 2: cada etapa exige su origen (procesamiento <- recepcion aceptada, extraccion <- procesamiento...).
+  if (!id) {
+    if (options.requerido) throw new HttpError(400, { message: options.requerido, codigo: "origen_requerido" });
+    return null;
+  }
   const row = await snapshotRow(s, table, id);
   if (!row) throw new HttpError(404, { message: `No existe la ${LABEL[table]} de origen` });
+  // Lo pendiente del visto bueno de un supervisor no sirve de origen.
+  exigirSinSupervisionPendiente(row, `La ${LABEL[table]} ${folioLabel(table, row)}`, "continuar a partir de ella");
   const estado = String(row.estado || "");
   if (isAnulado(table, row)) throw new HttpError(409, { message: `La ${LABEL[table]} ${folioLabel(table, row)} esta anulada; no se puede continuar a partir de ella` });
   if (estado === "rechazada") throw new HttpError(409, { message: `La ${LABEL[table]} ${folioLabel(table, row)} fue rechazada; no se puede continuar a partir de ella` });

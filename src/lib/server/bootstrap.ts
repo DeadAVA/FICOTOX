@@ -1,6 +1,7 @@
 import { ensureAuditSchema } from "./audit";
 import { withSession } from "./db";
 import { ensureRbacSchema, migrarRolesUnicos, registrarVencimientos } from "./rbac";
+import { ensureSeguridadSchema } from "./seguridad";
 import { resetSchemaMemo } from "./schema";
 import { ensureUsuariosSchema } from "./users";
 import { ensureMovimientosSchema } from "./inventory-usage";
@@ -30,6 +31,7 @@ export function ensureInitialSchema(): Promise<void> {
       await ensureRbacSchema(s);
       await ensureUsuariosSchema(s);
       await ensureAuditSchema(s);
+      await ensureSeguridadSchema(s);
       // Fase 1: usuarios.id_rol -> usuario_roles (una vez; queda en la bitacora).
       await migrarRolesUnicos(s);
       await ensureSamplesRecepcionSchema(s);

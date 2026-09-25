@@ -85,6 +85,18 @@ export const ACTION_TONE: Record<string, AuditTone> = {
   asignar_rol: "brand",
   revocar_rol: "danger",
   vencer_rol: "warning",
+  acotar_rol: "warning",
+  // Fase 2: seguridad de cuentas y supervision.
+  reauth_fallida: "danger",
+  bloquear: "danger",
+  desbloquear: "warning",
+  cambiar_password: "neutral",
+  restablecer_password: "warning",
+  cerrar_sesiones: "neutral",
+  cambiar_vigencia: "warning",
+  visto_bueno: "success",
+  regresar_supervision: "warning",
+  cambiar_cargo: "neutral",
 };
 
 /*
@@ -276,6 +288,15 @@ const FIELD_LABELS: Record<string, string> = {
   auth_provider: "Acceso mediante",
   ultimo_acceso: "Último acceso",
   contrasena: "Contraseña",
+  tipo_cuenta: "Tipo de cuenta",
+  supervisor_id: "Supervisor",
+  motivo_ultimo_cambio: "Motivo del último cambio de vigencia",
+  bloqueado_hasta: "Bloqueada hasta",
+  cargo_predeterminado: "Cargo predeterminado",
+  debe_cambiar_password: "Debe cambiar su contraseña",
+  requiere_supervision: "Requiere visto bueno",
+  supervision_estado: "Supervisión",
+  supervision_observaciones: "Observaciones del supervisor",
   cantidad: "Cantidad",
   movimientos_repuestos: "Movimientos de inventario repuestos",
   ignorados: "Filas ignoradas",
@@ -356,6 +377,13 @@ const HIDDEN_FIELDS = new Set([
   "entregado_en",
   "password_hash",
   "id_mantenimiento",
+  // Fase 2: datos internos de sesion y supervision.
+  "token_version",
+  "intentos_desde",
+  "supervision_solicitada_por",
+  "supervision_solicitada_en",
+  "supervisado_por",
+  "supervisado_en",
   // Copia interna del estado para poder restaurar; el cambio de estado ya se muestra.
   "estado_previo",
   // Ids de relaciones y datos internos de la cuenta Microsoft.
@@ -393,7 +421,7 @@ const STATE_BY_ENTITY: Record<string, Record<string, { label: string }>> = {
 };
 const GENERIC_STATES: Record<string, string> = { pendiente: "Pendiente", vencido: "Vencido", completado: "Completado", programado: "Programado", cancelado: "Cancelado", activo: "Activo", inactivo: "Inactivo", baja: "Dado de baja", vigente: "Vigente", obsoleto: "Obsoleto" };
 
-const CONSUMED_DETAIL = new Set(["enmienda_de", "enmienda", "nueva_revision_de", "avatar", "contrasena", "excepcion", "revisiones_obsoletas", "pdf", "sha256", "a_quien", "medio", "fecha", "decision", "disposicion", "cantidad", "insertados", "actualizados", "ignorados", "errores", "hojas", "movimientos_repuestos", "proveedor", "existe_usuario", "motivo", "permisos", "rol", "rol_id", "asignacion_id", "vigente_desde", "vigente_hasta", "actuo_como"]);
+const CONSUMED_DETAIL = new Set(["enmienda_de", "enmienda", "nueva_revision_de", "avatar", "contrasena", "excepcion", "revisiones_obsoletas", "pdf", "sha256", "a_quien", "medio", "fecha", "decision", "disposicion", "cantidad", "insertados", "actualizados", "ignorados", "errores", "hojas", "movimientos_repuestos", "proveedor", "existe_usuario", "motivo", "permisos", "rol", "rol_id", "asignacion_id", "vigente_desde", "vigente_hasta", "actuo_como", "ip", "tipo", "bloqueado_hasta", "cambios", "roles_acotados", "cambio_obligatorio", "sesiones", "otras_sesiones", "supervisado", "antes", "despues", "tipo_cuenta", "supervisor_id"]);
 const DELIVERY_PHRASE: Record<string, string> = { correo: "por correo electrónico", impreso: "en mano (impreso)", portal: "por el portal o carpeta compartida", otro: "por otro medio" };
 const providerLabel = (value: unknown) => ({ microsoft: "Microsoft", local: "contraseña local" })[String(value)] || String(value);
 const exceptionLabel = (value: unknown) => {
@@ -689,10 +717,12 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       break;
     case "asignar_rol":
     case "revocar_rol":
-    case "vencer_rol": {
+    case "vencer_rol":
+    case "acotar_rol": {
       const rol = detalle.rol ? `el rol "${String(detalle.rol)}"` : "un rol";
-      const quien = referencia ? ` ${accion === "vencer_rol" ? "de" : "a"} ${referencia}` : "";
-      action = accion === "asignar_rol" ? `asignó ${rol}${quien}` : accion === "revocar_rol" ? `revocó ${rol}${quien}` : `terminó la vigencia de ${rol}${quien}`;
+      const quien = referencia ? ` ${accion === "asignar_rol" || accion === "revocar_rol" ? "a" : "de"} ${referencia}` : "";
+      action =
+        accion === "asignar_rol" ? `asignó ${rol}${quien}` : accion === "revocar_rol" ? `revocó ${rol}${quien}` : accion === "acotar_rol" ? `acotó ${rol}${quien} a la vigencia de su cuenta` : `terminó la vigencia de ${rol}${quien}`;
       if (detalle.vigente_desde || detalle.vigente_hasta) {
         facts.push(`Vigencia: desde ${humanValue("vigente_desde", detalle.vigente_desde)}${detalle.vigente_hasta ? ` hasta ${humanValue("vigente_hasta", detalle.vigente_hasta)}` : " sin fecha de fin"}`);
       }
@@ -704,6 +734,51 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       else if (detalle.existe_usuario === false) facts.push("El correo no corresponde a ningún usuario");
       else if (detalle.existe_usuario === true) facts.push("Contraseña incorrecta");
       if (detalle.proveedor) facts.push(`Acceso con ${providerLabel(detalle.proveedor)}`);
+      break;
+    case "reauth_fallida":
+      action = `no pudo confirmar su identidad${referencia ? ` (${referencia})` : ""}`;
+      facts.push("Contraseña incorrecta al confirmar una acción crítica");
+      break;
+    case "bloquear":
+      action = `se bloqueó la cuenta ${referencia || ""}`.trim();
+      if (detalle.bloqueado_hasta) facts.push(`Bloqueada hasta ${fmtWhen(detalle.bloqueado_hasta)}`);
+      if (detalle.tipo === "reauth") facts.push("Por confirmaciones de identidad fallidas");
+      break;
+    case "desbloquear":
+      action = `desbloqueó la cuenta ${referencia || ""}`.trim();
+      break;
+    case "cambiar_password":
+      action = "cambió su contraseña";
+      facts.push("Sus demás sesiones se cerraron");
+      break;
+    case "restablecer_password":
+      action = `restableció la contraseña de ${referencia || "una cuenta"}`;
+      facts.push("Contraseña temporal: debe cambiarla al entrar; sus sesiones se cerraron");
+      break;
+    case "cerrar_sesiones":
+      action = "cerró su sesión en todos los dispositivos";
+      break;
+    case "cambiar_vigencia": {
+      action = `cambió la vigencia de la cuenta ${referencia || ""}`.trim();
+      const cambiosCuenta = (detalle.cambios || {}) as Record<string, { antes?: unknown; despues?: unknown }>;
+      for (const [campo, par] of Object.entries(cambiosCuenta)) {
+        if (!par || typeof par !== "object") continue;
+        const valor = (v: unknown) => (v === null || v === undefined || v === "" ? "sin definir" : campo === "tipo_cuenta" ? (v === "temporal" ? "temporal" : "permanente") : campo === "supervisor_id" ? `usuario #${String(v)}` : humanValue(campo, v, entidad));
+        facts.push(`${fieldLabel(campo)}: ${valor(par.antes)} → ${valor(par.despues)}`);
+      }
+      if (detalle.tipo_cuenta === "temporal") facts.push(`Cuenta temporal${detalle.vigente_hasta ? ` hasta ${humanValue("vigente_hasta", detalle.vigente_hasta)}` : ""}`);
+      if (Number(detalle.roles_acotados)) facts.push(`${Number(detalle.roles_acotados)} rol${Number(detalle.roles_acotados) === 1 ? "" : "es"} acotado${Number(detalle.roles_acotados) === 1 ? "" : "s"} a la nueva vigencia`);
+      break;
+    }
+    case "visto_bueno":
+      action = `dio el visto bueno a ${obj}`;
+      break;
+    case "regresar_supervision":
+      action = `regresó con observaciones ${obj}`;
+      break;
+    case "cambiar_cargo":
+      action = detalle.despues ? `fijó su cargo predeterminado: ${String(detalle.despues)}` : "quitó su cargo predeterminado";
+      if (detalle.antes) facts.push(`Antes: ${String(detalle.antes)}`);
       break;
     default:
       action = `${accion} ${obj}`;
@@ -726,7 +801,7 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
   const route = ENTITY_ROUTE[entidad];
   const href = route !== undefined && (entry.entidad_id || referencia) ? route(String(entry.entidad_id || ""), referencia || "") : null;
   const when = entry.fecha_hora ? new Date(String(entry.fecha_hora)) : null;
-  if (!entry.usuario_nombre && !entry.usuario_email && accion === "login_fallido") action = action.charAt(0).toUpperCase() + action.slice(1);
+  if (!entry.usuario_nombre && !entry.usuario_email && ["login_fallido", "bloquear", "reauth_fallida"].includes(accion)) action = action.charAt(0).toUpperCase() + action.slice(1);
 
   // Lo que quede en `_detalle` sin traducir se muestra como hecho, para no perder datos.
   for (const [key, value] of Object.entries(detalle)) {
@@ -737,7 +812,7 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
   return {
     id: Number(entry.id),
     when: when && !Number.isNaN(when.getTime()) ? when : null,
-    actor: String(entry.usuario_nombre || entry.usuario_email || (accion === "login_fallido" ? "" : "El sistema")),
+    actor: String(entry.usuario_nombre || entry.usuario_email || (["login_fallido", "bloquear", "reauth_fallida"].includes(accion) ? "" : "El sistema")),
     actorEmail: entry.usuario_email ? String(entry.usuario_email) : null,
     isSystem: !entry.usuario_nombre && !entry.usuario_email,
     action,
@@ -748,7 +823,7 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
     facts,
     motivo: entry.motivo ? String(entry.motivo) : null,
     changes,
-    href: accion === "login" || accion === "login_fallido" ? null : href,
+    href: ["login", "login_fallido", "reauth_fallida", "cerrar_sesiones"].includes(accion) ? null : href,
     hash: entry.hash ? String(entry.hash) : null,
   };
 }

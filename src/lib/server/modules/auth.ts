@@ -5,7 +5,9 @@ import { registrarAuditoria } from "../audit";
 import { getConfig } from "../config";
 import { isOperationalError, type Row, type Session } from "../db";
 import { HttpError, json, readJson, type RouteContext } from "../http";
-import { cargarAutorizacion, ensureRbacSchema, filasDeRoles, hoy } from "../rbac";
+import { cargarAutorizacion, cuentaVigente, ensureRbacSchema, filasDeRoles, hoy, MENSAJE_CUENTA_NO_VIGENTE } from "../rbac";
+import { emitirReauth, estadoAcceso, ipDe, MENSAJE_ACCESO_FALLIDO, registrarIntento, consumirIdToken } from "../seguridad";
+import { hashPassword, validatePasswordStrength } from "../password";
 import { expandirPermisos, mapaPermisos, permite } from "../../shared/permisos";
 import { ensureUsuariosSchema } from "../users";
 import { verifyPassword } from "../password";
@@ -18,7 +20,8 @@ function domainAllowed(email: string): boolean {
 }
 
 const USER_QUERY = `
-  SELECT u.id, u.nombre, u.email, u.activo, u.password_hash, u.avatar
+  SELECT u.id, u.nombre, u.email, u.activo, u.password_hash, u.avatar, u.token_version, u.vigente_desde, u.vigente_hasta,
+         u.bloqueado_hasta, u.intentos_desde, u.debe_cambiar_password, u.auth_provider
   FROM usuarios u
   WHERE LOWER(u.email) = LOWER(:email)
   LIMIT 1
@@ -34,26 +37,29 @@ async function getUserByEmail(s: Session, email: string): Promise<Row | null> {
  * revocado o vencido deja de contar sin volver a iniciar sesion.
  */
 async function issueSession(s: Session, row: Row): Promise<Response> {
-  if (!row.activo) {
-    return json({ message: "Usuario inactivo" }, 403);
+  // Fase 2: una cuenta inactiva o fuera de vigencia no entra, y el intento queda en la bitacora
+  // (se descarta lo que el login alcanzo a registrar como exitoso).
+  const rechazo = !row.activo ? "inactiva" : !cuentaVigente(row) ? "cuenta_no_vigente" : null;
+  if (rechazo) {
+    await s.rollback();
+    await registrarAuditoria(s, null, { accion: "login_fallido", entidad: "sesion", entidadId: row.id as number, referencia: String(row.email || "").slice(0, 160), detalle: { motivo: rechazo, existe_usuario: true } });
+    await s.commit();
+    return rechazo === "inactiva" ? json({ message: "Usuario inactivo" }, 403) : json({ message: MENSAJE_CUENTA_NO_VIGENTE, codigo: "cuenta_no_vigente" }, 403);
   }
 
   await s.execute("UPDATE usuarios SET ultimo_acceso = CURRENT_TIMESTAMP WHERE id = :user_id", { user_id: row.id });
   await s.commit();
 
-  const token = await createAccessToken({
-    sub: String(row.id),
-    email: row.email,
-    nombre: row.nombre,
-  });
-  const perfil = await perfilSesion(s, { sub: String(row.id), email: String(row.email || ""), nombre: String(row.nombre || "") });
+  const user: CurrentUser = { sub: String(row.id), email: String(row.email || ""), nombre: String(row.nombre || ""), tv: Number(row.token_version || 0) };
+  const token = await createAccessToken({ ...user });
+  const perfil = await perfilSesion(s, user);
   return json({ token, ...perfil });
 }
 
-/* Usuario, roles vigentes y permisos efectivos { modulo: { accion: alcance } }. */
+/* Usuario, roles vigentes, cuenta y permisos efectivos { modulo: { accion: alcance } }. */
 async function perfilSesion(s: Session, user: CurrentUser) {
-  const auth = await cargarAutorizacion(s, user);
-  const row = await s.queryOne<{ nombre: string; email: string; avatar: string | null }>("SELECT nombre, email, avatar FROM usuarios WHERE id = :id", { id: auth.userId });
+  const auth = await cargarAutorizacion(s, user, { permitirCambioPendiente: true });
+  const row = await s.queryOne<{ nombre: string; email: string; avatar: string | null; tiene_password: number }>("SELECT nombre, email, avatar, CASE WHEN password_hash IS NULL THEN 0 ELSE 1 END AS tiene_password FROM usuarios WHERE id = :id", { id: auth.userId });
   const roles = auth.roles.map((r) => ({ id: r.id, nombre: r.nombre, clave: r.clave, vigente_desde: r.vigente_desde, vigente_hasta: r.vigente_hasta ?? null, permisos: mapaPermisos(expandirPermisos(r.filas)) }));
   return {
     user: {
@@ -62,9 +68,18 @@ async function perfilSesion(s: Session, user: CurrentUser) {
       email: row?.email ?? user.email,
       avatar: row?.avatar ?? null,
       roles: roles.map((r) => r.nombre),
+      tipo_cuenta: auth.cuenta.tipo_cuenta,
+      vigente_hasta: auth.cuenta.vigente_hasta,
+      supervisor_id: auth.cuenta.supervisor_id,
+      cargo_predeterminado: auth.cuenta.cargo_predeterminado,
+      debe_cambiar_password: auth.cuenta.debe_cambiar_password,
+      auth_provider: auth.cuenta.auth_provider,
+      /* Sin contrasena local (solo Microsoft): la reautenticacion se hace con Microsoft. */
+      tiene_password: !!Number(row?.tiene_password || 0),
     },
     roles,
     permissions: mapaPermisos(auth.efectivos),
+    sesion: { inactividad_min: getConfig().SESION_INACTIVIDAD_MIN, expira_horas: getConfig().JWT_EXPIRES_HOURS },
   };
 }
 
@@ -103,6 +118,7 @@ export async function authConfig(): Promise<Response> {
       allowedDomain: config.MICROSOFT_ALLOWED_DOMAIN,
     },
     manualLoginEnabled: config.LOCAL_LOGIN_ENABLED,
+    sesion: { inactividad_min: config.SESION_INACTIVIDAD_MIN, expira_horas: config.JWT_EXPIRES_HOURS },
   });
 }
 
@@ -150,6 +166,12 @@ export async function loginWithMicrosoft({ request, s }: RouteContext): Promise<
     await registrarAuditoria(s, null, { accion: "login_fallido", entidad: "sesion", referencia: email.slice(0, 160), detalle: { proveedor: "microsoft", existe_usuario: false } });
     await s.commit();
     return json({ message: "Tu cuenta pertenece a CICESE, pero todavia no esta dada de alta en FICOTOX." }, 403);
+  }
+
+  // Microsoft ya verifico la contrasena: solo cuenta el bloqueo de la cuenta (no el de la IP).
+  const acceso = await estadoAcceso(s, email, ipDe(request));
+  if (acceso.bloqueadaHasta) {
+    return json({ message: MENSAJE_ACCESO_FALLIDO }, 401);
   }
 
   const name = String(claims.name || row.nombre || email.split("@", 1)[0]).trim().slice(0, 100);
@@ -203,13 +225,25 @@ export async function loginWithEmail({ request, s }: RouteContext): Promise<Resp
     throw error;
   }
 
-  // Mismo mensaje si el correo no existe o la contrasena falla: no revelar cuentas.
+  // Fase 2: bloqueo por intentos fallidos (por cuenta y por IP). Mismo mensaje exista o no la cuenta.
+  const ip = ipDe(request);
+  const acceso = await estadoAcceso(s, email, ip);
+  // Un intento rechazado por un bloqueo vigente no cuenta como fallo (ni de la cuenta ni de la IP):
+  // asi un bloqueo de IP no bloquea cuentas ajenas ni se prolonga mientras alguien siga intentando.
+  if (acceso.ipBloqueada) {
+    return json({ message: `Demasiados intentos fallidos desde este equipo; espera ${getConfig().LOGIN_BLOQUEO_MIN} minutos`, codigo: "ip_bloqueada" }, 429);
+  }
+  if (acceso.bloqueadaHasta) {
+    // Cuenta bloqueada: ni siquiera se compara la contrasena; mismo mensaje que un fallo.
+    return json({ message: MENSAJE_ACCESO_FALLIDO }, 401);
+  }
   if (!row || !verifyPassword(password, row.password_hash as string | null)) {
     // Los intentos fallidos quedan en la bitacora (ISO/IEC 17025 7.11.1).
-    await registrarAuditoria(s, null, { accion: "login_fallido", entidad: "sesion", referencia: email.slice(0, 160), detalle: { existe_usuario: !!row } });
+    await registrarIntento(s, { email, ip, tipo: "login", exito: false, usuario: row });
     await s.commit();
-    return json({ message: "Correo o contraseña incorrectos" }, 401);
+    return json({ message: MENSAJE_ACCESO_FALLIDO }, 401);
   }
+  await registrarIntento(s, { email, ip, tipo: "login", exito: true, usuario: row });
   await registrarAuditoria(s, { sub: String(row.id), nombre: String(row.nombre || ""), email: String(row.email || "") }, { accion: "login", entidad: "sesion", entidadId: row.id as number, referencia: email.slice(0, 160) });
   return issueSession(s, row);
 }
@@ -230,7 +264,7 @@ export async function personal({ request, s }: RouteContext): Promise<Response> 
   const user = await requireUser(request);
   await ensureUsuariosSchema(s);
   await cargarAutorizacion(s, user);
-  const usuarios = await s.query<Row>("SELECT id, nombre FROM usuarios WHERE COALESCE(activo, 1) = 1 ORDER BY nombre");
+  const usuarios = (await s.query<Row>("SELECT id, nombre, vigente_desde, vigente_hasta FROM usuarios WHERE COALESCE(activo, 1) = 1 ORDER BY nombre")).filter((u) => cuentaVigente(u));
   const asignaciones = await s.query<Row>(
     `
     SELECT ur.usuario_id, r.id AS rol_id, r.nombre
@@ -277,6 +311,7 @@ export async function personal({ request, s }: RouteContext): Promise<Response> 
 export async function updateMyAvatar({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await ensureUsuariosSchema(s);
+  await cargarAutorizacion(s, user, { permitirCambioPendiente: true });
   const payload = await readJson(request);
   const avatar = payload.avatar === null || payload.avatar === "" ? null : payload.avatar;
   if (avatar !== null && !isAvatarKey(avatar)) return json({ message: "Avatar no reconocido" }, 400);
@@ -287,6 +322,102 @@ export async function updateMyAvatar({ request, s }: RouteContext): Promise<Resp
   await registrarAuditoria(s, user, { accion: "editar", entidad: "usuarios", entidadId: id, referencia: String(user.email || ""), detalle: { avatar: { antes: antes.avatar || null, despues: avatar } } });
   await s.commit();
   return json({ message: "Avatar actualizado", avatar });
+}
+
+/* ---------- Fase 2: reautenticacion, contrasena, sesiones y cargo ---------- */
+
+/*
+ * Reautenticacion para una accion critica: contrasena (cuentas locales) o un
+ * id_token de Microsoft reciente (prompt=login, auth_time de hace menos de
+ * REAUTH_TTL_MIN). Devuelve un token de un solo uso ligado a la persona y a la
+ * accion. Los fallos cuentan para el bloqueo de la cuenta.
+ */
+export async function reautenticar({ request, s }: RouteContext): Promise<Response> {
+  const user = await requireUser(request);
+  const auth = await cargarAutorizacion(s, user);
+  const payload = await readJson(request);
+  const accion = String(payload.accion || "").trim().slice(0, 60);
+  if (!/^[a-z_]+:[A-Za-z_]+$/.test(accion)) return json({ message: "Indica la acción que vas a confirmar" }, 400);
+  const row = await s.queryOne<Row>(USER_QUERY, { email: auth.cuenta.email });
+  const ip = ipDe(request);
+  let valido = false;
+  const idToken = String(payload.id_token || "").trim();
+  if (idToken) {
+    try {
+      const claims = await validateMicrosoftIdToken(idToken);
+      const authTime = Number(claims.auth_time || 0);
+      const reciente = authTime * 1000 > Date.now() - getConfig().REAUTH_TTL_MIN * 60_000;
+      // Cada id_token sirve una sola vez (no se emiten varios tokens con una sola autenticacion).
+      valido = emailFromClaims(claims) === auth.cuenta.email.toLowerCase() && reciente && (await consumirIdToken(s, idToken, auth.userId));
+    } catch {
+      valido = false;
+    }
+  } else {
+    valido = verifyPassword(String(payload.password || ""), (row?.password_hash as string | null) || null);
+  }
+  if (!valido) {
+    const bloqueo = await registrarIntento(s, { email: auth.cuenta.email, ip, tipo: "reauth", exito: false, usuario: row });
+    await s.commit();
+    return json({ message: bloqueo ? "Demasiados intentos fallidos: tu cuenta quedó bloqueada temporalmente" : "La contraseña no es correcta", codigo: bloqueo ? "cuenta_bloqueada" : "reauth_fallida" }, 401);
+  }
+  const emitido = await emitirReauth(s, auth.userId, accion);
+  await s.commit();
+  return json({ token: emitido.token, accion, expira_en: emitido.expira_en });
+}
+
+/* Cambio de contrasena propio (pide la actual). Cierra las demas sesiones y devuelve un token nuevo. */
+export async function cambiarPassword({ request, s }: RouteContext): Promise<Response> {
+  const user = await requireUser(request);
+  const auth = await cargarAutorizacion(s, user, { permitirCambioPendiente: true });
+  const payload = await readJson(request);
+  const row = await s.queryOne<Row>(USER_QUERY, { email: auth.cuenta.email });
+  if (!row?.password_hash) return json({ message: "Tu cuenta entra con Microsoft: la contraseña se cambia allí" }, 400);
+  const actual = String(payload.actual || "");
+  const nueva = String(payload.nueva || "");
+  if (!verifyPassword(actual, row.password_hash as string)) {
+    const bloqueo = await registrarIntento(s, { email: auth.cuenta.email, ip: ipDe(request), tipo: "reauth", exito: false, usuario: row });
+    await s.commit();
+    return json({ message: bloqueo ? "Demasiados intentos fallidos: tu cuenta quedó bloqueada temporalmente" : "La contraseña actual no es correcta" }, 401);
+  }
+  const debil = validatePasswordStrength(nueva, { email: auth.cuenta.email, nombre: auth.cuenta.nombre });
+  if (debil) return json({ message: debil }, 400);
+  if (nueva === actual) return json({ message: "La contraseña nueva debe ser distinta de la actual" }, 400);
+  await s.execute("UPDATE usuarios SET password_hash = :hash, debe_cambiar_password = 0, token_version = COALESCE(token_version, 0) + 1 WHERE id = :id", { hash: hashPassword(nueva), id: auth.userId });
+  // Nunca se guardan contrasenas ni hashes en la bitacora.
+  await registrarAuditoria(s, user, { accion: "cambiar_password", entidad: "usuarios", entidadId: auth.userId, referencia: auth.cuenta.email, detalle: { otras_sesiones: "cerradas" } });
+  await s.commit();
+  const fila = await s.queryOne<Row>(USER_QUERY, { email: auth.cuenta.email });
+  return issueSession(s, fila as Row);
+}
+
+/* Cerrar sesion en todos los dispositivos: invalida todos los tokens emitidos (incluido el actual). */
+export async function cerrarSesiones({ request, s }: RouteContext): Promise<Response> {
+  const user = await requireUser(request);
+  const auth = await cargarAutorizacion(s, user, { permitirCambioPendiente: true });
+  await s.execute("UPDATE usuarios SET token_version = COALESCE(token_version, 0) + 1 WHERE id = :id", { id: auth.userId });
+  await registrarAuditoria(s, user, { accion: "cerrar_sesiones", entidad: "usuarios", entidadId: auth.userId, referencia: auth.cuenta.email });
+  await s.commit();
+  return json({ message: "Se cerró tu sesión en todos los dispositivos" });
+}
+
+/* Cargo predeterminado: rol vigente con el que actua cuando varios permiten la accion (null = preguntar siempre). */
+export async function fijarCargoPredeterminado({ request, s }: RouteContext): Promise<Response> {
+  const user = await requireUser(request);
+  const auth = await cargarAutorizacion(s, user);
+  const payload = await readJson(request);
+  const rolId = payload.rol_id === null || payload.rol_id === "" || payload.rol_id === undefined ? null : Number.parseInt(String(payload.rol_id), 10);
+  if (rolId !== null && !auth.roles.some((r) => r.id === rolId)) return json({ message: "Elige uno de tus roles vigentes" }, 400);
+  const antes = auth.cuenta.cargo_predeterminado;
+  await s.execute("UPDATE usuarios SET cargo_predeterminado = :rol WHERE id = :id", { rol: rolId, id: auth.userId });
+  await registrarAuditoria(s, user, {
+    accion: "cambiar_cargo",
+    entidad: "usuarios",
+    entidadId: auth.userId,
+    referencia: auth.cuenta.email,
+    detalle: { antes: auth.roles.find((r) => r.id === antes)?.nombre ?? null, despues: auth.roles.find((r) => r.id === rolId)?.nombre ?? null },
+  });
+  await s.commit();
+  return json({ message: "Cargo predeterminado guardado", cargo_predeterminado: rolId });
 }
 
 export { HttpError };

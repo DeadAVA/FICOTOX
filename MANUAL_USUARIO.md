@@ -22,6 +22,15 @@ El sistema esta orientado al seguimiento de actividades de laboratorio bajo un f
 
 Si no puede ingresar, contacte al administrador del sistema para validar que su usuario este dado de alta, activo, con al menos un rol vigente y con contrasena definida. Si entra pero solo ve el mensaje "Sin permisos asignados", su cuenta no tiene roles vigentes: pida a la administracion que le asigne uno.
 
+### 2.1 Seguridad de la sesion
+
+- **Intentos fallidos**: despues de 5 intentos fallidos en 15 minutos la cuenta se bloquea 15 minutos (tambien cuentan las confirmaciones de contrasena fallidas). El mensaje es siempre "Correo o contraseña incorrectos...". La administracion puede desbloquearla antes.
+- **Inactividad**: tras 30 minutos sin usar el sistema, la sesion se cierra. Un minuto antes aparece el aviso **"Tu sesión está por cerrarse"** con el boton **Seguir trabajando**. Si se cierra, vera **"Sesión cerrada por inactividad"**: escriba su contrasena y presione **Volver a entrar**; lo que estaba capturando sigue ahi. En todo caso la sesion dura como maximo 8 horas.
+- **Confirmar identidad**: las acciones criticas (aprobar, autorizar, entregar, anular, restaurar, dar de baja, cancelar, cerrar una muestra, dar visto bueno y los cambios de usuarios) piden su contrasena en el mismo dialogo donde escribe el motivo o firma. Si una accion no la pidio, aparece el dialogo **"Confirma tu identidad"** sin salir del formulario. Quien entra con Microsoft confirma en la ventana de Microsoft.
+- **Cuenta fuera de vigencia**: si su cuenta aun no inicia o ya termino, vera "Tu acceso no está vigente; contacta al administrador". Si vence con la sesion abierta, el sistema lo regresa a la pantalla de acceso.
+- **Mi cuenta** (menu de usuario, abajo a la izquierda): **Cambiar contraseña** (minimo 10 caracteres, distinta de su correo y de su nombre; cierra sus otras sesiones), **Cargo predeterminado** (si tiene varios roles) y **Cerrar sesión en todos los dispositivos**.
+- Si la administracion restablece su contrasena, al entrar con la contrasena temporal debera elegir una nueva antes de continuar.
+
 ## 3. Navegacion general
 
 La **barra lateral** (a la izquierda) tiene seis entradas, visibles segun los permisos del usuario:
@@ -368,10 +377,13 @@ La seccion **Usuarios** permite administrar cuentas de acceso y sus roles. Quien
 
 1. En la barra lateral, grupo **Administracion**, elija **Usuarios**.
 2. Presione **Nuevo usuario**.
-3. Capture nombre, correo electronico, **rol inicial**, departamento, contrasena inicial (minimo 8 caracteres) y estado.
-4. Presione **Crear usuario**.
+3. Capture nombre, correo electronico, **rol inicial**, departamento, contrasena inicial (minimo 10 caracteres) y estado.
+4. En **Vigencia de la cuenta** elija **Permanente** o **Temporal**. Una cuenta temporal (estancias, estudiantes) requiere **fecha de fin** y **supervisor**: una persona activa, con cuenta permanente y con permiso de revisar o aprobar ensayos o muestras. El rol de estudiante / personal en formacion solo se asigna a cuentas temporales.
+5. Escriba su contrasena para confirmar y presione **Crear usuario**.
 
-Para cambiar la contrasena de un usuario existente, editelo y capture una nueva contrasena; si deja el campo vacio se conserva la actual.
+Cambiar la vigencia, el tipo de cuenta o el supervisor pide un **motivo** y su contrasena, y queda en la bitacora. Ningun rol puede quedar vigente mas alla de la vigencia de la cuenta; si acorta la cuenta, sus roles se acortan con ella.
+
+Para una contrasena olvidada use **Restablecer contraseña…** en el menu de la fila: el sistema genera una contrasena temporal que se muestra **una sola vez** (copiela y entreguela por un medio seguro); la persona debera cambiarla al entrar. Una cuenta bloqueada muestra **"Bloqueada hasta HH:MM"** y se libera con **Desbloquear…** (con motivo).
 
 ### 13.2 Asignar y revocar roles
 
@@ -392,7 +404,15 @@ Edite el usuario y cambie su estado a activo o inactivo. Un usuario inactivo no 
 
 ### 13.4 Con que cargo firmo
 
-Cuando firma, revisa, aprueba, autoriza, entrega o anula, el sistema guarda el **cargo** con el que actuo (el nombre de su rol). Si solo uno de sus roles permite esa accion se usa ese; si varios lo permiten, el sistema le pregunta **"¿Con qué cargo actúas?"** y usted elige. El cargo aparece junto a su firma en el registro y en el PDF del informe.
+Cuando firma, revisa, aprueba, autoriza, entrega o anula, el sistema guarda el **cargo** con el que actuo (el nombre de su rol). Si solo uno de sus roles permite esa accion se usa ese. Si varios lo permiten, se usa su **cargo predeterminado** (Mi cuenta › Cargo predeterminado) cuando ese cargo permite la accion; si no lo tiene o no la permite, el sistema le pregunta **"¿Con qué cargo actúas?"**. El cargo aparece junto a su firma en el registro y en el PDF del informe.
+
+### 13.5 Revision de accesos
+
+En **Administracion › Revisión de accesos** se consultan, para la revision periodica: las cuentas y sus roles vigentes, las cuentas temporales con su supervisor, los vencimientos proximos (7, 30 o 90 dias), las cuentas bloqueadas y los cambios de un periodo (bloqueos, desbloqueos, roles asignados, revocados o vencidos, cambios de vigencia, contrasenas restablecidas y bajas). Los botones **Exportar CSV de cuentas** y **Exportar CSV de eventos** descargan cada seccion. Quien solo ve su propia cuenta ve solo la suya. En el **Inicio**, la administracion y los supervisores ven el aviso de accesos que vencen en 7 dias.
+
+### 13.6 Supervision (cuentas temporales y alcance "supervisado")
+
+Lo que captura una persona supervisada (cuenta temporal con supervisor, o un permiso con alcance "supervisado") queda **"Pendiente de visto bueno"**: no puede usarse como origen de la etapa siguiente, cerrarse, revisarse, aprobarse ni autorizarse hasta que su supervisor lo apruebe. El supervisor lo ve en el Inicio (aviso **Por supervisar**) y en **Muestras › Por supervisar**, donde puede **Dar visto bueno** (con su contrasena) o **Regresar** con observaciones. Lo regresado aparece a quien lo capturo en **Regresados a ti**; al corregirlo vuelve a quedar pendiente.
 
 ## 14. Buenas practicas de uso
 
@@ -408,7 +428,7 @@ Cuando firma, revisa, aprueba, autoriza, entrega o anula, el sistema guarda el *
 
 ### No puedo iniciar sesion
 
-Verifique que su correo este registrado, que la contrasena sea correcta, que el usuario este activo y que tenga un rol asignado. El mensaje "Correo o contrasena incorrectos" aparece en ambos casos.
+Verifique que su correo este registrado, que la contrasena sea correcta, que el usuario este activo, dentro de su vigencia y que tenga un rol asignado. El mensaje "Correo o contraseña incorrectos" aparece en todos los casos, tambien si la cuenta se bloqueo por intentos fallidos (espere 15 minutos o pida el desbloqueo).
 
 ### No veo una seccion en la barra lateral
 

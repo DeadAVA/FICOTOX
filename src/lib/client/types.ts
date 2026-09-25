@@ -12,6 +12,14 @@ export interface SessionUser {
   roles?: string[];
   /* Clave del catalogo de avatares; null = el que se deriva del correo. */
   avatar?: string | null;
+  /* Fase 2: cuenta, cargo predeterminado y estado de la contrasena. */
+  tipo_cuenta?: "permanente" | "temporal";
+  vigente_hasta?: string | null;
+  supervisor_id?: number | null;
+  cargo_predeterminado?: number | null;
+  debe_cambiar_password?: boolean;
+  auth_provider?: string | null;
+  tiene_password?: boolean;
 }
 
 /* Permisos efectivos { modulo: { accion: alcance } } (Fase 1; src/lib/shared/permisos.ts). */
@@ -37,6 +45,8 @@ export interface AuthConfig {
     allowedDomain?: string;
   };
   manualLoginEnabled?: boolean;
+  /* Fase 2: cierre por inactividad (minutos). */
+  sesion?: { inactividad_min?: number; expira_horas?: number };
 }
 
 export type PageKey =

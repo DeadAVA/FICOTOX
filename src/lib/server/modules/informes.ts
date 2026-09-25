@@ -8,11 +8,14 @@ import { isIntegrityError, isSqlite, type Row, type Session } from "../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
 import { renderInformePdf, type InformeAnalisis, type InformeRender } from "../informe-pdf";
 import { cargoActuante, requirePermission } from "../rbac";
+import { exigirReauth } from "../seguridad";
+import { aplicarSupervision, exigirSinSupervisionPendiente, filtroSupervision, marcaSupervision } from "../supervision";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
 import { advanceState, ensureAnulacionColumns, nextFolioNum, readMotivo } from "../samples-flow";
 import { ANALYSIS_METHODS, ANALYSIS_TYPES, REPORT_DEFAULT_STATEMENTS, REPORT_DELIVERY_MEDIA } from "../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "./helpers";
 import { approvedAnalysesForReception, samePersonException, serializeAnalysis } from "./samples/analisis";
+import { ensureSupervisionColumns } from "../supervision";
 
 /*
  * Informe de resultados (ISO/IEC 17025 7.8; FX-TCP-IR / FX-TCF-IR).
@@ -122,6 +125,7 @@ export async function ensureInformesSchema(s: Session): Promise<void> {
   await addColumnIfMissing(s, TABLE, "revisado_rol_id", "INT DEFAULT NULL");
   await addColumnIfMissing(s, TABLE, "autorizado_rol_id", "INT DEFAULT NULL");
   await ensureAnulacionColumns(s, TABLE);
+  await ensureSupervisionColumns(s, "informes");
   markSchemaReady("informes");
 }
 
@@ -228,6 +232,7 @@ async function loadRecepcion(s: Session, id: number | null): Promise<Row> {
   const row = await snapshotRow(s, "muestras_recepcion", id);
   if (!row) throw new HttpError(404, { message: "Recepcion no encontrada" });
   if (["anulada", "rechazada"].includes(String(row.estado || ""))) throw new HttpError(409, { message: "La recepcion esta anulada o rechazada; no se puede informar" });
+  exigirSinSupervisionPendiente(row, `La recepcion R ${String(row.folio_num || 0).padStart(7, "0")}`, "informar a partir de ella");
   return row;
 }
 
@@ -275,7 +280,8 @@ export async function getNextFolio({ request, s }: RouteContext): Promise<Respon
 
 export async function listInformes({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "informes", "V");
+  const permiso = await requirePermission(s, user, "informes", "V");
+  const supFiltro = filtroSupervision(request, "i", permiso.auth.userId);
   await ensureInformesSchema(s);
   const search = searchParam(request, "search");
   const estado = searchParam(request, "estado");
@@ -285,18 +291,19 @@ export async function listInformes({ request, s }: RouteContext): Promise<Respon
     `
     SELECT i.id, i.folio_num, i.version, i.recepcion_id, i.sustituye_a, i.fecha_emision, i.estado,
            i.elaborado_nombre, i.autorizado_nombre, i.autorizado_en, i.entrega_json, i.archivo_pdf, i.motivo_anulacion, i.creado_en,
-           i.cliente_json, i.analisis_ids_json,
+           i.cliente_json, i.analisis_ids_json, i.supervision_estado, i.supervisor_id,
            r.folio_num AS folio_recepcion_num, r.solicitante, r.id_interno AS recepcion_id_interno
     FROM ${TABLE} i
     LEFT JOIN muestras_recepcion r ON r.id = i.recepcion_id
     WHERE (:incluir_anulados = 1 OR i.estado <> 'anulado')
       AND (:estado = '' OR i.estado = :estado OR (:estado = 'pendiente' AND i.estado IN ('borrador', 'en_revision')))
       AND (:recepcion_id = 0 OR i.recepcion_id = :recepcion_id)
+      ${supFiltro.sql}
       AND (:search = '' OR CAST(i.folio_num AS CHAR) LIKE :search_like OR r.solicitante LIKE :search_like OR i.cliente_json LIKE :search_like OR r.id_interno LIKE :search_like)
     ORDER BY i.folio_num DESC, i.version DESC
     LIMIT 400
     `,
-    { search, search_like: `%${search}%`, estado, recepcion_id: recepcionId, incluir_anulados: includeAnulados ? 1 : 0 },
+    { search, search_like: `%${search}%`, estado, recepcion_id: recepcionId, incluir_anulados: includeAnulados ? 1 : 0, ...supFiltro.params },
   );
   return json({
     items: rows.map((row) => {
@@ -358,6 +365,7 @@ export async function createInforme({ request, s }: RouteContext): Promise<Respo
   if (analyses.some((a) => Number(a.recepcion_id) !== Number(recepcion.id))) return json({ message: "Todos los analisis deben pertenecer a la recepcion del informe" }, 400);
   const folio = data.folio_num || (await nextFolioNum(s, TABLE));
   const userId = userIdFromClaims(user);
+  const supervision = marcaSupervision(permiso);
   try {
     const result = await s.execute(
       `
@@ -386,6 +394,7 @@ export async function createInforme({ request, s }: RouteContext): Promise<Respo
       },
     );
     const id = result.lastrowid as number;
+    await aplicarSupervision(s, TABLE, id, supervision, userId);
     const despues = await snapshotRow(s, TABLE, id);
     await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), despues, detalle: { actuo_como: actuo } });
     await s.commit();
@@ -432,6 +441,7 @@ export async function updateInforme({ request, s, params }: RouteContext): Promi
       actualizado_por: userIdFromClaims(user),
     },
   );
+  await aplicarSupervision(s, TABLE, id, marcaSupervision(permiso), userIdFromClaims(user));
   const despues = await snapshotRow(s, TABLE, id);
   await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: id, referencia: informeFolio(despues), antes, despues, detalle: { actuo_como: actuo } });
   await s.commit();
@@ -453,6 +463,7 @@ export async function reviewInforme({ request, s, params }: RouteContext): Promi
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
   if (String(antes.estado) !== "borrador") return json({ message: "Solo se revisan informes en borrador" }, 409);
+  exigirSinSupervisionPendiente(antes, `El informe ${informeFolio(antes)}`, "revisar");
   const ids = safeJsonLoad<number[]>(String(antes.analisis_ids_json || "[]"), []);
   if (!ids.length) return json({ message: "El informe no incluye analisis" }, 400);
   const payload = await readJson(request);
@@ -519,7 +530,9 @@ export async function authorizeInforme({ request, s, params }: RouteContext): Pr
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
   if (String(antes.estado) !== "en_revision") return json({ message: "El informe debe estar revisado antes de autorizarse" }, 409);
+  exigirSinSupervisionPendiente(antes, `El informe ${informeFolio(antes)}`, "autorizar");
   const payload = await readJson(request);
+  await exigirReauth(s, request, user, "informes:A");
   // Quien reviso no autoriza, salvo excepcion con motivo.
   const excepcion = await samePersonException(antes.revisado_por, user, payload, "La autorizacion debe hacerla una persona distinta de quien reviso");
   if (excepcion instanceof Response) return excepcion;
@@ -564,6 +577,7 @@ export async function deliverInforme({ request, s, params }: RouteContext): Prom
   const fecha = strippedOrNull(payload.fecha, 10);
   const aQuien = strippedOrNull(payload.a_quien, 180);
   if (!DELIVERY.has(medio) || !fecha || !aQuien) return json({ message: "Indica fecha, medio y a quien se entrego el informe" }, 400);
+  await exigirReauth(s, request, user, "informes:A");
   const entrega = { fecha, medio, a_quien: aQuien, observaciones: strippedOrNull(payload.observaciones), entregado_por: userIdFromClaims(user), entregado_rol_id: actuo.rol_id, entregado_cargo: actuo.cargo, entregado_en: new Date().toISOString() };
   await s.execute(`UPDATE ${TABLE} SET estado = 'entregado', entrega_json = :entrega, actualizado_por = :usuario WHERE id = :id`, { entrega: jsonText(entrega), usuario: userIdFromClaims(user), id });
   const despues = await snapshotRow(s, TABLE, id);
@@ -583,6 +597,7 @@ export async function anularInforme({ request, s, params }: RouteContext): Promi
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
   if (String(antes.estado) === "anulado") return json({ message: "El informe ya esta anulado" }, 409);
+  await exigirReauth(s, request, user, "informes:AN");
   await s.execute(`UPDATE ${TABLE} SET estado_previo = :previo, estado = 'anulado', anulado_en = :fecha, anulado_por = :usuario, anulado_rol_id = :rol_id, anulado_cargo = :cargo, motivo_anulacion = :motivo WHERE id = :id`, { previo: String(antes.estado), fecha: new Date().toISOString(), usuario: userIdFromClaims(user), rol_id: actuo.rol_id, cargo: actuo.cargo, motivo, id });
   const despues = (await snapshotRow(s, TABLE, id))!;
   if (despues.archivo_pdf) {
@@ -600,7 +615,8 @@ export async function anularInforme({ request, s, params }: RouteContext): Promi
 export async function amendInforme({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  const actuo = cargoActuante(request, await requirePermission(s, user, "informes", "C", { objeto: "informe", borrador: true }));
+  const permisoC = await requirePermission(s, user, "informes", "C", { objeto: "informe", borrador: true });
+  const actuo = cargoActuante(request, permisoC);
   await ensureInformesSchema(s);
   const original = await snapshotRow(s, TABLE, id);
   if (!original) return json({ message: "Informe no encontrado" }, 404);
@@ -637,6 +653,7 @@ export async function amendInforme({ request, s, params }: RouteContext): Promis
     },
   );
   const nuevoId = result.lastrowid as number;
+  await aplicarSupervision(s, TABLE, nuevoId, marcaSupervision(permisoC), userId);
   const despues = await snapshotRow(s, TABLE, nuevoId);
   await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: nuevoId, referencia: `${informeFolio(despues)} v${maxVersion + 1}`, motivo, despues, detalle: { enmienda_de: id, actuo_como: actuo } });
   await s.commit();

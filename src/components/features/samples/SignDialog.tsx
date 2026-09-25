@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field, Textarea } from "@/components/ui/Field";
 import { Dialog } from "@/components/ui/Overlay";
+import { CampoCargo, CampoIdentidad, useConfirmaConPassword } from "@/components/session/Reautenticar";
+import { armarCargo, armarReauth } from "@/lib/client/api";
 import { EditableScope } from "./FormLayout";
 import { SignaturePad } from "./SignaturePad";
 
@@ -22,6 +24,7 @@ export function SignDialog({
   withObservaciones = false,
   requireSignature = false,
   loading = false,
+  critico = false,
   onConfirm,
 }: {
   open: boolean;
@@ -32,18 +35,30 @@ export function SignDialog({
   withObservaciones?: boolean;
   requireSignature?: boolean;
   loading?: boolean;
+  /* Aprobar/autorizar (Fase 2): pide la contrasena en el mismo dialogo. */
+  critico?: boolean;
   onConfirm: (data: { firma: string; observaciones: string }) => Promise<void> | void;
 }) {
   const [firma, setFirma] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [cargo, setCargo] = useState("");
+  const conPassword = useConfirmaConPassword();
 
   const submit = async () => {
     if (requireSignature && !firma) {
       setError("La firma es obligatoria");
       return;
     }
+    if (critico && conPassword && !password) {
+      setError("Escribe tu contraseña para confirmar");
+      return;
+    }
     setError(null);
+    if (critico) armarReauth(conPassword ? { password } : null);
+    armarCargo(cargo ? Number(cargo) : null);
+    setPassword("");
     await onConfirm({ firma, observaciones: observaciones.trim() });
   };
 
@@ -76,6 +91,11 @@ export function SignDialog({
             <SignaturePad value={firma} onChange={setFirma} label={`Firma: ${title}`} />
           </EditableScope>
         </Field>
+        {critico ? (
+          <CampoIdentidad value={password} onChange={setPassword} id="sign-password" cargo={cargo} onCargo={setCargo} />
+        ) : (
+          <CampoCargo value={cargo} onChange={setCargo} />
+        )}
       </div>
     </Dialog>
   );

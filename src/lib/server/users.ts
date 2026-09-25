@@ -67,6 +67,20 @@ export async function ensureUsuariosSchema(s: Session): Promise<void> {
     ["password_hash", "VARCHAR(255) DEFAULT NULL"],
     /* Avatar elegido por la persona (clave del catalogo compartido); NULL = se deriva del correo. */
     ["avatar", "VARCHAR(40) DEFAULT NULL"],
+    /* Fase 2: vigencia de la cuenta, cuentas temporales con supervisor. */
+    ["tipo_cuenta", "VARCHAR(20) NOT NULL DEFAULT 'permanente'"],
+    ["vigente_desde", "VARCHAR(10) DEFAULT NULL"],
+    ["vigente_hasta", "VARCHAR(10) DEFAULT NULL"],
+    ["supervisor_id", "INT DEFAULT NULL"],
+    ["motivo_ultimo_cambio", "TEXT"],
+    /* Fase 2: sesiones y contrasenas. token_version invalida los tokens emitidos antes. */
+    ["token_version", "INT NOT NULL DEFAULT 0"],
+    ["debe_cambiar_password", "INT NOT NULL DEFAULT 0"],
+    ["bloqueado_hasta", "VARCHAR(40) DEFAULT NULL"],
+    /* Desde cuando cuentan los intentos fallidos (se mueve al entrar bien o al desbloquear). */
+    ["intentos_desde", "VARCHAR(40) DEFAULT NULL"],
+    /* Rol con el que actua por omision cuando varios roles vigentes permiten la accion. */
+    ["cargo_predeterminado", "INT DEFAULT NULL"],
   ] as Array<[string, string]>) {
     await addColumnIfMissing(s, "usuarios", columnName, columnDefinition);
   }

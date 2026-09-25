@@ -59,7 +59,11 @@
       "rol": "Estudiante / personal en formación",
       "nombre": "Diego Salinas Mora",
       "email": "diego.salinas@ficotox.local",
-      "password": "CAMBIAR"
+      "password": "CAMBIAR",
+      "temporal": {
+        "meses": 6,
+        "supervisor": "ricardo.medina@ficotox.local"
+      }
     }
   ]
 }

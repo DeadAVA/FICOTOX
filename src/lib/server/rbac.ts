@@ -13,6 +13,7 @@ import {
   isAlcance,
   isModulo,
   mapaPermisos,
+  alcancePermite,
   permite,
   type Accion,
   type Alcance,
@@ -46,6 +47,18 @@ export function toBit(value: unknown): number {
 }
 
 /* Fecha local YYYY-MM-DD: la vigencia de los roles se mide por dia. */
+/*
+ * Limites en UTC (como se guarda fecha_hora) de un dia local "AAAA-MM-DD": los
+ * filtros por fecha de la bitacora y de la revision de accesos comparan el dia
+ * local del laboratorio, no el dia UTC.
+ */
+export function inicioDiaLocal(fecha: string): string {
+  return new Date(`${fecha}T00:00:00`).toISOString();
+}
+export function finDiaLocal(fecha: string): string {
+  return new Date(`${fecha}T23:59:59.999`).toISOString();
+}
+
 export function hoy(): string {
   return new Date().toLocaleDateString("en-CA");
 }
@@ -326,19 +339,70 @@ export interface Autorizacion {
   userId: number;
   roles: RolVigente[];
   efectivos: PermisosEfectivos;
+  cuenta: CuentaSesion;
+}
+
+/* Datos de la cuenta que importan en cada peticion (Fase 2). */
+export interface CuentaSesion {
+  email: string;
+  nombre: string;
+  tipo_cuenta: string;
+  vigente_desde: string | null;
+  vigente_hasta: string | null;
+  supervisor_id: number | null;
+  cargo_predeterminado: number | null;
+  debe_cambiar_password: boolean;
+  auth_provider: string | null;
+}
+
+export const MENSAJE_CUENTA_NO_VIGENTE = "Tu acceso no está vigente; contacta al administrador";
+
+/* ¿La cuenta esta dentro de su vigencia hoy? */
+export function cuentaVigente(fila: { vigente_desde?: unknown; vigente_hasta?: unknown }, fecha = hoy()): boolean {
+  const desde = fila.vigente_desde ? String(fila.vigente_desde) : null;
+  const hasta = fila.vigente_hasta ? String(fila.vigente_hasta) : null;
+  return (!desde || desde <= fecha) && (!hasta || hasta >= fecha);
 }
 
 /* Carga la persona (debe existir y estar activa) y sus permisos efectivos desde la base. */
-export async function cargarAutorizacion(s: Session, user: CurrentUser | null): Promise<Autorizacion> {
+/*
+ * Valida la sesion en cada peticion (Fase 2): la cuenta existe, esta activa y
+ * dentro de su vigencia, y el token no fue revocado (token_version). Si la
+ * persona debe cambiar su contrasena, solo se permiten las rutas que lo
+ * resuelven (opcion permitirCambioPendiente).
+ */
+export async function cargarAutorizacion(s: Session, user: CurrentUser | null, opciones: { permitirCambioPendiente?: boolean } = {}): Promise<Autorizacion> {
   if (!user) throw new HttpError(401, { message: "Token requerido" });
   await ensureRbacSchema(s);
   const userId = Number.parseInt(String(user.sub || ""), 10);
   if (!Number.isFinite(userId)) throw new HttpError(401, { message: "Token invalido" });
-  const fila = await s.queryOne<{ activo: number | null }>("SELECT activo FROM usuarios WHERE id = :id", { id: userId });
-  if (!fila) throw new HttpError(401, { message: "La cuenta ya no existe" });
-  if (fila.activo !== null && fila.activo !== undefined && !Number(fila.activo)) throw new HttpError(403, { message: "Usuario inactivo" });
+  const fila = await s.queryOne<Row>(
+    "SELECT email, nombre, activo, tipo_cuenta, vigente_desde, vigente_hasta, supervisor_id, cargo_predeterminado, debe_cambiar_password, token_version, auth_provider FROM usuarios WHERE id = :id",
+    { id: userId },
+  );
+  if (!fila) throw new HttpError(401, { message: "La cuenta ya no existe", codigo: "sesion_revocada" });
+  if (fila.activo !== null && fila.activo !== undefined && !Number(fila.activo)) throw new HttpError(401, { message: "Usuario inactivo", codigo: "sesion_revocada" });
+  if (Number(user.tv ?? 0) !== Number(fila.token_version ?? 0)) throw new HttpError(401, { message: "Tu sesión se cerró (cambio de contraseña, bloqueo o cierre en todos los dispositivos); vuelve a iniciar sesión", codigo: "sesion_revocada" });
+  if (!cuentaVigente(fila)) throw new HttpError(401, { message: MENSAJE_CUENTA_NO_VIGENTE, codigo: "cuenta_no_vigente" });
+  const debeCambiar = !!Number(fila.debe_cambiar_password || 0);
+  if (debeCambiar && !opciones.permitirCambioPendiente) throw new HttpError(403, { message: "Debes cambiar tu contraseña antes de continuar", codigo: "cambiar_password" });
   const roles = await rolesVigentes(s, userId);
-  return { userId, roles, efectivos: expandirPermisos(roles.flatMap((r) => r.filas)) };
+  return {
+    userId,
+    roles,
+    efectivos: expandirPermisos(roles.flatMap((r) => r.filas)),
+    cuenta: {
+      email: String(fila.email || ""),
+      nombre: String(fila.nombre || ""),
+      tipo_cuenta: String(fila.tipo_cuenta || "permanente"),
+      vigente_desde: (fila.vigente_desde as string | null) || null,
+      vigente_hasta: (fila.vigente_hasta as string | null) || null,
+      supervisor_id: fila.supervisor_id === null || fila.supervisor_id === undefined ? null : Number(fila.supervisor_id),
+      cargo_predeterminado: fila.cargo_predeterminado === null || fila.cargo_predeterminado === undefined ? null : Number(fila.cargo_predeterminado),
+      debe_cambiar_password: debeCambiar,
+      auth_provider: (fila.auth_provider as string | null) || null,
+    },
+  };
 }
 
 export interface Permiso {
@@ -350,13 +414,15 @@ export interface Permiso {
   /* Roles vigentes que otorgan la accion en este contexto (para el cargo con que se actua). */
   candidatos: RolVigente[];
   auth: Autorizacion;
+  /* Contexto con que se evaluo (para saber si solo lo cubre el alcance "supervisado"). */
+  ctx?: ContextoAlcance;
 }
 
 export function permisoDe(auth: Autorizacion, modulo: Modulo, accion: Accion, ctx?: ContextoAlcance): Permiso | null {
   if (!permite(auth.efectivos, modulo, accion, ctx)) return null;
   const alcances = auth.efectivos[modulo]?.[accion] || [];
   const candidatos = auth.roles.filter((rol) => permite(expandirPermisos(rol.filas), modulo, accion, ctx));
-  return { modulo, accion, alcances, total: esTotal(alcances), candidatos, auth };
+  return { modulo, accion, alcances, total: esTotal(alcances), candidatos, auth, ctx };
 }
 
 /*
@@ -382,6 +448,15 @@ export async function tienePermiso(s: Session, user: CurrentUser | null, modulo:
   return !!permisoDe(auth, modulo, accion, ctx);
 }
 
+/*
+ * ¿La operacion solo esta cubierta por el alcance "supervisado"? Entonces lo
+ * que se crea o edita queda pendiente del visto bueno del supervisor (Fase 2).
+ */
+export function soloSupervisado(permiso: Permiso): boolean {
+  const cubren = permiso.alcances.filter((a) => alcancePermite(a, permiso.ctx || {}));
+  return cubren.length > 0 && cubren.every((a) => a === "supervisado");
+}
+
 /* V de muestras solo con alcance "estado": la API omite datos tecnicos, resultados y firmas. */
 export function soloEstado(permiso: Permiso): boolean {
   return !permiso.total && permiso.alcances.length > 0 && permiso.alcances.every((a) => a === "estado");
@@ -403,6 +478,9 @@ export function cargoActuante(request: Request, permiso: Permiso): { rol_id: num
     return { rol_id: rol.id, cargo: rol.nombre };
   }
   if (opciones.length === 1) return { rol_id: opciones[0].id, cargo: opciones[0].nombre };
+  // Fase 2: si su cargo predeterminado otorga el permiso, se usa sin preguntar.
+  const predeterminado = opciones.find((r) => r.id === permiso.auth.cuenta.cargo_predeterminado);
+  if (predeterminado) return { rol_id: predeterminado.id, cargo: predeterminado.nombre };
   throw new HttpError(409, {
     message: "Tienes varios roles que permiten esta acción: elige con qué cargo actúas",
     codigo: "ELEGIR_CARGO",
@@ -439,13 +517,15 @@ export interface ConteoAdministradores {
 }
 
 export async function countActiveAdministrators(s: Session): Promise<ConteoAdministradores> {
-  const rows = await s.query<{ usuario_id: number; rol_id: number; vigente_hasta: string | null }>(
+  const rows = await s.query<{ usuario_id: number; rol_id: number; vigente_hasta: string | null; cuenta_hasta: string | null; tipo_cuenta: string | null }>(
     `
-    SELECT ur.usuario_id, ur.rol_id, ur.vigente_hasta
+    SELECT ur.usuario_id, ur.rol_id, ur.vigente_hasta, u.vigente_hasta AS cuenta_hasta, u.tipo_cuenta
     FROM usuario_roles ur
     INNER JOIN roles r ON r.id = ur.rol_id
     INNER JOIN usuarios u ON u.id = ur.usuario_id
     WHERE COALESCE(u.activo, 1) = 1 AND ${VIGENTE_SQL}
+      AND (u.vigente_desde IS NULL OR u.vigente_desde <= :hoy)
+      AND (u.vigente_hasta IS NULL OR u.vigente_hasta >= :hoy)
     `,
     { hoy: hoy() },
   );
@@ -456,7 +536,8 @@ export async function countActiveAdministrators(s: Session): Promise<ConteoAdmin
     const efectivos = expandirPermisos(filas.get(Number(row.rol_id)) || []);
     if (!esTotal(efectivos.usuarios?.G)) continue;
     vigentes.add(Number(row.usuario_id));
-    if (!row.vigente_hasta) permanentes.add(Number(row.usuario_id));
+    // Permanente: ni el rol ni la cuenta tienen fecha de fin.
+    if (!row.vigente_hasta && !row.cuenta_hasta && String(row.tipo_cuenta || "permanente") !== "temporal") permanentes.add(Number(row.usuario_id));
   }
   return { vigentes: vigentes.size, permanentes: permanentes.size };
 }

@@ -101,7 +101,7 @@ function MantenimientoContent() {
 
   // Los mantenimientos forman el historial del equipo: se cancelan con motivo, no se borran.
   const deleteItem = async (item: ApiRecord) => {
-    const motivo = await prompt({ title: "Cancelar mantenimiento", description: "El registro queda como cancelado con el motivo; sigue visible en el historial del equipo.", confirmLabel: "Cancelar mantenimiento", tone: "danger" });
+    const motivo = await prompt({ critico: true, title: "Cancelar mantenimiento", description: "El registro queda como cancelado con el motivo; sigue visible en el historial del equipo.", confirmLabel: "Cancelar mantenimiento", tone: "danger" });
     if (!motivo) return;
     try {
       await sendJsonAuth("DELETE", `${API_BASE_URL}/inventory/mantenimientos/${item.id}`, token, { motivo });

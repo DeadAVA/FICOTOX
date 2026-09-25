@@ -18,7 +18,7 @@ import { FilterChips, FilterMenu, type FilterGroup, type FilterToggle } from "@/
 import { PageHeader, SearchInput, SegmentedTabs, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, TableSkeleton, type Tone } from "@/components/ui/Primitives";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
-import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
+import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { openProtectedFile } from "@/lib/client/files";
 import { fmt, fmtDate, normalizeText } from "@/lib/client/format";
 import { useInitialParam, useOpenState, useParamChange, useUrlTrigger } from "@/lib/client/hooks";
@@ -26,6 +26,7 @@ import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { DOCUMENT_AREAS, DOCUMENT_TYPES } from "@/lib/shared/sgc";
+import { CampoIdentidad } from "@/components/session/Reautenticar";
 
 type Vista = "maestra" | "todos" | "reportes";
 
@@ -68,6 +69,7 @@ function DocumentosContent() {
   const modal = useOpenState<ApiRecord>();
   const detail = useOpenState<ApiRecord>();
   const [aprobar, setAprobar] = useState<{ item: ApiRecord; cargo: string; vigencia: string } | null>(null);
+  const [claveAprobar, setClaveAprobar] = useState("");
   useUrlTrigger("nuevo", () => modal.open(null));
 
   const resource = useResource<{ docs: ApiRecord[]; maestra: ApiRecord[]; reportes: ApiRecord[]; summary: ApiRecord }>(
@@ -115,11 +117,11 @@ function DocumentosContent() {
 
   const enviarRevision = (item: ApiRecord) => act(`${item.id}/enviar-revision`, { reviso: { nombre: formatActiveUserSignature() } }, "Enviado a revisión");
   const obsoletar = async (item: ApiRecord) => {
-    const motivo = await prompt({ title: `Declarar obsoleto ${item.clave} rev. ${item.revision}`, description: "El documento deja de estar vigente y se conserva identificado como obsoleto.", confirmLabel: "Declarar obsoleto", tone: "danger" });
+    const motivo = await prompt({ critico: true, title: `Declarar obsoleto ${item.clave} rev. ${item.revision}`, description: "El documento deja de estar vigente y se conserva identificado como obsoleto.", confirmLabel: "Declarar obsoleto", tone: "danger" });
     if (motivo) await act(`${item.id}/obsoletar`, { motivo }, "Documento obsoleto");
   };
   const cancelar = async (item: ApiRecord) => {
-    const motivo = await prompt({ title: `Cancelar borrador ${item.clave} rev. ${item.revision}`, confirmLabel: "Cancelar borrador", tone: "danger" });
+    const motivo = await prompt({ critico: true, title: `Cancelar borrador ${item.clave} rev. ${item.revision}`, confirmLabel: "Cancelar borrador", tone: "danger" });
     if (motivo) await act(`${item.id}/cancelar`, { motivo }, "Borrador cancelado");
   };
   const nuevaRevision = async (item: ApiRecord) => {
@@ -128,6 +130,8 @@ function DocumentosContent() {
   };
   const confirmarAprobacion = async () => {
     if (!aprobar) return;
+    armarReauth(claveAprobar ? { password: claveAprobar } : null);
+    setClaveAprobar("");
     await act(`${aprobar.item.id}/aprobar`, { aprobo: { nombre: user?.nombre || user?.email || "", cargo: aprobar.cargo || null }, fecha_vigencia: aprobar.vigencia || null }, "Documento aprobado");
     setAprobar(null);
   };
@@ -380,6 +384,7 @@ function DocumentosContent() {
             <Field label="Vigente desde" htmlFor="ap-vig" hint="Si se deja vacío, hoy.">
               <Input id="ap-vig" type="date" value={aprobar.vigencia} onChange={(event) => setAprobar({ ...aprobar, vigencia: event.target.value })} />
             </Field>
+            <CampoIdentidad value={claveAprobar} onChange={setClaveAprobar} id="ap-password" />
           </div>
         ) : null}
       </Dialog>

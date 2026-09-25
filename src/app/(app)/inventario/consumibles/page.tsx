@@ -98,7 +98,7 @@ function ConsumiblesContent() {
 
   // Baja logica con motivo: el consumible deja de ofrecerse, sus movimientos se conservan.
   const deleteConsumable = async (item: ApiRecord) => {
-    const motivo = await prompt({ title: `Dar de baja "${item.producto}"`, description: "El consumible deja de aparecer en el inventario y en los formatos; sus movimientos y registros se conservan.", confirmLabel: "Dar de baja", tone: "danger" });
+    const motivo = await prompt({ critico: true, title: `Dar de baja "${item.producto}"`, description: "El consumible deja de aparecer en el inventario y en los formatos; sus movimientos y registros se conservan.", confirmLabel: "Dar de baja", tone: "danger" });
     if (!motivo) return;
     try {
       await sendJsonAuth("DELETE", `${API_BASE_URL}/consumables/${item.id}`, token, { motivo });
@@ -111,7 +111,7 @@ function ConsumiblesContent() {
   };
 
   const reactivarConsumable = async (item: ApiRecord) => {
-    const motivo = await prompt({ title: `Reactivar "${item.producto}"`, confirmLabel: "Reactivar" });
+    const motivo = await prompt({ critico: true, title: `Reactivar "${item.producto}"`, confirmLabel: "Reactivar" });
     if (!motivo) return;
     try {
       await sendJsonAuth("POST", `${API_BASE_URL}/consumables/${item.id}/reactivar`, token, { motivo });

@@ -14,7 +14,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -35,6 +35,16 @@ if (configuredEnv) {
   loadEnvFile(path.resolve(configuredEnv));
 } else {
   loadEnvFile(path.join(rootDir, ".env"));
+}
+
+// Fase 2: en produccion no se arranca con un JWT_SECRET inseguro (el servidor tambien lo verifica).
+{
+  const { erroresSecretosProduccion } = await import("../src/lib/shared/secretos.mjs");
+  const errores = erroresSecretosProduccion({ ...process.env, NODE_ENV: process.env.NODE_ENV || "production" });
+  if (errores.length) {
+    console.error(`FICOTOX no arranca en produccion: ${errores.join("; ")}. Define un JWT_SECRET aleatorio de al menos 32 caracteres en .env.`);
+    process.exit(1);
+  }
 }
 
 const truthy = (name, fallback = "false") => ["1", "true", "yes", "on"].includes(String(process.env[name] ?? fallback).trim().toLowerCase());
@@ -83,7 +93,8 @@ function detectLanIp() {
 const browserHost = ["0.0.0.0", "::", ""].includes(host) ? detectLanIp() : host;
 const url = `http://${browserHost}:${port}`;
 
-const child = spawn(process.execPath, [serverFile], {
+// Sin proxy de confianza, la IP del bloqueo por IP es la del socket (scripts/ip-real.mjs).
+const child = spawn(process.execPath, ["--import", pathToFileURL(path.join(rootDir, "scripts", "ip-real.mjs")).href, serverFile], {
   cwd: standaloneDir,
   env: { ...process.env, HOSTNAME: host, PORT: port, NODE_ENV: "production" },
   stdio: "inherit",

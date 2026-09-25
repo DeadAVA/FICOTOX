@@ -1,12 +1,14 @@
 import { requireUser, userIdFromClaims } from "../auth";
 import { registrarAuditoria, snapshotRow } from "../audit";
 import { type Session } from "../db";
-import { intParam, json, readJson, type RouteContext } from "../http";
+import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
 import { darDeBaja, ensureBajaColumns, reactivarItem } from "../inventory-baja";
 import { ensureMovimientosSchema } from "../inventory-usage";
 import { requirePermission } from "../rbac";
+import { aplicarSupervision, marcaSupervision } from "../supervision";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
 import { searchParam, toIntOrNull, utcTimestampReference } from "./helpers";
+import { ensureSupervisionColumns } from "../supervision";
 
 /* Portado de modules/inventory/consumables.py del backend Flask original. */
 
@@ -40,6 +42,7 @@ export async function ensureConsumiblesSchema(s: Session): Promise<void> {
     WHERE stock_maximo IS NULL AND piezas IS NOT NULL AND piezas > 0
     `,
   );
+  await ensureSupervisionColumns(s, "consumibles");
   markSchemaReady("consumibles");
 }
 
@@ -231,7 +234,7 @@ export async function getConsumables({ request, s }: RouteContext): Promise<Resp
 
 export async function createConsumable({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" });
+  const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" }));
   await ensureConsumiblesSchema(s);
 
   const data = normalizePayload(await readJson(request));
@@ -246,6 +249,7 @@ export async function createConsumable({ request, s }: RouteContext): Promise<Re
     `,
     { ...data, creado_por: userIdFromClaims(user) },
   );
+  await aplicarSupervision(s, "consumibles", result.lastrowid as number, supervision, userIdFromClaims(user));
   await registrarAuditoria(s, user, { accion: "crear", entidad: "consumibles", entidadId: result.lastrowid, referencia: String(data.producto), despues: await snapshotRow(s, "consumibles", result.lastrowid) });
   await s.commit();
   return json({ message: "Consumible creado", id: result.lastrowid }, 201);
@@ -267,7 +271,7 @@ export async function getConsumable({ request, s, params }: RouteContext): Promi
 export async function updateConsumable({ request, s, params }: RouteContext): Promise<Response> {
   const consumableId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "inventario", "E", { objeto: "catalogo_inventario" });
+  const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "E", { objeto: "catalogo_inventario" }));
   await ensureConsumiblesSchema(s);
 
   const data = normalizePayload(await readJson(request));
@@ -291,6 +295,7 @@ export async function updateConsumable({ request, s, params }: RouteContext): Pr
     await s.rollback();
     return json({ message: "Consumible no encontrado" }, 404);
   }
+  await aplicarSupervision(s, "consumibles", consumableId, supervision, userIdFromClaims(user));
   await registrarAuditoria(s, user, { accion: "editar", entidad: "consumibles", entidadId: consumableId, referencia: String(data.producto), antes, despues: await snapshotRow(s, "consumibles", consumableId) });
   await s.commit();
   return json({ message: "Consumible actualizado" });
@@ -299,7 +304,7 @@ export async function updateConsumable({ request, s, params }: RouteContext): Pr
 export async function refillConsumable({ request, s, params }: RouteContext): Promise<Response> {
   const consumableId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "inventario", "C", { objeto: "movimiento" });
+  const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "movimiento" }));
   await ensureConsumiblesSchema(s);
   await ensureMovimientosSchema(s);
 
@@ -343,6 +348,7 @@ export async function refillConsumable({ request, s, params }: RouteContext): Pr
       id_usuario: userId,
     },
   );
+  await aplicarSupervision(s, "consumibles", consumableId, supervision, userId);
   const despues = await snapshotRow(s, "consumibles", consumableId);
   await registrarAuditoria(s, user, { accion: "reponer", entidad: "consumibles", entidadId: consumableId, referencia: String(despues?.producto || consumableId), motivo, despues, detalle: { cantidad: amount } });
   await s.commit();
@@ -355,7 +361,7 @@ export async function deleteConsumable({ request, s, params }: RouteContext): Pr
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "AN");
   await ensureConsumiblesSchema(s);
-  return darDeBaja(s, user, "consumibles", consumableId, await readJson(request), "Consumible");
+  return darDeBaja(s, user, "consumibles", consumableId, await readJson(request), "Consumible", request);
 }
 
 export async function reactivarConsumable({ request, s, params }: RouteContext): Promise<Response> {
@@ -363,7 +369,7 @@ export async function reactivarConsumable({ request, s, params }: RouteContext):
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "G");
   await ensureConsumiblesSchema(s);
-  return reactivarItem(s, user, "consumibles", consumableId, await readJson(request), "Consumible");
+  return reactivarItem(s, user, "consumibles", consumableId, await readJson(request), "Consumible", request);
 }
 
 const IMPORT_INSERT = `
@@ -373,7 +379,8 @@ const IMPORT_INSERT = `
 
 export async function importConsumables({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" });
+  // La importacion masiva no se hace bajo supervision (no hay visto bueno por fila).
+  if (marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" }))) throw new HttpError(403, { message: "La importación masiva no está disponible para capturas bajo supervisión" });
   await ensureConsumiblesSchema(s);
   let inserted = 0;
 

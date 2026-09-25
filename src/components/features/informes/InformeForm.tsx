@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowsClockwise, FilePdf, FloppyDisk, PaperPlaneTilt, Prohibit, SealCheck, Truck } from "@phosphor-icons/react";
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
-import { FolioChip } from "@/components/features/samples/status";
+import { FolioChip, SupervisionCallout } from "@/components/features/samples/status";
 import { SignDialog } from "@/components/features/samples/SignDialog";
 import { Callout, FlowSteps, FormCard, FormPage, FormTable, PersonCard, ReadValue, SignoffCard, formTd, formTh, missingMessage, missingSections, openFormSection, type FormSectionDef } from "@/components/features/samples/FormLayout";
 import { useSession } from "@/components/session/SessionProvider";
@@ -15,13 +15,14 @@ import { cn } from "@/components/ui/cn";
 import { Checkbox, Field, FormGrid, Input, Select, Textarea } from "@/components/ui/Field";
 import { ActionMenu, Dialog, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { Badge, EmptyState } from "@/components/ui/Primitives";
-import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
+import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { openProtectedFile } from "@/lib/client/files";
 import { fmtDate, isoDate, parseIntOrNull } from "@/lib/client/format";
 import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { ANALYSIS_METHODS, ANALYSIS_TYPES, REPORT_DEFAULT_STATEMENTS, REPORT_DELIVERY_MEDIA, REPORT_STATES } from "@/lib/shared/sgc";
+import { CampoIdentidad } from "@/components/session/Reautenticar";
 
 /*
  * Informe de resultados (ISO/IEC 17025 7.8): se arma a partir de una
@@ -116,6 +117,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
   const [sign, setSign] = useState<"revisar" | "autorizar" | null>(null);
   const [signing, setSigning] = useState(false);
   const [entrega, setEntrega] = useState<{ open: boolean; fecha: string; medio: string; aQuien: string; observaciones: string }>({ open: false, fecha: isoDate(new Date()), medio: "correo", aQuien: "", observaciones: "" });
+  const [claveEntrega, setClaveEntrega] = useState("");
   const editing = !!item?.id;
   const estado = String(item?.estado || "borrador");
   // E solo en borrador (Fase 1): en revisión o después se corrige por enmienda o anulación.
@@ -237,6 +239,9 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
   const registrarEntrega = async () => {
     if (!item) return;
     if (!entrega.fecha || !entrega.medio || !entrega.aQuien.trim()) return toast.error("Fecha, medio y destinatario son obligatorios");
+    // Registrar la entrega es una accion A: se confirma la identidad en el mismo dialogo.
+    armarReauth(claveEntrega ? { password: claveEntrega } : null);
+    setClaveEntrega("");
     try {
       await sendJsonAuth("POST", `${API_BASE_URL}/informes/${item.id}/entregar`, token, { fecha: entrega.fecha, medio: entrega.medio, a_quien: entrega.aQuien.trim(), observaciones: entrega.observaciones.trim() || null });
       toast.success("Entrega registrada");
@@ -250,7 +255,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
 
   const anular = async () => {
     if (!item) return;
-    const motivo = await prompt({ title: `Anular informe ${item.folio}`, description: "El informe queda anulado y su PDF marcado como sin validez. Para corregirlo emite una enmienda.", confirmLabel: "Anular", tone: "danger" });
+    const motivo = await prompt({ critico: true, title: `Anular informe ${item.folio}`, description: "El informe queda anulado y su PDF marcado como sin validez. Para corregirlo emite una enmienda.", confirmLabel: "Anular", tone: "danger" });
     if (!motivo) return;
     try {
       await sendJsonAuth("POST", `${API_BASE_URL}/informes/${item.id}/anular`, token, { motivo });
@@ -363,6 +368,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
           Esta versión sustituye a la anterior. Motivo: {String(item.motivo_enmienda || "—")}
         </Callout>
       ) : null}
+      <SupervisionCallout item={item} />
       {item?.motivo_anulacion ? (
         <Callout tone="danger" title="Informe anulado">
           Motivo: {String(item.motivo_anulacion)}
@@ -561,6 +567,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
         confirmLabel={sign === "revisar" ? "Marcar revisado" : "Autorizar"}
         requireSignature={sign === "autorizar"}
         loading={signing}
+        critico={sign === "autorizar"}
         onConfirm={doSign}
       />
 
@@ -593,6 +600,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
               </Select>
             </Field>
           </FormGrid>
+          <CampoIdentidad value={claveEntrega} onChange={setClaveEntrega} id="e-password" />
           <Field label="Entregado a" htmlFor="e-quien" required>
             <Input id="e-quien" maxLength={180} value={entrega.aQuien} onChange={(event) => setEntrega({ ...entrega, aQuien: event.target.value })} />
           </Field>

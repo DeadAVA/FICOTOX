@@ -2,12 +2,15 @@ import { requireUser, userIdFromClaims } from "../auth";
 import { registrarAuditoria, snapshotRow } from "../audit";
 import { isIntegrityError, isSqlite, type Row, type Session } from "../db";
 import { darDeBaja, ensureBajaColumns, itemRef, reactivarItem } from "../inventory-baja";
-import { intParam, json, readJson, type RouteContext } from "../http";
+import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
 import { ensureMovimientosSchema } from "../inventory-usage";
 import { cargarAutorizacion, recortarPorModulo, requirePermission } from "../rbac";
+import { exigirReauth } from "../seguridad";
+import { aplicarSupervision, exigirSinSupervisionPendiente, marcaSupervision } from "../supervision";
 import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
 import { ensureConsumiblesSchema } from "./consumables";
 import { firstTruthy, isTruthy, searchParam, toFloatOrNull, toIntOrNull, toStrOrNull, utcTimestampReference } from "./helpers";
+import { ensureSupervisionColumns } from "../supervision";
 
 /* Portado de modules/inventory/endpoints.py del backend Flask original. */
 
@@ -474,6 +477,7 @@ export async function ensureReactivosSchema(s: Session): Promise<void> {
       ) IS NOT NULL
     `,
   );
+  await ensureSupervisionColumns(s, "reactivos");
   markSchemaReady("reactivos");
 }
 
@@ -702,7 +706,7 @@ export async function getReactivo({ request, s, params }: RouteContext): Promise
 
 export async function createReactivo({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" });
+  const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" }));
   await ensureReactivosSchema(s);
 
   const data = normalizeReactivoPayload(await readJson(request));
@@ -712,6 +716,7 @@ export async function createReactivo({ request, s }: RouteContext): Promise<Resp
 
   const result = await s.execute(`INSERT INTO reactivos (${REACTIVO_INSERT_COLUMNS}) VALUES (${REACTIVO_INSERT_VALUES})`, data);
   const id = result.lastrowid as number;
+  await aplicarSupervision(s, "reactivos", id, supervision, userIdFromClaims(user));
   await registrarAuditoria(s, user, { accion: "crear", entidad: "reactivos", entidadId: id, referencia: reactivoRef(data), despues: await snapshotRow(s, "reactivos", id) });
   await s.commit();
   return json({ message: "Reactivo creado", id }, 201);
@@ -722,7 +727,7 @@ const reactivoRef = (row: Record<string, unknown> | null | undefined): string =>
 export async function updateReactivo({ request, s, params }: RouteContext): Promise<Response> {
   const reactivoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "inventario", "E", { objeto: "catalogo_inventario" });
+  const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "E", { objeto: "catalogo_inventario" }));
   await ensureReactivosSchema(s);
 
   const antes = await snapshotRow(s, "reactivos", reactivoId);
@@ -748,6 +753,7 @@ export async function updateReactivo({ request, s, params }: RouteContext): Prom
     await s.rollback();
     return json({ message: "Reactivo no encontrado" }, 404);
   }
+  await aplicarSupervision(s, "reactivos", reactivoId, supervision, userIdFromClaims(user));
   await registrarAuditoria(s, user, { accion: "editar", entidad: "reactivos", entidadId: reactivoId, referencia: reactivoRef(data), antes, despues: await snapshotRow(s, "reactivos", reactivoId) });
   await s.commit();
   return json({ message: "Reactivo actualizado" });
@@ -756,7 +762,7 @@ export async function updateReactivo({ request, s, params }: RouteContext): Prom
 export async function refillReactivo({ request, s, params }: RouteContext): Promise<Response> {
   const reactivoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "inventario", "C", { objeto: "movimiento" });
+  const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "movimiento" }));
   await ensureReactivosSchema(s);
   await ensureMovimientosSchema(s);
 
@@ -809,6 +815,7 @@ export async function refillReactivo({ request, s, params }: RouteContext): Prom
       id_usuario: userIdFromClaims(user),
     },
   );
+  await aplicarSupervision(s, "reactivos", reactivoId, supervision, userIdFromClaims(user));
   await registrarAuditoria(s, user, { accion: "reponer", entidad: "reactivos", entidadId: reactivoId, referencia: reactivoRef(row), motivo, antes: row, despues: await snapshotRow(s, "reactivos", reactivoId), detalle: { cantidad: amount } });
   await s.commit();
   return json({ message: "Stock de reactivo rellenado" });
@@ -823,7 +830,8 @@ export async function importReactivos({ request, s }: RouteContext): Promise<Res
    * 5. Regresar resumen operativo para la interfaz.
    */
   const user = await requireUser(request);
-  await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" });
+  // La importacion masiva no se hace bajo supervision (no hay visto bueno por fila).
+  if (marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" }))) throw new HttpError(403, { message: "La importación masiva no está disponible para capturas bajo supervisión" });
   await ensureReactivosSchema(s);
 
   const payload = await readJson(request);
@@ -931,7 +939,7 @@ export async function deleteReactivo({ request, s, params }: RouteContext): Prom
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "AN");
   await ensureReactivosSchema(s);
-  return darDeBaja(s, user, "reactivos", reactivoId, await readJson(request), "Reactivo");
+  return darDeBaja(s, user, "reactivos", reactivoId, await readJson(request), "Reactivo", request);
 }
 
 export async function reactivarReactivo({ request, s, params }: RouteContext): Promise<Response> {
@@ -939,7 +947,7 @@ export async function reactivarReactivo({ request, s, params }: RouteContext): P
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "G");
   await ensureReactivosSchema(s);
-  return reactivarItem(s, user, "reactivos", reactivoId, await readJson(request), "Reactivo");
+  return reactivarItem(s, user, "reactivos", reactivoId, await readJson(request), "Reactivo", request);
 }
 
 // ---------------------------------------------------------------------------
@@ -999,6 +1007,7 @@ export async function ensureEquiposSchema(s: Session): Promise<void> {
   await ensureBajaColumns(s, "equipos");
   // Último folio anotado en la bitácora del equipo: los formatos sugieren el siguiente.
   await addColumnIfMissing(s, "equipos", "ultimo_folio_bitacora", "VARCHAR(60) DEFAULT NULL");
+  await ensureSupervisionColumns(s, "equipos");
   markSchemaReady("equipos");
 }
 
@@ -1086,6 +1095,7 @@ export async function ensureMantenimientosSchema(s: Session): Promise<void> {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
       `,
   );
+  await ensureSupervisionColumns(s, "mantenimientos");
   markSchemaReady("mantenimientos");
 }
 
@@ -1174,7 +1184,7 @@ export async function getEquipo({ request, s, params }: RouteContext): Promise<R
 
 export async function createEquipo({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "equipos", "C", { objeto: "equipo" });
+  const supervision = marcaSupervision(await requirePermission(s, user, "equipos", "C", { objeto: "equipo" }));
   await ensureEquiposSchema(s);
 
   const data = normalizeEquipoPayload(await readJson(request));
@@ -1198,6 +1208,7 @@ export async function createEquipo({ request, s }: RouteContext): Promise<Respon
       { ...data },
     );
     insertedId = result.lastrowid;
+    if (insertedId) await aplicarSupervision(s, "equipos", insertedId, supervision, userIdFromClaims(user));
     await registrarAuditoria(s, user, { accion: "crear", entidad: "equipos", entidadId: insertedId, referencia: String(data.nombre), despues: await snapshotRow(s, "equipos", insertedId) });
     await s.commit();
   } catch (error) {
@@ -1213,7 +1224,7 @@ export async function createEquipo({ request, s }: RouteContext): Promise<Respon
 export async function updateEquipo({ request, s, params }: RouteContext): Promise<Response> {
   const equipoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "equipos", "E", { objeto: "equipo" });
+  const supervision = marcaSupervision(await requirePermission(s, user, "equipos", "E", { objeto: "equipo" }));
   await ensureEquiposSchema(s);
 
   const data = normalizeEquipoPayload(await readJson(request));
@@ -1244,6 +1255,7 @@ export async function updateEquipo({ request, s, params }: RouteContext): Promis
     if (rowcount > 0) {
       // El estado manual no puede contradecir a Mantenimiento: si hay uno pendiente, queda "en mantenimiento".
       await syncEquipoEstado(s, equipoId);
+      await aplicarSupervision(s, "equipos", equipoId, supervision, userIdFromClaims(user));
       await registrarAuditoria(s, user, { accion: "editar", entidad: "equipos", entidadId: equipoId, referencia: String(data.nombre), antes, despues: await snapshotRow(s, "equipos", equipoId) });
     }
     await s.commit();
@@ -1267,7 +1279,7 @@ export async function deleteEquipo({ request, s, params }: RouteContext): Promis
   const user = await requireUser(request);
   await requirePermission(s, user, "equipos", "AN");
   await ensureEquiposSchema(s);
-  return darDeBaja(s, user, "equipos", equipoId, await readJson(request), "Equipo");
+  return darDeBaja(s, user, "equipos", equipoId, await readJson(request), "Equipo", request);
 }
 
 export async function reactivarEquipo({ request, s, params }: RouteContext): Promise<Response> {
@@ -1275,7 +1287,7 @@ export async function reactivarEquipo({ request, s, params }: RouteContext): Pro
   const user = await requireUser(request);
   await requirePermission(s, user, "equipos", "G");
   await ensureEquiposSchema(s);
-  return reactivarItem(s, user, "equipos", equipoId, await readJson(request), "Equipo");
+  return reactivarItem(s, user, "equipos", equipoId, await readJson(request), "Equipo", request);
 }
 
 export async function listConsumiblesInventory({ request, s }: RouteContext): Promise<Response> {
@@ -1435,7 +1447,7 @@ async function syncEquipoEstado(s: Session, equipoId: number, proximaCalibracion
 
 export async function createMantenimiento({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "equipos", "C", { objeto: "mantenimiento" });
+  const supervision = marcaSupervision(await requirePermission(s, user, "equipos", "C", { objeto: "mantenimiento" }));
   await ensureMantenimientosSchema(s);
 
   const payload = await readJson(request);
@@ -1450,6 +1462,8 @@ export async function createMantenimiento({ request, s }: RouteContext): Promise
   if (data.estado === "completado" && !data.fecha_realizado) {
     return json({ message: "Indica la fecha en que se realizó para marcarlo como completado" }, 400);
   }
+  // Lo capturado bajo supervision no se da por completado sin el visto bueno.
+  if (supervision && data.estado === "completado") return json({ message: "Lo que capturas bajo supervisión no se marca como completado: queda pendiente del visto bueno de tu supervisor", codigo: "supervision_pendiente" }, 409);
 
   const result = await s.execute(
     `
@@ -1464,6 +1478,7 @@ export async function createMantenimiento({ request, s }: RouteContext): Promise
     `,
     { ...data },
   );
+  await aplicarSupervision(s, "mantenimientos", result.lastrowid as number, supervision, userIdFromClaims(user));
   await registrarAuditoria(s, user, { accion: "crear", entidad: "mantenimientos", entidadId: result.lastrowid, referencia: `mantenimiento ${data.tipo} equipo ${data.id_equipo}`, despues: await snapshotRow(s, "mantenimientos", result.lastrowid) });
   await syncEquipoEstado(s, Number(data.id_equipo), proximaCalibracion, data.estado === "completado" && data.tipo === "calibracion");
   await s.commit();
@@ -1473,7 +1488,7 @@ export async function createMantenimiento({ request, s }: RouteContext): Promise
 export async function updateMantenimiento({ request, s, params }: RouteContext): Promise<Response> {
   const mantenimientoId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "equipos", "E", { objeto: "mantenimiento" });
+  const supervision = marcaSupervision(await requirePermission(s, user, "equipos", "E", { objeto: "mantenimiento" }));
   await ensureMantenimientosSchema(s);
 
   const payload = await readJson(request);
@@ -1490,6 +1505,10 @@ export async function updateMantenimiento({ request, s, params }: RouteContext):
   }
 
   const antesMantenimiento = await snapshotRow(s, "mantenimientos", mantenimientoId);
+  if (data.estado === "completado" && String(antesMantenimiento?.estado || "") !== "completado") {
+    if (supervision) return json({ message: "Lo que capturas bajo supervisión no se marca como completado: queda pendiente del visto bueno de tu supervisor", codigo: "supervision_pendiente" }, 409);
+    exigirSinSupervisionPendiente(antesMantenimiento, "El mantenimiento", "marcar como completado");
+  }
   const result = await s.execute(
     `
     UPDATE mantenimientos
@@ -1509,6 +1528,7 @@ export async function updateMantenimiento({ request, s, params }: RouteContext):
     await s.rollback();
     return json({ message: "Mantenimiento no encontrado" }, 404);
   }
+  await aplicarSupervision(s, "mantenimientos", mantenimientoId, supervision, userIdFromClaims(user));
   await registrarAuditoria(s, user, { accion: "editar", entidad: "mantenimientos", entidadId: mantenimientoId, referencia: `mantenimiento ${data.tipo} equipo ${data.id_equipo}`, antes: antesMantenimiento, despues: await snapshotRow(s, "mantenimientos", mantenimientoId) });
   // Si el mantenimiento se movió de equipo, el anterior también se recalcula.
   const equipoAnterior = Number(antesMantenimiento?.id_equipo || 0);
@@ -1530,6 +1550,7 @@ export async function deleteMantenimiento({ request, s, params }: RouteContext):
     const payload = await readJson(request);
     const motivo = String(payload.motivo || "").trim();
     if (motivo.length < 5) return json({ message: "Indica el motivo de la cancelacion (al menos 5 caracteres)" }, 400);
+    await exigirReauth(s, request, user, "equipos:AN");
     const antes = await snapshotRow(s, "mantenimientos", mantenimientoId);
     // `||` es concatenacion en SQLite pero OR logico en MySQL: se usa CONCAT en ese motor.
     const observaciones = isSqlite() ? "TRIM(COALESCE(observaciones, '') || :nota)" : "TRIM(CONCAT(COALESCE(observaciones, ''), :nota))";

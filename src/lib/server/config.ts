@@ -22,6 +22,21 @@ export interface AppConfig {
   MICROSOFT_ALLOWED_DOMAIN: string;
   MICROSOFT_AUTH_ENABLED: boolean;
   CORS_ORIGINS: string;
+  /* Fase 2: bloqueo por intentos, sesiones y reautenticacion. */
+  LOGIN_MAX_INTENTOS: number;
+  LOGIN_VENTANA_MIN: number;
+  LOGIN_BLOQUEO_MIN: number;
+  LOGIN_IP_MAX_INTENTOS: number;
+  TRUST_PROXY: boolean;
+  /* Lo que captura una cuenta temporal con supervisor queda pendiente de visto bueno (Fase 2). */
+  SUPERVISAR_CUENTAS_TEMPORALES: boolean;
+  SESION_INACTIVIDAD_MIN: number;
+  REAUTH_TTL_MIN: number;
+}
+
+function envInt(name: string, fallback: number): number {
+  const value = Number.parseInt(process.env[name] || "", 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 let cached: AppConfig | null = null;
@@ -107,13 +122,22 @@ export function getConfig(): AppConfig {
     DATABASE_URL: url,
     SQLITE_PATH: sqlitePath,
     JWT_SECRET: process.env.JWT_SECRET || "ficotox-jwt-secret",
-    JWT_EXPIRES_HOURS: Number.parseInt(process.env.JWT_EXPIRES_HOURS || "12", 10) || 12,
+    JWT_EXPIRES_HOURS: envInt("JWT_EXPIRES_HOURS", 8),
     LOCAL_LOGIN_ENABLED: envBool("LOCAL_LOGIN_ENABLED", "true"),
     MICROSOFT_CLIENT_ID: clientId,
     MICROSOFT_TENANT_ID: tenantId,
     MICROSOFT_ALLOWED_DOMAIN: (process.env.MICROSOFT_ALLOWED_DOMAIN || "cicese.mx").trim().toLowerCase(),
     MICROSOFT_AUTH_ENABLED: envBool("MICROSOFT_AUTH_ENABLED", "true") && !!clientId && !!tenantId,
-    CORS_ORIGINS: process.env.CORS_ORIGINS || "*",
+    // Por omision solo el mismo origen (sin encabezados CORS); "*" o una lista se configuran.
+    CORS_ORIGINS: process.env.CORS_ORIGINS ?? "",
+    LOGIN_MAX_INTENTOS: envInt("LOGIN_MAX_INTENTOS", 5),
+    LOGIN_VENTANA_MIN: envInt("LOGIN_VENTANA_MIN", 15),
+    LOGIN_BLOQUEO_MIN: envInt("LOGIN_BLOQUEO_MIN", 15),
+    LOGIN_IP_MAX_INTENTOS: envInt("LOGIN_IP_MAX_INTENTOS", 20),
+    TRUST_PROXY: envBool("TRUST_PROXY", "false"),
+    SUPERVISAR_CUENTAS_TEMPORALES: envBool("SUPERVISAR_CUENTAS_TEMPORALES", "true"),
+    SESION_INACTIVIDAD_MIN: envInt("SESION_INACTIVIDAD_MIN", 30),
+    REAUTH_TTL_MIN: envInt("REAUTH_TTL_MIN", 5),
   };
   return cached;
 }

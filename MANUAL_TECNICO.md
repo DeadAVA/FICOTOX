@@ -144,9 +144,15 @@ Se leen desde `.env` en la raiz. `FICOTOX_ENV_FILE` permite indicar otro archivo
 
 | Variable | Descripcion | Valor por defecto |
 | --- | --- | --- |
-| `SECRET_KEY` | Secreto general | `ficotox-dev-secret` |
-| `JWT_SECRET` | Secreto para firmar JWT | `ficotox-jwt-secret` |
-| `JWT_EXPIRES_HOURS` | Duracion del token en horas | `12` |
+| `SECRET_KEY` | Llave del sello de la bitacora (no se cambia; ver 9.5) | `ficotox-dev-secret` (entonces se usa `instance/auditoria.key`) |
+| `JWT_SECRET` | Secreto para firmar JWT. **En produccion** es obligatorio, de 32+ caracteres y distinto de los valores de ejemplo, o el servidor no arranca | `ficotox-jwt-secret` (solo desarrollo) |
+| `JWT_EXPIRES_HOURS` | Duracion maxima de la sesion en horas | `8` |
+| `SESION_INACTIVIDAD_MIN` | Cierre de sesion por inactividad (minutos); aviso 1 min antes | `30` |
+| `LOGIN_MAX_INTENTOS` / `LOGIN_VENTANA_MIN` / `LOGIN_BLOQUEO_MIN` | Fallos que bloquean una cuenta, ventana en que se cuentan y duracion del bloqueo | `5` / `15` / `15` |
+| `LOGIN_IP_MAX_INTENTOS` | Fallos desde una IP (misma ventana) que bloquean esa IP | `20` |
+| `REAUTH_TTL_MIN` | Vigencia del token de reautenticacion | `5` |
+| `TRUST_PROXY` | Detras de un proxy propio: tomar la IP de `X-Forwarded-For`/`X-Real-IP` que fija el proxy | `false` |
+| `SUPERVISAR_CUENTAS_TEMPORALES` | Lo que captura una cuenta temporal con supervisor queda pendiente de visto bueno (decision pendiente de validar) | `true` |
 | `DATABASE_URL` | URL de base externa (`mysql://usuario:password@host:3306/ficotox`) | No definida |
 | `SQLITE_PATH` | Ruta de SQLite local | `instance/ficotox.sqlite3` |
 | `LOCAL_LOGIN_ENABLED` | Activa login local por correo | `true` |
@@ -154,7 +160,7 @@ Se leen desde `.env` en la raiz. `FICOTOX_ENV_FILE` permite indicar otro archivo
 | `MICROSOFT_CLIENT_ID` | Client ID de Microsoft Entra ID | Vacio |
 | `MICROSOFT_TENANT_ID` | Tenant ID de Microsoft Entra ID | Vacio |
 | `MICROSOFT_ALLOWED_DOMAIN` | Dominio permitido para Microsoft | `cicese.mx` |
-| `CORS_ORIGINS` | Origenes permitidos por CORS (`*` o lista separada por comas) | `*` |
+| `CORS_ORIGINS` | Origenes permitidos por CORS (lista separada por comas o `*`); vacio = solo el mismo origen | Vacio (mismo origen) |
 | `HOST` / `PORT` | Host y puerto del lanzador standalone | `0.0.0.0` / `5000` |
 | `FICOTOX_OPEN_BROWSER` | Abrir navegador al iniciar el lanzador | `true` |
 
@@ -163,21 +169,22 @@ Se aceptan tambien los nombres anteriores `FLASK_HOST`, `FLASK_PORT` y `FLASK_OP
 Ejemplo SQLite:
 
 ```env
-SECRET_KEY=change-me
-JWT_SECRET=change-me-too
-JWT_EXPIRES_HOURS=12
+SECRET_KEY=<64 caracteres aleatorios; openssl rand -hex 32>
+JWT_SECRET=<otros 64 caracteres aleatorios>
+JWT_EXPIRES_HOURS=8
+SESION_INACTIVIDAD_MIN=30
 LOCAL_LOGIN_ENABLED=true
 MICROSOFT_AUTH_ENABLED=false
 SQLITE_PATH=instance/ficotox.sqlite3
-CORS_ORIGINS=*
+CORS_ORIGINS=
 ```
 
 Ejemplo MySQL/MariaDB:
 
 ```env
 DATABASE_URL=mysql://usuario:password@localhost:3306/ficotox
-SECRET_KEY=change-me
-JWT_SECRET=change-me-too
+SECRET_KEY=<64 caracteres aleatorios>
+JWT_SECRET=<otros 64 caracteres aleatorios>
 LOCAL_LOGIN_ENABLED=true
 MICROSOFT_AUTH_ENABLED=false
 ```
@@ -200,6 +207,14 @@ GET  /api/auth/config
 POST /api/auth/login
 POST /api/auth/microsoft
 GET  /api/auth/me
+POST /api/auth/reauth          { accion, password | id_token } -> { token, expira_en } (un solo uso, REAUTH_TTL_MIN)
+POST /api/auth/password        { actual, nueva } -> sesion nueva (las demas se cierran)
+POST /api/auth/logout-all      cerrar sesion en todos los dispositivos (token_version + 1)
+PUT  /api/auth/me/cargo        { rol_id | null } cargo predeterminado
+
+GET  /api/supervision                                  { por_supervisar, regresados }
+POST /api/supervision/<tabla>/<id>/visto-bueno         { observaciones? } (reautenticacion supervision:visto_bueno)
+POST /api/supervision/<tabla>/<id>/regresar            { observaciones } (5+ caracteres)
 ```
 
 ### 7.2 `admin`
@@ -223,7 +238,12 @@ PUT    /api/admin/usuarios/<id>                        datos de la cuenta (los r
 DELETE /api/admin/usuarios/<id>                        baja logica con motivo
 POST   /api/admin/usuarios/<id>/roles                  asignar { rol_id, vigente_desde, vigente_hasta?, motivo }
 POST   /api/admin/usuarios/<id>/roles/<asig>/revocar   revocar { motivo }
+POST   /api/admin/usuarios/<id>/desbloquear            { motivo } (reautenticacion)
+POST   /api/admin/usuarios/<id>/password               { motivo } -> { password_temporal } (se muestra una vez; cambio obligatorio)
+GET    /api/admin/accesos?desde&hasta&dias             revision de accesos; &formato=csv&seccion=cuentas|eventos
 ```
+
+- **Fase 2 · cuentas**: `tipo_cuenta` (`permanente|temporal`), `vigente_desde`, `vigente_hasta`, `supervisor_id`, `motivo_ultimo_cambio` (en el alta y en `PUT`; `motivo_cuenta` es obligatorio si cambian). Temporal exige fecha de fin y supervisor. El supervisor es una persona activa, vigente, con cuenta permanente y un rol con R o A en `ensayos` o `muestras` (por permisos); nadie se supervisa a si mismo. El rol de estudiante (`clave = estudiante`) solo va en cuentas temporales. Un rol no puede quedar vigente fuera de la vigencia de la cuenta (400); al acortar la cuenta, sus roles se acotan. Cambiar vigencia o supervisor deja `cambiar_vigencia` en la bitacora, y cada rol ajustado su propio evento: `acotar_rol` (nueva fecha de fin) o `revocar_rol` si el rol empezaba despues del nuevo fin (no quedan rangos invertidos). Extender despues la cuenta no devuelve esos roles: se reasignan.
 
 - Ver cuentas y roles: `usuarios:V`; todo lo demas: `usuarios:G`.
 - **Siempre queda un administrador**: un cambio (revocar, desactivar, dar de baja, editar permisos o desactivar un rol) que deje en cero a los usuarios activos con `usuarios:G` vigente, o que deje solo administradores con fecha de fin, responde **409** y no se aplica (`countActiveAdministrators` / `assertAdministratorRemains` en `rbac.ts`).
@@ -442,9 +462,9 @@ Helpers de API en `src/lib/client/api.ts`: `getJsonAuth`, `sendJsonAuth`, `sendF
 
 ### 9.1 JWT
 
-Los tokens se emiten en login y se firman con `JWT_SECRET` usando HS256. Desde la Fase 1 **el token solo identifica a la persona** (`sub`, `email`, `nombre`, `iat`, `exp`): los roles y permisos se calculan en cada peticion desde la base, asi que revocar o vencer un rol tiene efecto inmediato sin volver a iniciar sesion. Una cuenta desactivada recibe 403 aunque su token siga vigente.
+Los tokens se emiten en login y se firman con `JWT_SECRET` usando HS256. Desde la Fase 1 **el token solo identifica a la persona** (`sub`, `email`, `nombre`, `iat`, `exp`): los roles y permisos se calculan en cada peticion desde la base, asi que revocar o vencer un rol tiene efecto inmediato sin volver a iniciar sesion. Una cuenta desactivada o fuera de vigencia recibe 401 aunque su token siga vigente; desde la Fase 2 el token lleva `tv` (token_version) para revocarlo.
 
-El acceso local requiere correo y contrasena. Las contrasenas se guardan en `usuarios.password_hash` con scrypt (`src/lib/server/password.ts`, formato `scrypt$N$salt$hash`) y se validan en `POST /api/auth/login`; un correo inexistente o una contrasena incorrecta responden 401 con el mismo mensaje. Los usuarios se crean con contrasena desde la pantalla de Usuarios (minimo 8 caracteres) y `scripts/set-password.mjs <correo> <contrasena>` permite asignarla desde la terminal en instalaciones SQLite.
+El acceso local requiere correo y contrasena. Las contrasenas se guardan en `usuarios.password_hash` con scrypt (`src/lib/server/password.ts`, formato `scrypt$N$salt$hash`) y se validan en `POST /api/auth/login`; un correo inexistente o una contrasena incorrecta responden 401 con el mismo mensaje. Los usuarios se crean con contrasena desde la pantalla de Usuarios (minimo 10 caracteres; Fase 2) y `scripts/set-password.mjs <correo> <contrasena>` permite asignarla desde la terminal en instalaciones SQLite.
 
 Los endpoints protegidos llaman a `requireUser(request)`, que:
 
@@ -457,7 +477,7 @@ Los endpoints protegidos llaman a `requireUser(request)`, que:
 
 Detalle completo, matriz y decisiones pendientes: **`docs/CATALOGO_PERMISOS.md`**.
 
-- **Modelo**: un permiso es `(rol, modulo, accion, alcance)` en la tabla `rol_acciones` (`src/lib/shared/permisos.ts`). Modulos: `usuarios, documentos, muestras, ensayos, informes, equipos, inventario, calidad, compras`. Acciones: `V C E R A AN G` (C/E/R/A/AN implican V; G implica todas). Alcances aplicados: `total, propio, estado, recepcion, preparacion, borrador, bitacora, uso, mantenimiento, movimientos`; diferidos (se comportan como `total`, salvo en usuarios, donde son solo V): `asignado, supervisado, proyecto, tecnico, investigacion, autorizados, administrativo, limitado, incidencias, auditoria`.
+- **Modelo**: un permiso es `(rol, modulo, accion, alcance)` en la tabla `rol_acciones` (`src/lib/shared/permisos.ts`). Modulos: `usuarios, documentos, muestras, ensayos, informes, equipos, inventario, calidad, compras`. Acciones: `V C E R A AN G` (C/E/R/A/AN implican V; G implica todas). Alcances aplicados: `total, propio, estado, recepcion, preparacion, borrador, bitacora, uso, mantenimiento, movimientos`; `supervisado` se aplica desde la Fase 2 (9.2.1); diferidos (se comportan como `total`, salvo en usuarios, donde son solo V de la propia cuenta, y en calidad, donde son sin acceso): `asignado, proyecto, tecnico, investigacion, autorizados, administrativo, limitado, incidencias, auditoria`.
 - **Varios roles por persona** (`usuario_roles`, con vigencia, motivo y revocacion; nada se borra). Permisos efectivos = union de los roles vigentes hoy de roles activos. `usuarios.id_rol` se migro al arrancar ("Migración Fase 1", en la bitacora) y ya no se lee.
 - **Servidor**: cada endpoint llama `requirePermission(s, user, modulo, accion, contexto?)` (`src/lib/server/rbac.ts`), que carga la persona (activa) y sus roles vigentes desde la base, exige la accion y, con contexto, el alcance (`{ objeto, borrador, propio }`). Devuelve los alcances y los roles que otorgan la accion. `soloEstado(permiso)` recorta las respuestas de muestras con alcance `estado`. No queda ninguna verificacion por nombre de rol ni el modulo `aprobaciones`.
 - **Cargo con el que se actua**: `cargoActuante(request, permiso)` elige el rol (uno solo, o el que llega en `X-Actuar-Como`; si hay varios y no llega, 409 `ELEGIR_CARGO` con las opciones). El cliente (`src/lib/client/api.ts` + `ActuarComoProvider`) pide "Actuar como" y repite la peticion. Se guarda en `creado_rol_id/creado_cargo`, `revisado_*`, `aprobado_*`, `autorizado_*`, `elaborado_*`, `anulado_*`, `entrega_json` y en la bitacora (`actuo_como`).
@@ -468,9 +488,38 @@ Detalle completo, matriz y decisiones pendientes: **`docs/CATALOGO_PERMISOS.md`*
 
 La accion `AN` significa anular o dar de baja con motivo: ningun endpoint de registros tecnicos o de inventario borra filas (la unica excepcion son los roles que nunca se asignaron, que si se eliminan y quedan en la bitacora como `eliminar`). Un reactivo o consumible dado de baja no se puede **elegir de nuevo** (409), pero un registro que ya lo declaraba se sigue pudiendo reabrir y guardar.
 
+### 9.2.1 Seguridad de cuentas y sesiones (Fase 2)
+
+Codigo: `src/lib/server/seguridad.ts` (intentos, bloqueo, reautenticacion), `rbac.ts` (`cargarAutorizacion`), `supervision.ts`, `src/lib/shared/secretos.mjs`, `src/instrumentation.ts`; en el cliente `src/lib/client/api.ts`, `src/components/session/Reautenticar.tsx`, `SesionInactiva.tsx`, `CambiarPassword.tsx`.
+
+- **Fechas de filtros**: los filtros por dia de la bitacora y de la revision de accesos usan el dia local del servidor (`inicioDiaLocal`/`finDiaLocal` en `rbac.ts`), aunque `fecha_hora` se guarda en UTC.
+- **Validacion por peticion** (`cargarAutorizacion`): la cuenta existe, esta activa, dentro de su vigencia (`vigente_desde/hasta`) y el claim `tv` del JWT coincide con `usuarios.token_version`. Si no: 401 `sesion_revocada` o `cuenta_no_vigente` ("Tu acceso no está vigente; contacta al administrador"). Con `debe_cambiar_password` solo se permiten `/auth/me` y `/auth/password` (403 `cambiar_password`).
+- **`token_version`** sube con: cerrar sesion en todos los dispositivos, baja de la cuenta, cambio o restablecimiento de contrasena y bloqueo. Todo token anterior deja de valer.
+- **Bloqueo** (tabla `intentos_acceso`): `LOGIN_MAX_INTENTOS` fallos (login o reautenticacion) en `LOGIN_VENTANA_MIN` bloquean la cuenta `LOGIN_BLOQUEO_MIN` (`usuarios.bloqueado_hasta`); `LOGIN_IP_MAX_INTENTOS` fallos desde una IP la bloquean (429 `ip_bloqueada`). El mensaje es el mismo exista o no la cuenta (los correos inexistentes tambien se bloquean por correo). `usuarios:G` desbloquea con motivo. Reactivar una cuenta dada de baja tambien exige reautenticacion; un guardado de usuario con varios cambios criticos pide una sola. Eventos `login_fallido`, `reauth_fallida`, `bloquear`, `desbloquear`. Un intento rechazado por un bloqueo vigente (de la cuenta o de la IP) **no cuenta** como fallo: un bloqueo de IP no bloquea cuentas ajenas ni se prolonga solo. Microsoft solo respeta el bloqueo de la cuenta. **IP**: con el lanzador de produccion (`scripts/start-ficotox.mjs`) y sin proxy, `scripts/ip-real.mjs` (precargado con `--import`) sobrescribe `X-Forwarded-For` con la direccion del socket, asi que cada equipo cuenta por separado y el cliente no puede elegir su IP. Detras de un proxy propio usa `TRUST_PROXY=true` para que la IP sea la que fija el proxy. Con `next dev`/`next start` directos, Next solo rellena el encabezado si falta: un cliente podria falsificarlo (eludir el limite por IP o bloquear otra IP; el bloqueo por cuenta no cambia), por eso en produccion se usa el lanzador o un proxy.
+- **Reautenticacion** (tabla `reautenticaciones`, solo el hash SHA-256 del token): `exigirReauth(s, request, user, "modulo:accion")` en toda accion A y AN (anular, restaurar, dar de baja, cancelar, cerrar muestra, aprobar, autorizar, entregar), reactivar (G), visto bueno y en usuarios (asignar/revocar roles, alta de cuenta, cambiar vigencia o supervisor, permisos de un rol, desbloquear, restablecer o fijar la contrasena de otra persona, baja). Sin encabezado `X-Reauth`: 401 `reauth_required` con la `accion`; token vencido, usado, de otra persona o de otra accion: 401 `reauth_invalido`. El token se marca usado dentro de la transaccion (si el handler falla, el rollback lo libera). Con Microsoft: MSAL `prompt=login` (pidiendo la claim `auth_time` como esencial) y el servidor exige `auth_time` dentro de `REAUTH_TTL_MIN` y que el `id_token` no se haya usado antes (tabla `reauth_idtokens`, solo su hash). Si el registro de la aplicacion en Entra ID no emite `auth_time` en el `id_token`, agregala como *optional claim* del token de identidad; sin ella la reautenticacion con Microsoft se rechaza. En la interfaz la contrasena se pide en el mismo dialogo de confirmacion (`usePrompt({ critico: true })`, `SignDialog critico`); si no, `ReautenticarProvider` la pide sin salir del formulario.
+- **Sesiones**: JWT de `JWT_EXPIRES_HOURS` (8 h). Riesgo aceptado: el cierre por inactividad es del navegador; un token copiado sigue valiendo en el servidor hasta que expira (8 h) o sube `token_version` (cerrar en todos los dispositivos, baja, contrasena, bloqueo). Cierre por inactividad en el cliente (`SESION_INACTIVIDAD_MIN`, aviso 1 min antes, actividad compartida entre pestanas): se descarta el token y la pagina queda bajo una pantalla de bloqueo; al volver a entrar se conserva lo capturado.
+- **Contrasenas**: minimo 10 caracteres, distinta del correo, de su parte local y del nombre. Restablecer genera una temporal y obliga a cambiarla. Nunca se escriben contrasenas ni hashes en la bitacora (`password_hash` es campo volatil).
+- **Alcance `supervisado`** (`supervision.ts`): lo que crea o edita una persona cuya operacion solo cubre `supervisado`, o cuya cuenta es temporal con supervisor, queda `supervision_estado = 'pendiente'` con el `supervisor_id` de su cuenta. Mientras esta pendiente o regresado no sirve de origen de la etapa siguiente, no se cierra, no se revisa, aprueba ni autoriza, y un mantenimiento no se marca completado (409 `supervision_pendiente`). Solo el supervisor asignado da el visto bueno (reautenticacion) o lo regresa con observaciones; ambos quedan en la bitacora. Tablas: las 4 del flujo de muestras, `informes`, `equipos`, `mantenimientos`, `reactivos`, `consumibles`.
+- **Origen obligatorio** (`assertOrigin(..., { requerido })`): procesamiento <- recepcion aceptada; extraccion <- procesamiento; analisis <- extraccion (plancton/otro, al menos procesamiento); informe <- recepcion. Se valida al crear y al editar (400 `origen_requerido`, 409 si el origen esta anulado, rechazado o pendiente de supervision).
+- **Secretos**: en produccion (`NODE_ENV=production`) `src/instrumentation.ts` (que importa `instrumentation-node.ts` solo en el runtime Node.js) y `scripts/start-ficotox.mjs` detienen el arranque si `JWT_SECRET` falta, es un valor por defecto o mide menos de 32 caracteres.
+- **CORS**: sin `CORS_ORIGINS` solo se atiende el mismo origen (sin encabezados CORS).
+
 ### 9.3 Microsoft Entra ID
 
 El login Microsoft valida el `id_token` con las claves JWKS del tenant (`jose`), `audience` contra `MICROSOFT_CLIENT_ID`, `issuer` contra el tenant, el dominio permitido y la existencia del usuario en `usuarios`.
+
+### 9.5 Llave de la bitacora
+
+**Nunca vacies ni cambies una `SECRET_KEY` existente** (aunque sea un valor de ejemplo como `change-me`) sin seguir la migracion de abajo: la instalacion que la uso ya sello su bitacora con ella. El `.env.example` la trae vacia solo para instalaciones nuevas.
+
+La bitacora se sella con HMAC-SHA256 encadenado (`src/lib/shared/audit-chain.mjs`). La llave es `SECRET_KEY` si esta definida y no es `ficotox-dev-secret`; si no, `instance/auditoria.key` (se crea al azar la primera vez). **La llave nunca se cambia sola**: al arrancar y en `/auditoria` (`GET /api/audit/verify` -> `llave: { origen, advertencias }`) solo se advierte si falta o es corta. Respalda `.env` o `instance/auditoria.key` junto con la base.
+
+Migrar la llave (solo si es imprescindible, con el servidor detenido):
+
+1. Respaldar la base y el `.env` / `auditoria.key` actuales.
+2. Verificar la cadena con la llave actual (`/auditoria` en verde).
+3. Dejar constancia: la cadena anterior se conserva sellada con la llave vieja; guarda esa llave en custodia (sin ella no se puede volver a verificar lo anterior).
+4. Configurar la llave nueva y, antes de atender peticiones, agregar una entrada de corte que declare el cambio. Mientras no exista una herramienta de "resellado" versionada, **no cambies la llave** en una instalacion con datos: la verificacion de toda la cadena anterior fallaria.
 
 ## 10. Base de datos
 

@@ -14,6 +14,10 @@
  *     con --actualizar-permisos.
  *   - Un usuario se busca por correo y no se duplica ni se cambia su contrasena;
  *     si no tiene su rol del catalogo vigente, se le asigna.
+ *   - Fase 2: una persona con `"temporal": { "meses": 6, "supervisor": "correo" }`
+ *     se da de alta como cuenta temporal (fin de vigencia a N meses y supervisor);
+ *     su rol vence con la cuenta. El rol de estudiante / personal en formacion
+ *     exige cuenta temporal.
  * - Todo queda en la bitacora (actor "sistema", motivo --motivo o "Catálogo de
  *   roles Fase 1"), sellado con src/lib/shared/audit-chain.mjs, la misma
  *   implementacion que usa el servidor. Al terminar se recalcula la cadena.
@@ -102,7 +106,10 @@ const errores = [];
 for (const persona of personas) {
   if (!rolesPorNombre.has(persona.rol)) errores.push(`${persona.email}: el rol "${persona.rol}" no esta en roles-catalogo.json`);
   if (!persona.nombre || !persona.email) errores.push(`Falta nombre o correo en ${JSON.stringify(persona)}`);
-  const debil = validatePasswordStrength(String(persona.password || ""));
+  const debil = validatePasswordStrength(String(persona.password || ""), { email: persona.email, nombre: persona.nombre });
+  const rolCat = rolesPorNombre.get(persona.rol);
+  if (rolCat?.clave === "estudiante" && !persona.temporal) errores.push(`${persona.email}: el rol "${persona.rol}" requiere cuenta temporal ("temporal": { "meses": N, "supervisor": "correo" })`);
+  if (persona.temporal && (!Number(persona.temporal.meses) || !persona.temporal.supervisor)) errores.push(`${persona.email}: "temporal" necesita "meses" y "supervisor"`);
   if (debil || persona.password === "CAMBIAR") errores.push(`${persona.email}: ${debil || "escribe una contrasena real"}`);
 }
 if (errores.length) fail(`Revisa ${path.relative(rootDir, usuariosFile)}:\n- ${errores.join("\n- ")}`);
@@ -118,6 +125,11 @@ const Database = require("better-sqlite3");
 const db = new Database(sqlitePath);
 const tablas = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name));
 const faltan = ["roles", "rol_acciones", "usuario_roles", "usuarios", "auditoria"].filter((tabla) => !tablas.has(tabla));
+const columnasUsuarios = tablas.has("usuarios") ? db.prepare("PRAGMA table_info(usuarios)").all().map((c) => c.name) : [];
+if (personas.some((p) => p.temporal) && !columnasUsuarios.includes("tipo_cuenta")) {
+  db.close();
+  fail("La base no tiene las columnas de cuentas temporales de la Fase 2 (usuarios.tipo_cuenta).\nArranca FICOTOX una vez y abre /api/health/db para crearlas; luego detenlo y repite.");
+}
 const columnasRoles = tablas.has("roles") ? db.prepare("PRAGMA table_info(roles)").all().map((c) => c.name) : [];
 if (faltan.length || !columnasRoles.includes("clave")) {
   db.close();
@@ -200,11 +212,23 @@ const alta = db.transaction(() => {
     const vigente = db
       .prepare("SELECT id FROM usuario_roles WHERE usuario_id = ? AND rol_id = ? AND revocado_en IS NULL AND (vigente_hasta IS NULL OR vigente_hasta >= ?) LIMIT 1")
       .get(usuario.id, roleId, hoy);
+    // Cuenta temporal (Fase 2): fin de vigencia y supervisor; el rol vence con la cuenta.
+    let hasta = usuario.vigente_hasta || null;
+    if (persona.temporal && String(usuario.tipo_cuenta || "permanente") !== "temporal") {
+      const supervisor = db.prepare("SELECT id FROM usuarios WHERE LOWER(email) = LOWER(?) LIMIT 1").get(String(persona.temporal.supervisor).trim());
+      if (!supervisor) throw new Error(`${email}: el supervisor ${persona.temporal.supervisor} no existe (dalo de alta antes en el archivo)`);
+      const fin = new Date();
+      fin.setMonth(fin.getMonth() + Number(persona.temporal.meses));
+      hasta = fin.toLocaleDateString("en-CA");
+      const antes = db.prepare("SELECT * FROM usuarios WHERE id = ?").get(usuario.id);
+      db.prepare("UPDATE usuarios SET tipo_cuenta = 'temporal', vigente_hasta = ?, supervisor_id = ?, motivo_ultimo_cambio = ? WHERE id = ?").run(hasta, supervisor.id, MOTIVO, usuario.id);
+      auditar({ accion: "cambiar_vigencia", entidad: "usuarios", entidadId: usuario.id, referencia: email, antes, despues: db.prepare("SELECT * FROM usuarios WHERE id = ?").get(usuario.id), detalle: { tipo_cuenta: "temporal", vigente_hasta: hasta, supervisor_id: supervisor.id } });
+    }
     if (vigente) continue;
     const { lastInsertRowid } = db
-      .prepare("INSERT INTO usuario_roles (usuario_id, rol_id, vigente_desde, vigente_hasta, motivo, asignado_por, asignado_en) VALUES (?, ?, ?, NULL, ?, NULL, ?)")
-      .run(usuario.id, roleId, hoy, MOTIVO, new Date().toISOString());
-    auditar({ accion: "asignar_rol", entidad: "usuarios", entidadId: usuario.id, referencia: email, detalle: { rol: persona.rol, rol_id: roleId, asignacion_id: Number(lastInsertRowid), vigente_desde: hoy, vigente_hasta: null } });
+      .prepare("INSERT INTO usuario_roles (usuario_id, rol_id, vigente_desde, vigente_hasta, motivo, asignado_por, asignado_en) VALUES (?, ?, ?, ?, ?, NULL, ?)")
+      .run(usuario.id, roleId, hoy, hasta, MOTIVO, new Date().toISOString());
+    auditar({ accion: "asignar_rol", entidad: "usuarios", entidadId: usuario.id, referencia: email, detalle: { rol: persona.rol, rol_id: roleId, asignacion_id: Number(lastInsertRowid), vigente_desde: hoy, vigente_hasta: hasta } });
     resumen.asignaciones.push(`${email} → ${persona.rol}`);
   }
 });

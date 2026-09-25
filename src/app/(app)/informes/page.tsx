@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { ArrowSquareOut, FilePdf, FileText, Plus } from "@phosphor-icons/react";
-import { FolioChip, StateBadge } from "@/components/features/samples/status";
+import { FolioChip, StateBadge, SupervisionBadge } from "@/components/features/samples/status";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
@@ -146,6 +146,7 @@ function InformesContent() {
                   <Td muted>{item.autorizado_nombre || "-"}</Td>
                   <Td>
                     <StateBadge kind="informe" status={item.estado} />
+                    <SupervisionBadge estado={item.supervision_estado} />
                     {item.estado === "entregado" && (item.entrega as ApiRecord)?.fecha ? <p className="mt-0.5 text-[11.5px] text-ink-3">Entregado {fmtDate((item.entrega as ApiRecord).fecha)}</p> : null}
                   </Td>
                   <Td align="right" sticky onClick={(event) => event.stopPropagation()}>

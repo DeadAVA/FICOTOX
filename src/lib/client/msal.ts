@@ -63,3 +63,15 @@ export const logoutMicrosoft = (): void => {
     msalClient.logoutPopup({ account }).catch(() => {});
   }
 };
+
+/*
+ * Reautenticacion con Microsoft (Fase 2): vuelve a pedir la contrasena de
+ * Microsoft (prompt=login) y devuelve el id_token; el servidor valida que el
+ * auth_time sea reciente.
+ */
+export const reautenticarConMicrosoft = async (authConfig: AuthConfig, email?: string): Promise<string> => {
+  const client = await getMsalClient(authConfig);
+  const result = await client.loginPopup({ scopes: ["openid", "profile", "email"], prompt: "login", loginHint: email, claims: JSON.stringify({ id_token: { auth_time: { essential: true } } }) });
+  if (!result.idToken) throw new Error("Microsoft no devolvió un token de identidad");
+  return result.idToken;
+};

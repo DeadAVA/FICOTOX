@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ArrowCounterClockwise, ArrowSquareOut, Drop, PencilSimple, Plus, Prohibit } from "@phosphor-icons/react";
-import { FolioChip, SampleStatus } from "@/components/features/samples/status";
+import { FolioChip, SampleStatus, SupervisionBadge } from "@/components/features/samples/status";
 import { useAnulacion } from "@/components/features/samples/useAnulacion";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
@@ -158,6 +158,7 @@ function ProcesamientoList() {
                     <Td muted>{ORGANISMO[organismoDe(item)] || organismoDe(item) || "—"}</Td>
                     <Td>
                       <SampleStatus status={item.estado} />
+                      <SupervisionBadge estado={item.supervision_estado} />
                     </Td>
                     <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
                       <ActionMenu items={menuFor(item)} header={`${formatProcessingFolio(item)} · ${item.id_interno || "lote"}`} />

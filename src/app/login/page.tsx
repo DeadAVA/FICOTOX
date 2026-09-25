@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Eye, EyeSlash, WindowsLogo } from "@phosphor-icons/react";
 import { BrandMark } from "@/components/shell/Brand";
-import { useSession } from "@/components/session/SessionProvider";
+import { AVISO_LOGIN_KEY, useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { loginWithMicrosoft } from "@/lib/client/msal";
@@ -25,6 +25,20 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [msBusy, setMsBusy] = useState(false);
+  // Fase 2: por que se cerro la sesion (revocada, cuenta fuera de vigencia...).
+  const [aviso, setAviso] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const mensaje = window.sessionStorage.getItem(AVISO_LOGIN_KEY);
+      if (mensaje) {
+        window.sessionStorage.removeItem(AVISO_LOGIN_KEY);
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- lectura unica de sessionStorage al montar
+        setAviso(mensaje);
+      }
+    } catch {
+      /* sin almacenamiento */
+    }
+  }, []);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -73,6 +87,12 @@ export default function LoginPage() {
         </h1>
         <p className="mt-1.5 text-center text-[15px] text-ink-2">Sistema Integrado de Gestión de Laboratorio</p>
         <p className="eyebrow mt-3 text-ink-3">LN-FICOTOX · CICESE</p>
+
+        {aviso ? (
+          <p role="status" className="mt-8 w-full rounded-[10px] bg-warning-soft px-3 py-2 text-center text-[13px] text-warning-text">
+            {aviso}
+          </p>
+        ) : null}
 
         {manualEnabled ? (
           <form onSubmit={handleSubmit} className="mt-10 flex w-full flex-col gap-4" noValidate>

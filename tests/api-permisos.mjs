@@ -6,6 +6,7 @@
  * no amplia por su cuenta lo que un rol puede hacer: un permiso ausente
  * significa "no concedido", no "pendiente de configurar".
  */
+import "./lib/reauth-auto.mjs";
 const BASE = process.env.BASE || "http://localhost:3100/api";
 const results = [];
 const check = (name, ok, detail = "") => {

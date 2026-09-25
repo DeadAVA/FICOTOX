@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/Primitives";
 import { HIDDEN_MODULES } from "@/lib/shared/features";
 import { ACCIONES, ACCION_KEYS, ALCANCES, MODULOS, alcanceLabel, firmaFilas, type Accion, type PermisoFila } from "@/lib/shared/permisos";
 import { REGLAS_COMBINACION } from "@/lib/shared/combinaciones-roles";
-import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
+import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
+import { CampoIdentidad } from "@/components/session/Reautenticar";
 import { fmtDate } from "@/lib/client/format";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
@@ -80,7 +81,7 @@ export function RoleSheet({ open, role, initialPermisos, usuarios = [], readOnly
     const cambiaPermisos = editing && (firmaFilas(initialPermisos) !== firmaFilas(permisos) || !!role?.activo !== activo);
     let motivo: string | null = null;
     if (cambiaPermisos) {
-      motivo = await prompt({ title: "Motivo del cambio de permisos", description: "Queda en la bitácora junto con los permisos antes y después.", label: "Motivo", minLength: 5, confirmLabel: "Guardar cambios" });
+      motivo = await prompt({ critico: true, title: "Motivo del cambio de permisos", description: "Queda en la bitácora junto con los permisos antes y después.", label: "Motivo", minLength: 5, confirmLabel: "Guardar cambios" });
       if (!motivo) return;
     }
     const payload = { nombre: nombre.trim(), descripcion: descripcion.trim(), activo, permisos, ...(motivo ? { motivo } : {}) };
@@ -263,6 +264,15 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
   const [asignaciones, setAsignaciones] = useState<ApiRecord[]>((item?.asignaciones || []) as ApiRecord[]);
   const [nueva, setNueva] = useState({ rol_id: "", desde: hoyLocal(), hasta: "", motivo: "" });
   const [asignando, setAsignando] = useState(false);
+  // Fase 2: vigencia de la cuenta y supervisor (temporal => fin y supervisor obligatorios).
+  const [tipoCuenta, setTipoCuenta] = useState<string>(String(item?.tipo_cuenta || "permanente"));
+  const [cuentaDesde, setCuentaDesde] = useState(String(item?.vigente_desde || ""));
+  const [cuentaHasta, setCuentaHasta] = useState(String(item?.vigente_hasta || ""));
+  const [supervisorId, setSupervisorId] = useState(item?.supervisor_id ? String(item.supervisor_id) : "");
+  const [motivoCuenta, setMotivoCuenta] = useState("");
+  const [personas, setPersonas] = useState<ApiRecord[]>([]);
+  // Contrasena de quien administra: confirma la identidad en la misma hoja (reautenticacion).
+  const [clave, setClave] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editing = !!item?.id;
@@ -274,7 +284,20 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
     getJsonAuth(`${API_BASE_URL}/admin/roles`, token)
       .then((data) => setRoles(((data.items || []) as ApiRecord[]).filter((role) => !!role.activo)))
       .catch(() => setRoles([]));
-  }, [open, token, puedeAdministrar]);
+    // Posibles supervisores: cuentas activas y permanentes (el servidor valida que tengan R o A en ensayos o muestras).
+    getJsonAuth(`${API_BASE_URL}/admin/usuarios`, token)
+      .then((data) => setPersonas(((data.items || []) as ApiRecord[]).filter((u) => !!u.activo && String(u.tipo_cuenta || "permanente") !== "temporal" && !u.vigente_hasta && Number(u.id) !== Number(item?.id))))
+      .catch(() => setPersonas([]));
+  }, [open, token, puedeAdministrar, item?.id]);
+
+  const cambiaCuenta =
+    editing &&
+    (String(item?.tipo_cuenta || "permanente") !== tipoCuenta ||
+      String(item?.vigente_desde || "") !== cuentaDesde ||
+      String(item?.vigente_hasta || "") !== cuentaHasta ||
+      String(item?.supervisor_id || "") !== supervisorId);
+  // Pide la contrasena en la hoja cuando el guardado es critico: alta (asigna rol), cambio de vigencia o supervisor, baja o fijar la contrasena de otra persona.
+  const guardadoCritico = !editing || cambiaCuenta || (editing && !!item?.activo && !activo) || (editing && !!password && !esPropia);
 
   const userId = item?.id;
   const recargar = async () => {
@@ -321,10 +344,26 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
       setError("Define una contraseña inicial");
       return;
     }
-    if (password && password.length < 8) {
-      setError("La contraseña debe tener al menos 8 caracteres");
+    if (password && password.length < 10) {
+      setError("La contraseña debe tener al menos 10 caracteres");
       return;
     }
+    payload.tipo_cuenta = tipoCuenta;
+    payload.vigente_desde = cuentaDesde || null;
+    payload.vigente_hasta = cuentaHasta || null;
+    payload.supervisor_id = supervisorId ? Number(supervisorId) : null;
+    if (tipoCuenta === "temporal" && (!cuentaHasta || !supervisorId)) {
+      setError("Una cuenta temporal necesita fecha de fin y supervisor");
+      return;
+    }
+    if (cambiaCuenta) {
+      if (motivoCuenta.trim().length < 5) {
+        setError("Indica el motivo del cambio de vigencia o supervisor (al menos 5 caracteres)");
+        return;
+      }
+      payload.motivo_cuenta = motivoCuenta.trim();
+    }
+    if (guardadoCritico) armarReauth(clave ? { password: clave } : null);
     setSubmitting(true);
     setError(null);
     try {
@@ -347,6 +386,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
   const asignar = async () => {
     if (!nueva.rol_id) return toast.error("Elige el rol a asignar");
     if (nueva.motivo.trim().length < 5) return toast.error("Indica el motivo de la asignación (al menos 5 caracteres)");
+    armarReauth(clave ? { password: clave } : null);
     setAsignando(true);
     try {
       await sendJsonAuth("POST", `${API_BASE_URL}/admin/usuarios/${item!.id}/roles`, token, { rol_id: Number(nueva.rol_id), vigente_desde: nueva.desde || null, vigente_hasta: nueva.hasta || null, motivo: nueva.motivo.trim() });
@@ -362,7 +402,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
   };
 
   const revocar = async (asignacion: ApiRecord) => {
-    const motivo = await prompt({ title: `Revocar el rol "${asignacion.rol}"`, description: "La asignación se conserva en el historial como revocada; los permisos dejan de contar de inmediato.", label: "Motivo", minLength: 5, confirmLabel: "Revocar", tone: "danger" });
+    const motivo = await prompt({ critico: true, title: `Revocar el rol "${asignacion.rol}"`, description: "La asignación se conserva en el historial como revocada; los permisos dejan de contar de inmediato.", label: "Motivo", minLength: 5, confirmLabel: "Revocar", tone: "danger" });
     if (!motivo) return;
     try {
       await sendJsonAuth("POST", `${API_BASE_URL}/admin/usuarios/${item!.id}/roles/${asignacion.id}/revocar`, token, { motivo });
@@ -434,24 +474,62 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
                 <Field label="Avatar" hint={editing ? "La persona también puede cambiarlo desde Mi cuenta." : "Si no eliges uno, se asigna al azar."} className="sm:col-span-2">
                   <AvatarPicker value={avatar} seed={email.trim().toLowerCase() || nombre.toLowerCase()} onChange={setAvatar} size={44} />
                 </Field>
-                <Field label={editing ? "Nueva contraseña" : "Contraseña"} htmlFor="u-password" required={!editing} hint={editing ? "Déjala vacía para conservar la actual." : "Mínimo 8 caracteres."} className="sm:col-span-2">
-                  <Input
-                    id="u-password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    trailing={
-                      <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"} className="rounded-full p-1 text-ink-3 hover:bg-surface-2 hover:text-ink">
-                        {showPassword ? <EyeSlash size={16} /> : <Eye size={16} />}
-                      </button>
-                    }
-                  />
-                </Field>
+                {esPropia ? (
+                  <p className="text-[12.5px] text-ink-3 sm:col-span-2">Tu propia contraseña se cambia en Mi cuenta › Cambiar contraseña.</p>
+                ) : (
+                  <Field label={editing ? "Nueva contraseña" : "Contraseña"} htmlFor="u-password" required={!editing} hint={editing ? "Déjala vacía para conservar la actual. Si la cambias, la persona deberá cambiarla al entrar." : "Mínimo 10 caracteres; distinta del correo y del nombre."} className="sm:col-span-2">
+                    <Input
+                      id="u-password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      trailing={
+                        <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"} className="rounded-full p-1 text-ink-3 hover:bg-surface-2 hover:text-ink">
+                          {showPassword ? <EyeSlash size={16} /> : <Eye size={16} />}
+                        </button>
+                      }
+                    />
+                  </Field>
+                )}
               </>
             ) : null}
           </FormGrid>
           {puedeAdministrar ? <Switch checked={activo} onCheckedChange={setActivo} label="Usuario activo" description="Un usuario inactivo conserva su historial pero no puede entrar." /> : null}
+
+          <Panel title="Vigencia de la cuenta" description="Una cuenta temporal (estudiantes, estancias) necesita fecha de fin y un supervisor; fuera de su vigencia no puede entrar y sus roles no pueden durar más que la cuenta.">
+            <FormGrid>
+              <Field label="Tipo de cuenta" htmlFor="u-tipo-cuenta">
+                <Select id="u-tipo-cuenta" value={tipoCuenta} onChange={(event) => setTipoCuenta(event.target.value)}>
+                  <option value="permanente">Permanente</option>
+                  <option value="temporal">Temporal</option>
+                </Select>
+              </Field>
+              <Field label="Supervisor" htmlFor="u-supervisor" required={tipoCuenta === "temporal"} hint="Persona con cuenta permanente que revisa y aprueba en ensayos o muestras.">
+                <Select id="u-supervisor" value={supervisorId} onChange={(event) => setSupervisorId(event.target.value)}>
+                  <option value="">Sin supervisor</option>
+                  {personas.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre || p.email}
+                    </option>
+                  ))}
+                  {supervisorId && !personas.some((p) => String(p.id) === supervisorId) ? <option value={supervisorId}>{String(item?.supervisor_nombre || `Usuario #${supervisorId}`)}</option> : null}
+                </Select>
+              </Field>
+              <Field label="Vigente desde" htmlFor="u-cuenta-desde" hint="Opcional">
+                <Input id="u-cuenta-desde" type="date" value={cuentaDesde} onChange={(event) => setCuentaDesde(event.target.value)} />
+              </Field>
+              <Field label="Vigente hasta" htmlFor="u-cuenta-hasta" required={tipoCuenta === "temporal"} hint={tipoCuenta === "temporal" ? undefined : "Opcional"}>
+                <Input id="u-cuenta-hasta" type="date" value={cuentaHasta} onChange={(event) => setCuentaHasta(event.target.value)} />
+              </Field>
+              {cambiaCuenta ? (
+                <Field label="Motivo del cambio de vigencia o supervisor" htmlFor="u-motivo-cuenta" required hint="Queda en la bitácora." className="sm:col-span-2">
+                  <Input id="u-motivo-cuenta" maxLength={300} value={motivoCuenta} onChange={(event) => setMotivoCuenta(event.target.value)} />
+                </Field>
+              ) : null}
+            </FormGrid>
+          </Panel>
+          {puedeAdministrar && guardadoCritico ? <CampoIdentidad value={clave} onChange={setClave} id="u-clave-admin" /> : null}
         </fieldset>
       </form>
 
@@ -527,6 +605,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
                   <Input id="u-asignar-hasta" type="date" value={nueva.hasta} onChange={(event) => setNueva((prev) => ({ ...prev, hasta: event.target.value }))} />
                 </Field>
               </FormGrid>
+              {!guardadoCritico ? <CampoIdentidad value={clave} onChange={setClave} id="u-clave-asignar" /> : null}
               <div>
                 <Button icon={<Plus size={14} weight="bold" />} onClick={asignar} loading={asignando}>
                   Asignar rol

@@ -22,7 +22,7 @@ import { ANALYSIS_METHODS, ANALYSIS_STATES, ANALYSIS_TYPES, CONFORMITY_OPTIONS }
 import { Callout, ChoiceCard, ChoiceGrid, FieldGroup, FlowSteps, FormCard, FormPage, Panel, PersonCard, SignoffCard, missingMessage, missingSections, openFormSection, type FormSectionDef } from "./FormLayout";
 import { InsumoSearch, InventarioRows, collectInventarioRows, newInventarioRow } from "./InsumoSearch";
 import { SignDialog } from "./SignDialog";
-import { FolioChip } from "./status";
+import { FolioChip, SupervisionCallout } from "./status";
 import { useAnulacion } from "./useAnulacion";
 
 /*
@@ -475,6 +475,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
           <FlowSteps steps={FLOW_STEPS} current={estado} failed={anulado ? "Anulado" : undefined} />
         </div>
       ) : null}
+      <SupervisionCallout item={item} />
       {item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">
           Motivo: {String(item.motivo_anulacion)}
@@ -749,6 +750,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
         confirmLabel={sign === "revisar" ? "Marcar revisado" : "Aprobar"}
         withObservaciones={sign === "revisar"}
         loading={signing}
+        critico={sign === "aprobar"}
         onConfirm={doSign}
       />
     </FormPage>
