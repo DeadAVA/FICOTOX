@@ -1,6 +1,6 @@
 # Catálogo de permisos de FICOTOX
 
-**Estado final vigente (Fases 9 y 10).** Refleja el sistema tras las fases 0–7 y 9 (la Fase 8 —incidencias, auditorías internas, compras y proyectos— no está implementada; sus alcances siguen diferidos). Pendientes y decisiones por validar consolidados en `docs/PENDIENTES.md`.
+**Estado final vigente (Fases 9, 10 y 11).** Refleja el sistema tras las fases 0–7, 9, 10 y 11. La Fase 11 implementa incidencias, no conformidades y acciones correctivas (la primera parte de la antigua Fase 8) y aplica el alcance `incidencias`; auditorías internas, compras y proyectos siguen pendientes y sus alcances diferidos. Pendientes y decisiones por validar consolidados en `docs/PENDIENTES.md`.
 
 Especificación de origen: "Roles y permisos FICOTOX" (FX-MO-2-1), sección 5, con las decisiones anotadas desde la Fase 1. Fuente en el código:
 
@@ -23,7 +23,7 @@ Especificación de origen: "Roles y permisos FICOTOX" (FX-MO-2-1), sección 5, c
 | `informes` | Informes de resultados |
 | `equipos` | Equipos y mantenimientos (y reportes de mantenimiento) |
 | `inventario` | Reactivos, consumibles y movimientos |
-| `calidad` | Bitácora de auditoría (en Fase 8: incidencias, no conformidades, auditorías internas) |
+| `calidad` | Bitácora de auditoría; incidencias, no conformidades y acciones correctivas (Fase 11); auditorías internas (posterior) |
 | `compras` | Sin pantallas aún (Fase 8); solo existe en el catálogo |
 
 El módulo `aprobaciones` desapareció: revisar y aprobar son acciones de `ensayos`, `informes` y `documentos`. Los módulos de la Fase 0 quedan inactivos en la tabla `permisos` (no se borran). El **Inicio** lo ve toda persona activa; sus paneles y avisos se filtran por el permiso V de cada módulo, y en "En curso" el siguiente paso de un flujo solo aparece como botón si la persona tiene el permiso de darlo (si no, "Pendiente: …").
@@ -64,7 +64,19 @@ El módulo `aprobaciones` desapareció: revisar y aprobar son acciones de `ensay
 | Alta / edición / importación de reactivos y consumibles | `inventario:C` / `inventario:E` |
 | Reponer stock (registra movimiento) | `inventario:C` (alcance `movimientos` basta) |
 | Baja / reactivar reactivo o consumible | `inventario:AN` / `inventario:G` |
-| Bitácora y "Verificar integridad" | `calidad:V` |
+| Bitácora y "Verificar integridad" | `calidad:V` (con alcance `incidencias` no: 403) |
+| Reportar incidencia (Fase 11) | `calidad:C` con cualquier alcance; **nunca sujeto a visto bueno** (cuenta supervisada o temporal incluida) |
+| Ver incidencias y NC (Fase 11) | `calidad:V` total; con `incidencias`, solo las incidencias propias y las NC o acciones donde es responsable (lo ajeno responde 404). `bitacora` (Admin técnico) no las ve |
+| Evaluar incidencia: cerrar sin NC o escalar (Fase 11) | `calidad:R` (regla 7) |
+| Crear NC directa (Fase 11) | `calidad:R` o `calidad:G` |
+| Editar NC: impacto, causa, acciones, comunicaciones, informes afectados (Fase 11) | `calidad:G`, o el responsable de la NC con `calidad:C` o superior, mientras no esté cerrada; nombrar o cambiar al responsable, solo `calidad:G` (con motivo) |
+| Marcar una acción correctiva como iniciada o implementada (Fase 11) | su responsable o `calidad:G` |
+| Verificar eficacia (Fase 11) | `calidad:R` (regla 8) |
+| Suspender método o equipo, retener informe (Fase 11) | `calidad:R` |
+| Reanudar, liberar retención (Fase 11) | `calidad:A` + reautenticación (regla 10 en reanudar) |
+| Cerrar NC (Fase 11) | `calidad:A` + reautenticación (regla 9) |
+| Anular incidencia o NC (Fase 11) | `calidad:AN` + reautenticación, acción crítica con segundo usuario (`anular_calidad`) |
+| Indicadores de calidad (Fase 11) | `calidad:V` total |
 | Ver usuarios y roles | `usuarios:V` |
 | Alta / edición / baja de cuentas, asignar y revocar roles, configurar roles | `usuarios:G` |
 | Respaldos: ver (solo lectura) | `usuarios:G` o `calidad:V` (Fase 10) |
@@ -85,7 +97,8 @@ Un permiso es `(rol, módulo, acción, alcance)`. `total` = sin límite.
 | `recepcion` | En muestras: C/E solo sobre recepción. |
 | `preparacion` | En ensayos: C/E solo sobre procesamiento (extracción y análisis → 403). |
 | `borrador` | C/E solo mientras el registro está en borrador o registrado. |
-| `bitacora` | En calidad: solo la bitácora de auditoría. |
+| `bitacora` | En calidad: solo la bitácora de auditoría (no incidencias ni NC). |
+| `incidencias` | (Fase 11) En calidad: crear incidencias y ver solo las propias (reportadas por la persona) y las NC o acciones correctivas donde es responsable. Solo vale sobre esos objetos (`ALCANCES_SOLO_CON_OBJETO`): no abre la bitácora, los respaldos ni otras incidencias, por lista, ficha, búsqueda, filtro por registro, campana, historial, adjuntos ni exportación. Su V implícita es `incidencias`. |
 
 **Bitácora y alcances**: `calidad:V` permite ver qué pasó, quién y cuándo en todo el sistema, pero los **datos** de una entrada (antes, después y cambios) solo se entregan si la persona puede ver el módulo del registro y, en muestras, si su alcance no es solo `estado` (`datos_restringidos: true`). Así un alcance no se elude leyendo la bitácora.
 | `uso` | En equipos: solo registrar uso y folio de bitácora al capturar extracciones y análisis; no edita el catálogo ni los mantenimientos. |
@@ -101,13 +114,13 @@ Un permiso es `(rol, módulo, acción, alcance)`. `total` = sin límite.
 | --- | --- |
 | `proyecto` | 8 |
 | `tecnico`, `investigacion`, `administrativo` | 8 / posterior |
-| `incidencias`, `auditoria` | 8 |
+| `auditoria` | posterior |
 | `limitado` | posterior |
 
 Mientras no se apliquen se comportan como `total`, con dos excepciones (Fase 2, `MODULOS_DIFERIDO_RESTRINGIDO` en `src/lib/shared/permisos.ts`):
 
 - **usuarios**: cualquier alcance diferido se comporta como **solo V de la propia cuenta** (`propio`). Afecta al Administrador/a Auxiliar (`V (limitado)`).
-- **calidad**: cualquier alcance diferido se comporta como **sin acceso** (ni la acción ni su V implícita). Así `C (incidencias)` y `C E (auditoria)` no abren la bitácora: el Técnico Analista, el Técnico Auxiliar, el Administrador/a Auxiliar y el Estudiante no ven la bitácora (403); el Auditor Interno la sigue viendo por su `V` total.
+- **calidad**: cualquier alcance diferido se comporta como **sin acceso** (ni la acción ni su V implícita). Así `C E (auditoria)` no abre la bitácora; `C (incidencias)` tampoco (desde la Fase 11 se aplica: ver arriba). El Técnico Analista, el Técnico Auxiliar, el Administrador/a Auxiliar y el Estudiante no ven la bitácora (403); el Auditor Interno la sigue viendo por su `V` total.
 
 Revisión del resto de módulos: en documentos, muestras, ensayos, informes, equipos e inventario un diferido como `total` no expone datos que el rol no deba ver según la matriz (sus celdas ya incluyen V), por lo que se mantiene hasta su fase. La pantalla de roles muestra los diferidos con la etiqueta "se aplica en Fase X". `asignado` (Fase 5) y `autorizados` (Fase 7) ya no son diferidos.
 
@@ -169,6 +182,10 @@ Catálogos versionados en el repositorio (no se editan desde la aplicación): `s
 | 4 | Supervisión: el supervisor no da visto bueno a lo que él mismo capturó. |
 | 5 | Documentos SGC: quien elaboró no revisa ni aprueba; quien revisó no aprueba. |
 | 6 | Segundo usuario: quien solicita una acción crítica no la aprueba. |
+| 7 | (Fase 11) Quien reportó una incidencia no la evalúa. |
+| 8 | (Fase 11) Quien es o fue responsable de una acción correctiva (no cancelada), o la marcó como implementada, no verifica la eficacia de su NC. |
+| 9 | (Fase 11) Quien es o fue responsable de la NC no la cierra (reasignarla no elude la regla). |
+| 10 | (Fase 11) Quien suspendió un método o equipo no lo reanuda. |
 
 Violación: 409 con código `segregacion` y la regla concreta. Las excepciones se piden como solicitud `excepcion_segregacion` (la aprueba A en calidad) y quedan registradas en el registro, en la bitácora y, en informes, en el PDF.
 
@@ -183,6 +200,7 @@ Violación: 409 con código `segregacion` y la regla concreta. Las excepciones s
 | Rechazar una recepción o aceptarla con desviación (Fase 5) | A en muestras (Coord. Área Técnica); directo si quien la registra ya tiene muestras:A |
 | Cambiar el folio de una recepción ya creada (Fase 5) | A en muestras |
 | Reabrir una recepción cerrada o rechazada (Fase 5) | A en muestras |
+| Anular una incidencia o una no conformidad (Fase 11) | AN en calidad |
 
 Revocar roles, dar de baja cuentas, bloquear y acortar vigencias **no** requieren segundo usuario (reducir privilegios no debe esperar). En usuarios, `G` **no** implica A (Fase 3.1): solo quien tiene `usuarios:A` explícito (Responsable General) aprueba cambios de acceso; en los demás módulos G sigue implicando todas las acciones. Nadie puede editar los permisos de un rol que él mismo tiene vigente (409 `rol_propio`); los demás roles se editan como antes. Guardas: siempre queda al menos un usuario activo con `usuarios:G` vigente (y uno sin fecha de fin) y con `usuarios:A` vigente. El script de alta asigna roles sin solicitud y lo deja dicho en la bitácora.
 
@@ -223,6 +241,18 @@ Otorgan y revocan (con motivo, reautenticación y bitácora): quien tiene `ensay
 - **Evidencia instrumental** (sección 7, etapa "Resultados"): adjuntar y anular usan las mismas reglas que editar el análisis (`exigirAnalisisEditable`, `exigirAsignacion`, `exigirAutorizaciones`); con una cuenta supervisada el análisis vuelve a quedar pendiente del visto bueno. Adjuntar o anular evidencia cuenta como "elaboró" para la segregación (regla 1: quien la adjuntó no revisa ni aprueba ese análisis). Ver y descargar: `ensayos:V` con su alcance; Mariana (Técnico Auxiliar), Patricia (Responsable General), el Auditor y el revisor la ven; Jorge (Administrador técnico, sin ensayos) no.
 - **Respaldos** (sección 9, "El Administrador técnico ejecutará respaldos y pruebas de recuperación"): la pantalla la ve quien tiene `usuarios:G` (crea respaldos) o `calidad:V` (solo lectura: Mejora Continua, Auditor, Responsable General, coordinaciones con calidad). Los avisos de respaldo y de prueba de restauración llegan a `usuarios:G` y `calidad:A`.
 
+## 6 septies. Incidencias y no conformidades (Fase 11)
+
+- **Reportar no pasa por supervisión**: un Estudiante o una cuenta temporal supervisada reporta directo (queda "reportada"); reportar un problema nunca se frena. La evaluación sí la hace otra persona (regla 7).
+- **Reglas 7–10** en `src/lib/shared/segregacion.ts` (versión `2026-09-29.1`), evaluadas por persona. La excepción de segregación existente aplica (solicitud `excepcion_segregacion` sobre `incidencias`, `no_conformidades` o `suspensiones`, aprobada por A en calidad).
+- **Incidencias automáticas**: las "reporta" la persona que causó el evento (quien decidió la recepción o capturó con el equipo no apto); las alertas de integridad, "Sistema". No se crean si falla la transacción del evento.
+- **Admin técnico** (`calidad:V bitacora`): ve la bitácora (y en ella los eventos de calidad sin datos ni motivo; la búsqueda por motivo no los alcanza; tampoco el motivo de suspender, reanudar, retener o liberar registrado sobre equipos e informes), pero no incidencias ni NC, ni sus solicitudes (`/api/solicitudes?entidad=…` aplica la visibilidad de la ficha).
+- **Ligar registros**: al reportar solo se ligan registros cuyo módulo la persona puede ver (V; con `asignado`, solo recepciones asignadas o propias; con `autorizados`, solo documentos vigentes distribuidos a la persona); si no, 404 como si no existiera. Lo mismo al marcar un informe como afectado (informes:V).
+- **Responsables**: de una NC o de una acción solo se nombra a alguien con cuenta vigente y calidad:V sobre ese objeto (el Admin técnico no); el responsable de la NC la edita con C, E, R, A o AN. Quien es responsable solo de una acción ve la NC completa (incluidas comunicaciones con el cliente), salvo el detalle de incidencias ajenas agrupadas (solo folio y estado).
+- **Retenciones en el informe**: la ficha del informe muestra la NC que lo retiene; el motivo, solo con calidad:V total.
+- **Suspensiones activas** (`/api/calidad/suspensiones/activas`, avisos de los formatos): ensayos:V, equipos:V o calidad:V; muestran método o equipo y folio de la NC (dato operativo: el equipo ya aparece "fuera de servicio"), nunca el motivo.
+- No se agregaron permisos al catálogo: la matriz de calidad (C incidencias en los operativos; C R en Coord. Técnica; V R A AN en Responsable General; G R A AN en Mejora Continua; C E en I+D; V en el Auditor, cuyo C E `auditoria` sigue diferido y por eso no reporta incidencias) ya cubre la tabla de la fase.
+
 ## 7. Decisiones pendientes de validar con Mejora Continua
 
 1. **AN (anular con justificación)**: la matriz original no lo asignaba a ningún rol. Se propuso y se cargó: Coord. Área Técnica en muestras, ensayos, informes, equipos e inventario; Mejora Continua en documentos y calidad; Responsable General en todo excepto usuarios (anulaciones excepcionales). La aprobación de un segundo usuario llega en Fase 3.
@@ -232,7 +262,7 @@ Otorgan y revocan (con motivo, reautenticación y bitácora): quien tiene `ensay
 5. **Anclas de las reglas 1 y 2** (`usuarios:G` y `compras:G`) y la lectura de las celdas con paréntesis (sección 3).
 6. **Reportes de mantenimiento**: pasan del módulo documentos (entonces apagado) a `equipos` (V para verlos, C con alcance `mantenimiento` para generarlos).
 7. **Uso de equipos e insumos al capturar**: se exige `equipos:C` / `inventario:C` además de `ensayos:C`.
-8. **Alcances diferidos en calidad** (resuelto en la Fase 2): en calidad un diferido es *sin acceso*, así que `C (incidencias)` ya no abre la bitácora. Cuando se implemente el registro de incidencias (Fase 8) se aplicará el alcance real.
+8. **Alcances diferidos en calidad** (resuelto en la Fase 2 y, para `incidencias`, en la Fase 11): en calidad un diferido es *sin acceso*; `incidencias` ya se aplica con su alcance real (sección 3).
 9. **Supervisión de cuentas temporales** (Fase 2): además del alcance `supervisado`, todo lo que captura una cuenta temporal con supervisor queda pendiente de visto bueno. Validar si una estancia temporal con rol de Técnico Analista debe quedar supervisada o no.
 10. **Segregación en documentos** (Fase 3): el modelo tiene un solo paso de revisión; la regla "revisor de calidad, revisor técnico y aprobador no pueden ser todos la misma persona" se aplica como revisor distinto del aprobador. Resuelto en la Fase 7: revisión de calidad (documentos:G) y revisión técnica (documentos:R, si el documento la requiere) separadas; quien elabora envía a revisión; quien hizo la revisión de calidad no aprueba.
 11. **`usuarios:G` ya no implica A** (resuelto en la Fase 3.1): el Administrador técnico administra cuentas y roles, pero las asignaciones de rol, reactivaciones y ampliaciones de vigencia las aprueba solo quien tiene `usuarios:A` explícito (Responsable General). En los demás módulos G sigue implicando todo. La guarda de `usuarios:A` ahora sí aplica por separado.

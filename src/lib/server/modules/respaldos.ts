@@ -9,6 +9,7 @@
  *   servidor detenido (scripts/restaurar-ficotox.mjs); la pantalla la explica.
  * - Una sola implementacion del respaldo: src/lib/shared/respaldo.mjs.
  */
+import { registrarIncidenciaAutomatica } from "./calidad/automaticas";
 import fs from "node:fs";
 import path from "node:path";
 import { requireUser } from "../auth";
@@ -54,9 +55,37 @@ export function avisosRespaldo(): AvisoRespaldo[] {
   return out;
 }
 
+/*
+ * Fase 11: un acta cuya verificacion 1 (integridad de los archivos del respaldo)
+ * fallo es una alerta de integridad del respaldo: queda en la bitacora y crea una
+ * incidencia automatica (reportada por el sistema, una por acta).
+ */
+async function alertasDeRespaldo(s: RouteContext["s"]): Promise<boolean> {
+  let nuevas = false;
+  for (const acta of listarActas(getConfig().RESPALDOS_DIR).slice(0, 50)) {
+    const v1 = (acta.verificaciones as Array<{ n: number; ok: boolean; detalle?: string }> | undefined)?.find((v) => v.n === 1);
+    if (!v1 || v1.ok) continue;
+    const id = await registrarIncidenciaAutomatica(s, {
+      origen: "alerta_integridad",
+      clave: `alerta_integridad:respaldo:${acta.archivo}`,
+      tipo: "sistema",
+      descripcion: `La prueba de restauración del ${formatearFechaHora(acta.fecha)} detectó que el respaldo ${acta.respaldo_id} no es íntegro (verificación 1): ${String(v1.detalle || "").slice(0, 300)}`,
+      impacto: "desconocido",
+      actor: null,
+      registros: [],
+    });
+    if (id) {
+      await registrarAuditoria(s, null, { accion: "alerta_integridad", entidad: "respaldos", entidadId: acta.respaldo_id, referencia: acta.respaldo_id, detalle: { acta: acta.archivo, verificacion: 1, detalle: String(v1.detalle || "").slice(0, 300) } });
+      nuevas = true;
+    }
+  }
+  return nuevas;
+}
+
 /* GET /api/respaldos */
 export async function listarRespaldosApi({ request, s }: RouteContext): Promise<Response> {
   const auth = await exigirVer(request, s);
+  if (await alertasDeRespaldo(s)) await s.commit();
   const cfg = getConfig();
   const respaldos = listarRespaldos(cfg.RESPALDOS_DIR).map(({ carpeta: _carpeta, ...r }) => (void _carpeta, r));
   const actas = listarActas(cfg.RESPALDOS_DIR).slice(0, 20).map((a) => ({ archivo: a.archivo, fecha: a.fecha, respaldo_id: a.respaldo_id, responsable: a.responsable, modo: a.modo, resultado: a.resultado, duracion_ms: a.duracion_ms }));

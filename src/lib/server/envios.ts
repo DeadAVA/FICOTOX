@@ -16,6 +16,7 @@
  * - Los correos y evidencias solo los ve quien tiene informes:V; en la bitacora
  *   el correo aparece parcialmente oculto.
  */
+import { exigirSinRetencion } from "./modules/calidad/bloqueos";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -99,6 +100,8 @@ async function informeEnviable(s: Session, id: number): Promise<Row> {
   if (!row) throw new HttpError(404, { message: "Informe no encontrado" });
   if (!["liberado", "enviado"].includes(String(row.estado))) throw new HttpError(409, { message: `Solo se envían informes liberados (el informe ${informeFolio(row)} está ${row.estado})`, codigo: "no_liberado" });
   exigirSinRequiereEnmienda(row, "enviar");
+  // Fase 11: retenido por una NC -> no se envia (tampoco se reenvia uno ya enviado).
+  await exigirSinRetencion(s, id, informeFolio(row), "enviar");
   await exigirSinSolicitudPendiente(s, "informes", id, `El informe ${informeFolio(row)}`, "enviar");
   if (!row.archivo_pdf || !fs.existsSync(path.join(informesDir(), String(row.archivo_pdf)))) throw new HttpError(409, { message: "El informe no tiene su PDF final" });
   return row;

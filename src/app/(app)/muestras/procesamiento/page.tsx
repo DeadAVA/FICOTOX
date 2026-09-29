@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ArrowCounterClockwise, ArrowSquareOut, Drop, PencilSimple, Plus, Prohibit } from "@phosphor-icons/react";
+import { useMenuReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { FolioChip, SampleStatus, SolicitudBadge, SupervisionBadge } from "@/components/features/samples/status";
 import { useAnulacion } from "@/components/features/samples/useAnulacion";
 import { RequireModule } from "@/components/session/RequireModule";
@@ -93,11 +94,13 @@ function ProcesamientoList() {
   ];
   const toggles: FilterToggle[] = [{ key: "mias", label: "Mis muestras", description: "Solo las muestras asignadas a ti o que registraste.", checked: mias, onChange: setMias }, { key: "anulados", label: "Mostrar anulados", checked: showAnuladas, onChange: setShowAnuladas }];
 
+  const reportar = useMenuReportar();
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulada = item.estado === "anulada";
     const list: MenuItem[] = [{ label: "Abrir", description: "Ver el formato completo", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/muestras/procesamiento/${item.id}`) }];
     if (canEdit(item) && !anulada) list.push({ label: "Editar", description: "Corregir pasos, pesos o resguardo", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/procesamiento/${item.id}`) });
     if (canExtraer && !anulada) list.push({ label: "Extraer", description: "Nueva extracción ASP o DSP de esta molienda", icon: <Drop size={16} weight="duotone" />, tone: "success", onSelect: () => router.push(`/muestras/extraccion/nueva?procesamiento=${item.id}`) });
+    list.push(...reportar("muestras_procesamiento", item.id, formatProcessingFolio(item)));
     if (canDelete) {
       if (anulada) list.push({ label: "Restaurar procesamiento", description: "Vuelve a la lista con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => restaurar(item) });
       else list.push({ label: "Anular procesamiento…", description: "Queda en la bitácora con motivo", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => anular(item) });

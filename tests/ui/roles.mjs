@@ -29,16 +29,16 @@ const check = (name, ok, detail = "") => {
 const TODOS = ["muestras", "ensayos", "informes", "equipos", "inventario", "calidad", "usuarios"];
 /* Modulos con V (efectiva) de cada rol; "usuarios:propio" oculta Roles. */
 const USUARIOS = [
-  ["Administrador técnico del sistema", "jorge.ramirez@ficotox.local", ["usuarios", "muestras", "equipos", "calidad"]],
+  ["Administrador técnico del sistema", "jorge.ramirez@ficotox.local", ["usuarios", "muestras", "equipos", "calidad:bitacora"]],
   ["Responsable General", "patricia.luna@ficotox.local", TODOS],
   ["Coordinador/a de Mejora Continua", "ana.torres@ficotox.local", TODOS],
   ["Coordinador/a del Área Técnica", "ricardo.medina@ficotox.local", TODOS],
   ["Coordinador/a de Investigación y Desarrollo", "gabriela.ortiz@ficotox.local", TODOS],
-  ["Técnico Analista", "luis.castro@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "informes", "equipos", "inventario"]],
-  ["Técnico Auxiliar", "mariana.delgado@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "equipos", "inventario"]],
-  ["Administrador/a Auxiliar", "carmen.aguilar@ficotox.local", ["usuarios:propio", "muestras", "equipos", "inventario"]],
+  ["Técnico Analista", "luis.castro@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "informes", "equipos", "inventario", "calidad:incidencias"]],
+  ["Técnico Auxiliar", "mariana.delgado@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "equipos", "inventario", "calidad:incidencias"]],
+  ["Administrador/a Auxiliar", "carmen.aguilar@ficotox.local", ["usuarios:propio", "muestras", "equipos", "inventario", "calidad:incidencias"]],
   ["Auditor Interno", "hector.navarro@ficotox.local", TODOS],
-  ["Estudiante / personal en formación", "diego.salinas@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "equipos", "inventario"]],
+  ["Estudiante / personal en formación", "diego.salinas@ficotox.local", ["usuarios:propio", "muestras", "ensayos", "equipos", "inventario", "calidad:incidencias"]],
 ];
 
 /* Botones de alta esperados por rol: [ruta, texto, visible?]. */
@@ -79,6 +79,8 @@ const BOTONES = {
 function enlacesEsperados(modulos) {
   const set = new Set(modulos.map((m) => m.split(":")[0]));
   const propio = modulos.includes("usuarios:propio");
+  // Fase 11: alcance de calidad ("bitacora": Admin tecnico; "incidencias": roles operativos).
+  const calidad = modulos.find((m) => m.startsWith("calidad"))?.split(":")[1] || "total";
   const out = new Set(["/", "/ayuda"]);
   if (set.has("muestras")) out.add("/muestras/recepcion");
   if (set.has("muestras") || set.has("ensayos")) {
@@ -90,7 +92,8 @@ function enlacesEsperados(modulos) {
   if (set.has("informes")) out.add("/informes");
   if (set.has("inventario")) ["/inventario/reactivos", "/inventario/consumibles", "/movimientos"].forEach((h) => out.add(h));
   if (set.has("equipos")) ["/inventario/equipos", "/inventario/mantenimiento"].forEach((h) => out.add(h));
-  if (set.has("calidad")) out.add("/auditoria");
+  if (set.has("calidad") && calidad !== "incidencias") out.add("/auditoria");
+  if (set.has("calidad") && calidad !== "bitacora") out.add("/calidad/incidencias");
   // Fase 7: Documentos encendido (Calidad › Documentos) para quien ve documentos.
   if (set.has("documentos")) out.add("/documentos");
   if (set.has("usuarios")) {
@@ -98,7 +101,7 @@ function enlacesEsperados(modulos) {
     out.add("/administracion/accesos");
     if (!propio) out.add("/administracion/roles");
     // Fase 10: Respaldos para usuarios:G o calidad:V (en el catalogo, todo rol que ve calidad tambien ve usuarios).
-    if (set.has("calidad")) out.add("/administracion/respaldos");
+    if (set.has("calidad") && calidad !== "incidencias") out.add("/administracion/respaldos");
   }
   return out;
 }

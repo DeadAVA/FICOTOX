@@ -6,7 +6,7 @@ import { API_BASE_URL, getJsonAuth, postJson, registrarAvisoSesion, sendJsonAuth
 import { resetSearchIndex } from "@/lib/client/search-index";
 import { clearSession, getStoredPermissions, getStoredToken, setSession, setStoredPermissions } from "@/lib/client/session";
 import type { ApiRecord, AuthConfig, ModuleAction, PermissionsMap, RolSesion, SessionUser } from "@/lib/client/types";
-import { alcancePermite, type Accion, type Alcance, type ContextoAlcance, type Modulo } from "@/lib/shared/permisos";
+import { ALCANCES_SOLO_CON_OBJETO, alcancePermite, type Accion, type Alcance, type ContextoAlcance, type Modulo } from "@/lib/shared/permisos";
 
 /*
  * Sesion de la aplicacion: token, usuario, permisos y configuracion de acceso.
@@ -221,7 +221,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const can = useCallback(
     (modulo: Modulo, accion: ModuleAction = "V", ctx?: ContextoAlcance) => {
       if (!permissions[modulo]?.[accion]) return false;
-      if (!ctx) return true;
+      // Fase 11: sin contexto no cuenta un alcance que solo vale con objeto ("incidencias" no abre la bitacora).
+      if (!ctx) return roles.some((rol) => { const a = rol.permisos[modulo]?.[accion]; return !!a && !ALCANCES_SOLO_CON_OBJETO.has(a); }) || !ALCANCES_SOLO_CON_OBJETO.has(permissions[modulo]![accion]!);
       // Con contexto: basta que un rol vigente lo permita con alguno de sus alcances.
       return roles.some((rol) => {
         const alcance = rol.permisos[modulo]?.[accion];

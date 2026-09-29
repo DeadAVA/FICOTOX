@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { ensureCalidadSchema } from "./calidad/comun";
+import { exigirSinRetencion, retencionesActivas } from "./calidad/bloqueos";
+import { incidenciaPorAlertaIntegridad } from "./calidad/automaticas";
 import fs from "node:fs";
 import path from "node:path";
 import { requireUser, userIdFromClaims, type CurrentUser } from "../auth";
@@ -7,7 +10,7 @@ import { getConfig } from "../config";
 import { isIntegrityError, isSqlite, type Row, type Session } from "../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
 import { renderInformePdf, type InformeAnalisis, type InformeRender } from "../informe-pdf";
-import { cargoActuante, requirePermission } from "../rbac";
+import { cargarAutorizacion, cargoActuante, permisoDe, requirePermission } from "../rbac";
 import { exigirReauth } from "../seguridad";
 import { crearSolicitud, exigirSinSolicitudPendiente, pendientesDe, respuestaSolicitud, serializarSolicitud } from "../solicitudes";
 import { detalleExcepcion, elaboradoresDe, ensureExcepcionesColumn, excepcionesDe, exigirSegregacion } from "../segregacion";
@@ -320,6 +323,8 @@ export async function listInformes({ request, s }: RouteContext): Promise<Respon
   const supFiltro = filtroSupervision(request, "i", permiso.auth.userId);
   await ensureInformesSchema(s);
   const search = searchParam(request, "search");
+  // Fase 11: la lista marca los informes retenidos por una NC (la tabla la crea el esquema de calidad).
+  await ensureCalidadSchema(s);
   const estado = searchParam(request, "estado");
   const recepcionId = toIntOrNull(searchParam(request, "recepcion_id")) || 0;
   const includeAnulados = searchParam(request, "anulados") === "1";
@@ -328,7 +333,8 @@ export async function listInformes({ request, s }: RouteContext): Promise<Respon
     SELECT i.id, i.folio_num, i.version, i.recepcion_id, i.sustituye_a, i.fecha_emision, i.estado,
            i.elaborado_nombre, i.autorizado_nombre, i.autorizado_en, i.liberado_en, i.requiere_enmienda, i.requiere_enmienda_motivo, i.entrega_json, i.archivo_pdf, i.motivo_anulacion, i.creado_en,
            i.cliente_json, i.analisis_ids_json, i.supervision_estado, i.supervisor_id,
-           r.folio_num AS folio_recepcion_num, r.solicitante, r.id_interno AS recepcion_id_interno
+           r.folio_num AS folio_recepcion_num, r.solicitante, r.id_interno AS recepcion_id_interno,
+           (SELECT COUNT(*) FROM retenciones_informe rt WHERE rt.informe_id = i.id AND rt.liberada_en IS NULL) AS retenido
     FROM ${TABLE} i
     LEFT JOIN muestras_recepcion r ON r.id = i.recepcion_id
     WHERE (:incluir_anulados = 1 OR i.estado <> 'anulado')
@@ -382,6 +388,10 @@ export async function getInforme({ request, s, params }: RouteContext): Promise<
   item.recepcion = recepcion ? { id: recepcion.id, folio_num: recepcion.folio_num, solicitante: recepcion.solicitante, fecha_recepcion: recepcion.fecha_recepcion, estado: recepcion.estado, decision_aceptacion: recepcion.decision_aceptacion } : null;
   // Fase 6: integridad del PDF final (su SHA-256 contra el guardado al liberar).
   item.pdf_integridad = await integridadPdf(row);
+  // Fase 11: retenciones activas por no conformidad (no se libera ni se envia mientras existan).
+  // El motivo es de la NC: solo con calidad:V total (a los demas, el folio de la NC y la fecha bastan para saber por que no se libera).
+  const calidadTotal = !!permisoDe(await cargarAutorizacion(s, user), "calidad", "V", { objeto: "nc" })?.alcances.includes("total");
+  item.retenciones = (await retencionesActivas(s, id)).map((r) => ({ id: r.id, nc_id: r.nc_id, nc_folio: r.nc_folio, motivo: calidadTotal ? r.motivo : null, retenido_en: r.retenido_en }));
   return json({ item });
 }
 
@@ -631,6 +641,8 @@ export async function liberarInforme({ request, s, params }: RouteContext): Prom
   if (!antes) return json({ message: "Informe no encontrado" }, 404);
   if (String(antes.estado) !== "autorizado") return json({ message: "Solo se liberan informes autorizados" }, 409);
   exigirSinRequiereEnmienda(antes, "liberar");
+  // Fase 11: un informe retenido por una NC no se libera.
+  await exigirSinRetencion(s, id, informeFolio(antes), "liberar");
   await exigirAutorizaciones(s, user, requisitosInforme("liberar"));
   await exigirSinSolicitudPendiente(s, TABLE, id, `El informe ${informeFolio(antes)}`, "liberar");
   const ids = safeJsonLoad<number[]>(String(antes.analisis_ids_json || "[]"), []);
@@ -838,7 +850,11 @@ export async function getInformePdf({ request, s, params }: RouteContext): Promi
   if (row.archivo_pdf && fs.existsSync(path.join(informesDir(), String(row.archivo_pdf)))) {
     pdf = await fs.promises.readFile(path.join(informesDir(), String(row.archivo_pdf)));
     // Fase 6: si la huella no coincide con la guardada al liberar, se avisa en la bitacora (y en la ficha).
-    if (integridad === "alterado") await registrarAuditoria(s, user, { accion: "alerta_integridad", entidad: TABLE, entidadId: id, referencia: informeFolio(row), motivo: "El SHA-256 del PDF no coincide con el guardado al liberar", detalle: { esperado: row.pdf_sha256, obtenido: createHash("sha256").update(pdf).digest("hex") } });
+    if (integridad === "alterado") {
+      await registrarAuditoria(s, user, { accion: "alerta_integridad", entidad: TABLE, entidadId: id, referencia: informeFolio(row), motivo: "El SHA-256 del PDF no coincide con el guardado al liberar", detalle: { esperado: row.pdf_sha256, obtenido: createHash("sha256").update(pdf).digest("hex") } });
+      // Fase 11: incidencia automatica (la reporta el sistema; una por PDF alterado).
+      await incidenciaPorAlertaIntegridad(s, { clave: `informe:${id}:${row.pdf_sha256}`, descripcion: `El PDF final del informe ${informeFolio(row)} no coincide con su huella SHA-256 registrada al liberarlo (alerta de integridad).`, registros: [{ entidad: TABLE, entidad_id: id, referencia: informeFolio(row) }] });
+    }
   } else {
     // Borrador: vista previa generada al vuelo, marcada como tal.
     const analyses = await loadAnalyses(s, safeJsonLoad<number[]>(String(row.analisis_ids_json || "[]"), []));

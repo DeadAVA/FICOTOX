@@ -548,7 +548,7 @@ Resumen del estado final (Fases 9 y 10). El detalle por modulo, accion y alcance
 
 ### 13.19 Notificaciones y exportacion
 
-- **Campana** (barra lateral): contador y panel con lo que te toca, calculado al momento: muestras asignadas a ti en los ultimos 7 dias; analisis e informes que puedes revisar, aprobar, autorizar o liberar; solicitudes **Por autorizar** y registros **Por supervisar**; documentos por leer y por revisar, aprobar o publicar; mantenimientos vencidos o proximos (si ves equipos); cuentas, roles y autorizaciones que vencen pronto (las tuyas, y las de otros si administras); y, para el Administrador tecnico y quien revisa en Calidad, **respaldos** sin hacer en las ultimas 24 h o sin prueba de restauracion en 90 dias (13.20). Cada elemento abre su registro.
+- **Campana** (barra lateral): contador y panel con lo que te toca, calculado al momento: muestras asignadas a ti en los ultimos 7 dias; analisis e informes que puedes revisar, aprobar, autorizar o liberar; solicitudes **Por autorizar** y registros **Por supervisar**; documentos por leer y por revisar, aprobar o publicar; mantenimientos vencidos o proximos (si ves equipos); cuentas, roles y autorizaciones que vencen pronto (las tuyas, y las de otros si administras); y, para el Administrador tecnico y quien revisa en Calidad, **respaldos** sin hacer en las ultimas 24 h o sin prueba de restauracion en 90 dias (13.20); y los avisos de **calidad** (13.21). Cada elemento abre su registro.
 - **Exportar la bitacora**: en **Auditoria**, **Exportar CSV** descarga lo que muestran los filtros aplicados (fecha, usuario, accion, modulo, referencia, motivo y los cambios en texto legible).
 - **Exportar el historial de un registro**: en el **Historial** de cada ficha, **Exportar** descarga su linea de tiempo en CSV.
 - Las exportaciones respetan tus permisos y alcances (lo que no puedes ver sale como "datos restringidos") y quedan en la bitacora.
@@ -562,6 +562,48 @@ La pantalla **Respaldos** la administra el **Administrador tecnico del sistema**
 - **Pruebas de restauracion**: cada prueba genera un **acta** (fecha, respaldo, responsable, cada verificacion con ✅/❌, tiempo y conclusion) que se descarga desde la tabla. La ultima prueba aparece arriba.
 - **Avisos**: si no hay respaldo en las ultimas 24 h o no hay prueba de restauracion aprobada en 90 dias, se avisa en esta pantalla, en el Inicio y en la campana.
 - **La restauracion no se hace desde la interfaz**: solo por linea de comandos y con el servidor detenido. La pantalla muestra los comandos; el procedimiento completo esta en `docs/RESPALDO_Y_RECUPERACION.md`.
+
+### 13.21 Incidencias y no conformidades (Calidad › Incidencias y NC)
+
+Para registrar cualquier problema del trabajo (ISO/IEC 17025 7.10 y 8.7): una **incidencia** es el aviso de que algo paso; Calidad la evalua y, si hay un incumplimiento, la escala a una **no conformidad (NC)**, que se analiza, se corrige con **acciones correctivas** y se cierra cuando se verifica que fueron eficaces. Nada se borra: todo queda en la bitacora.
+
+**Reportar una incidencia** (cualquier persona con Calidad: C, incluidos Tecnico Analista, Tecnico Auxiliar, Administrador/a Auxiliar y Estudiante):
+
+- Boton **Reportar incidencia** en la barra lateral, en el buscador (⌘K: "reportar incidencia") o en el menu **⋯** de una recepcion, procesamiento, extraccion, analisis, informe, equipo, reactivo o consumible (asi queda ligada a ese registro).
+- Se llena en menos de un minuto: **tipo** (desviacion del metodo, falla de equipo, condicion ambiental, muestra o custodia, insumo, seguridad, sistema, queja del cliente u otro), **cuando ocurrio**, **que paso** (al menos 20 caracteres), **accion inmediata** (opcional), **¿afecta resultados?** (si, no o no se sabe) y **fotos o archivos** (hasta 6; mismas reglas de la evidencia: PDF, imagen, CSV, Excel…, con su huella SHA-256).
+- **No requiere visto bueno** aunque tu cuenta sea supervisada o temporal: reportar un problema nunca se frena. Queda "Reportada" a tu nombre con fecha, hora y cargo.
+- Algunas incidencias las crea el sistema (sin duplicarlas si el evento se repite): recepcion **aceptada con desviacion** o **rechazada**, uso de un **equipo con calibracion vencida o no apto**, y **alertas de integridad** (PDF, evidencia o respaldo alterados; estas las reporta "Sistema").
+
+**Que ves** (pestañas **Incidencias**, **No conformidades**, **Acciones** e **Indicadores**):
+
+- Con Calidad: V total (Coordinacion Tecnica, Mejora Continua, Responsable General, Auditor, I+D) ves todo. Los roles operativos ven **solo las incidencias que reportaron** y las NC o acciones **a su cargo**; no ven la bitacora completa ni incidencias de otros. El **Administrador tecnico no ve incidencias ni NC**.
+- Cada lista tiene busqueda, filtros por estado, tipo, clasificacion, origen, **periodo** y "mias", y **CSV**. **Indicadores** (solo V total): NC abiertas y cerradas, por tipo y clasificacion, dias promedio al cierre, acciones vencidas y reaperturas.
+- En la ficha de cada registro relacionado (recepcion, analisis, informe, equipo…) hay una seccion **Incidencias** con las que lo mencionan y el boton para reportar una.
+
+**Evaluar la incidencia** (Calidad: R; nunca quien la reporto, regla 7): en su ficha, **Evaluar** → **Cerrar sin NC** (evento aislado) o **Escalar a no conformidad** (nueva, o agregarla a una NC abierta: una NC puede agrupar varias incidencias), con justificacion. Una incidencia ya evaluada no se vuelve a evaluar.
+
+**La no conformidad** es un formato de pagina con indicador de etapa (Abierta → En analisis → Acciones en curso → En verificacion → Cerrada) y nueve secciones:
+
+1. **Origen**: incidencias, clasificacion (menor, mayor, critica; por validar) y **responsable** (solo lo nombra Mejora Continua, Calidad: G; cambiarlo pide motivo).
+2. **Descripcion y requisito incumplido** (clausula ISO, procedimiento o formato).
+3. **Evaluacion de impacto**: ¿afecta resultados emitidos?, ¿se detiene el trabajo?, ¿se notifica al cliente?; **informes afectados** y su **retencion**; **suspension** de un metodo o equipo; **comunicaciones con el cliente**.
+4. **Analisis de causa**: 5 porques, Ishikawa u otro; causa raiz; ¿requiere accion correctiva? (si es "no", con justificacion: se evalua si puede repetirse).
+5. **Acciones correctivas**: responsable, fecha compromiso, estado y evidencia. La marca como implementada su responsable (con evidencia). Una accion con fecha pasada aparece **vencida** (no se bloquea). Si su responsable ya no tiene cuenta vigente, se avisa y se **reasigna con motivo**.
+6. **Verificacion de eficacia** (Calidad: R; nunca el responsable de una accion, regla 8): **eficaz**, o **no eficaz**, que **reabre** la NC a analisis sin borrar nada y cuenta la reapertura (para continuar hay que revisar la causa y agregar al menos una accion nueva).
+7. **Efectos en el SGC**: actualizar riesgos (bandera y nota) y **Proponer cambio documental** (crea la propuesta de documentos ligada a la NC).
+8. **Cierre** (Calidad: A con tu contraseña; nunca el responsable de la NC, regla 9): exige evaluacion de impacto completa, acciones implementadas o canceladas y la ultima verificacion eficaz (o la justificacion si no requiere acciones), ninguna suspension ni retencion activa y la comunicacion al cliente si se decidio notificarlo. Genera el PDF **"Registro de no conformidad"** con firmas, cargos y huella SHA-256.
+9. **Historial**.
+
+Editan la NC Mejora Continua (Calidad: G) y su responsable. Anular una incidencia o una NC es una accion critica: pide motivo y la autoriza un segundo usuario (una incidencia escalada solo se anula si su NC esta anulada).
+
+**Suspensiones y retenciones** (7.10.1):
+
+- **Metodo suspendido** (p. ej. DSP): no se pueden crear ni editar extracciones ni analisis de ese metodo ("Método DSP suspendido por NC 0000001"); los aprobados no se tocan. El formato lo avisa al abrirlo.
+- **Equipo suspendido**: queda **fuera de servicio** y no se puede usar en los formatos ni ponerse operativo desde el inventario; al reanudar vuelve a su estado anterior. Si otra NC abierta tambien lo suspende, sigue suspendido hasta que se reanuden todas.
+- **Informe retenido**: no se libera ni se envia ("retenido por NC …"); si ya se envio queda marcado como retenido (no se reenvia). Si hay que corregir resultados se usa la **enmienda** del analisis y del informe.
+- Suspender y retener: Calidad: R. **Reanudar** y **liberar la retencion**: Calidad: A con tu contraseña; nunca quien suspendio (regla 10). Si no hay otra persona disponible se puede pedir una **excepcion de separacion de funciones**.
+
+**Avisos** (Inicio y campana): incidencias por evaluar, mis acciones correctivas (proximas y vencidas), verificaciones pendientes, informes retenidos, metodos y equipos suspendidos, y acciones por reasignar.
 
 ## 14. Buenas practicas de uso
 
@@ -626,6 +668,14 @@ Un analisis incluido en el informe se enmendo despues. Cree la enmienda del info
 ### "Solo se envian informes liberados"
 
 Autorizar ya no genera el PDF final: falta **Liberar** el informe (Informes: A y la autorizacion FX-THF-AP de liberacion de informes).
+
+### "Método … suspendido por NC …" o equipo suspendido
+
+Calidad detuvo ese metodo o equipo por una no conformidad (13.21). No se puede guardar un registro que lo use hasta que quien tiene Calidad: A lo reanude; consulta la NC indicada en el aviso.
+
+### "El informe … está retenido por NC …"
+
+Una no conformidad puso en duda sus resultados: no se libera ni se envia hasta que Calidad libere la retencion (13.21).
 
 ## 16. Soporte
 

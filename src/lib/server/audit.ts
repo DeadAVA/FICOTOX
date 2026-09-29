@@ -88,7 +88,23 @@ export type AuditAction =
   | "adjuntar"
   | "anular_adjunto"
   | "respaldar"
-  | "restaurar_respaldo";
+  | "restaurar_respaldo"
+  | "reportar"
+  | "evaluar"
+  | "cerrar_sin_nc"
+  | "escalar"
+  | "avanzar"
+  | "implementar"
+  | "iniciar_accion"
+  | "cancelar"
+  | "reasignar"
+  | "verificar"
+  | "suspender"
+  | "reanudar"
+  | "retener"
+  | "liberar_retencion"
+  | "comunicar"
+  | "afectar";
 
 export interface AuditEntry {
   accion: AuditAction;
@@ -234,7 +250,7 @@ let claveCache: string | null = null;
  * ya sellado. Se muestran en el log al arrancar y en /auditoria.
  */
 export function advertenciaLlaveBitacora(): string[] {
-  const archivo = path.join(getConfig().INSTANCE_DIR, "auditoria.key");
+  const archivo = path.join(/*turbopackIgnore: true*/ getConfig().INSTANCE_DIR, "auditoria.key");
   return advertenciasLlaveBitacora(process.env, fs.existsSync(archivo));
 }
 

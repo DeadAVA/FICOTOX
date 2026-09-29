@@ -27,7 +27,7 @@ import path from "node:path";
 import { leerClaveSello, stableJson } from "./audit-chain.mjs";
 
 /* Version del esquema de datos. Subirla cuando una fase cambie tablas o columnas de forma que un respaldo nuevo no sirva en una app anterior. */
-export const ESQUEMA_VERSION = 10;
+export const ESQUEMA_VERSION = 11;
 export const FORMATO = "ficotox-respaldo";
 export const VERSION_FORMATO = 1;
 
@@ -45,6 +45,11 @@ export const TABLAS_PRINCIPALES = [
   "muestras_extraccion",
   "muestras_analisis",
   "adjuntos",
+  "incidencias",
+  "no_conformidades",
+  "acciones_correctivas",
+  "suspensiones",
+  "retenciones_informe",
   "informes",
   "envios_informe",
   "documentos_sgc",
@@ -57,7 +62,8 @@ export const TABLAS_PRINCIPALES = [
 ];
 
 /* Carpetas de la instancia con archivos que se respaldan. */
-export const CARPETAS_ARCHIVOS = ["informes", "evidencias", "documentos_sgc", "maintenance_reports"];
+// Fase 11: "calidad" (PDF "Registro de no conformidad").
+export const CARPETAS_ARCHIVOS = ["informes", "evidencias", "documentos_sgc", "maintenance_reports", "calidad"];
 
 export const ARCHIVO_LLAVE = path.join(/*turbopackIgnore: true*/ "llave", "llave-bitacora.txt");
 export const CARPETA_ACTAS = "pruebas-restauracion";

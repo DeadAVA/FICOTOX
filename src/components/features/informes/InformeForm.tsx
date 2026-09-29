@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowsClockwise, FilePdf, FloppyDisk, LockKey, PaperPlaneTilt, Prohibit, SealCheck } from "@phosphor-icons/react";
+import { IncidenciasFormCard } from "@/components/features/calidad/IncidenciasDelRegistro";
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
 import { BotonSegregado, FolioChip, SegregacionCallout, SolicitudCallout, SupervisionCallout } from "@/components/features/samples/status";
 import { SignDialog } from "@/components/features/samples/SignDialog";
@@ -22,6 +23,7 @@ import { fmtDate, isoDate, parseIntOrNull, todayIso } from "@/lib/client/format"
 import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
+import { folioNc } from "@/lib/shared/calidad";
 import { ANALYSIS_METHODS, ANALYSIS_TYPES, REPORT_DEFAULT_STATEMENTS, REPORT_STATES } from "@/lib/shared/sgc";
 import { EnviosPanel } from "@/components/features/informes/EnviosPanel";
 import { AvisoAutorizacion } from "@/components/features/samples/AvisoAutorizacion";
@@ -298,7 +300,13 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
   const resultadosCongelados = (item?.resultados || []) as ApiRecord[];
   // Fase 6: un analisis incluido se enmendo despues; no se libera ni se envia hasta la enmienda del informe.
   const requiereEnmienda = !!Number(item?.requiere_enmienda || 0);
-  const bloqueoEnmienda = requiereEnmienda ? `Requiere enmienda: ${String(item?.requiere_enmienda_motivo || "un análisis incluido se enmendó")}. No se puede liberar ni enviar hasta crear y liberar su enmienda.` : null;
+  // Fase 11: retenido por una NC, igual que "requiere enmienda": no se libera ni se envia.
+  const retenciones = (item?.retenciones || []) as ApiRecord[];
+  const bloqueoEnmienda = requiereEnmienda
+    ? `Requiere enmienda: ${String(item?.requiere_enmienda_motivo || "un análisis incluido se enmendó")}. No se puede liberar ni enviar hasta crear y liberar su enmienda.`
+    : retenciones.length
+      ? `Retenido por ${[...new Set(retenciones.map((r) => folioNc(r.nc_folio)))].join(", ")}: no se libera ni se envía hasta que Calidad libere la retención.`
+      : null;
   const enviable = ["liberado", "enviado"].includes(estado);
   const folioLabel = editing ? `${item!.folio} · v${item!.version}` : "Nuevo informe";
 
@@ -341,6 +349,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
                 <Callout tone="info">{estado === "autorizado" ? "Libera el informe para generar el PDF final; después se registra su envío por correo." : "El envío por correo se registra una vez liberado el informe."}</Callout>
               )}
             </FormCard>
+            <IncidenciasFormCard entidad="informes" id={item?.id} etiqueta={String(item!.folio)} />
             <FormCard id="sec-historial" title="Historial del informe" description="Bitácora de auditoría: creación, revisión, autorización, liberación, envíos, enmiendas y descargas.">
               <RecordHistory entidad="informes" entidadId={item?.id as number | undefined} />
             </FormCard>
@@ -368,7 +377,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
             </BotonSegregado>
           ) : null}
           {editing && estado === "autorizado" && canAuthorize ? (
-            <Button icon={<LockKey size={16} />} onClick={() => setSign("liberar")} disabled={requiereEnmienda} title={bloqueoEnmienda || undefined}>
+            <Button icon={<LockKey size={16} />} onClick={() => setSign("liberar")} disabled={!!bloqueoEnmienda} title={bloqueoEnmienda || undefined}>
               Liberar
             </Button>
           ) : null}
@@ -402,6 +411,14 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
       ) : null}
       <SupervisionCallout item={item} />
       <SolicitudCallout item={item} />
+      {/* Fase 11: retenido por una NC; no se libera ni se envia hasta que calidad libere la retencion. */}
+      {((item?.retenciones || []) as ApiRecord[]).length ? (
+        <div data-aviso-retencion>
+          <Callout tone="danger" title={`Retenido por ${[...new Set(((item!.retenciones || []) as ApiRecord[]).map((r) => folioNc(r.nc_folio)))].join(", ")}`}>
+            {((item!.retenciones || []) as ApiRecord[]).map((r) => r.motivo).filter(Boolean).map(String).join(" · ") || "Por una no conformidad"}. No se libera ni se envía hasta que Calidad libere la retención{estado === "enviado" ? " (ya se envió: no se reenvía)" : ""}.
+          </Callout>
+        </div>
+      ) : null}
       {editing && estado === "borrador" && canReview ? <AvisoAutorizacion requisitos={requisitosInforme("revisar")} accion="revisar este informe" /> : null}
       {editing && estado === "en_revision" && canAuthorize ? <AvisoAutorizacion requisitos={requisitosInforme("autorizar")} accion="autorizar este informe" /> : null}
       {editing && estado === "autorizado" && canAuthorize ? <AvisoAutorizacion requisitos={requisitosInforme("liberar")} accion="liberar este informe" /> : null}

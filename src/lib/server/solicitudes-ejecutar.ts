@@ -4,7 +4,9 @@ import { HttpError, readJson, type RouteContext } from "./http";
 import { cargarAutorizacion } from "./rbac";
 import { anularRegistro, folioLabel, opcionesAnulacion, restaurarRegistro, type SampleTable } from "./samples-flow";
 import { ensureExcepcionesColumn, excepcionesDe, registrarExcepcion, TABLAS_CON_EXCEPCION, type TablaConExcepcion } from "./segregacion";
-import { excepcionPara } from "../shared/segregacion";
+import { excepcionPara, type Violacion } from "../shared/segregacion";
+import type { CurrentUser } from "./auth";
+import type { Row, Session } from "./db";
 import { exigirReauth } from "./seguridad";
 import { aprobarSolicitudCon, crearSolicitud, detalleSolicitud, respuestaSolicitud, type Ejecutores } from "./solicitudes";
 import { ejecutarAmpliacionVigencia, ejecutarAsignacionRol, ejecutarReactivacion } from "./modules/admin";
@@ -12,6 +14,8 @@ import { ejecutarAnulacionInforme, informeFolio, violacionParaExcepcionInforme }
 import { violacionParaExcepcionAnalisis } from "./modules/samples/analisis";
 import { ejecutarCambioFolio, ejecutarDecisionRecepcion, ejecutarReapertura } from "./modules/samples/recepcion";
 import { ejecutarObsoletarDocumento, violacionParaExcepcionDocumento } from "./modules/documentos-sgc";
+import { ejecutarAnulacionCalidad, violacionParaExcepcionNc, violacionParaExcepcionSuspension } from "./modules/calidad/nc";
+import { violacionParaExcepcionIncidencia } from "./modules/calidad/incidencias";
 
 /*
  * Que hace el servidor cuando un segundo usuario aprueba cada tipo de
@@ -61,11 +65,20 @@ export const EJECUTORES: Ejecutores = {
   cambiar_folio: ejecutarCambioFolio,
   reabrir_recepcion: ejecutarReapertura,
   obsoletar_documento: ejecutarObsoletarDocumento,
+  // Fase 11: anular una incidencia o una NC.
+  anular_calidad: (ctx) => ejecutarAnulacionCalidad({ s: ctx.s, user: ctx.user, actuo: ctx.actuo, solicitud: ctx.solicitud, motivo: ctx.motivo }),
 };
 
 export const aprobarSolicitud = aprobarSolicitudCon(EJECUTORES);
 
-const ACCIONES_EXCEPCION = new Set(["revisar", "aprobar", "autorizar"]);
+// Fase 11: evaluar (incidencia, regla 7), verificar y cerrar (NC, reglas 8 y 9), reanudar (suspension, regla 10).
+const ACCIONES_EXCEPCION = new Set(["revisar", "aprobar", "autorizar", "evaluar", "verificar", "cerrar", "reanudar"]);
+type EvaluadorExcepcion = (s: Session, user: CurrentUser, id: number, accion: string) => Promise<{ violacion: Violacion | null; row: Row; referencia: string }>;
+const EVALUADORES_CALIDAD: Record<string, EvaluadorExcepcion> = {
+  incidencias: violacionParaExcepcionIncidencia,
+  no_conformidades: violacionParaExcepcionNc,
+  suspensiones: violacionParaExcepcionSuspension,
+};
 
 /*
  * POST /api/solicitudes: hoy solo el tipo "excepcion_segregacion" se pide de
@@ -79,9 +92,9 @@ export async function solicitarExcepcion({ request, s }: RouteContext): Promise<
   const payload = await readJson(request);
   if (String(payload.tipo || "excepcion_segregacion") !== "excepcion_segregacion") throw new HttpError(400, { message: "Solo se solicita de forma explícita la excepción de segregación; las demás acciones críticas crean su solicitud al pedirse" });
   const entidad = String(payload.entidad || "");
-  if (!TABLAS_CON_EXCEPCION.includes(entidad as TablaConExcepcion)) throw new HttpError(400, { message: "La excepción de segregación aplica a análisis, informes y documentos" });
+  if (!TABLAS_CON_EXCEPCION.includes(entidad as TablaConExcepcion)) throw new HttpError(400, { message: "La excepción de segregación aplica a análisis, informes, documentos, incidencias, no conformidades y suspensiones" });
   const accion = String(payload.accion || "");
-  if (!ACCIONES_EXCEPCION.has(accion)) throw new HttpError(400, { message: "Indica la acción: revisar, aprobar o autorizar" });
+  if (!ACCIONES_EXCEPCION.has(accion)) throw new HttpError(400, { message: "Indica la acción: revisar, aprobar, autorizar, evaluar, verificar, cerrar o reanudar" });
   const id = Number.parseInt(String(payload.entidad_id || ""), 10);
   if (!Number.isFinite(id)) throw new HttpError(404, { message: "Registro no encontrado" });
   await ensureExcepcionesColumn(s, entidad as TablaConExcepcion);
@@ -89,11 +102,12 @@ export async function solicitarExcepcion({ request, s }: RouteContext): Promise<
    * Solo la pide quien podria hacer la accion (permiso del modulo y estado del
    * registro) y a quien la segregacion se la impide de verdad.
    */
+  const calidad = EVALUADORES_CALIDAD[entidad];
   const evaluar = entidad === "muestras_analisis" ? violacionParaExcepcionAnalisis : entidad === "informes" ? violacionParaExcepcionInforme : violacionParaExcepcionDocumento;
-  const { violacion, row } = await evaluar(s, user, id, accion);
+  const { violacion, row, referencia: referenciaCalidad } = calidad ? await calidad(s, user, id, accion) : { ...(await evaluar(s, user, id, accion)), referencia: null as string | null };
   if (!violacion) throw new HttpError(409, { message: `La separación de funciones no te impide ${accion} este registro; no necesitas una excepción`, codigo: "excepcion_innecesaria" });
   if (excepcionPara(excepcionesDe(row), userIdFromClaims(user) as number, accion)) throw new HttpError(409, { message: `Ya tienes una excepción aprobada para ${accion} este registro`, codigo: "excepcion_innecesaria" });
-  const referencia = entidad === "informes" ? informeFolio(row) : TABLAS_MUESTRAS.has(entidad) ? folioLabel(entidad as SampleTable, row) : `${row.clave || "Documento"} rev. ${row.revision || ""}`.trim();
+  const referencia = referenciaCalidad || (entidad === "informes" ? informeFolio(row) : TABLAS_MUESTRAS.has(entidad) ? folioLabel(entidad as SampleTable, row) : `${row.clave || "Documento"} rev. ${row.revision || ""}`.trim());
   await exigirReauth(s, request, user, "solicitudes:excepcion");
   const solicitud = await crearSolicitud(s, user, { tipo: "excepcion_segregacion", entidad, entidadId: id, referencia, accion: "excepcion", datos: { accion }, motivo: String(payload.motivo || "") });
   await s.commit();

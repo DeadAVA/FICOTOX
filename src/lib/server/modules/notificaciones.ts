@@ -4,6 +4,7 @@
  * muestran lo que aplica a la persona segun sus permisos y asignaciones.
  * Reutiliza las consultas de los avisos del Inicio.
  */
+import { avisosCalidad } from "./calidad/tablero";
 import { requireUser } from "../auth";
 import { type Row, type Session } from "../db";
 import { json, type RouteContext } from "../http";
@@ -104,6 +105,8 @@ export async function notificacionesDe(s: Session, auth: Autorizacion): Promise<
   for (const a of (await autorizacionesPorVencer(s, auth, 30)).slice(0, LIMITE)) out.push({ tipo: "autorizacion", titulo: `Autorización por vencer: ${a.etiqueta}`, detalle: `${a.propia ? "Tuya" : a.persona} · vence el ${formatearFecha(a.vigente_hasta)}`, href: a.propia ? "/#mis-autorizaciones" : "/administracion/usuarios", tono: "warning" });
   // Fase 10: respaldos (quien respalda y quien revisa): sin respaldo reciente o sin prueba de restauracion.
   if (recibeAvisosRespaldo(auth)) for (const a of avisosRespaldo()) out.push({ tipo: a.tipo === "sin_respaldo" ? "respaldo" : "prueba_restauracion", titulo: a.titulo, detalle: a.detalle, href: "/administracion/respaldos", tono: "warning" });
+  // Fase 11: incidencias por evaluar, mis acciones (proximas y vencidas), verificaciones, informes retenidos y suspensiones.
+  for (const a of await avisosCalidad(s, auth)) out.push(a);
   return out;
 }
 

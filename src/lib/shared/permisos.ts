@@ -19,7 +19,7 @@ export const MODULOS = [
   { clave: "informes", nombre: "Informes", descripcion: "Informes de resultados" },
   { clave: "equipos", nombre: "Equipos", descripcion: "Equipos y mantenimientos" },
   { clave: "inventario", nombre: "Inventario", descripcion: "Reactivos, consumibles y movimientos" },
-  { clave: "calidad", nombre: "Calidad", descripcion: "Bitacora de auditoria (incidencias, no conformidades y auditorias internas en Fase 8)" },
+  { clave: "calidad", nombre: "Calidad", descripcion: "Bitacora de auditoria, incidencias, no conformidades y acciones correctivas (auditorias internas en una fase posterior)" },
   { clave: "compras", nombre: "Compras", descripcion: "Sin pantallas todavia (Fase 8)" },
 ] as const;
 
@@ -67,7 +67,7 @@ export const ALCANCES = [
   { clave: "autorizados", nombre: "Autorizados", fase: null, descripcion: "Solo los documentos vigentes que le fueron distribuidos" },
   { clave: "administrativo", nombre: "Administrativo", fase: "7/8", descripcion: "Solo lo administrativo" },
   { clave: "limitado", nombre: "Limitado", fase: "posterior", descripcion: "Vista limitada" },
-  { clave: "incidencias", nombre: "Incidencias", fase: "8", descripcion: "Solo incidencias" },
+  { clave: "incidencias", nombre: "Incidencias", fase: null, descripcion: "Reportar incidencias y ver solo las propias y las NC o acciones de las que es responsable; no la bitacora" },
   { clave: "auditoria", nombre: "Auditorías internas", fase: "8", descripcion: "Solo auditorias internas" },
 ] as const;
 
@@ -82,7 +82,16 @@ export const MODULOS_DIFERIDO_RESTRINGIDO: Record<string, "sin_acceso" | "propio
 };
 
 /* Alcances que limitan tambien lo que se ve; los demas solo limitan la operacion. */
-const LIMITAN_VISTA = new Set<Alcance>(["propio", "estado", "bitacora", "asignado", "autorizados"]);
+const LIMITAN_VISTA = new Set<Alcance>(["propio", "estado", "bitacora", "asignado", "autorizados", "incidencias"]);
+
+/*
+ * Fase 11: alcances que solo valen con un objeto de su ambito. "incidencias"
+ * (en calidad) permite reportar y ver incidencias, NC y acciones propias, pero
+ * NUNCA cuenta para una comprobacion sin contexto (bitacora, respaldos, menu de
+ * Auditoria): ahi se comporta como si no existiera.
+ */
+export const ALCANCES_SOLO_CON_OBJETO = new Set<Alcance>(["incidencias"]);
+const OBJETOS_INCIDENCIAS = new Set(["incidencia", "nc", "accion_correctiva"]);
 
 export function isModulo(value: unknown): value is Modulo {
   return typeof value === "string" && (MODULO_KEYS as string[]).includes(value);
@@ -223,6 +232,9 @@ export function alcancePermite(alcance: Alcance, ctx: ContextoAlcance = {}): boo
       return ctx.objeto === "mantenimiento";
     case "movimientos":
       return ctx.objeto === "movimiento";
+    case "incidencias":
+      // Fase 11: solo incidencias, NC y acciones; el servidor filtra a las propias o donde es responsable.
+      return !!ctx.objeto && OBJETOS_INCIDENCIAS.has(ctx.objeto);
     default:
       return false;
   }
@@ -232,7 +244,7 @@ export function alcancePermite(alcance: Alcance, ctx: ContextoAlcance = {}): boo
 export function permite(efectivos: PermisosEfectivos, modulo: Modulo, accion: Accion, ctx?: ContextoAlcance): boolean {
   const lista = efectivos[modulo]?.[accion];
   if (!lista?.length) return false;
-  if (!ctx) return true;
+  if (!ctx) return lista.some((alcance) => !ALCANCES_SOLO_CON_OBJETO.has(alcance));
   return lista.some((alcance) => alcancePermite(alcance, ctx));
 }
 

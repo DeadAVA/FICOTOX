@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Archive, ArrowCounterClockwise, FloppyDisk, Hash, Plus, Printer, UserPlus, X } from "@phosphor-icons/react";
+import { IncidenciasFormCard } from "@/components/features/calidad/IncidenciasDelRegistro";
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -546,6 +547,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
               <Callout tone="info">La disposición final se registra cuando la muestra ya no requiere trabajo en el laboratorio.</Callout>
             )}
           </FormCard>
+            <IncidenciasFormCard entidad="muestras_recepcion" id={item?.id} etiqueta={formatSampleFolio(item!)} />
             <FormCard id="sec-historial" title="Historial del registro" description="Bitácora de auditoría: quién creó, editó, aceptó, anuló o cerró esta recepción y qué cambió.">
               <RecordHistory entidad="muestras_recepcion" entidadId={item?.id as number | undefined} />
             </FormCard>

@@ -15,7 +15,8 @@ export interface DetailGroup {
   rows: Array<{ label: string; value: ReactNode; mono?: boolean }>;
 }
 
-export function DetailSheet({ open, onOpenChange, title, subtitle, badges, groups, actions, hero }: { open: boolean; onOpenChange: (open: boolean) => void; title: ReactNode; subtitle?: ReactNode; badges?: ReactNode; groups: DetailGroup[]; actions?: ReactNode; hero?: ReactNode }) {
+/* `extra` (Fase 11): contenido al final de la ficha, p. ej. las incidencias que mencionan el elemento. */
+export function DetailSheet({ open, onOpenChange, title, subtitle, badges, groups, actions, hero, extra }: { open: boolean; onOpenChange: (open: boolean) => void; title: ReactNode; subtitle?: ReactNode; badges?: ReactNode; groups: DetailGroup[]; actions?: ReactNode; hero?: ReactNode; extra?: ReactNode }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title={title} description={subtitle} footer={actions} headerExtra={badges}>
       <div className="flex flex-col gap-5">
@@ -37,6 +38,7 @@ export function DetailSheet({ open, onOpenChange, title, subtitle, badges, group
             </section>
           );
         })}
+        {extra}
       </div>
     </Sheet>
   );

@@ -11,9 +11,9 @@
  * un registro concreto; queda registrada en el registro y en la bitacora.
  */
 
-export const VERSION_SEGREGACION = "2026-09-24.1";
+export const VERSION_SEGREGACION = "2026-09-29.1";
 
-export type AccionSegregada = "revisar" | "aprobar" | "autorizar" | "supervisar" | "aprobar_solicitud";
+export type AccionSegregada = "revisar" | "aprobar" | "autorizar" | "supervisar" | "aprobar_solicitud" | "evaluar" | "verificar" | "cerrar" | "reanudar";
 
 export interface Regla {
   numero: number;
@@ -30,6 +30,11 @@ export const REGLAS_SEGREGACION: Regla[] = [
   { numero: 4, clave: "visto_bueno", titulo: "Supervision: el supervisor no da visto bueno a lo que el mismo capturo", descripcion: "Aplica al alcance supervisado y a las cuentas temporales." },
   { numero: 5, clave: "documentos", titulo: "Documentos SGC: quien elaboro no revisa ni aprueba; revisor y aprobador no son la misma persona", descripcion: "Revisor de calidad, revisor tecnico y aprobador no pueden ser todos la misma persona." },
   { numero: 6, clave: "segundo_usuario", titulo: "Segundo usuario: quien solicita una accion critica no la aprueba", descripcion: "La aprobacion de una solicitud la da otra persona con el permiso que exige la accion." },
+  // Fase 11: incidencias, no conformidades y acciones correctivas (ISO/IEC 17025 7.10 y 8.7).
+  { numero: 7, clave: "evaluar_incidencia", titulo: "Incidencias: quien reporto una incidencia no la evalua", descripcion: "Cerrarla sin NC o escalarla la decide otra persona con calidad:R." },
+  { numero: 8, clave: "verificar_eficacia", titulo: "Acciones correctivas: el responsable de una accion no verifica su eficacia", descripcion: "La verificacion de eficacia de la NC la hace alguien que no es ni fue responsable de ninguna de sus acciones ni las implemento." },
+  { numero: 9, clave: "cerrar_nc", titulo: "No conformidades: el responsable de la NC no la cierra", descripcion: "La cierra otra persona con calidad:A (tampoco quien fue responsable antes de una reasignacion)." },
+  { numero: 10, clave: "reanudar_trabajo", titulo: "Suspensiones: quien suspendio un metodo o equipo no lo reanuda", descripcion: "Reanudar el trabajo (7.10.1 f) lo autoriza otra persona con calidad:A." },
 ];
 
 export const reglaPorClave = (clave: string): Regla | undefined => REGLAS_SEGREGACION.find((r) => r.clave === clave);
@@ -41,7 +46,7 @@ export interface Violacion {
   mensaje: string;
 }
 
-const ETIQUETA_ACCION: Record<string, string> = { revisar: "revisar", aprobar: "aprobar", autorizar: "autorizar", supervisar: "dar el visto bueno a", aprobar_solicitud: "aprobar" };
+const ETIQUETA_ACCION: Record<string, string> = { revisar: "revisar", aprobar: "aprobar", autorizar: "autorizar", supervisar: "dar el visto bueno a", aprobar_solicitud: "aprobar", evaluar: "evaluar", verificar: "verificar", cerrar: "cerrar", reanudar: "reanudar" };
 const lo = (accion: string) => ETIQUETA_ACCION[accion] || accion;
 
 /* ¿Tiene esta persona una excepcion aprobada para esta accion? */
@@ -112,4 +117,32 @@ export function evaluarDocumento(usuarioId: number, elaboradores: Iterable<numbe
 export function evaluarSegundoUsuario(usuarioId: number, solicitadoPor: number | null | undefined): Violacion | null {
   if (solicitadoPor === null || solicitadoPor === undefined || Number(solicitadoPor) !== Number(usuarioId)) return null;
   return { regla: 6, clave: "segundo_usuario", mensaje: "Solicitaste esta acción; la debe aprobar otra persona" };
+}
+
+/* Regla 7: quien reporto la incidencia no la evalua. */
+export function evaluarIncidencia(usuarioId: number, reportadaPor: number | null | undefined): Violacion | null {
+  if (reportadaPor === null || reportadaPor === undefined || Number(reportadaPor) !== Number(usuarioId)) return null;
+  return { regla: 7, clave: "evaluar_incidencia", mensaje: "Reportaste esta incidencia; la debe evaluar otra persona" };
+}
+
+/*
+ * Regla 8: quien es o fue responsable de una accion de la NC, o la marco como
+ * implementada, no verifica su eficacia (reasignar la accion no la elude).
+ */
+export function evaluarVerificacion(usuarioId: number, participantesAcciones: Iterable<number | null | undefined>): Violacion | null {
+  if (![...participantesAcciones].some((id) => id !== null && id !== undefined && Number(id) === Number(usuarioId))) return null;
+  return { regla: 8, clave: "verificar_eficacia", mensaje: "Eres o fuiste responsable de una acción de esta NC (o la implementaste); su eficacia la debe verificar otra persona" };
+}
+
+/* Regla 9: el responsable de la NC no la cierra. */
+/* Tambien quien lo fue antes: reasignar la NC no elude la regla. */
+export function evaluarCierreNc(usuarioId: number, responsablesNc: Iterable<number | null | undefined>): Violacion | null {
+  if (![...responsablesNc].some((id) => id !== null && id !== undefined && Number(id) === Number(usuarioId))) return null;
+  return { regla: 9, clave: "cerrar_nc", mensaje: "Eres o fuiste el responsable de esta NC; la debe cerrar otra persona" };
+}
+
+/* Regla 10: quien suspendio no reanuda. */
+export function evaluarReanudacion(usuarioId: number, suspendidaPor: number | null | undefined): Violacion | null {
+  if (suspendidaPor === null || suspendidaPor === undefined || Number(suspendidaPor) !== Number(usuarioId)) return null;
+  return { regla: 10, clave: "reanudar_trabajo", mensaje: "Suspendiste este trabajo; lo debe reanudar otra persona" };
 }

@@ -81,18 +81,18 @@ function loadEnvFile(target: string): void {
 function loadEnvironment(baseDir: string): void {
   const configured = (process.env.FICOTOX_ENV_FILE || "").trim();
   if (configured) {
-    loadEnvFile(path.resolve(baseDir, configured));
+    loadEnvFile(path.resolve(/*turbopackIgnore: true*/ baseDir, configured));
     return;
   }
-  loadEnvFile(path.join(baseDir, ".env"));
+  loadEnvFile(path.join(/*turbopackIgnore: true*/ baseDir, ".env"));
 }
 
 function resolveSqlitePath(baseDir: string): string {
   const configured = (process.env.SQLITE_PATH || "").trim();
   if (configured) {
-    return path.resolve(baseDir, configured);
+    return path.resolve(/*turbopackIgnore: true*/ baseDir, configured);
   }
-  return path.join(baseDir, "instance", "ficotox.sqlite3");
+  return path.join(/*turbopackIgnore: true*/ baseDir, "instance", "ficotox.sqlite3");
 }
 
 function buildDatabaseUrl(baseDir: string): { url: string; sqlitePath: string | null } {
@@ -100,7 +100,7 @@ function buildDatabaseUrl(baseDir: string): { url: string; sqlitePath: string | 
   if (explicit) {
     if (explicit.startsWith("sqlite:")) {
       const raw = explicit.replace(/^sqlite:\/*/, "");
-      const sqlitePath = path.isAbsolute(raw) ? raw : path.resolve(baseDir, raw);
+      const sqlitePath = path.isAbsolute(raw) ? raw : path.resolve(/*turbopackIgnore: true*/ baseDir, raw);
       return { url: `sqlite:///${sqlitePath}`, sqlitePath };
     }
     return { url: explicit, sqlitePath: null };
@@ -112,14 +112,14 @@ function buildDatabaseUrl(baseDir: string): { url: string; sqlitePath: string | 
 
 export function getConfig(): AppConfig {
   if (cached) return cached;
-  const BASE_DIR = process.env.FICOTOX_BASE_DIR ? path.resolve(process.env.FICOTOX_BASE_DIR) : process.cwd();
+  const BASE_DIR = process.env.FICOTOX_BASE_DIR ? path.resolve(/*turbopackIgnore: true*/ process.env.FICOTOX_BASE_DIR) : process.cwd();
   loadEnvironment(BASE_DIR);
   const { url, sqlitePath } = buildDatabaseUrl(BASE_DIR);
   const instanceDir = process.env.FICOTOX_INSTANCE_DIR
-    ? path.resolve(BASE_DIR, process.env.FICOTOX_INSTANCE_DIR)
+    ? path.resolve(/*turbopackIgnore: true*/ BASE_DIR, process.env.FICOTOX_INSTANCE_DIR)
     : sqlitePath
       ? path.dirname(sqlitePath)
-      : path.join(BASE_DIR, "instance");
+      : path.join(/*turbopackIgnore: true*/ BASE_DIR, "instance");
 
   cached = {
     BASE_DIR,

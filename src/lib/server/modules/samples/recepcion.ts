@@ -1,4 +1,6 @@
 import { requireUser, userIdFromClaims, type CurrentUser } from "../../auth";
+import { incidenciaPorDecisionRecepcion } from "../calidad/automaticas";
+import { actorDe } from "../calidad/comun";
 import { registrarAuditoria, snapshotRow } from "../../audit";
 import { isSqlite, type Row, type Session } from "../../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../../http";
@@ -361,6 +363,8 @@ export async function createReceptionSample({ request, s }: RouteContext): Promi
     await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues, detalle: { actuo_como: actuo } });
     if (data.decision_aceptacion) {
       await registrarAuditoria(s, user, { accion: data.decision_aceptacion === "rechazada" ? "rechazar" : "aceptar", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), detalle: { decision: data.decision_aceptacion } });
+      // Fase 11: aceptada con desviacion o rechazada -> incidencia automatica.
+      await incidenciaPorDecisionRecepcion(s, user, despues!, folioLabel(TABLE, despues), String(data.decision_aceptacion), actuo.cargo);
     }
     const solicitud = decision ? await crearSolicitud(s, user, { tipo: "decision_recepcion", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), accion: decision.decision, datos: decision, motivo: decision.motivo, cargo: actuo.cargo }) : null;
     await s.commit();
@@ -443,6 +447,7 @@ export async function updateReceptionSample({ request, s, params }: RouteContext
     await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { actuo_como: actuo } });
     if (data.decision_aceptacion && data.decision_aceptacion !== String(antes?.decision_aceptacion || "")) {
       await registrarAuditoria(s, user, { accion: data.decision_aceptacion === "rechazada" ? "rechazar" : "aceptar", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), detalle: { decision: data.decision_aceptacion } });
+      await incidenciaPorDecisionRecepcion(s, user, despues!, folioLabel(TABLE, despues), String(data.decision_aceptacion), actuo.cargo);
     }
     const solicitud = decision ? await crearSolicitud(s, user, { tipo: "decision_recepcion", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), accion: decision.decision, datos: decision, motivo: decision.motivo, cargo: actuo.cargo }) : null;
     await s.commit();
@@ -570,6 +575,8 @@ export async function ejecutarDecisionRecepcion(ctx: ContextoEjecucion): Promise
   await ctx.s.execute(`UPDATE ${TABLE} SET decision_aceptacion = :decision, aceptacion_json = COALESCE(:aceptacion, aceptacion_json), estado = :estado WHERE id = :id`, { decision, aceptacion: (ctx.datos.aceptacion_json as string | null) || null, estado: decision, id: antes.id });
   const despues = await snapshotRow(ctx.s, TABLE, Number(antes.id));
   await registrarAuditoria(ctx.s, ctx.user, { accion: decision === "rechazada" ? "rechazar" : "aceptar", entidad: TABLE, entidadId: Number(antes.id), referencia: folioLabel(TABLE, antes), antes, despues, motivo: ctx.motivo, detalle: { decision, actuo_como: ctx.actuo, ...detalleSolicitud(ctx.solicitud) } });
+  // Fase 11: la incidencia automatica la reporta quien tomo la decision (el solicitante), no quien la aprobo.
+  await incidenciaPorDecisionRecepcion(ctx.s, (await actorDe(ctx.s, Number(ctx.solicitud.solicitado_por))) || ctx.user, despues!, folioLabel(TABLE, antes), decision, ctx.solicitud.rol ? String(ctx.solicitud.rol) : null);
   return { item: serializeRow(despues!) };
 }
 

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Dialog as RadixDialog } from "radix-ui";
-import { ArrowsLeftRight, CaretRight, ClockCounterClockwise, Cube, FileText, Flask, House, List, MagnifyingGlass, Package, Question, SealCheck, ShieldCheck, SidebarSimple, SignOut, TestTube, UserCircle, Users, Wrench, X } from "@phosphor-icons/react";
+import { ArrowsLeftRight, CaretRight, ClockCounterClockwise, Cube, FileText, Flask, House, List, MagnifyingGlass, Package, Question, SealCheck, ShieldCheck, SidebarSimple, SignOut, TestTube, UserCircle, Users, WarningDiamond, Wrench, X } from "@phosphor-icons/react";
+import { reportarIncidencia, ReportarIncidenciaHost, usePuedeReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { useSession } from "@/components/session/SessionProvider";
 import { cn } from "@/components/ui/cn";
 import { Dropdown, Tooltip } from "@/components/ui/Overlay";
@@ -131,6 +132,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   const items = visibleNav(permissions);
+  const puedeReportar = usePuedeReportar();
 
   const sidebarProps = {
     items,
@@ -144,6 +146,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       setMobileOpen(false);
       setAccountOpen(true);
     },
+    // Fase 11: "Reportar incidencia" siempre a la mano para quien tiene calidad:C.
+    onReportar: puedeReportar
+      ? () => {
+          setMobileOpen(false);
+          reportarIncidencia();
+        }
+      : undefined,
     isMac,
     user,
     onLogout: logout,
@@ -193,6 +202,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <ReportarIncidenciaHost />
       {accountOpen ? <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} /> : null}
     </div>
   );
@@ -200,7 +210,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 type VisibleItem = NavItem & { children: NavChild[] };
 
-function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAccount, onClose, isMac, user, onLogout }: { items: VisibleItem[]; pathname: string; collapsed: boolean; onSearch: () => void; onToggle: () => void; onAccount: () => void; onClose?: () => void; isMac: boolean; user: { nombre?: string; email?: string; roles?: string[]; avatar?: string | null } | null; onLogout: () => void }) {
+function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAccount, onClose, onReportar, isMac, user, onLogout }: { items: VisibleItem[]; pathname: string; collapsed: boolean; onSearch: () => void; onToggle: () => void; onAccount: () => void; onClose?: () => void; onReportar?: () => void; isMac: boolean; user: { nombre?: string; email?: string; roles?: string[]; avatar?: string | null } | null; onLogout: () => void }) {
   // El shell solo se monta ya autenticado (en el cliente), así que leer localStorage al iniciar no desajusta la hidratación.
   const [expanded, setExpanded] = useState<string[]>(() => (typeof window === "undefined" ? [] : readExpanded()));
 
@@ -337,6 +347,20 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
       </nav>
 
       <div className={cn("border-t border-line/70 p-2", collapsed && "flex flex-col items-center gap-1")}>
+        {onReportar ? (
+          collapsed ? (
+            <Tooltip content="Reportar incidencia" side="right">
+              <button type="button" onClick={onReportar} className="press inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-3 hover:bg-surface-3 hover:text-ink" aria-label="Reportar incidencia">
+                <WarningDiamond size={18} />
+              </button>
+            </Tooltip>
+          ) : (
+            <button type="button" onClick={onReportar} className="press mb-0.5 flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] font-medium text-ink-2 hover:bg-surface-3/80 hover:text-ink" data-reportar-incidencia-boton>
+              <WarningDiamond size={18} className="text-ink-3" />
+              Reportar incidencia
+            </button>
+          )
+        ) : null}
         {/* Ayuda: siempre visible, no depende de permisos. */}
         {collapsed ? (
           <Tooltip content="Ayuda" side="right">

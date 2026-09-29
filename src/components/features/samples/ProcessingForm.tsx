@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { FloppyDisk, Plus } from "@phosphor-icons/react";
+import { IncidenciasFormCard } from "@/components/features/calidad/IncidenciasDelRegistro";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
@@ -486,9 +487,12 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
       readOnly={readOnly}
       after={
         editing ? (
-          <FormCard id="sec-historial" title="Historial del registro" description="Bitácora de auditoría: quién creó, editó, anuló o restauró este procesamiento y qué cambió.">
-            <RecordHistory entidad="muestras_procesamiento" entidadId={item?.id as number | undefined} />
-          </FormCard>
+          <>
+            <IncidenciasFormCard entidad="muestras_procesamiento" id={item?.id} etiqueta={formatProcessingFolio(item!)} />
+            <FormCard id="sec-historial" title="Historial del registro" description="Bitácora de auditoría: quién creó, editó, anuló o restauró este procesamiento y qué cambió.">
+              <RecordHistory entidad="muestras_procesamiento" entidadId={item?.id as number | undefined} />
+            </FormCard>
+          </>
         ) : null
       }
       actions={

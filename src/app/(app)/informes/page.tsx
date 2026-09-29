@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { ArrowSquareOut, FilePdf, FileText, Plus } from "@phosphor-icons/react";
+import { useMenuReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { FolioChip, StateBadge, SolicitudBadge, SupervisionBadge } from "@/components/features/samples/status";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
@@ -87,9 +88,11 @@ function InformesContent() {
   ];
   const toggles: FilterToggle[] = [{ key: "anulados", label: "Mostrar anulados", checked: showAnulados, onChange: setShowAnulados }];
 
+  const reportar = useMenuReportar();
   const menuFor = (item: ApiRecord): MenuItem[] => [
     { label: "Abrir", description: "Ver el informe y su historial", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/informes/${item.id}`) },
     { label: "Ver PDF", description: ["liberado", "enviado", "sustituido", "anulado"].includes(String(item.estado)) ? "Documento liberado con SHA-256" : "Vista previa (sin validez)", icon: <FilePdf size={16} weight="duotone" />, onSelect: () => openProtectedFile(`${API_BASE_URL}/informes/${item.id}/pdf`, token, `${String(item.folio || "informe").replace(/\s+/g, "-")}.pdf`) },
+    ...reportar("informes", item.id, String(item.folio || "Informe")),
   ];
 
   return (
@@ -150,6 +153,11 @@ function InformesContent() {
                     <StateBadge kind="informe" status={item.estado} />
                     <SupervisionBadge estado={item.supervision_estado} />
                     <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} />
+                    {Number(item.retenido || 0) ? (
+                      <span className="ml-1" data-retenido>
+                        <Badge tone="danger">Retenido</Badge>
+                      </span>
+                    ) : null}
                     {Number(item.requiere_enmienda || 0) ? (
                       <span className="ml-1" title={String(item.requiere_enmienda_motivo || "")} data-requiere-enmienda>
                         <Badge tone="danger">Requiere enmienda</Badge>

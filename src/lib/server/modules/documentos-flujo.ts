@@ -9,7 +9,8 @@
  * Segregacion: quien elaboro no revisa ni aprueba; quien hizo la revision de
  * calidad no aprueba. Aprobar y publicar piden reautenticacion.
  */
-import { requireUser, userIdFromClaims } from "../auth";
+import { ensureCalidadSchema } from "./calidad/comun";
+import { requireUser, userIdFromClaims, type CurrentUser } from "../auth";
 import { registrarAuditoria, snapshotRow } from "../audit";
 import { isSqlite, type Row, type Session } from "../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
@@ -38,6 +39,8 @@ export async function ensureDocumentosFlujoSchema(s: Session): Promise<void> {
       estado VARCHAR(12) NOT NULL DEFAULT 'pendiente', resuelto_por INT DEFAULT NULL, resuelto_en VARCHAR(40) DEFAULT NULL, motivo_resolucion ${texto}, asignado_a INT DEFAULT NULL, documento_creado_id INT DEFAULT NULL)${fin}`,
   );
   await addColumnIfMissing(s, PROPUESTAS, "documento_creado_id", "INT DEFAULT NULL");
+  // Fase 11: propuesta nacida de una no conformidad (liga en ambos sentidos).
+  await addColumnIfMissing(s, PROPUESTAS, "nc_id", "INT DEFAULT NULL");
   markSchemaReady(DISTRIBUCION);
 }
 
@@ -226,10 +229,21 @@ export async function proponerDocumento({ request, s }: RouteContext): Promise<R
     titulo = titulo || `Cambio a ${doc.clave}: ${doc.titulo}`;
   }
   if (!titulo) throw new HttpError(400, { message: "Indica el título del documento propuesto" });
-  const r = await s.execute(`INSERT INTO ${PROPUESTAS} (tipo, documento_id, titulo, motivo, propuesto_por, propuesto_en) VALUES (:tipo, :doc, :titulo, :motivo, :yo, :en)`, { tipo, doc: documentoId, titulo, motivo, yo: userIdFromClaims(user), en: new Date().toISOString() });
-  await registrarAuditoria(s, user, { accion: "proponer", entidad: PROPUESTAS, entidadId: Number(r.lastrowid), referencia: titulo, motivo, detalle: { tipo, documento_id: documentoId } });
+  const id = await insertarPropuesta(s, user, { tipo, documentoId, titulo, motivo });
   await s.commit();
-  return json({ message: tipo === "cambio" ? "Solicitud de cambio registrada" : "Propuesta de documento registrada", id: r.lastrowid }, 201);
+  return json({ message: tipo === "cambio" ? "Solicitud de cambio registrada" : "Propuesta de documento registrada", id }, 201);
+}
+
+/*
+ * Inserta la propuesta y la deja en la bitacora. Fase 11: una NC puede crear su
+ * propuesta de cambio documental (nc_id liga ambos sentidos).
+ */
+export async function insertarPropuesta(s: Session, user: CurrentUser, datos: { tipo: "nuevo" | "cambio"; documentoId: number | null; titulo: string; motivo: string; ncId?: number | null; ncFolio?: string | null }): Promise<number> {
+  await ensureDocumentosFlujoSchema(s);
+  await addColumnIfMissing(s, PROPUESTAS, "nc_id", "INT DEFAULT NULL");
+  const r = await s.execute(`INSERT INTO ${PROPUESTAS} (tipo, documento_id, titulo, motivo, propuesto_por, propuesto_en, nc_id) VALUES (:tipo, :doc, :titulo, :motivo, :yo, :en, :nc)`, { tipo: datos.tipo, doc: datos.documentoId, titulo: datos.titulo, motivo: datos.motivo, yo: userIdFromClaims(user), en: new Date().toISOString(), nc: datos.ncId ?? null });
+  await registrarAuditoria(s, user, { accion: "proponer", entidad: PROPUESTAS, entidadId: Number(r.lastrowid), referencia: datos.titulo, motivo: datos.motivo, detalle: { tipo: datos.tipo, documento_id: datos.documentoId, ...(datos.ncFolio ? { nc: datos.ncFolio } : {}) } });
+  return Number(r.lastrowid);
 }
 
 /* GET /api/documentos-sgc/propuestas */
@@ -239,9 +253,11 @@ export async function listarPropuestas({ request, s }: RouteContext): Promise<Re
   // Fase 9: quien solo ve documentos distribuidos ("autorizados") no ve las propuestas.
   if (soloAutorizados(permiso.auth)) throw new HttpError(403, { message: "Las propuestas no están disponibles con tu alcance de documentos" });
   await ensureDocumentosFlujoSchema(s);
+  await ensureCalidadSchema(s);
   const filas = await s.query<Row>(
-    `SELECT p.*, u.nombre AS propuesto_por_nombre, a.nombre AS asignado_nombre, d.clave AS documento_clave FROM ${PROPUESTAS} p
+    `SELECT p.*, u.nombre AS propuesto_por_nombre, a.nombre AS asignado_nombre, d.clave AS documento_clave, n.folio_num AS nc_folio FROM ${PROPUESTAS} p
      LEFT JOIN usuarios u ON u.id = p.propuesto_por LEFT JOIN usuarios a ON a.id = p.asignado_a LEFT JOIN ${TABLE} d ON d.id = p.documento_id
+     LEFT JOIN no_conformidades n ON n.id = p.nc_id
      ORDER BY p.estado = 'pendiente' DESC, p.id DESC LIMIT 300`,
   );
   return json({ items: filas });

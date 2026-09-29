@@ -270,6 +270,7 @@ if (restauradaDb) {
     { etiqueta: "evidencias de envío", tabla: "envios_informe", archivo: "evidencia_archivo", sha: "evidencia_sha256", carpeta: path.join("informes", "envios") },
     { etiqueta: "adjuntos (evidencia instrumental)", tabla: "adjuntos", archivo: "nombre_almacenado", sha: "sha256", carpeta: "evidencias" },
     { etiqueta: "documentos SGC", tabla: "documentos_sgc", archivo: "archivo_nombre", sha: "archivo_sha256", carpeta: "documentos_sgc" },
+    { etiqueta: "PDF de no conformidades", tabla: "no_conformidades", archivo: "archivo_pdf", sha: "pdf_sha256", carpeta: path.join("calidad", "nc") },
   ];
   const resumen = [];
   const problemas7 = [];

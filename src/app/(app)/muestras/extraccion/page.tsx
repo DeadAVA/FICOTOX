@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { ArrowCounterClockwise, ArrowSquareOut, CaretDown, Flask, PencilSimple, Plus, Prohibit, TestTube } from "@phosphor-icons/react";
+import { useMenuReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { FolioChip, SampleStatus, SolicitudBadge, SupervisionBadge } from "@/components/features/samples/status";
 import { useAnulacion } from "@/components/features/samples/useAnulacion";
 import { RequireModule } from "@/components/session/RequireModule";
@@ -114,11 +115,13 @@ function ExtraccionList() {
   ];
   const toggles: FilterToggle[] = [{ key: "mias", label: "Mis muestras", description: "Solo las muestras asignadas a ti o que registraste.", checked: mias, onChange: setMias }, { key: "anuladas", label: "Mostrar anuladas", checked: showAnuladas, onChange: setShowAnuladas }];
 
+  const reportar = useMenuReportar();
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulada = item.estado === "anulada";
     const list: MenuItem[] = [{ label: "Abrir", description: "Ver el formato completo", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/muestras/extraccion/${item.id}`) }];
     if (canEdit(item) && !anulada) list.push({ label: "Editar", description: "Corregir pasos, pesos o equipos", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/extraccion/${item.id}`) });
     if (canAnalizar && !anulada) list.push({ label: "Analizar", description: "Registrar el análisis de este extracto", icon: <TestTube size={16} weight="duotone" />, tone: "success", onSelect: () => router.push(`/muestras/analisis/nuevo?extraccion=${item.id}`) });
+    list.push(...reportar("muestras_extraccion", item.id, formatExtractionFolio(item)));
     if (canDelete) {
       if (anulada) list.push({ label: "Restaurar extracción", description: "Vuelve a la lista con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => restaurar(item) });
       else list.push({ label: "Anular extracción…", description: "Repone el inventario y queda en la bitácora", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => anular(item) });

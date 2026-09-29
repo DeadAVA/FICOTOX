@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ArrowCounterClockwise, ArrowSquareOut, Flask, Hash, PencilSimple, Plus, Printer, Prohibit, TestTube, UserPlus } from "@phosphor-icons/react";
+import { useMenuReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { FolioChip, SampleStatus, SolicitudBadge, SupervisionBadge } from "@/components/features/samples/status";
 import { useAnulacion } from "@/components/features/samples/useAnulacion";
 import { RequireModule } from "@/components/session/RequireModule";
@@ -110,6 +111,7 @@ function RecepcionList() {
     { key: "anuladas", label: "Mostrar anuladas", description: "Incluye las recepciones anuladas con motivo.", checked: showAnuladas, onChange: setShowAnuladas },
   ];
 
+  const reportar = useMenuReportar();
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulada = item.estado === "anulada";
     const estado = String(item.estado || "");
@@ -123,6 +125,7 @@ function RecepcionList() {
     if (!anulada && !terminada && can("muestras", "E", { objeto: "recepcion" })) list.push({ label: "Cambiar folio…", description: "Con motivo; lo autoriza la Coord. Técnica", icon: <Hash size={16} weight="duotone" />, onSelect: () => acciones.cambiarFolio(item) });
     if (["cerrada", "rechazada"].includes(estado) && can("muestras", "E", { objeto: "recepcion" })) list.push({ label: "Reabrir…", description: "Vuelve al estado previo, con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", onSelect: () => acciones.reabrir(item) });
     if (puedeProcesar) list.push({ label: "Procesar", description: "Crear el procesamiento de esta muestra", icon: <Flask size={16} weight="duotone" />, tone: "success", onSelect: () => router.push(`/muestras/procesamiento/nuevo?recepcion=${item.id}`) });
+    list.push(...reportar("muestras_recepcion", item.id, formatSampleFolio(item)));
     if (canDelete) {
       if (anulada) list.push({ label: "Restaurar recepción", description: "Vuelve a la lista con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => restaurar(item) });
       else list.push({ label: "Anular recepción…", description: "Queda en la bitácora con motivo", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => anular(item) });

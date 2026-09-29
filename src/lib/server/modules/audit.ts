@@ -1,4 +1,5 @@
 import { requireUser } from "../auth";
+import { exigirVerRegistroCalidad } from "./calidad/acceso-historial";
 import { advertenciaLlaveBitacora, ensureAuditSchema, origenLlaveBitacora, registrarAuditoria, verifyAuditChain } from "../audit";
 import { AUDIT_ACTIONS, AUDIT_ENTITIES } from "../../shared/sgc";
 import { formatearFechaHora, hoyLocal } from "../../shared/fechas";
@@ -19,7 +20,22 @@ import { safeJsonLoad, searchParam } from "./helpers";
  * registro y, en muestras, si su alcance no es solo "estado" (Fase 1). Asi el
  * alcance de un modulo no se elude leyendo la bitacora.
  */
+/* Fase 11: incidencias, NC y acciones; sus datos solo con calidad:V total (el admin tecnico, V bitacora, no los ve). */
+const ENTIDADES_CALIDAD = new Set(["incidencias", "no_conformidades", "acciones_correctivas", "suspensiones"]);
+/* Acciones de calidad que se registran tambien sobre equipos e informes: su motivo es de la NC. */
+const ACCIONES_CALIDAD = ["suspender", "reanudar", "retener", "liberar_retencion"];
+const SQL_SENSIBLE_CALIDAD = `(entidad IN (${[...ENTIDADES_CALIDAD].map((e) => `'${e}'`).join(", ")}) OR accion IN (${ACCIONES_CALIDAD.map((a) => `'${a}'`).join(", ")}))`;
+
+const calidadTotal = (auth: Autorizacion) => !!permisoDe(auth, "calidad", "V", { objeto: "incidencia" })?.alcances.includes("total");
+
+/* Sin calidad:V total, el motivo de lo que viene de una NC (justificaciones, suspensiones, retenciones) no se entrega. */
+function sinMotivoDeCalidad(item: Row, total: boolean): Row {
+  if (total || !(ENTIDADES_CALIDAD.has(String(item.entidad || "")) || ACCIONES_CALIDAD.includes(String(item.accion || "")))) return item;
+  return { ...item, motivo: null };
+}
+
 function datosVisibles(auth: Autorizacion, entidad: unknown): boolean {
+  if (ENTIDADES_CALIDAD.has(String(entidad || ""))) return calidadTotal(auth);
   const modulo = ENTITY_MODULE[String(entidad || "")];
   if (!modulo) return true;
   const permiso = permisoDe(auth, modulo, "V");
@@ -28,7 +44,8 @@ function datosVisibles(auth: Autorizacion, entidad: unknown): boolean {
 
 function recortar(item: Row, visible: boolean): Row {
   if (visible) return item;
-  return { ...item, cambios: {}, datos_anteriores: null, datos_nuevos: null, datos_restringidos: true };
+  // En calidad tambien el motivo (justificaciones, descripciones de NC) queda restringido.
+  return { ...item, cambios: {}, datos_anteriores: null, datos_nuevos: null, datos_restringidos: true, ...(ENTIDADES_CALIDAD.has(String(item.entidad || "")) ? { motivo: null } : {}) };
 }
 
 function serialize(row: Row): Row {
@@ -64,6 +81,9 @@ const ENTITY_MODULE: Record<string, Modulo> = {
   mantenimientos: "equipos",
   usuarios: "usuarios",
   roles: "usuarios",
+  incidencias: "calidad",
+  no_conformidades: "calidad",
+  acciones_correctivas: "calidad",
 };
 
 export async function listAudit({ request, s }: RouteContext): Promise<Response> {
@@ -75,7 +95,10 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
   // al que pertenece; todo lo demas requiere el permiso de auditoria.
   const modulo = entidad && entidadId ? ENTITY_MODULE[entidad] : undefined;
   const auth = await cargarAutorizacion(s, user);
-  await requirePermission(s, user, modulo || "calidad", "V", undefined, auth);
+  // Fase 11: el historial de una incidencia o NC lo ve quien ve ese registro (con alcance "incidencias", solo lo propio).
+  const historialCalidad = !!(entidad && entidadId && ENTIDADES_CALIDAD.has(entidad));
+  if (historialCalidad) await exigirVerRegistroCalidad(s, user, entidad, Number(entidadId));
+  else await requirePermission(s, user, modulo || "calidad", "V", undefined, auth);
   const accion = searchParam(request, "accion");
   const usuario = searchParam(request, "usuario");
   const search = searchParam(request, "search");
@@ -105,7 +128,7 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
       AND (:entidad_id = '' OR entidad_id = :entidad_id)
       AND (:accion = '' OR accion = :accion)
       AND (:usuario = '' OR usuario_email LIKE :usuario_like OR usuario_nombre LIKE :usuario_like)
-      AND (:search = '' OR referencia LIKE :search_like OR motivo LIKE :search_like)
+      AND (:search = '' OR referencia LIKE :search_like OR (motivo LIKE :search_like${calidadTotal(auth) || historialCalidad ? "" : ` AND NOT ${SQL_SENSIBLE_CALIDAD}`}))
       AND (:desde = '' OR fecha_hora >= :desde_ini)
       AND (:hasta = '' OR fecha_hora <= :hasta_fin)
       ${moduloFiltro ? `AND entidad IN (${entidadesModulo.map((e) => `'${e}'`).join(", ") || "''"})` : ""}
@@ -131,7 +154,8 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
       ...Object.fromEntries(accionesLista.map((a, i) => [`acc${i}`, a])),
     },
   );
-  const items = rows.map((row) => recortar(serialize(row), datosVisibles(auth, row.entidad)));
+  const total = calidadTotal(auth) || historialCalidad;
+  const items = rows.map((row) => sinMotivoDeCalidad(recortar(serialize(row), historialCalidad || datosVisibles(auth, row.entidad)), total));
   if (csv) {
     // Fase 9: exportacion para auditoria, con los mismos filtros y alcances; queda en la bitacora.
     await registrarAuditoria(s, user, { accion: "exportar", entidad: entidad && entidadId ? entidad : "auditoria", entidadId: entidad && entidadId ? entidadId : null, referencia: entidad && entidadId ? `Historial ${AUDIT_ENTITIES[entidad] || entidad} #${entidadId}` : "Bitácora", detalle: { formato: "csv", filas: items.length, filtros: { entidad, entidad_id: entidadId, accion, usuario, search, desde, hasta, modulo: moduloFiltro } } });
@@ -181,7 +205,7 @@ export async function getAuditEntry({ request, s, params }: RouteContext): Promi
     datos_anteriores: safeJsonLoad(row.datos_anteriores_json, null),
     datos_nuevos: safeJsonLoad(row.datos_nuevos_json, null),
   };
-  return json({ item: recortar(item, datosVisibles(auth, row.entidad)) });
+  return json({ item: sinMotivoDeCalidad(recortar(item, datosVisibles(auth, row.entidad)), calidadTotal(auth)) });
 }
 
 /* Integridad de la cadena de hashes (ISO/IEC 17025 7.11.3). */

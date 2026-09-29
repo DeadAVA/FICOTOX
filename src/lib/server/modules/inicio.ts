@@ -1,4 +1,5 @@
 import { requireUser } from "../auth";
+import { avisosCalidad } from "./calidad/tablero";
 import { type Row } from "../db";
 import { json, type RouteContext } from "../http";
 import { cargarAutorizacion, permisoDe, requirePermission, soloEstado } from "../rbac";
@@ -391,6 +392,21 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
       href: administraAut ? "/administracion/usuarios" : "/#mis-autorizaciones",
       items: porVencer.slice(0, MAX_ITEMS).map((a) => ({ label: a.propia ? `Tu autorización: ${a.etiqueta}` : `${a.persona} · ${a.etiqueta}`, sub: `Vence el ${fmtDate(a.vigente_hasta)}`, href: administraAut ? "/administracion/usuarios" : "/#mis-autorizaciones" })),
     });
+  }
+
+  // Fase 11: calidad (incidencias por evaluar, mis acciones, verificaciones, retenciones y suspensiones).
+  const calidad = await avisosCalidad(s, auth);
+  const grupos: Array<[string, string, Aviso["tone"], string, string[]]> = [
+    ["calidad_incidencias", "Incidencias por evaluar", "warning", "/calidad/incidencias?filtro=por_evaluar", ["incidencia_por_evaluar"]],
+    ["calidad_acciones", "Mis acciones correctivas", "info", "/calidad/incidencias?tab=acciones&mias=1", ["accion_mia", "accion_vencida"]],
+    ["calidad_verificaciones", "Verificaciones de eficacia pendientes", "warning", "/calidad/incidencias?tab=nc&estado=en_verificacion", ["verificacion_pendiente"]],
+    ["calidad_retenidos", "Informes retenidos por NC", "danger", "/calidad/incidencias?tab=nc", ["informe_retenido"]],
+    ["calidad_suspensiones", "Métodos y equipos suspendidos", "danger", "/calidad/incidencias?tab=nc", ["suspension"]],
+    ["calidad_reasignar", "Acciones por reasignar", "warning", "/calidad/incidencias?tab=acciones", ["responsable_no_vigente"]],
+  ];
+  for (const [key, label, tone, href, tipos] of grupos) {
+    const items = calidad.filter((a) => tipos.includes(a.tipo));
+    if (items.length) avisos.push({ key, label, tone: items.some((a) => a.tono === "danger") ? "danger" : tone, count: items.length, href, items: items.slice(0, MAX_ITEMS).map((a) => ({ label: a.titulo, sub: a.detalle, href: a.href })) });
   }
 
   // Fase 10: respaldos sin hacer o sin prueba de restauracion (a quien respalda y a quien revisa).

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowRight, CalendarCheck, CalendarX, Cube, FileText, Flask, IdentificationBadge, Package, SealCheck, Stamp, TestTube, Truck, WarningOctagon, Wrench } from "@phosphor-icons/react";
+import { ArrowRight, CalendarCheck, CalendarX, Cube, FileText, Flask, IdentificationBadge, ListChecks, Lock, Package, Pause, SealCheck, Stamp, TestTube, Truck, UserSwitch, WarningDiamond, WarningOctagon, Wrench } from "@phosphor-icons/react";
 import { cn } from "@/components/ui/cn";
 import { HoverCard } from "@/components/ui/Overlay";
 import { fmt } from "@/lib/client/format";
@@ -52,6 +52,13 @@ const ICONS: Record<string, ReactNode> = {
   por_autorizar: <Stamp size={17} />,
   // Fase 4: autorizaciones FX-THF-AP por vencer.
   autorizaciones_vencen: <IdentificationBadge size={17} />,
+  // Fase 11: calidad.
+  calidad_incidencias: <WarningDiamond size={17} />,
+  calidad_acciones: <ListChecks size={17} />,
+  calidad_verificaciones: <SealCheck size={17} />,
+  calidad_retenidos: <Lock size={17} />,
+  calidad_suspensiones: <Pause size={17} />,
+  calidad_reasignar: <UserSwitch size={17} />,
 };
 
 const TONE = {

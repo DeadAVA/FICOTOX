@@ -316,6 +316,7 @@ export function useGlobalSearch() {
         { label: "Movimientos de inventario", href: "/movimientos", allowed: can("inventario"), kw: "movimientos entradas salidas" },
         { label: "Documentos del SGC", href: "/documentos", allowed: FEATURES.documentos && can("documentos"), kw: "documentos sgc calidad lista maestra" },
         { label: "Bitácora de auditoría", href: "/auditoria", allowed: can("calidad"), kw: "auditoria bitacora" },
+        { label: "Incidencias y no conformidades", href: "/calidad/incidencias", allowed: can("calidad", "V", { objeto: "incidencia" }) && alcance("calidad") !== "bitacora", kw: "calidad incidencias no conformidades nc acciones correctivas" },
         { label: "Usuarios", href: "/administracion/usuarios", allowed: can("usuarios"), kw: "administracion usuarios cuentas" },
         { label: "Roles y permisos", href: "/administracion/roles", allowed: can("usuarios") && alcance("usuarios") !== "propio", kw: "administracion roles permisos" },
       ]
@@ -340,11 +341,14 @@ export function useGlobalSearch() {
         { label: "Equipos en mantenimiento", sub: "Con un mantenimiento pendiente", href: "/inventario/equipos?filtro=mantenimiento", allowed: can("equipos"), kw: "equipos mantenimiento" },
         { label: "Mantenimientos vencidos", sub: "Programados y no realizados a tiempo", href: "/inventario/mantenimiento?filtro=vencido", allowed: can("equipos"), kw: "mantenimientos vencidos atrasados" },
         { label: "Mantenimientos próximos", sub: "En los próximos 30 días", href: "/inventario/mantenimiento?filtro=proximo", allowed: can("equipos"), kw: "mantenimientos proximos calendario 30 dias" },
+        { label: "Incidencias por evaluar", sub: "Reportadas o en evaluación", href: "/calidad/incidencias?filtro=por_evaluar", allowed: can("calidad", "R", { objeto: "incidencia" }), kw: "incidencias evaluar calidad pendientes" },
+        { label: "No conformidades abiertas", sub: "Sin cerrar, por etapa", href: "/calidad/incidencias?tab=nc", allowed: can("calidad", "V", { objeto: "nc" }) && alcance("calidad") !== "bitacora", kw: "nc no conformidades abiertas acciones correctivas" },
+        { label: "Mis acciones correctivas", sub: "Pendientes o en proceso a tu nombre", href: "/calidad/incidencias?tab=acciones", allowed: can("calidad", "V", { objeto: "accion_correctiva" }) && alcance("calidad") !== "bitacora", kw: "acciones correctivas mias pendientes vencidas" },
         { label: "Mantenimientos completados", sub: "Historial por equipo", href: "/inventario/mantenimiento?filtro=completado", allowed: can("equipos"), kw: "mantenimientos completados historial" },
       ]
         .filter((v) => v.allowed)
         .map((v) => ({ id: `view-${v.href}`, kind: "vista" as const, label: v.label, sub: v.sub, href: v.href, keywords: norm(`${v.label} ${v.sub} ${v.kw} ver lista filtro`) })),
-    [can],
+    [can, alcance],
   );
 
   /* Temas de la ayuda: se abren en la sección correspondiente del manual. */
@@ -368,6 +372,7 @@ export function useGlobalSearch() {
         { label: "Nuevo equipo", sub: "Alta con clave de bitácora", href: "/inventario/equipos?nuevo=1", allowed: can("equipos", "C", { objeto: "equipo" }), kw: "inventario alta bitacora" },
         { label: "Programar mantenimiento", sub: "Preventivo, correctivo, calibración o verificación", href: "/inventario/mantenimiento?nuevo=1", allowed: can("equipos", "C", { objeto: "mantenimiento" }), kw: "calibracion verificacion" },
         { label: "Nuevo documento del SGC", sub: "Documento controlado", href: "/documentos?nuevo=1", allowed: FEATURES.documentos && can("documentos", "C", { objeto: "documento", borrador: true }), kw: "calidad" },
+        { label: "Reportar incidencia", sub: "Falla, desviación o queja; con foto", href: "?reportar=1", allowed: can("calidad", "C", { objeto: "incidencia" }), kw: "incidencia problema falla desviacion queja reportar calidad" },
         { label: "Nueva extracción ASP", sub: "Ácido domoico · metanol:agua 50:50", href: "/muestras/extraccion/nueva?tipo=E-A", allowed: can("ensayos", "C", { objeto: "extraccion", borrador: true }), kw: "acido domoico asp e-a", specific: true },
         { label: "Nueva extracción DSP", sub: "Toxinas lipofílicas · metanol 100 % e hidrólisis", href: "/muestras/extraccion/nueva?tipo=E-D", allowed: can("ensayos", "C", { objeto: "extraccion", borrador: true }), kw: "toxinas lipofilicas dsp e-d okadaico", specific: true },
       ]

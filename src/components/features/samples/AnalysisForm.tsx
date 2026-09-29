@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowCounterClockwise, ArrowUUpLeft, CheckCircle, FloppyDisk, PaperPlaneTilt, PencilLine, Plus, Prohibit, SealCheck, X } from "@phosphor-icons/react";
+import { AvisoSuspension } from "@/components/features/calidad/AvisoSuspension";
+import { IncidenciasFormCard } from "@/components/features/calidad/IncidenciasDelRegistro";
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -27,7 +29,7 @@ import { BotonSegregado, FolioChip, SegregacionCallout, SolicitudCallout, Superv
 import { useAnulacion } from "./useAnulacion";
 import { formatearHora } from "@/lib/shared/fechas";
 import { AvisoAutorizacion } from "./AvisoAutorizacion";
-import { requisitosAnalisis, requisitosRevisionResultados } from "@/lib/shared/autorizaciones";
+import { metodoDeTipoAnalisis, requisitosAnalisis, requisitosRevisionResultados } from "@/lib/shared/autorizaciones";
 import { firmanteDe, firmantesPayload, type FirmanteState } from "./FirmanteSelect";
 import { EvidenciaPanel } from "./EvidenciaPanel";
 
@@ -535,9 +537,12 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       }
       after={
         editing ? (
-          <FormCard id="sec-historial" title="Historial del registro" description="Bitácora de auditoría de este análisis.">
-            <RecordHistory entidad="muestras_analisis" entidadId={item?.id as number | undefined} />
-          </FormCard>
+          <>
+            <IncidenciasFormCard entidad="muestras_analisis" id={item?.id} etiqueta={folioLabel} />
+            <FormCard id="sec-historial" title="Historial del registro" description="Bitácora de auditoría de este análisis.">
+              <RecordHistory entidad="muestras_analisis" entidadId={item?.id as number | undefined} />
+            </FormCard>
+          </>
         ) : null
       }
       actions={
@@ -600,6 +605,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       ) : null}
       <SupervisionCallout item={item} />
       <SolicitudCallout item={item} />
+      <AvisoSuspension metodo={metodoDeTipoAnalisis(form.tipo)} equipoIds={[form.equipo]} />
       {item?.sustituye_a ? (
         <Callout tone="info" title={`Enmienda: versión ${version}`}>
           Sustituye a la versión {version - 1}

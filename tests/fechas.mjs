@@ -8,7 +8,7 @@
  * Una fecha sola ("AAAA-MM-DD") se formatea como texto (nunca "un dia antes");
  * un instante se muestra en America/Tijuana.
  */
-import { diaSemana, diasEntre, fechaSola, finDiaLocal, formatearFecha, formatearFechaHora, formatearFechaLarga, formatearHora, hoyLocal, inicioDiaLocal, parsearFechaEscrita, sumarDias, sumarMeses, tonoVencimiento, fechaValida, instanteDe } from "../src/lib/shared/fechas.ts";
+import { diaSemana, diasEntre, fechaSola, finDiaLocal, formatearFecha, formatearFechaHora, formatearFechaLarga, formatearHora, hoyLocal, inicioDiaLocal, parsearFechaEscrita, sumarDias, sumarMeses, tonoVencimiento, fechaValida, instanteDe, instanteDeFechaHoraLocal, horaLocal } from "../src/lib/shared/fechas.ts";
 
 const results = [];
 const check = (name, ok, detail = "") => {
@@ -31,6 +31,7 @@ check("fechaValida rechaza fechas imposibles", fechaValida("2026-02-29") === nul
 check("inicio y fin del dia local en UTC (verano, UTC-7)", inicioDiaLocal("2026-09-24") === "2026-09-24T07:00:00.000Z" && finDiaLocal("2026-09-24") === "2026-09-25T06:59:59.999Z", `${inicioDiaLocal("2026-09-24")} ${finDiaLocal("2026-09-24")}`);
 check("inicio y fin del dia local en UTC (invierno, UTC-8)", inicioDiaLocal("2026-01-15") === "2026-01-15T08:00:00.000Z" && finDiaLocal("2026-01-15") === "2026-01-16T07:59:59.999Z", `${inicioDiaLocal("2026-01-15")}`);
 check("el instante de fin de dia vuelve al mismo dia local", fechaSola(finDiaLocal("2026-09-24")) === "2026-09-24" && fechaSola(inicioDiaLocal("2026-09-24")) === "2026-09-24");
+check("Fase 11: fecha y hora locales -> UTC (verano e invierno) e invalidas -> vacio", instanteDeFechaHoraLocal("2026-09-24", "14:30") === "2026-09-24T21:30:00.000Z" && instanteDeFechaHoraLocal("2026-01-15", "08:05") === "2026-01-15T16:05:00.000Z" && instanteDeFechaHoraLocal("2026-09-24", "25:00") === "" && /^\d{2}:\d{2}$/.test(horaLocal()), `${instanteDeFechaHoraLocal("2026-09-24", "14:30")}`);
 check("hoyLocal es el dia de America/Tijuana del instante dado", hoyLocal(new Date("2026-09-11T02:30:00.000Z")) === "2026-09-10" && /^\d{4}-\d{2}-\d{2}$/.test(hoyLocal()));
 check("diaSemana y fecha larga", diaSemana("2026-09-24") === "jueves" && formatearFechaLarga("2026-09-24") === "24 de septiembre de 2026");
 check("tonoVencimiento por dia local", tonoVencimiento(sumarDias(hoyLocal(), -1)) === "danger" && tonoVencimiento(sumarDias(hoyLocal(), 5)) === "warning" && tonoVencimiento(sumarDias(hoyLocal(), 60)) === null && tonoVencimiento(null) === null);

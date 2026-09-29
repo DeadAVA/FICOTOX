@@ -3,6 +3,8 @@
 import { Suspense, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ArrowCounterClockwise, ArrowsClockwise, Flask, IdentificationCard, PencilSimple, Plus, Trash, UploadSimple } from "@phosphor-icons/react";
+import { IncidenciasDelRegistro } from "@/components/features/calidad/IncidenciasDelRegistro";
+import { useMenuReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { DetailSheet } from "@/components/features/inventory/DetailSheet";
 import { ImportReactivosSheet, ReactivoSheet } from "@/components/features/inventory/ReactivoSheet";
 import { StockRefillSheet, type StockRefillTarget } from "@/components/features/inventory/StockRefillSheet";
@@ -152,12 +154,14 @@ function ReactivosContent() {
   ];
   const toggles: FilterToggle[] = [{ key: "bajas", label: "Mostrar bajas", description: "Incluye reactivos dados de baja.", checked: showBajas, onChange: setShowBajas }];
 
+  const reportar = useMenuReportar();
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const inactive = Number(item.activo ?? 1) === 0;
     const { unit } = getReactivoStockInfo(item);
     const list: MenuItem[] = [{ label: "Ver ficha", description: "Existencia, lote, ubicación y caducidad", icon: <IdentificationCard size={16} weight="duotone" />, tone: "brand", onSelect: () => detail.open(item) }];
     if (canRellenar && !inactive) list.push({ label: "Rellenar stock", description: "Registrar una entrada", icon: <ArrowsClockwise size={16} weight="duotone" />, tone: "success", onSelect: () => refill.open({ type: "reactivo", id: Number(item.id), name: formatReactivoName(item), unit }) });
     if (canEditar) list.push({ label: "Editar", description: "Cambiar datos del reactivo", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => editReactivo(Number(item.id)) });
+    list.push(...reportar("reactivos", item.id, formatReactivoName(item)));
     if (inactive ? canReactivar : canBaja) {
       if (inactive) list.push({ label: "Reactivar reactivo…", description: "Vuelve al inventario con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => reactivarReactivo(item) });
       else list.push({ label: "Dar de baja…", description: "Deja de ofrecerse; conserva su historial", icon: <Trash size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => deleteReactivo(item) });
@@ -246,6 +250,12 @@ function ReactivosContent() {
 
       {selected ? (
         <DetailSheet
+          extra={
+            <section className="flex flex-col gap-1.5">
+              <h3 className="eyebrow px-1 text-ink-3">Incidencias</h3>
+              <IncidenciasDelRegistro entidad="reactivos" id={selected.id} etiqueta={formatReactivoName(selected)} />
+            </section>
+          }
           open={detail.isOpen}
           onOpenChange={(open) => {
             if (!open) detail.close();

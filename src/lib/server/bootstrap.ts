@@ -17,6 +17,7 @@ import { ensureInformesSchema } from "./modules/informes";
 import { ensureEquiposSchema, ensureMantenimientosSchema, ensureReactivosSchema } from "./modules/inventory";
 import { ensureAnalysisSchema } from "./modules/samples/analisis";
 import { ensureAdjuntosSchema } from "./adjuntos";
+import { ensureCalidadSchema } from "./modules/calidad/comun";
 import { ensureSamplesRecepcionSchema } from "./modules/samples/recepcion";
 import { ensureSamplesProcesamientoSchema } from "./modules/samples/procesamiento";
 import { ensureSamplesExtraccionSchema } from "./modules/samples/extraccion";
@@ -59,6 +60,8 @@ export function ensureInitialSchema(): Promise<void> {
       await ensureEquiposSchema(s);
       await ensureMantenimientosSchema(s);
       await ensureMovimientosSchema(s);
+      // Fase 11: incidencias, NC, acciones, comunicaciones, suspensiones y retenciones (despues de documentos: liga propuestas).
+      await ensureCalidadSchema(s);
       await s.commit();
     }).catch((error: unknown) => {
       initialSchemaPromise = null;

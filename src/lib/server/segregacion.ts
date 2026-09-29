@@ -12,7 +12,8 @@ import { excepcionPara, type ExcepcionSegregacion, type Violacion } from "../sha
  * persona; se registra en la bitacora de la accion.
  */
 
-export const TABLAS_CON_EXCEPCION = ["muestras_analisis", "informes", "documentos_sgc"] as const;
+// Fase 11: incidencias (evaluar), no conformidades (verificar, cerrar) y suspensiones (reanudar).
+export const TABLAS_CON_EXCEPCION = ["muestras_analisis", "informes", "documentos_sgc", "incidencias", "no_conformidades", "suspensiones"] as const;
 export type TablaConExcepcion = (typeof TABLAS_CON_EXCEPCION)[number];
 
 export async function ensureExcepcionesColumn(s: Session, tabla: TablaConExcepcion): Promise<void> {

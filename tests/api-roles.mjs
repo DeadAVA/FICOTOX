@@ -60,8 +60,8 @@ for (let i = 0; i < 60; i += 1) {
 
 const MODULOS = ["usuarios", "documentos", "muestras", "ensayos", "informes", "equipos", "inventario", "calidad", "compras"];
 const ACCIONES = ["V", "C", "E", "R", "A", "AN", "G"];
-/* Fase 2: "supervisado" ya se aplica (queda pendiente del visto bueno), no es diferido. */
-const DIFERIDOS = new Set(["asignado", "proyecto", "tecnico", "investigacion", "autorizados", "administrativo", "limitado", "incidencias", "auditoria"]);
+/* Fase 2: "supervisado" ya se aplica (queda pendiente del visto bueno), no es diferido. Fase 11: "incidencias" tampoco. */
+const DIFERIDOS = new Set(["asignado", "proyecto", "tecnico", "investigacion", "autorizados", "administrativo", "limitado", "auditoria"]);
 const f = (modulo, acciones, alcance = "total") => acciones.split(" ").map((accion) => ({ modulo, accion, alcance }));
 
 const MATRIZ = {
@@ -110,6 +110,7 @@ const firma = (filas) => filas.map((x) => `${x.modulo}:${x.accion}:${x.alcance}`
 /*
  * Reglas de la especificacion: G -> todas; C/E/R/A/AN -> V. Alcances diferidos
  * (Fase 2): en usuarios = solo V de la propia cuenta; en calidad = sin acceso.
+ * Fase 11: calidad "incidencias" ya se aplica (C incidencias -> V incidencias).
  */
 function expandir(filas) {
   const out = {};
@@ -123,7 +124,7 @@ function expandir(filas) {
     // Fase 3.1: en usuarios, G no implica A.
     for (const a of accion === "G" ? ACCIONES.filter((x) => !(modulo === "usuarios" && x === "A")) : [accion]) {
       add(modulo, a, alcance);
-      if (a !== "V") add(modulo, "V", ["propio", "estado", "bitacora"].includes(alcance) || DIFERIDOS.has(alcance) ? alcance : "total");
+      if (a !== "V") add(modulo, "V", ["propio", "estado", "bitacora", "incidencias"].includes(alcance) || DIFERIDOS.has(alcance) ? alcance : "total");
     }
   }
   return out;
@@ -151,6 +152,8 @@ function alcancePermite(al, ctx = {}) {
     uso: ctx.objeto === "uso_equipo",
     mantenimiento: ctx.objeto === "mantenimiento",
     movimientos: ctx.objeto === "movimiento",
+    // Fase 11: solo sobre incidencias, NC y acciones (nunca la bitacora).
+    incidencias: ["incidencia", "nc", "accion_correctiva"].includes(ctx.objeto),
   }[al] === true;
 }
 const permitido = (filas, modulo, accion, ctx) => [...(expandir(filas)[modulo]?.[accion] || [])].some((al) => alcancePermite(al, ctx));

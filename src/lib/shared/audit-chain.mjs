@@ -169,7 +169,7 @@ export function leerClaveSello(secretKey, instanceDir) {
   const configurada = String(secretKey || "").trim();
   if (configurada && configurada !== SECRET_KEY_DESARROLLO) return { clave: configurada, origen: "SECRET_KEY" };
   try {
-    const clave = fs.readFileSync(path.join(instanceDir, "auditoria.key"), "utf8").trim();
+    const clave = fs.readFileSync(path.join(/*turbopackIgnore: true*/ instanceDir, "auditoria.key"), "utf8").trim();
     return clave ? { clave, origen: "auditoria.key" } : null;
   } catch {
     return null;
@@ -180,7 +180,7 @@ export function leerClaveSello(secretKey, instanceDir) {
 export function resolverClaveSello(secretKey, instanceDir) {
   const configurada = String(secretKey || "").trim();
   if (configurada && configurada !== SECRET_KEY_DESARROLLO) return configurada;
-  const archivo = path.join(instanceDir, "auditoria.key");
+  const archivo = path.join(/*turbopackIgnore: true*/ instanceDir, "auditoria.key");
   let clave = "";
   try {
     clave = fs.readFileSync(archivo, "utf8").trim();

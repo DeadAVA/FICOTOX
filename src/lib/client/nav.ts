@@ -64,11 +64,14 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/auditoria",
     label: "Calidad",
     modules: (["documentos", "calidad"] as Modulo[]).filter((m) => !HIDDEN_MODULES.has(m)),
-    description: HIDDEN_MODULES.has("documentos") ? "Bitácora de auditoría" : "Documentos controlados y bitácora de auditoría",
+    description: HIDDEN_MODULES.has("documentos") ? "Incidencias, no conformidades y bitácora de auditoría" : "Incidencias y no conformidades, documentos controlados y bitácora de auditoría",
     icon: "seal",
     children: ([
+      // Fase 11: incidencias, NC y acciones (con el alcance "incidencias", solo lo propio). El admin tecnico (V bitacora) no las ve.
+      { href: "/calidad/incidencias", label: "Incidencias y NC", visible: (p) => !!p.calidad?.V && p.calidad.V !== "bitacora" },
       { href: "/documentos", label: "Documentos", module: "documentos" },
-      { href: "/auditoria", label: "Auditoría", module: "calidad" },
+      // Con el alcance "incidencias" no se ve la bitacora.
+      { href: "/auditoria", label: "Auditoría", module: "calidad", hideForScopes: ["incidencias"] },
     ] as NavChild[]).filter((child) => !HIDDEN_MODULES.has(String(child.module))),
   },
   {
@@ -82,7 +85,7 @@ export const NAV_ITEMS: NavItem[] = [
       { href: "/administracion/roles", label: "Roles", module: "usuarios", hideForScopes: ["propio"] },
       { href: "/administracion/accesos", label: "Revisión de accesos", module: "usuarios" },
       // Fase 10: los administra usuarios:G y los consulta calidad:V (solo lectura).
-      { href: "/administracion/respaldos", label: "Respaldos", visible: (p) => !!p.usuarios?.G || !!p.calidad?.V },
+      { href: "/administracion/respaldos", label: "Respaldos", visible: (p) => !!p.usuarios?.G || (!!p.calidad?.V && p.calidad.V !== "incidencias") },
     ],
   },
 ];

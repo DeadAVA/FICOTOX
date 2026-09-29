@@ -16,7 +16,9 @@ import { ANALYSIS_METHODS, ANALYSIS_TYPES, CONFORMITY_OPTIONS } from "../../../s
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toFloatOrNull, toIntOrNull } from "../helpers";
 import { ensureSupervisionColumns } from "../../supervision";
 import { exigirAutorizaciones, requisitosEquipos } from "../../autorizaciones";
-import { requisitosAnalisis, requisitosRevisionResultados } from "../../../shared/autorizaciones";
+import { metodoDeTipoAnalisis, requisitosAnalisis, requisitosRevisionResultados } from "../../../shared/autorizaciones";
+import { exigirSinSuspension, idsDeEquipos } from "../calidad/bloqueos";
+import { incidenciasPorEquiposNoAptos } from "../calidad/automaticas";
 import { exigirAsignacion, filtroAsignadas } from "../../asignaciones";
 import { ensureColumnasFirma, firmanteElegido, guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
 import { marcarRequiereEnmienda } from "../informes";
@@ -445,6 +447,8 @@ export async function createAnalysis({ request, s }: RouteContext): Promise<Resp
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: !!(data.equipo_id || data.equipo_nombre), insumosJson: data.uso_inventario_json });
   // Fase 4: autorizacion FX-THF-AP: analisis, metodo del tipo de analisis y equipo usado (si esta en el inventario).
   await exigirAutorizaciones(s, user, [...requisitosAnalisis(data.tipo_analisis), ...(await requisitosEquipos(s, [data.equipo_id]))]);
+  // Fase 11: metodo o equipo suspendido por una NC -> 409.
+  await exigirSinSuspension(s, { metodos: [metodoDeTipoAnalisis(data.tipo_analisis)], equipoIds: [data.equipo_id], equipoNombres: data.equipo_id ? [] : [data.equipo_nombre] });
   if (!data.folio_num) data.folio_num = await nextFolioNum(s, TABLE);
   // Fase 6: con firmantes.analista basta (el nombre lo pone la cuenta al resolver la firma).
   if (!data.analista_nombre && firmanteElegido(payload, "analista")) data.analista_nombre = "(cuenta del firmante)";
@@ -483,6 +487,7 @@ export async function createAnalysis({ request, s }: RouteContext): Promise<Resp
     await advanceState(s, "muestras_recepcion", data.recepcion_id, "en_analisis");
     const despues = await snapshotRow(s, TABLE, id);
     await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues, detalle: { actuo_como: actuo } });
+    await incidenciasPorEquiposNoAptos(s, user, TABLE, id, folioLabel(TABLE, despues), await idsDeEquipos(s, [data.equipo_id], data.equipo_id ? [] : [data.equipo_nombre]), actuo.cargo);
     await recordBitacoraFolios(s, [{ equipoId: data.equipo_id, folio: data.equipo_folio_bitacora }]);
     await s.commit();
     return json({ message: "Analisis registrado", id, folio_num: data.folio_num }, 201);
@@ -524,6 +529,8 @@ export async function updateAnalysis({ request, s, params }: RouteContext): Prom
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: !!(data.equipo_id || data.equipo_nombre), insumosJson: data.uso_inventario_json });
   // Fase 4: autorizacion FX-THF-AP: analisis, metodo del tipo de analisis y equipo usado (si esta en el inventario).
   await exigirAutorizaciones(s, user, [...requisitosAnalisis(data.tipo_analisis), ...(await requisitosEquipos(s, [data.equipo_id]))]);
+  // Fase 11: metodo o equipo suspendido por una NC -> 409.
+  await exigirSinSuspension(s, { metodos: [metodoDeTipoAnalisis(data.tipo_analisis)], equipoIds: [data.equipo_id], equipoNombres: data.equipo_id ? [] : [data.equipo_nombre] });
   if (!data.folio_num) return json({ message: "El folio es obligatorio" }, 400);
   // Fase 6: con firmantes.analista basta (el nombre lo pone la cuenta al resolver la firma).
   if (!data.analista_nombre && firmanteElegido(payload, "analista")) data.analista_nombre = "(cuenta del firmante)";
@@ -560,6 +567,7 @@ export async function updateAnalysis({ request, s, params }: RouteContext): Prom
     await guardarFirmantes(s, TABLE, id, data, firmasAnalisis(data.tipo_analisis));
     const despues = await snapshotRow(s, TABLE, id);
     await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { actuo_como: actuo } });
+    await incidenciasPorEquiposNoAptos(s, user, TABLE, id, folioLabel(TABLE, despues), await idsDeEquipos(s, [data.equipo_id], data.equipo_id ? [] : [data.equipo_nombre]), actuo.cargo);
     await recordBitacoraFolios(s, [{ equipoId: data.equipo_id, folio: data.equipo_folio_bitacora }]);
     await s.commit();
     return json({ message: "Analisis actualizado" });

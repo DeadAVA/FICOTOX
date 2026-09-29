@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { FloppyDisk, Plus } from "@phosphor-icons/react";
+import { AvisoSuspension } from "@/components/features/calidad/AvisoSuspension";
+import { IncidenciasFormCard } from "@/components/features/calidad/IncidenciasDelRegistro";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Field, FormGrid, Input, Select } from "@/components/ui/Field";
@@ -30,7 +32,7 @@ import type { ExtractionProtocol, ExtractionState, FixedField, ProtocolContext, 
 import { SolicitudCallout, SupervisionCallout } from "./status";
 import { formatearHora } from "@/lib/shared/fechas";
 import { AvisoAutorizacion } from "./AvisoAutorizacion";
-import { requisitoEquipo, requisitosExtraccion } from "@/lib/shared/autorizaciones";
+import { metodoDeExtraccion, requisitoEquipo, requisitosExtraccion } from "@/lib/shared/autorizaciones";
 import { firmanteDe, firmantesPayload, type FirmanteState } from "./FirmanteSelect";
 
 /*
@@ -732,9 +734,12 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
       readOnly={readOnly}
       after={
         editing ? (
-          <FormCard id="sec-historial" title="Historial del registro" description="Bitácora de auditoría: quién creó, editó, anuló o restauró esta extracción y qué cambió.">
-            <RecordHistory entidad="muestras_extraccion" entidadId={item?.id as number | undefined} />
-          </FormCard>
+          <>
+            <IncidenciasFormCard entidad="muestras_extraccion" id={item?.id} etiqueta={folioLabel} />
+            <FormCard id="sec-historial" title="Historial del registro" description="Bitácora de auditoría: quién creó, editó, anuló o restauró esta extracción y qué cambió.">
+              <RecordHistory entidad="muestras_extraccion" entidadId={item?.id as number | undefined} />
+            </FormCard>
+          </>
         ) : null
       }
       actions={
@@ -752,6 +757,7 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
     >
       <SupervisionCallout item={item} />
       <SolicitudCallout item={item} />
+      <AvisoSuspension metodo={metodoDeExtraccion(protocol.tipo)} equipoIds={rows.map((row) => (/^\d+$/.test(row.ref) ? row.ref : null))} />
       {!readOnly ? <AvisoAutorizacion requisitos={[...requisitosExtraccion(protocol.tipo), ...rows.filter((row) => row.enCatalogo && /^\d+$/.test(row.ref)).map((row) => requisitoEquipo(row.ref, row.claveCatalogo || row.nombre))]} /> : null}
       {readOnly && item?.motivo_anulacion ? (
         <Callout tone="danger" title="Registro anulado">

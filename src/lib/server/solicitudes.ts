@@ -1,4 +1,5 @@
 import { requireUser, userIdFromClaims, type CurrentUser } from "./auth";
+import { ENTIDADES_REGISTRO_CALIDAD, exigirVerRegistroCalidad } from "./modules/calidad/acceso-historial";
 import { registrarAuditoria } from "./audit";
 import { getConfig } from "./config";
 import { isSqlite, type Row, type Session } from "./db";
@@ -292,7 +293,9 @@ export async function listarSolicitudes({ request, s }: RouteContext): Promise<R
   });
   if (entidad && entidadId) {
     const modulo = permisoParaAprobar("anular_registro", entidad).modulo;
-    if (!permisoDe(auth, modulo, "V")) throw new HttpError(403, { message: `Permiso denegado para ${modulo}:V` });
+    // Fase 11: en calidad se ve el registro como su ficha (el alcance "bitacora" o "incidencias" no basta para lo ajeno).
+    if (ENTIDADES_REGISTRO_CALIDAD.has(entidad)) await exigirVerRegistroCalidad(s, user, entidad, Number.parseInt(entidadId, 10) || 0);
+    else if (!permisoDe(auth, modulo, "V")) throw new HttpError(403, { message: `Permiso denegado para ${modulo}:V` });
     const filas = await s.query<Solicitud>("SELECT * FROM solicitudes_autorizacion WHERE entidad = :entidad AND entidad_id = :id ORDER BY id DESC LIMIT 200", { entidad, id: entidadId });
     return json({ items: filas.map(decorar), total: filas.length });
   }

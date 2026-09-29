@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { ArrowCounterClockwise, ArrowSquareOut, PencilSimple, Plus, Prohibit, TestTube } from "@phosphor-icons/react";
+import { useMenuReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { FolioChip, StateBadge, SolicitudBadge, SupervisionBadge } from "@/components/features/samples/status";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
@@ -99,11 +100,13 @@ function AnalisisList() {
   ];
   const toggles: FilterToggle[] = [{ key: "mias", label: "Mis muestras", description: "Solo las muestras asignadas a ti o que registraste.", checked: mias, onChange: setMias }, { key: "anulados", label: "Mostrar anulados", checked: showAnulados, onChange: setShowAnulados }];
 
+  const reportar = useMenuReportar();
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulado = item.estado === "anulado";
     const editable = canEdit(item) && !anulado && item.estado === "registrado";
     const list: MenuItem[] = [{ label: "Abrir", description: item.estado === "aprobado" ? "Solo lectura: análisis aprobado" : "Ver resultados, controles y revisión", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/muestras/analisis/${item.id}`) }];
     if (editable) list.push({ label: "Editar", description: "Corregir resultados antes de la revisión", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/analisis/${item.id}`) });
+    list.push(...reportar("muestras_analisis", item.id, folioA(item)));
     if (canDelete) {
       if (anulado) list.push({ label: "Restaurar análisis", description: "Vuelve a la lista con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => restaurar(item) });
       else list.push({ label: "Anular análisis…", description: "Queda en la bitácora con motivo", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => anular(item) });

@@ -42,6 +42,30 @@ interface Vista {
 }
 
 export function EvidenciaPanel({ analisisId, token, onResumen }: { analisisId: number; token: string; onResumen?: (vigentes: number, puedeAdjuntar: boolean) => void }) {
+  return <AdjuntosPanel registroId={analisisId} base={`/samples/analysis/${analisisId}`} token={token} onResumen={onResumen} />;
+}
+
+/*
+ * Fase 11: el mismo panel sirve a las incidencias (fotos) y a las acciones
+ * correctivas (evidencia de implementacion): cambia la ruta base, la clave que
+ * se invalida al adjuntar y los textos.
+ */
+export interface TextosAdjuntos {
+  vacioTitulo: string;
+  vacioEditable: string;
+  vacioLectura: string;
+  boton: string;
+}
+
+const TEXTOS_ANALISIS: TextosAdjuntos = {
+  vacioTitulo: "Sin evidencia adjunta",
+  vacioEditable: "Adjunta el cromatograma, el reporte del equipo o los cálculos del análisis.",
+  vacioLectura: "Este análisis no tiene evidencia instrumental.",
+  boton: "Adjuntar evidencia",
+};
+
+export function AdjuntosPanel({ registroId, base, token, onResumen, clave = "muestras", tipoInicial = "cromatograma", textos = TEXTOS_ANALISIS }: { registroId: number; base: string; token: string; onResumen?: (vigentes: number, puedeAdjuntar: boolean) => void; clave?: string; tipoInicial?: string; textos?: TextosAdjuntos }) {
+  const analisisId = registroId;
   const prompt = usePrompt();
   const [items, setItems] = useState<ApiRecord[]>([]);
   const [edicion, setEdicion] = useState<{ permitido: boolean; motivo: string | null }>({ permitido: false, motivo: null });
@@ -49,7 +73,7 @@ export function EvidenciaPanel({ analisisId, token, onResumen }: { analisisId: n
   const [maxMb, setMaxMb] = useState(25);
   const [cargando, setCargando] = useState(true);
   const [verAnulados, setVerAnulados] = useState(false);
-  const [tipo, setTipo] = useState("cromatograma");
+  const [tipo, setTipo] = useState(tipoInicial);
   const [descripcion, setDescripcion] = useState("");
   const [archivo, setArchivo] = useState<globalThis.File | null>(null);
   const [progreso, setProgreso] = useState<number | null>(null);
@@ -65,7 +89,7 @@ export function EvidenciaPanel({ analisisId, token, onResumen }: { analisisId: n
     let cancelado = false;
     (async () => {
       try {
-        const data = await getJsonAuth(`${API_BASE_URL}/samples/analysis/${analisisId}/adjuntos`, token);
+        const data = await getJsonAuth(`${API_BASE_URL}${base}/adjuntos`, token);
         if (cancelado) return;
         const lista = (data.items || []) as ApiRecord[];
         const ed = (data.edicion || { permitido: false, motivo: null }) as { permitido: boolean; motivo: string | null };
@@ -85,7 +109,7 @@ export function EvidenciaPanel({ analisisId, token, onResumen }: { analisisId: n
     };
     // onResumen es un callback del formato; basta con recargar al cambiar el analisis o `recarga`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analisisId, token, recarga]);
+  }, [base, token, recarga]);
 
   useEffect(() => () => (vista ? URL.revokeObjectURL(vista.url) : undefined), [vista]);
 
@@ -114,12 +138,12 @@ export function EvidenciaPanel({ analisisId, token, onResumen }: { analisisId: n
     form.append("descripcion", descripcion.trim());
     setProgreso(0);
     try {
-      const data = await sendFormAuthProgress(`${API_BASE_URL}/samples/analysis/${analisisId}/adjuntos`, token, form, setProgreso);
+      const data = await sendFormAuthProgress(`${API_BASE_URL}${base}/adjuntos`, token, form, setProgreso);
       toast.success(String(data.message || "Evidencia adjuntada"));
       setArchivo(null);
       setDescripcion("");
       if (inputRef.current) inputRef.current.value = "";
-      invalidate("muestras");
+      invalidate(clave);
       cargar();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo adjuntar la evidencia");
@@ -174,7 +198,7 @@ export function EvidenciaPanel({ analisisId, token, onResumen }: { analisisId: n
     try {
       const data = await sendJsonAuth("POST", `${API_BASE_URL}/adjuntos/${item.id}/anular`, token, { motivo });
       toast.success(String(data.message || "Adjunto anulado"));
-      invalidate("muestras");
+      invalidate(clave);
       cargar();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo anular el adjunto");
@@ -241,7 +265,7 @@ export function EvidenciaPanel({ analisisId, token, onResumen }: { analisisId: n
               </div>
             ) : null}
             <Button icon={<Paperclip size={16} />} onClick={subir} loading={progreso !== null} disabled={!archivo}>
-              Adjuntar evidencia
+              {textos.boton}
             </Button>
           </div>
         </div>
@@ -258,7 +282,7 @@ export function EvidenciaPanel({ analisisId, token, onResumen }: { analisisId: n
       </div>
 
       {cargando ? null : !visibles.length ? (
-        <EmptyState compact icon={<Paperclip size={20} />} title="Sin evidencia adjunta" description={edicion.permitido ? "Adjunta el cromatograma, el reporte del equipo o los cálculos del análisis." : "Este análisis no tiene evidencia instrumental."} />
+        <EmptyState compact icon={<Paperclip size={20} />} title={textos.vacioTitulo} description={edicion.permitido ? textos.vacioEditable : textos.vacioLectura} />
       ) : (
         <ul className="flex flex-col gap-2">
           {visibles.map((a) => {

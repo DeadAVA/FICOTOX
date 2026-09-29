@@ -19,10 +19,18 @@ import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from
 import { ensureEquiposSchema } from "../inventory";
 import { ensureSupervisionColumns } from "../../supervision";
 import { exigirAutorizaciones, requisitosEquipos } from "../../autorizaciones";
-import { requisitosExtraccion } from "../../../shared/autorizaciones";
+import { metodoDeExtraccion, requisitosExtraccion } from "../../../shared/autorizaciones";
+import { exigirSinSuspension, idsDeEquipos } from "../calidad/bloqueos";
+import { incidenciasPorEquiposNoAptos } from "../calidad/automaticas";
 import { exigirAsignacion, filtroAsignadas } from "../../asignaciones";
 import { ensureColumnasFirma, guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
 
+
+/* Fase 11: equipos de la extraccion para suspensiones e incidencias (con id, o solo por nombre si no se eligio del catalogo). */
+function usoDeEquipos(equiposJson: unknown): { equipoIds: unknown[]; equipoNombres: string[] } {
+  const filas = safeJsonLoad(equiposJson, []) as Array<{ equipo_id?: unknown; nombre?: unknown }>;
+  return { equipoIds: filas.map((e) => e.equipo_id), equipoNombres: filas.filter((e) => !e.equipo_id).map((e) => String(e.nombre || "")) };
+}
 /*
  * Portado de modules/samples/extraccion.py del backend Flask original.
  *
@@ -499,6 +507,8 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
   const data = normalizePayload(payload, tipo);
   // Fase 4: autorizacion FX-THF-AP: extraccion, metodo del tipo (E-A ASP, E-D DSP) y cada equipo del inventario usado.
   await exigirAutorizaciones(s, user, [...requisitosExtraccion(tipo), ...(await requisitosEquipos(s, (safeJsonLoad(data.equipos_json, []) as Array<{ equipo_id?: unknown }>).map((e) => e.equipo_id)))]);
+  // Fase 11: metodo o equipo suspendido por una NC -> 409.
+  await exigirSinSuspension(s, { metodos: [metodoDeExtraccion(tipo)], ...usoDeEquipos(data.equipos_json) });
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: (safeJsonLoad(data.equipos_json, []) as unknown[]).length > 0, insumosJson: data.uso_inventario_json });
   if (!data.folio_num) {
     data.folio_num = await nextFolioNum(s, TABLE, "tipo_registro = :tipo", { tipo });
@@ -549,6 +559,8 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
     await avanzarRecepcion(s, "muestras_procesamiento", data.procesamiento_id, "en_extraccion");
     const despues = await snapshotRow(s, TABLE, id);
     await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues, detalle: { actuo_como: actuo } });
+    // Fase 11: uso confirmado de un equipo no apto -> incidencia automatica (sin duplicados).
+    await incidenciasPorEquiposNoAptos(s, user, TABLE, id, folioLabel(TABLE, despues), await idsDeEquipos(s, usoDeEquipos(data.equipos_json).equipoIds, usoDeEquipos(data.equipos_json).equipoNombres), actuo.cargo);
     await recordBitacoraFolios(s, (safeJsonLoad(data.equipos_json, []) as Array<{ equipo_id?: unknown; folio_bitacora?: unknown }>).map((e) => ({ equipoId: e.equipo_id, folio: e.folio_bitacora })));
     await s.commit();
     return json({ message: "Extraccion creada", id, tipo_registro: tipo, folio_num: data.folio_num }, 201);
@@ -578,6 +590,8 @@ export async function updateExtractionSample({ request, s, params }: RouteContex
   const data = normalizePayload(payload, tipo);
   // Fase 4: autorizacion FX-THF-AP: extraccion, metodo del tipo (E-A ASP, E-D DSP) y cada equipo del inventario usado.
   await exigirAutorizaciones(s, user, [...requisitosExtraccion(tipo), ...(await requisitosEquipos(s, (safeJsonLoad(data.equipos_json, []) as Array<{ equipo_id?: unknown }>).map((e) => e.equipo_id)))]);
+  // Fase 11: metodo o equipo suspendido por una NC -> 409.
+  await exigirSinSuspension(s, { metodos: [metodoDeExtraccion(tipo)], ...usoDeEquipos(data.equipos_json) });
   if (!data.folio_num) {
     return json({ message: "El folio de extraccion es obligatorio" }, 400);
   }
@@ -635,6 +649,7 @@ export async function updateExtractionSample({ request, s, params }: RouteContex
     await avanzarRecepcion(s, "muestras_procesamiento", data.procesamiento_id, "en_extraccion");
     const despues = await snapshotRow(s, TABLE, extractionId);
     await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: extractionId, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { actuo_como: actuo } });
+    await incidenciasPorEquiposNoAptos(s, user, TABLE, extractionId, folioLabel(TABLE, despues), await idsDeEquipos(s, usoDeEquipos(data.equipos_json).equipoIds, usoDeEquipos(data.equipos_json).equipoNombres), actuo.cargo);
     await recordBitacoraFolios(s, (safeJsonLoad(data.equipos_json, []) as Array<{ equipo_id?: unknown; folio_bitacora?: unknown }>).map((e) => ({ equipoId: e.equipo_id, folio: e.folio_bitacora })));
     await s.commit();
     return json({ message: "Extraccion actualizada" });

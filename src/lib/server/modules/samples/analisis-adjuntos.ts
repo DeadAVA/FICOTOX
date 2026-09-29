@@ -13,8 +13,10 @@
  *   Aprobado, sustituido o anulado: solo lectura, siempre descargable.
  * - Cada descarga se registra en la bitacora y recalcula el SHA-256.
  */
+import { anularAdjuntoComun, servirAdjunto, subirAdjunto } from "../../adjuntos-operaciones";
+import { contextoAdjuntoCalidad } from "../calidad/adjuntos";
 import { requireUser, userIdFromClaims, type CurrentUser } from "../../auth";
-import { registrarAuditoria, snapshotRow } from "../../audit";
+import { snapshotRow } from "../../audit";
 import { isSqlite, type Row, type Session } from "../../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../../http";
 import { cargoActuante, requirePermission, soloEstado, type Permiso } from "../../rbac";
@@ -25,22 +27,8 @@ import { estaAsignado, exigirAsignacion, soloAsignado } from "../../asignaciones
 import { folioLabel } from "../../samples-flow";
 import { getConfig } from "../../config";
 import { toIntOrNull } from "../helpers";
-import {
-  adjuntoPorId,
-  anularAdjuntoFila,
-  contentDisposition,
-  descartarArchivo,
-  duplicadoVigente,
-  ensureAdjuntosSchema,
-  guardarArchivo,
-  insertarAdjunto,
-  integridadAdjunto,
-  leerArchivo,
-  listarAdjuntos,
-  serializarAdjunto,
-  type ArchivoGuardado,
-} from "../../adjuntos";
-import { EXTENSIONES_EVIDENCIA, MIME_EVIDENCIA, MOTIVO_MIN, TIPO_EVIDENCIA_LABEL, VISTA_PREVIA } from "../../../shared/adjuntos";
+import { adjuntoPorId, ensureAdjuntosSchema, integridadAdjunto, listarAdjuntos, serializarAdjunto } from "../../adjuntos";
+import { EXTENSIONES_EVIDENCIA, MOTIVO_MIN } from "../../../shared/adjuntos";
 import { requisitosAnalisis } from "../../../shared/autorizaciones";
 import { ensureAnalysisSchema, exigirAnalisisEditable } from "./analisis";
 
@@ -83,7 +71,6 @@ async function exigirVerEvidencia(s: Session, user: CurrentUser, row: Row): Prom
   return permiso;
 }
 
-const detalleAdjunto = (a: Row) => ({ adjunto_id: Number(a.id), tipo_evidencia: String(a.tipo_evidencia), descripcion: String(a.descripcion), nombre: String(a.nombre_original), tamano_bytes: Number(a.tamano_bytes), sha256: String(a.sha256) });
 
 /* GET /api/samples/analysis/:id/adjuntos */
 export async function listarAdjuntosAnalisis({ request, s, params }: RouteContext): Promise<Response> {
@@ -127,99 +114,68 @@ export async function subirAdjuntoAnalisis({ request, s, params }: RouteContext)
   const permiso = await exigirModificarEvidencia(s, user, row);
   const actuo = cargoActuante(request, permiso);
   const supervision = marcaSupervision(permiso);
-  const archivo = await leerArchivo(request);
-  const userId = userIdFromClaims(user);
-  let guardado: ArchivoGuardado | null = null;
-  try {
-    guardado = await guardarArchivo("analisis", id, archivo.extension, archivo.bytes);
-    const duplicado = await duplicadoVigente(s, "analisis", id, guardado.sha256);
-    if (duplicado) throw new HttpError(409, { message: `Ese archivo ya está adjunto (${String(duplicado.descripcion)})`, codigo: "adjunto_duplicado" });
-    const adjuntoId = await insertarAdjunto(s, {
-      entidad: "analisis",
-      entidad_id: id,
-      tipo_evidencia: archivo.tipo_evidencia,
-      descripcion: archivo.descripcion,
-      nombre_original: archivo.nombre_original,
-      nombre_almacenado: guardado.nombre_almacenado,
-      mime: MIME_EVIDENCIA[archivo.extension] || "application/octet-stream",
-      extension: archivo.extension,
-      tamano_bytes: guardado.tamano_bytes,
-      sha256: guardado.sha256,
-      subido_por: userId,
-      subido_rol: actuo.cargo,
-    });
+  const referencia = folioLabel(TABLE, row);
+  return subirAdjunto(s, user, request, "analisis", id, {
+    auditEntidad: TABLE,
+    auditId: id,
+    referencia,
+    que: `el análisis ${referencia}`,
+    cargo: actuo.cargo,
+    detalleExtra: { actuo_como: actuo },
     // Cuenta supervisada: el analisis vuelve a quedar pendiente del visto bueno.
-    await aplicarSupervision(s, TABLE, id, supervision, userId);
-    const adjunto = (await adjuntoPorId(s, adjuntoId))!;
-    await registrarAuditoria(s, user, { accion: "adjuntar", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, row), detalle: { ...detalleAdjunto(adjunto), actuo_como: actuo } });
-    await s.commit();
-    return json({ message: `${TIPO_EVIDENCIA_LABEL[archivo.tipo_evidencia] || "Evidencia"} adjuntada`, item: serializarAdjunto(adjunto, { integridad: "ok" }) }, 201);
-  } catch (error) {
-    await s.rollback();
-    // Nada apunta al archivo: se elimina para no dejar huerfanos.
-    await descartarArchivo(guardado);
-    throw error;
-  }
+    despues: () => aplicarSupervision(s, TABLE, id, supervision, userIdFromClaims(user)),
+  });
 }
 
-/* Carga el adjunto y su analisis (solo la entidad "analisis" esta habilitada en esta fase). */
-async function adjuntoConAnalisis(s: Session, adjuntoId: number, bloquear = false): Promise<{ adjunto: Row; row: Row }> {
+/*
+ * Carga el adjunto. Los de un analisis se resuelven aqui; los de una incidencia
+ * o accion correctiva (Fase 11) los resuelve el modulo de calidad con sus reglas.
+ */
+async function adjuntoDe(s: Session, adjuntoId: number): Promise<Row> {
   await ensureAdjuntosSchema(s);
   const adjunto = await adjuntoPorId(s, adjuntoId);
-  if (!adjunto || String(adjunto.entidad) !== "analisis") throw new HttpError(404, { message: "Adjunto no encontrado" });
-  return { adjunto, row: await analisisDe(s, Number(adjunto.entidad_id), bloquear) };
+  if (!adjunto) throw new HttpError(404, { message: "Adjunto no encontrado" });
+  return adjunto;
 }
 
 /* GET /api/adjuntos/:id/archivo (?inline=1 para la vista previa de PDF e imagenes) */
 export async function descargarAdjunto({ request, s, params }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  const { adjunto, row } = await adjuntoConAnalisis(s, intParam(params.id));
+  const adjunto = await adjuntoDe(s, intParam(params.id));
+  if (String(adjunto.entidad) !== "analisis") return servirAdjunto(s, user, request, adjunto, await contextoAdjuntoCalidad(s, user, adjunto, "ver"));
+  const row = await analisisDe(s, Number(adjunto.entidad_id));
   await exigirVerEvidencia(s, user, row);
   const referencia = folioLabel(TABLE, row);
-  const integridad = await integridadAdjunto(adjunto);
-  if (integridad.estado !== "ok") {
-    await registrarAuditoria(s, user, { accion: "alerta_integridad", entidad: TABLE, entidadId: Number(row.id), referencia, detalle: { ...detalleAdjunto(adjunto), integridad: integridad.estado, esperado: adjunto.sha256, obtenido: integridad.sha256 } });
-  }
-  if (integridad.estado === "faltante" || !integridad.bytes) {
-    await s.commit();
-    return new Response(JSON.stringify({ message: "El archivo de la evidencia no está en el servidor; se registró una alerta de integridad", codigo: "archivo_faltante" }), { status: 404, headers: { "Content-Type": "application/json", "X-Integridad-Adjunto": "faltante" } });
-  }
-  const ext = String(adjunto.extension);
-  const inline = new URL(request.url).searchParams.get("inline") === "1" && VISTA_PREVIA.has(ext);
-  await registrarAuditoria(s, user, { accion: "descargar", entidad: TABLE, entidadId: Number(row.id), referencia, detalle: { adjunto_id: Number(adjunto.id), tipo_evidencia: String(adjunto.tipo_evidencia), nombre: String(adjunto.nombre_original), ...(inline ? { vista_previa: true } : {}) } });
-  await s.commit();
-  return new Response(new Uint8Array(integridad.bytes), {
-    status: 200,
-    headers: {
-      "Content-Type": MIME_EVIDENCIA[ext] || "application/octet-stream",
-      "Content-Disposition": contentDisposition(inline ? "inline" : "attachment", String(adjunto.nombre_original)),
-      "Content-Length": String(integridad.bytes.length),
-      "X-Content-Type-Options": "nosniff",
-      "Cache-Control": "private, no-store",
-      "X-Adjunto-Sha256": String(adjunto.sha256),
-      "X-Integridad-Adjunto": integridad.estado,
-    },
-  });
+  return servirAdjunto(s, user, request, adjunto, { auditEntidad: TABLE, auditId: Number(row.id), referencia, que: `el análisis ${referencia}` });
 }
 
 /* POST /api/adjuntos/:id/anular { motivo } (reautenticacion adjuntos:anular) */
 export async function anularAdjunto({ request, s, params }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  const { adjunto, row } = await adjuntoConAnalisis(s, intParam(params.id), true);
-  if (adjunto.anulado_en) throw new HttpError(409, { message: "El adjunto ya está anulado" });
-  const permiso = await exigirModificarEvidencia(s, user, row);
-  const actuo = cargoActuante(request, permiso);
-  const supervision = marcaSupervision(permiso);
+  const adjunto = await adjuntoDe(s, intParam(params.id));
   const payload = await readJson(request);
   const motivo = String(payload.motivo || "").trim();
+  if (String(adjunto.entidad) !== "analisis") {
+    // Primero la visibilidad (lo ajeno responde 404) y despues el estado del adjunto.
+    const ctx = await contextoAdjuntoCalidad(s, user, adjunto, "modificar", request);
+    if (adjunto.anulado_en) throw new HttpError(409, { message: "El adjunto ya está anulado" });
+    if (motivo.length < MOTIVO_MIN) throw new HttpError(400, { message: `Indica el motivo de la anulación (al menos ${MOTIVO_MIN} caracteres)` });
+    await exigirReauth(s, request, user, "adjuntos:anular");
+    await anularAdjuntoComun(s, user, adjunto, motivo, ctx);
+    await s.commit();
+    return json({ message: "Adjunto anulado; el archivo se conserva", item: serializarAdjunto((await adjuntoPorId(s, Number(adjunto.id)))!) });
+  }
+  const row = await analisisDe(s, Number(adjunto.entidad_id), true);
+  const permiso = await exigirModificarEvidencia(s, user, row);
+  if (adjunto.anulado_en) throw new HttpError(409, { message: "El adjunto ya está anulado" });
+  const actuo = cargoActuante(request, permiso);
+  const supervision = marcaSupervision(permiso);
   if (motivo.length < MOTIVO_MIN) throw new HttpError(400, { message: `Indica el motivo de la anulación (al menos ${MOTIVO_MIN} caracteres)` });
   await exigirReauth(s, request, user, "adjuntos:anular");
-  const userId = userIdFromClaims(user);
+  const referencia = folioLabel(TABLE, row);
   // Con el analisis ya bloqueado se vuelve a leer el adjunto: si otra peticion lo anulo antes, 409 (sin doble entrada en la bitacora).
-  const vigente = await adjuntoPorId(s, Number(adjunto.id), true);
-  if (!vigente || vigente.anulado_en || !(await anularAdjuntoFila(s, Number(adjunto.id), { por: userId, rol: actuo.cargo, motivo }))) throw new HttpError(409, { message: "El adjunto ya está anulado" });
-  await aplicarSupervision(s, TABLE, Number(row.id), supervision, userId);
-  await registrarAuditoria(s, user, { accion: "anular_adjunto", entidad: TABLE, entidadId: Number(row.id), referencia: folioLabel(TABLE, row), motivo, detalle: { ...detalleAdjunto(adjunto), actuo_como: actuo } });
+  await anularAdjuntoComun(s, user, adjunto, motivo, { auditEntidad: TABLE, auditId: Number(row.id), referencia, que: `el análisis ${referencia}`, cargo: actuo.cargo, detalleExtra: { actuo_como: actuo } });
+  await aplicarSupervision(s, TABLE, Number(row.id), supervision, userIdFromClaims(user));
   await s.commit();
   const despues = (await adjuntoPorId(s, Number(adjunto.id)))!;
   return json({ message: "Adjunto anulado; el archivo se conserva", item: serializarAdjunto(despues) });

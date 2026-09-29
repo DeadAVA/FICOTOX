@@ -186,6 +186,20 @@ export function finDiaLocal(fecha: string): string {
   return SOLO_FECHA.test(f) ? instanteLocal(f, 23, 59, 59, 999).toISOString() : "";
 }
 
+/* Fase 11: fecha y hora capturadas en la zona del laboratorio ("AAAA-MM-DD", "HH:MM") -> ISO UTC ("" si no son validas). */
+export function instanteDeFechaHoraLocal(fecha: string, hora: string): string {
+  const f = fechaSola(fecha);
+  const h = /^(\d{1,2}):(\d{2})$/.exec(String(hora || "").trim());
+  if (!SOLO_FECHA.test(f) || !h || Number(h[1]) > 23 || Number(h[2]) > 59) return "";
+  return instanteLocal(f, Number(h[1]), Number(h[2]), 0, 0).toISOString();
+}
+
+/* Hora local actual "HH:MM" en la zona del laboratorio. */
+export function horaLocal(ahora: Date = new Date()): string {
+  const p = partesEnZona(ahora);
+  return `${dos(p.hora)}:${dos(p.minuto)}`;
+}
+
 /*
  * Texto dd/mm/aaaa escrito por la persona -> "AAAA-MM-DD" (o "" si no es una
  * fecha valida). Acepta separadores / - . y anio de 4 cifras.

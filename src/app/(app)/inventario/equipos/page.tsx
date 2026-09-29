@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ArrowCounterClockwise, Cube, IdentificationCard, PencilSimple, Plus, Trash, Wrench } from "@phosphor-icons/react";
+import { IncidenciasDelRegistro } from "@/components/features/calidad/IncidenciasDelRegistro";
+import { useMenuReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { DetailSheet } from "@/components/features/inventory/DetailSheet";
 import { EquipoSheet } from "@/components/features/inventory/EquipoSheets";
 import { EQUIPO_ESTADOS, MANTENIMIENTO_TIPOS, metaFor } from "@/components/features/inventory/meta";
@@ -168,11 +170,13 @@ function EquiposContent() {
   ];
   const toggles: FilterToggle[] = [{ key: "bajas", label: "Mostrar bajas", description: "Incluye equipos dados de baja.", checked: showBajas, onChange: setShowBajas }];
 
+  const reportar = useMenuReportar();
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const inactive = Number(item.activo ?? 1) === 0;
     const list: MenuItem[] = [{ label: "Ver ficha", description: "Bitácora, serie, ubicación y calibración", icon: <IdentificationCard size={16} weight="duotone" />, tone: "brand", onSelect: () => detail.open(item) }];
     if (can("equipos", "C", { objeto: "mantenimiento" }) && !inactive) list.push({ label: "Programar mantenimiento", description: "Preventivo, correctivo o calibración", icon: <Wrench size={16} weight="duotone" />, tone: "success", onSelect: () => router.push(`/inventario/mantenimiento?nuevo=1&equipo=${item.id}`) });
     if (canEditar) list.push({ label: "Editar", description: "Cambiar datos del equipo", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => editEquipo(Number(item.id)) });
+    list.push(...reportar("equipos", item.id, String(item.nombre || "Equipo")));
     if (inactive ? canReactivar : canBaja) {
       if (inactive) list.push({ label: "Reactivar equipo…", description: "Vuelve al inventario con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => reactivarEquipo(item) });
       else list.push({ label: "Dar de baja…", description: "Deja de ofrecerse; conserva su historial", icon: <Trash size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => deleteEquipo(item) });
@@ -254,6 +258,12 @@ function EquiposContent() {
 
       {selected && selectedMeta ? (
         <DetailSheet
+          extra={
+            <section className="flex flex-col gap-1.5">
+              <h3 className="eyebrow px-1 text-ink-3">Incidencias</h3>
+              <IncidenciasDelRegistro entidad="equipos" id={selected.id} etiqueta={String(selected.nombre || "Equipo")} />
+            </section>
+          }
           open={detail.isOpen}
           onOpenChange={(open) => {
             if (!open) detail.close();

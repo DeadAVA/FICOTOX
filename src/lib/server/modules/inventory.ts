@@ -1,4 +1,6 @@
 import { requireUser, userIdFromClaims } from "../auth";
+import { suspensionesActivas } from "./calidad/bloqueos";
+import { folioNc } from "../../shared/calidad";
 import { registrarAuditoria, snapshotRow } from "../audit";
 import { isIntegrityError, isSqlite, type Row, type Session } from "../db";
 import { darDeBaja, ensureBajaColumns, itemRef, reactivarItem } from "../inventory-baja";
@@ -1244,6 +1246,11 @@ export async function updateEquipo({ request, s, params }: RouteContext): Promis
   if (!data.nombre) {
     return json({ message: "El nombre del equipo es obligatorio" }, 400);
   }
+  // Fase 11: un equipo suspendido por una NC sigue "fuera de servicio" hasta que Calidad lo reanude.
+  const suspendido = await suspensionesActivas(s, { tipo: "equipo", clave: String(equipoId) });
+  if (suspendido.length && data.estado !== "fuera_servicio") {
+    return json({ message: `El equipo está suspendido por ${[...new Set(suspendido.map((x) => folioNc(x.nc_folio)))].join(", ")}; su estado no cambia hasta que Calidad lo reanude`, codigo: "suspendido" }, 409);
+  }
 
   let rowcount: number;
   const antes = await snapshotRow(s, "equipos", equipoId);
@@ -1436,7 +1443,7 @@ export async function getMantenimiento({ request, s, params }: RouteContext): Pr
  * hay mantenimiento pendiente que lo sustituya. Al completar una calibración se
  * puede fijar la próxima fecha.
  */
-async function syncEquipoEstado(s: Session, equipoId: number, proximaCalibracion?: string | null, calibracionCompletada = false): Promise<void> {
+export async function syncEquipoEstado(s: Session, equipoId: number, proximaCalibracion?: string | null, calibracionCompletada = false): Promise<void> {
   const equipo = await s.queryOne<{ estado: string }>("SELECT estado FROM equipos WHERE id = :id", { id: equipoId });
   if (!equipo) return;
   const pendientes = await s.scalar("SELECT COUNT(*) FROM mantenimientos WHERE id_equipo = :id AND estado IN ('programado', 'en_proceso', 'vencido')", { id: equipoId });

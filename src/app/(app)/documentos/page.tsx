@@ -1,11 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { folioNc } from "@/lib/shared/calidad";
 import { FEATURES } from "@/lib/shared/features";
 import { toast } from "sonner";
 import { ArrowsClockwise, FileText, PaperPlaneTilt, PencilSimple, Plus, Prohibit, SealCheck, ArrowSquareOut, ClockCounterClockwise, ArrowUUpLeft, CheckCircle, DownloadSimple, Lightbulb, Megaphone } from "@phosphor-icons/react";
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
+import { IncidenciasDelRegistro } from "@/components/features/calidad/IncidenciasDelRegistro";
+import { useMenuReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { DocumentoSheet } from "@/components/features/documentos/DocumentoSheet";
 import { StateBadge } from "@/components/features/samples/status";
 import { PageBody } from "@/components/shell/AppShell";
@@ -248,6 +252,7 @@ function DocumentosContent() {
     }
   }
 
+  const reportar = useMenuReportar();
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const items: MenuItem[] = [];
     const estadoDoc = String(item.estado);
@@ -263,6 +268,7 @@ function DocumentosContent() {
     if (canCreate && ["vigente", "obsoleto"].includes(estadoDoc)) items.push({ label: "Nueva revisión…", description: "Borrador con revisión +1", icon: <ArrowsClockwise size={16} weight="duotone" />, tone: "success", separatorBefore: true, onSelect: () => nuevaRevision(item) });
     if (canView && estadoDoc === "vigente") items.push({ label: "Solicitar cambio…", description: "Mejora Continua la acepta o la rechaza", icon: <Lightbulb size={16} weight="duotone" />, onSelect: () => proponer(item) });
     if (canCalidad && estadoDoc === "vigente") items.push({ label: "Declarar obsoleto…", description: "Queda como solicitud a quien aprueba", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => obsoletar(item) });
+    items.push(...reportar("documentos_sgc", item.id, `${String(item.clave)} rev. ${String(item.revision)}`));
     if (canDelete && ["borrador", "revision_calidad", "revision_tecnica", "por_aprobar", "aprobado"].includes(estadoDoc)) items.push({ label: "Cancelar borrador…", description: "Queda cancelado con motivo", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => cancelar(item) });
     return items;
   };
@@ -341,6 +347,11 @@ function DocumentosContent() {
                   <Tr key={item.id} data-propuesta={item.id}>
                     <Td className="max-w-[360px]">
                       <CellPrimary title={item.titulo || "-"} subtitle={String(item.motivo || "")} />
+                      {item.nc_id ? (
+                        <Link href={`/calidad/nc/${item.nc_id}`} className="mt-0.5 inline-flex text-[12px] font-medium text-brand hover:underline" data-propuesta-nc>
+                          Por {folioNc(item.nc_folio)}
+                        </Link>
+                      ) : null}
                     </Td>
                     <Td muted>{item.tipo === "cambio" ? `Cambio${item.documento_clave ? ` · ${item.documento_clave}` : ""}` : "Nuevo"}</Td>
                     <Td muted>
@@ -541,6 +552,10 @@ function DocumentosContent() {
               </ul>
             </div>
             ) : null}
+            <div>
+              <p className="mb-2 text-[13px] font-medium text-ink-2">Incidencias</p>
+              <IncidenciasDelRegistro entidad="documentos_sgc" id={detailItem.id} etiqueta={`${String(detailItem.clave)} rev. ${String(detailItem.revision)}`} />
+            </div>
             <div>
               <p className="mb-2 text-[13px] font-medium text-ink-2">Historial (bitácora de auditoría)</p>
               <RecordHistory entidad="documentos_sgc" entidadId={detailItem.id as number} compact />

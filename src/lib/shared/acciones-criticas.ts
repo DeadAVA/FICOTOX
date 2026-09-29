@@ -11,9 +11,9 @@
  */
 import type { Accion, Modulo } from "./permisos";
 
-export const VERSION_ACCIONES_CRITICAS = "2026-09-24.1";
+export const VERSION_ACCIONES_CRITICAS = "2026-09-29.1";
 
-export type TipoSolicitud = "anular_registro" | "restaurar_registro" | "anular_informe" | "excepcion_segregacion" | "asignar_rol" | "reactivar_cuenta" | "ampliar_vigencia" | "decision_recepcion" | "cambiar_folio" | "reabrir_recepcion" | "obsoletar_documento";
+export type TipoSolicitud = "anular_registro" | "restaurar_registro" | "anular_informe" | "excepcion_segregacion" | "asignar_rol" | "reactivar_cuenta" | "ampliar_vigencia" | "decision_recepcion" | "cambiar_folio" | "reabrir_recepcion" | "obsoletar_documento" | "anular_calidad";
 
 export type EstadoSolicitud = "pendiente" | "aprobada" | "rechazada" | "cancelada" | "vencida";
 
@@ -40,6 +40,8 @@ export const ACCIONES_CRITICAS: Record<TipoSolicitud, AccionCritica> = {
   reabrir_recepcion: { tipo: "reabrir_recepcion", etiqueta: "Reabrir recepción", pendiente: "Reapertura solicitada", aprueba: { modulo: "muestras", accion: "A" }, descripcion: "Reabrir una recepción cerrada o rechazada: vuelve al estado previo." },
   // Fase 7: documento vigente declarado obsoleto sin reemplazo (lo pide documentos:G).
   obsoletar_documento: { tipo: "obsoletar_documento", etiqueta: "Declarar documento obsoleto", pendiente: "Obsolescencia solicitada", aprueba: { modulo: "documentos", accion: "A" }, descripcion: "Declarar obsoleto, sin reemplazo, un documento vigente del SGC." },
+  // Fase 11: anular una incidencia o una no conformidad (calidad:AN pide, otra persona con calidad:AN aprueba).
+  anular_calidad: { tipo: "anular_calidad", etiqueta: "Anular incidencia o NC", pendiente: "Anulación solicitada", aprueba: { modulo: "calidad", accion: "AN" }, descripcion: "Anular una incidencia o una no conformidad. Una incidencia escalada solo se anula si su NC está anulada." },
   ampliar_vigencia: { tipo: "ampliar_vigencia", etiqueta: "Ampliar vigencia", pendiente: "Ampliación de vigencia solicitada", aprueba: { modulo: "usuarios", accion: "A" }, descripcion: "Ampliar la vigencia de una cuenta temporal (o convertirla en permanente)." },
 };
 
@@ -54,6 +56,10 @@ export const MODULO_DE_ENTIDAD: Record<string, Modulo> = {
   informes: "informes",
   documentos_sgc: "documentos",
   usuarios: "usuarios",
+  incidencias: "calidad",
+  no_conformidades: "calidad",
+  acciones_correctivas: "calidad",
+  suspensiones: "calidad",
 };
 
 /* Permiso que necesita el segundo usuario para aprobar una solicitud concreta. */

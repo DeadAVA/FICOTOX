@@ -9,7 +9,8 @@
  * el servidor; la interfaz la usa para avisar antes de subir.
  */
 
-export const ENTIDADES_ADJUNTOS = ["analisis"] as const;
+/* Fase 11: tambien incidencias (fotos, bitacoras, correos) y acciones correctivas (evidencia de implementacion). */
+export const ENTIDADES_ADJUNTOS = ["analisis", "incidencia", "accion_correctiva"] as const;
 export type EntidadAdjunto = (typeof ENTIDADES_ADJUNTOS)[number];
 
 export const TIPOS_EVIDENCIA = [

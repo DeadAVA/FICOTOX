@@ -15,10 +15,10 @@ import type { HumanEntry } from "@/lib/client/audit-humanize";
 export type Categoria = "crear" | "editar" | "firmar" | "anular" | "accesos" | "exportar" | "sistema";
 
 export const CATEGORIAS: Array<{ value: Categoria; label: string; acciones: string[] }> = [
-  { value: "crear", label: "Crear", acciones: ["crear", "importar", "proponer", "enmendar", "reponer", "adjuntar"] },
-  { value: "editar", label: "Editar", acciones: ["editar", "restaurar", "reactivar", "cambiar_folio", "reabrir", "cambiar_vigencia", "cambiar_cargo", "asignar_muestra", "revocar_asignacion", "cerrar"] },
-  { value: "firmar", label: "Firmar / aprobar", acciones: ["revisar", "aprobar", "autorizar", "liberar", "visto_bueno", "aceptar", "enviar_revision", "publicar", "confirmar_firma", "confirmar_lectura", "confirmar_envio", "aprobar_solicitud", "solicitar", "otorgar_autorizacion", "enviar", "entregar"] },
-  { value: "anular", label: "Anular / rechazar", acciones: ["anular", "rechazar", "baja", "eliminar", "devolver", "sustituir", "rechazar_solicitud", "cancelar_solicitud", "regresar_supervision", "revocar_autorizacion", "revocar_rol", "acotar_rol", "anular_adjunto"] },
+  { value: "crear", label: "Crear", acciones: ["crear", "importar", "proponer", "enmendar", "reponer", "adjuntar", "reportar", "comunicar", "afectar"] },
+  { value: "editar", label: "Editar", acciones: ["editar", "restaurar", "reactivar", "cambiar_folio", "reabrir", "cambiar_vigencia", "cambiar_cargo", "asignar_muestra", "revocar_asignacion", "cerrar", "evaluar", "avanzar", "iniciar_accion", "reasignar"] },
+  { value: "firmar", label: "Firmar / aprobar", acciones: ["revisar", "aprobar", "autorizar", "liberar", "visto_bueno", "aceptar", "enviar_revision", "publicar", "confirmar_firma", "confirmar_lectura", "confirmar_envio", "aprobar_solicitud", "solicitar", "otorgar_autorizacion", "enviar", "entregar", "cerrar_sin_nc", "implementar", "verificar", "reanudar", "liberar_retencion"] },
+  { value: "anular", label: "Anular / rechazar", acciones: ["anular", "rechazar", "baja", "eliminar", "devolver", "sustituir", "rechazar_solicitud", "cancelar_solicitud", "regresar_supervision", "revocar_autorizacion", "revocar_rol", "acotar_rol", "anular_adjunto", "escalar", "cancelar", "suspender", "retener"] },
   { value: "accesos", label: "Accesos", acciones: ["login", "login_fallido", "reauth_fallida", "bloquear", "desbloquear", "cerrar_sesiones", "cambiar_password", "restablecer_password", "asignar_rol"] },
   { value: "exportar", label: "Exportar y descargas", acciones: ["exportar", "descargar", "imprimir_etiquetas"] },
   { value: "sistema", label: "Sistema", acciones: ["vencer_rol", "vencer_solicitud", "vencer_autorizacion", "requiere_enmienda", "alerta_integridad", "respaldar", "restaurar_respaldo"] },

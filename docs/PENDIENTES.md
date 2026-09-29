@@ -1,6 +1,6 @@
-# Pendientes de FICOTOX (fases 0 a 10)
+# Pendientes de FICOTOX (fases 0 a 11)
 
-Lista única y vigente de pendientes, riesgos y decisiones por validar al cierre de la Fase 10. Sale de MANUAL_TECNICO.md (§20), MANUAL_USUARIO.md, docs/CATALOGO_PERMISOS.md (§7), docs/CONTEXTO_AGENTE.md (§9) y los resúmenes de cada fase. Ya se quitaron los duplicados y lo que resolvieron fases posteriores. El origen de cada punto va entre paréntesis.
+Lista única y vigente de pendientes, riesgos y decisiones por validar al cierre de la Fase 11. Sale de MANUAL_TECNICO.md (§20), MANUAL_USUARIO.md, docs/CATALOGO_PERMISOS.md (§7), docs/CONTEXTO_AGENTE.md (§9) y los resúmenes de cada fase. Ya se quitaron los duplicados y lo que resolvieron fases posteriores. El origen de cada punto va entre paréntesis.
 
 Ya resuelto, así que no se repite abajo:
 - La A de informes de la Coord. Técnica exige la autorización FX-THF-AP (Fase 4).
@@ -10,6 +10,8 @@ Ya resuelto, así que no se repite abajo:
 - En el .env local: ALLOWED_EMAIL_DOMAINS definido, JWT_EXPIRES_HOURS=8 y CORS vacío (Fase 9).
 - En la Fase 9, el alcance "autorizados" ya se aplica también a la descarga del archivo, al resumen y a las propuestas de documentos.
 - Fase 10: adjuntar evidencia instrumental a los análisis (sección 7, "Resultados") y la prueba documentada de restauración de respaldos con acta (sección 9 y PVVC).
+- Fase 11: incidencias, no conformidades y acciones correctivas (7.10 y 8.7), con el alcance `incidencias` aplicado, las reglas de segregación 7–10, suspensiones de método o equipo y retención de informes; la tabla `adjuntos` ya sirve también a incidencias y acciones correctivas.
+- Fase 11: el paquete standalone ya no lleva `instance/`, respaldos, pruebas, `.env` ni llaves (`scripts/limpiar-standalone.mjs` y `tests/standalone.mjs`).
 
 ## Validar con Mejora Continua
 
@@ -32,6 +34,15 @@ Ya resuelto, así que no se repite abajo:
 - Antes de operar con la base real, correr el seed o registrar las autorizaciones FX-THF-AP del personal: con AUTORIZACIONES_OBLIGATORIAS=true nadie guarda formatos sin ellas (Fase 4, resumen).
 
 - Fase 10 · respaldos: frecuencia (diaria local, semanal externa), retención (30 locales), ubicación de las copias externas y de la llave, RTO (1 h) y RPO (24 h) son propuestas en `docs/RESPALDO_Y_RECUPERACION.md`; la tarea programada por omisión sigue siendo cada 15 días (`install-ficotox-backup-tasks.cmd daily` para la diaria).
+- Fase 11 · clasificación de las NC (menor, mayor, crítica) y su significado: propuesta en la plataforma, por validar con Mejora Continua (hoy solo informa; no cambia reglas).
+- Fase 11 · clave del formato "Registro de no conformidad": "FX-MC-NC (por confirmar)", configurable con `NC_FORMATO_CLAVE`.
+- Fase 11 · plazos: la fecha compromiso de cada acción la fija quien la crea; no hay plazos por clasificación ni para evaluar una incidencia o verificar la eficacia (la acción vencida se marca, no se bloquea). Definir si se requieren plazos.
+- Fase 11 · incidencias automáticas (recepción con desviación o rechazada, equipo no apto o con calibración vencida, alertas de integridad): confirmar si se quedan todas. Hoy las evalúa Calidad como cualquier otra (se cierran sin NC si no aplica).
+- Fase 11 · verificación de eficacia por NC (no por acción): elegida porque la eficacia se juzga sobre la causa raíz de la NC. Confirmar.
+- Fase 11 · un método suspendido bloquea crear y editar extracciones y análisis de ese método (lo que pide la fase); revisar o aprobar un análisis ya capturado no se bloquea. Confirmar si también debe detenerse.
+- Fase 11 · una incidencia escalada a una NC que después se anula no se vuelve a evaluar ("solo hacia adelante"): se anula y, si hace falta, se reporta de nuevo.
+- Fase 11 · quien es responsable solo de una acción ve la NC completa (impacto, comunicaciones, retenciones); de las incidencias ajenas agrupadas, solo folio y estado. Confirmar.
+- Fase 11 · suspensión desde dos NC: suspender lo que la misma NC ya suspende responde 409; otra NC sí puede suspenderlo y sigue suspendido hasta que todas lo reanuden. Confirmar esta lectura de los dos casos límite.
 - Fase 10 · evidencia: confirmar que la evidencia es obligatoria para todos los tipos de análisis (hoy `EVIDENCIA_OBLIGATORIA_ANALISIS` aplica a todos, incluido plancton) y si el revisor debe poder adjuntar (hoy solo quien puede editar, en "registrado").
 
 ## Mejoras técnicas
@@ -62,15 +73,16 @@ Ya resuelto, así que no se repite abajo:
 
 - Fase 10: los respaldos por terminal o tarea programada no escriben en la bitácora (su registro es el manifest); solo "Crear respaldo ahora" de la interfaz queda en ella.
 - Fase 10: el respaldo y la restauración con verificación automática son solo para SQLite; en MySQL/MariaDB se usa mysqldump y la verificación de la cadena del volcado no está implementada.
-- Fase 10: la tabla `adjuntos` solo está habilitada para análisis (incidencias y otros registros en fases posteriores).
 - Fase 10: los TIFF no tienen vista previa en la plataforma (Chrome y Firefox no los muestran); se descargan.
 - Fase 10 · rendimiento con SQLite: las peticiones se atienden una a la vez (una sola conexión), así que subir una evidencia grande (hasta 25 MB) o "Crear respaldo ahora" con muchos archivos retiene al resto de las peticiones mientras dura. Con el volumen actual son segundos; si crece, leer el archivo antes de abrir la sesión de base o programar los respaldos fuera de horario.
 
-- Build standalone (anterior a la Fase 10, confirmado construyendo `main`): el trazado de `instrumentation` copia toda la carpeta `instance/` (base real, `instance/test`, `instance/backups`) a `.next/standalone/instance/` pese a `outputFileTracingExcludes`. No afecta el funcionamiento, pero al copiar el build a otra PC viajan datos del laboratorio: copiar solo lo necesario o revisar el trazado. La Fase 10 evita que ademas se copien `backups/`, `tests/`, `marimo/` e `instance-restaurada/`.
+- Fase 11: la alerta de integridad de un respaldo (y su incidencia automática) se registra al abrir Administración › Respaldos o al consultar `GET /api/respaldos` con el acta fallida, no en el momento en que la prueba de restauración por terminal escribe el acta. El acta y el aviso de "prueba de restauración" siguen visibles.
+- Fase 11: la incidencia automática de "equipo no apto" se evalúa al guardar (estado y calibración de ese momento); si el equipo se corrige después, la incidencia automática queda y se cierra sin NC.
+- Fase 11 · MySQL: dos suspensiones simultáneas del mismo método desde NC distintas pueden chocar por el bloqueo de hueco del índice (InnoDB aborta una: 500 con rollback completo, se reintenta). Si ocurre en producción, serializar con una fila centinela por método.
+- Fase 11: el MySQL de las transiciones de calidad (FOR UPDATE, CAST de la clave de equipo) se probó solo en SQLite, como el resto del sistema. En MySQL, dos incidencias creadas al mismo tiempo pueden chocar en el folio (MAX+1, el mismo patrón de los demás folios) y la petición perdedora responde 500 y se reintenta; la deduplicación de incidencias automáticas se apoya en la misma transacción (sin índice único, porque una anulada no debe impedir una nueva).
 
-## Fase 8 (no implementada)
+## Resto de la antigua Fase 8 (no implementado)
 
-- Incidencias (calidad): los alcances `incidencias` (C del Técnico Analista, Técnico Auxiliar, Administrador/a Auxiliar y Estudiante) se guardan pero no se aplican; en calidad un diferido es "sin acceso" (CATALOGO_PERMISOS §3 y §7.8).
 - Auditorías internas: el alcance `auditoria` del Auditor Interno (C E en calidad) está diferido (CATALOGO_PERMISOS §3).
 - Compras: el módulo `compras` y sus permisos (G del Administrador/a Auxiliar; V y A de otros roles) existen en la matriz sin pantallas ni flujo (CATALOGO_PERMISOS §4).
 - Proyectos: el alcance `proyecto` de la Coord. de Investigación y Desarrollo (muestras, ensayos, informes) está diferido y hoy se comporta como `total` (CATALOGO_PERMISOS §3).

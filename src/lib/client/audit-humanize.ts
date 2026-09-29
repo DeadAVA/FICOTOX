@@ -2,6 +2,7 @@ import type { ApiRecord } from "@/lib/client/types";
 import { ACCION_KEYS, MODULOS, alcanceLabel, isAccion, isModulo } from "@/lib/shared/permisos";
 import { ACCEPTANCE_DECISIONS, ANALYSIS_STATES, AUDIT_ENTITIES, CLIENT_CONTACT_MEDIA, DISPOSAL_TYPES, DOCUMENT_STATES, RECEPTION_DELIVERY_MEDIA, REPORT_DELIVERY_MEDIA, REPORT_STATES, SAMPLE_STATES, STORAGE_PLACES } from "@/lib/shared/sgc";
 import { TIPO_EVIDENCIA_ART, fmtBytes, huellaCorta } from "@/lib/shared/adjuntos";
+import { ESTADOS_NC, ORIGEN_AUTOMATICO_LABEL, TIPO_INCIDENCIA_LABEL } from "@/lib/shared/calidad";
 import { diaSemana, diasEntre, fechaSola, formatearFecha, formatearFechaHora, formatearFechaLarga, formatearHora, hoyLocal, instanteDe } from "../shared/fechas";
 
 /*
@@ -63,6 +64,10 @@ const ENTITY_NOUN: Record<string, { art: string; noun: string; plural: string }>
   roles: { art: "el", noun: "rol", plural: "roles" },
   sesion: { art: "la", noun: "sesión", plural: "sesiones" },
   respaldos: { art: "el", noun: "respaldo", plural: "respaldos" },
+  incidencias: { art: "la", noun: "incidencia", plural: "incidencias" },
+  no_conformidades: { art: "la", noun: "no conformidad", plural: "no conformidades" },
+  acciones_correctivas: { art: "la", noun: "acción correctiva", plural: "acciones correctivas" },
+  suspensiones: { art: "la", noun: "suspensión", plural: "suspensiones" },
 };
 
 export const ACTION_TONE: Record<string, AuditTone> = {
@@ -139,6 +144,23 @@ export const ACTION_TONE: Record<string, AuditTone> = {
   anular_adjunto: "danger",
   respaldar: "brand",
   restaurar_respaldo: "warning",
+  // Fase 11: incidencias, no conformidades y acciones correctivas.
+  reportar: "warning",
+  evaluar: "neutral",
+  cerrar_sin_nc: "success",
+  escalar: "danger",
+  avanzar: "brand",
+  implementar: "success",
+  iniciar_accion: "brand",
+  cancelar: "danger",
+  reasignar: "warning",
+  verificar: "success",
+  suspender: "danger",
+  reanudar: "success",
+  retener: "danger",
+  liberar_retencion: "success",
+  comunicar: "ink",
+  afectar: "warning",
 };
 
 /*
@@ -461,7 +483,7 @@ const STATE_BY_ENTITY: Record<string, Record<string, { label: string }>> = {
 };
 const GENERIC_STATES: Record<string, string> = { pendiente: "Pendiente", vencido: "Vencido", completado: "Completado", programado: "Programado", cancelado: "Cancelado", activo: "Activo", inactivo: "Inactivo", baja: "Dado de baja", vigente: "Vigente", obsoleto: "Obsoleto" };
 
-const CONSUMED_DETAIL = new Set(["enmienda_de", "enmienda", "nueva_revision_de", "avatar", "contrasena", "excepcion", "revisiones_obsoletas", "pdf", "sha256", "a_quien", "medio", "fecha", "decision", "disposicion", "cantidad", "insertados", "actualizados", "ignorados", "errores", "hojas", "movimientos_repuestos", "proveedor", "existe_usuario", "motivo", "permisos", "rol", "rol_id", "asignacion_id", "vigente_desde", "vigente_hasta", "actuo_como", "ip", "tipo", "bloqueado_hasta", "cambios", "roles_acotados", "cambio_obligatorio", "sesiones", "otras_sesiones", "supervisado", "antes", "despues", "tipo_cuenta", "supervisor_id", "adjunto_id", "tipo_evidencia", "descripcion", "nombre", "tamano_bytes", "vista_previa", "integridad", "esperado", "obtenido", "adjuntos_heredados", "respaldo_id", "archivos", "incluye_llave", "llave_huella", "bitacora_ultimo_id", "tamano", "manifest_sha256", "origen", "modo", "responsable"]);
+const CONSUMED_DETAIL = new Set(["enmienda_de", "enmienda", "nueva_revision_de", "avatar", "contrasena", "excepcion", "revisiones_obsoletas", "pdf", "sha256", "a_quien", "medio", "fecha", "decision", "disposicion", "cantidad", "insertados", "actualizados", "ignorados", "errores", "hojas", "movimientos_repuestos", "proveedor", "existe_usuario", "motivo", "permisos", "rol", "rol_id", "asignacion_id", "vigente_desde", "vigente_hasta", "actuo_como", "ip", "tipo", "bloqueado_hasta", "cambios", "roles_acotados", "cambio_obligatorio", "sesiones", "otras_sesiones", "supervisado", "antes", "despues", "tipo_cuenta", "supervisor_id", "adjunto_id", "tipo_evidencia", "descripcion", "nombre", "tamano_bytes", "vista_previa", "integridad", "esperado", "obtenido", "adjuntos_heredados", "respaldo_id", "archivos", "incluye_llave", "llave_huella", "bitacora_ultimo_id", "tamano", "manifest_sha256", "origen", "modo", "responsable", "origen_automatico", "registros", "impacto", "nc", "etapa", "accion_correctiva", "fecha_compromiso", "implementacion", "resultado", "suspension", "sigue_suspendido_por", "informe", "informe_estado", "contacto", "propuesta_documental", "titulo", "pdf_sha256", "incidencia", "de", "a", "reaperturas", "acta", "verificacion", "detalle"]);
 const DELIVERY_PHRASE: Record<string, string> = { correo: "por correo electrónico", impreso: "en mano (impreso)", portal: "por el portal o carpeta compartida", otro: "por otro medio" };
 const exceptionLabel = (value: unknown) => {
   const text = String(value);
@@ -670,6 +692,8 @@ const ENTITY_ROUTE: Partial<Record<string, (id: string, referencia: string) => s
   consumibles: (_id, ref) => `/inventario/consumibles?buscar=${encodeURIComponent(ref)}`,
   equipos: (_id, ref) => `/inventario/equipos?buscar=${encodeURIComponent(ref)}`,
   mantenimientos: () => `/inventario/mantenimiento`,
+  incidencias: (id) => `/calidad/incidencias/${id}`,
+  no_conformidades: (id) => `/calidad/nc/${id}`,
   usuarios: () => `/administracion/usuarios`,
   roles: () => `/administracion/roles`,
 };
@@ -691,7 +715,10 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
 
   switch (accion) {
     case "crear":
-      if (detalle.enmienda_de || detalle.enmienda) action = `emitió ${obj} como enmienda (sustituye a la versión anterior)`;
+      if (detalle.accion_correctiva) {
+        action = `agregó la acción correctiva #${String(detalle.accion_correctiva)} a ${obj}`;
+        if (detalle.responsable) facts.push(`Responsable: ${String(detalle.responsable)}${detalle.fecha_compromiso ? ` · compromiso ${humanValue("fecha", detalle.fecha_compromiso)}` : ""}`);
+      } else if (detalle.enmienda_de || detalle.enmienda) action = `emitió ${obj} como enmienda (sustituye a la versión anterior)`;
       else if (detalle.nueva_revision_de) action = `creó una nueva revisión ${de(obj)}`;
       else action = `creó ${obj}`;
       break;
@@ -702,7 +729,8 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       else if (detalle.contrasena) {
         action = `cambió la contraseña ${de(obj)}`;
         if (keys.length) facts.push(`${keys.length} dato${keys.length === 1 ? "" : "s"} más editado${keys.length === 1 ? "" : "s"}`);
-      } else action = `editó ${obj}`;
+      } else if (entidad === "no_conformidades" && detalle.accion_correctiva) action = `editó la acción correctiva #${String(detalle.accion_correctiva)} ${de(obj)}`;
+      else action = `editó ${obj}`;
       break;
     }
     case "anular":
@@ -797,7 +825,66 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       action = `cambió el folio ${de(obj)}${detalle.folio_anterior ? ` (antes R ${String(detalle.folio_anterior).padStart(7, "0")})` : ""}`;
       break;
     case "reabrir":
-      action = `reabrió ${obj}${detalle.de ? ` (de "${String(detalle.de)}" a "${String(detalle.a || "")}")` : ""}`;
+      if (entidad === "no_conformidades") {
+        action = `reabrió ${obj}: la verificación fue no eficaz y regresa a análisis`;
+        if (detalle.reaperturas) facts.push(`Reapertura número ${String(detalle.reaperturas)}`);
+      } else action = `reabrió ${obj}${detalle.de ? ` (de "${String(detalle.de)}" a "${String(detalle.a || "")}")` : ""}`;
+      break;
+    // Fase 11: incidencias, NC y acciones correctivas.
+    case "reportar":
+      action = `reportó ${obj}`;
+      if (detalle.origen_automatico) facts.push(`Registro automático: ${ORIGEN_AUTOMATICO_LABEL[String(detalle.origen_automatico)] || String(detalle.origen_automatico)}`);
+      if (detalle.tipo) facts.push(`Tipo: ${TIPO_INCIDENCIA_LABEL[String(detalle.tipo)] || String(detalle.tipo)}`);
+      if (detalle.registros) facts.push(`Registros: ${String(detalle.registros)}`);
+      break;
+    case "evaluar":
+      action = `inició la evaluación de ${obj}`;
+      break;
+    case "cerrar_sin_nc":
+      action = `cerró ${obj} sin no conformidad`;
+      break;
+    case "escalar":
+      // Sobre la NC: la incidencia que se le agrego (una NC agrupa varias).
+      action = entidad === "no_conformidades" ? `agregó la incidencia ${String(detalle.incidencia || "")} a ${obj}` : `escaló ${obj} a la ${String(detalle.nc || "no conformidad")}`;
+      break;
+    case "avanzar":
+      action = `pasó ${obj} a la etapa "${ESTADOS_NC[String(detalle.etapa)]?.label || String(detalle.etapa || "")}"`;
+      break;
+    case "iniciar_accion":
+      action = `inició la acción correctiva #${String(detalle.accion_correctiva ?? "?")} ${de(obj)}`;
+      break;
+    case "implementar":
+      action = `marcó como implementada la acción correctiva #${String(detalle.accion_correctiva ?? "?")} ${de(obj)}`;
+      if (detalle.implementacion) facts.push(`Implementación: ${String(detalle.implementacion)}`);
+      break;
+    case "cancelar":
+      action = `canceló la acción correctiva #${String(detalle.accion_correctiva ?? "?")} ${de(obj)}`;
+      break;
+    case "reasignar":
+      action = detalle.accion_correctiva ? `reasignó la acción correctiva #${String(detalle.accion_correctiva)} ${de(obj)}` : `cambió el responsable ${de(obj)}`;
+      break;
+    case "verificar":
+      action = `verificó la eficacia ${de(obj)}: ${detalle.resultado === "eficaz" ? "eficaz" : "no eficaz"}`;
+      break;
+    case "suspender":
+    case "reanudar": {
+      const verbo = accion === "suspender" ? "suspendió" : "reanudó";
+      action = entidad === "no_conformidades" ? `${verbo} ${String(detalle.suspension || "un método o equipo")} por ${obj}` : `${verbo} ${obj}${detalle.nc ? ` (${String(detalle.nc)})` : ""}`;
+      if (detalle.sigue_suspendido_por) facts.push(`Sigue suspendido por ${String(detalle.sigue_suspendido_por)}`);
+      break;
+    }
+    case "retener":
+    case "liberar_retencion": {
+      const verbo = accion === "retener" ? "retuvo" : "liberó la retención de";
+      action = entidad === "informes" ? `${verbo} ${obj}${detalle.nc ? ` (${String(detalle.nc)})` : ""}` : `${verbo} ${String(detalle.informe || "un informe")} por ${obj}`;
+      break;
+    }
+    case "comunicar":
+      action = `registró una comunicación con el cliente en ${obj}`;
+      if (detalle.contacto) facts.push(`Con ${String(detalle.contacto)}${detalle.medio ? ` · ${String(detalle.medio)}` : ""}${detalle.fecha ? ` · ${humanValue("fecha", detalle.fecha)}` : ""}`);
+      break;
+    case "afectar":
+      action = `marcó ${String(detalle.informe || "un informe")} como afectado por ${obj}`;
       break;
     case "confirmar_firma":
       action = `${String(detalle.firmante || referencia || "una persona")} confirmó su firma con contraseña`;
@@ -816,11 +903,13 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       action = `confirmó la lectura de ${obj} (leí y comprendí)`;
       break;
     case "proponer":
-      action = `${detalle.tipo === "cambio" ? "solicitó un cambio" : "propuso un documento"}: ${obj}`;
+      if (entidad === "no_conformidades") action = `creó desde ${obj} una propuesta de cambio documental${detalle.titulo ? `: ${String(detalle.titulo)}` : ""}`;
+      else action = `${detalle.tipo === "cambio" ? "solicitó un cambio" : "propuso un documento"}: ${obj}${detalle.nc ? ` (desde ${String(detalle.nc)})` : ""}`;
       break;
     case "exportar": {
       const n = Number(detalle.filas || 0);
-      action = `${String(referencia || "").startsWith("Historial") ? "exportó el historial" : "exportó la bitácora"} (${n} ${n === 1 ? "fila" : "filas"}, CSV)`;
+      const lista = ["incidencias", "no_conformidades", "acciones_correctivas"].includes(entidad) ? `exportó la lista de ${ENTITY_NOUN[entidad].plural}` : null;
+      action = `${lista || (String(referencia || "").startsWith("Historial") ? "exportó el historial" : "exportó la bitácora")} (${n} ${n === 1 ? "fila" : "filas"}, CSV)`;
       break;
     }
     case "liberar":
@@ -906,6 +995,7 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
         // "de el cromatograma" -> "del cromatograma".
         action = detalle.vista_previa ? `abrió la vista previa ${de(que)} ${de(obj)}` : `descargó ${que} ${de(obj)}`;
       }
+      else if (entidad === "no_conformidades") action = `descargó el PDF ${detalle.pdf === "final" ? "final " : "(a pedido) "}${de(obj)}`;
       else action = entidad === "informes" ? `descargó el PDF ${de(obj)}` : `descargó ${obj}`;
       break;
     case "login":

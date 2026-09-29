@@ -372,6 +372,22 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   anular_adjunto: "Anuló evidencia instrumental",
   respaldar: "Creó un respaldo",
   restaurar_respaldo: "Restauración desde respaldo",
+  reportar: "Reportó una incidencia",
+  evaluar: "Inició la evaluación",
+  cerrar_sin_nc: "Cerró sin NC",
+  escalar: "Escaló a no conformidad",
+  avanzar: "Avanzó de etapa",
+  implementar: "Implementó una acción",
+  iniciar_accion: "Inició una acción",
+  cancelar: "Canceló una acción",
+  reasignar: "Reasignó",
+  verificar: "Verificó eficacia",
+  suspender: "Suspendió",
+  reanudar: "Reanudó",
+  retener: "Retuvo un informe",
+  liberar_retencion: "Liberó una retención",
+  comunicar: "Registró comunicación con el cliente",
+  afectar: "Marcó un informe afectado",
 };
 
 export const AUDIT_ENTITIES: Record<string, string> = {
@@ -390,4 +406,8 @@ export const AUDIT_ENTITIES: Record<string, string> = {
   sesion: "Sesión",
   reportes_mantenimiento: "Reporte de mantenimiento",
   respaldos: "Respaldo",
+  incidencias: "Incidencia",
+  no_conformidades: "No conformidad",
+  acciones_correctivas: "Acción correctiva",
+  suspensiones: "Suspensión",
 };
