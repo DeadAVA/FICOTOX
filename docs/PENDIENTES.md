@@ -1,6 +1,6 @@
-# Pendientes de FICOTOX (fases 0 a 9)
+# Pendientes de FICOTOX (fases 0 a 10)
 
-Lista única y vigente de pendientes, riesgos y decisiones por validar al cierre de la Fase 9. Sale de MANUAL_TECNICO.md (§20), MANUAL_USUARIO.md, docs/CATALOGO_PERMISOS.md (§7), docs/CONTEXTO_AGENTE.md (§9) y los resúmenes de cada fase. Ya se quitaron los duplicados y lo que resolvieron fases posteriores. El origen de cada punto va entre paréntesis.
+Lista única y vigente de pendientes, riesgos y decisiones por validar al cierre de la Fase 10. Sale de MANUAL_TECNICO.md (§20), MANUAL_USUARIO.md, docs/CATALOGO_PERMISOS.md (§7), docs/CONTEXTO_AGENTE.md (§9) y los resúmenes de cada fase. Ya se quitaron los duplicados y lo que resolvieron fases posteriores. El origen de cada punto va entre paréntesis.
 
 Ya resuelto, así que no se repite abajo:
 - La A de informes de la Coord. Técnica exige la autorización FX-THF-AP (Fase 4).
@@ -9,6 +9,7 @@ Ya resuelto, así que no se repite abajo:
 - Documentos SGC está encendido, con revisión de calidad y revisión técnica (Fase 7).
 - En el .env local: ALLOWED_EMAIL_DOMAINS definido, JWT_EXPIRES_HOURS=8 y CORS vacío (Fase 9).
 - En la Fase 9, el alcance "autorizados" ya se aplica también a la descarga del archivo, al resumen y a las propuestas de documentos.
+- Fase 10: adjuntar evidencia instrumental a los análisis (sección 7, "Resultados") y la prueba documentada de restauración de respaldos con acta (sección 9 y PVVC).
 
 ## Validar con Mejora Continua
 
@@ -29,6 +30,9 @@ Ya resuelto, así que no se repite abajo:
 - Registrar un envío de informe (manual o SMTP) no pide reautenticación; la antigua "entregar" sí la pedía (Fase 6, resumen).
 - Al aceptar una propuesta, el borrador queda a nombre de quien elabora y la bitácora registra "aceptar" a nombre de Mejora Continua (Fase 7, resumen).
 - Antes de operar con la base real, correr el seed o registrar las autorizaciones FX-THF-AP del personal: con AUTORIZACIONES_OBLIGATORIAS=true nadie guarda formatos sin ellas (Fase 4, resumen).
+
+- Fase 10 · respaldos: frecuencia (diaria local, semanal externa), retención (30 locales), ubicación de las copias externas y de la llave, RTO (1 h) y RPO (24 h) son propuestas en `docs/RESPALDO_Y_RECUPERACION.md`; la tarea programada por omisión sigue siendo cada 15 días (`install-ficotox-backup-tasks.cmd daily` para la diaria).
+- Fase 10 · evidencia: confirmar que la evidencia es obligatoria para todos los tipos de análisis (hoy `EVIDENCIA_OBLIGATORIA_ANALISIS` aplica a todos, incluido plancton) y si el revisor debe poder adjuntar (hoy solo quien puede editar, en "registrado").
 
 ## Mejoras técnicas
 
@@ -55,6 +59,14 @@ Ya resuelto, así que no se repite abajo:
 - La exportación CSV de la bitácora corta en 5000 filas por omisión (máximo 20000) sin avisar que el resultado quedó truncado. (Fase 9, revisión)
 - La columna "Módulo" del CSV de la bitácora muestra la clave interna (ensayos, equipos) en lugar de una etiqueta. (Fase 9, revisión)
 - Notificaciones: cuentas y roles avisan con 7 días de anticipación y las autorizaciones con 30; decidir si se unifican o documentarlo. (Fase 9, revisión)
+
+- Fase 10: los respaldos por terminal o tarea programada no escriben en la bitácora (su registro es el manifest); solo "Crear respaldo ahora" de la interfaz queda en ella.
+- Fase 10: el respaldo y la restauración con verificación automática son solo para SQLite; en MySQL/MariaDB se usa mysqldump y la verificación de la cadena del volcado no está implementada.
+- Fase 10: la tabla `adjuntos` solo está habilitada para análisis (incidencias y otros registros en fases posteriores).
+- Fase 10: los TIFF no tienen vista previa en la plataforma (Chrome y Firefox no los muestran); se descargan.
+- Fase 10 · rendimiento con SQLite: las peticiones se atienden una a la vez (una sola conexión), así que subir una evidencia grande (hasta 25 MB) o "Crear respaldo ahora" con muchos archivos retiene al resto de las peticiones mientras dura. Con el volumen actual son segundos; si crece, leer el archivo antes de abrir la sesión de base o programar los respaldos fuera de horario.
+
+- Build standalone (anterior a la Fase 10, confirmado construyendo `main`): el trazado de `instrumentation` copia toda la carpeta `instance/` (base real, `instance/test`, `instance/backups`) a `.next/standalone/instance/` pese a `outputFileTracingExcludes`. No afecta el funcionamiento, pero al copiar el build a otra PC viajan datos del laboratorio: copiar solo lo necesario o revisar el trazado. La Fase 10 evita que ademas se copien `backups/`, `tests/`, `marimo/` e `instance-restaurada/`.
 
 ## Fase 8 (no implementada)
 

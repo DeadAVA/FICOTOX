@@ -97,6 +97,8 @@ function enlacesEsperados(modulos) {
     out.add("/administracion/usuarios");
     out.add("/administracion/accesos");
     if (!propio) out.add("/administracion/roles");
+    // Fase 10: Respaldos para usuarios:G o calidad:V (en el catalogo, todo rol que ve calidad tambien ve usuarios).
+    if (set.has("calidad")) out.add("/administracion/respaldos");
   }
   return out;
 }

@@ -19,6 +19,7 @@ import { diasDesde, formatearFecha, hoyLocal, sumarDias } from "../../shared/fec
 import { esCoordinacion, filtroAsignadas, soloAsignado } from "../asignaciones";
 import { FEATURES } from "../../shared/features";
 import { documentosPorLeer } from "./documentos-flujo";
+import { avisosRespaldo, recibeAvisosRespaldo } from "./respaldos";
 
 /*
  * Datos del Inicio.
@@ -390,6 +391,12 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
       href: administraAut ? "/administracion/usuarios" : "/#mis-autorizaciones",
       items: porVencer.slice(0, MAX_ITEMS).map((a) => ({ label: a.propia ? `Tu autorización: ${a.etiqueta}` : `${a.persona} · ${a.etiqueta}`, sub: `Vence el ${fmtDate(a.vigente_hasta)}`, href: administraAut ? "/administracion/usuarios" : "/#mis-autorizaciones" })),
     });
+  }
+
+  // Fase 10: respaldos sin hacer o sin prueba de restauracion (a quien respalda y a quien revisa).
+  if (recibeAvisosRespaldo(auth)) {
+    const respaldo = avisosRespaldo();
+    if (respaldo.length) avisos.push({ key: "respaldos", label: "Respaldos", tone: "warning", count: respaldo.length, href: "/administracion/respaldos", items: respaldo.map((a) => ({ label: a.titulo, sub: a.detalle, href: "/administracion/respaldos" })) });
   }
 
   return json({ items: avisos, total: avisos.reduce((sum, a) => sum + a.count, 0) });

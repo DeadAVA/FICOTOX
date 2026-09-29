@@ -19,6 +19,8 @@ export interface NavChild {
   module?: Modulo;
   /* Oculta el destino si el alcance de V en su modulo es uno de estos (p. ej. "propio"). */
   hideForScopes?: string[];
+  /* Fase 10: regla propia de visibilidad (sustituye a `module`), p. ej. Respaldos: usuarios:G o calidad:V. */
+  visible?: (permissions: PermissionsMap) => boolean;
 }
 
 export interface NavItem {
@@ -79,6 +81,8 @@ export const NAV_ITEMS: NavItem[] = [
       { href: "/administracion/usuarios", label: "Usuarios", module: "usuarios" },
       { href: "/administracion/roles", label: "Roles", module: "usuarios", hideForScopes: ["propio"] },
       { href: "/administracion/accesos", label: "Revisión de accesos", module: "usuarios" },
+      // Fase 10: los administra usuarios:G y los consulta calidad:V (solo lectura).
+      { href: "/administracion/respaldos", label: "Respaldos", visible: (p) => !!p.usuarios?.G || !!p.calidad?.V },
     ],
   },
 ];
@@ -96,6 +100,7 @@ export function isActivePath(pathname: string, href: string): boolean {
 /* Hijos que la persona puede ver; sin `module` heredan los modulos del padre. */
 export function visibleChildren(item: NavItem, permissions: PermissionsMap): NavChild[] {
   return (item.children || []).filter((child) => {
+    if (child.visible) return child.visible(permissions);
     if (!child.module) return canAny(permissions, item.modules);
     const alcance = permissions[child.module]?.V;
     if (!alcance) return false;

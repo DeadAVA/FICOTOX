@@ -1,0 +1,397 @@
+/*
+ * Respaldo de FICOTOX (Fase 10). Unica implementacion, compartida por el
+ * servidor (Administracion > Respaldos, "Crear respaldo ahora"), el script de
+ * terminal (scripts/respaldar-ficotox.mjs, que invoca tambien
+ * scripts/backup_ficotox.py) y el script de restauracion
+ * (scripts/restaurar-ficotox.mjs). Es JavaScript plano (.mjs), como
+ * audit-chain.mjs, para que Node lo importe sin compilar; los tipos estan en
+ * respaldo.d.mts. Solo para servidor y scripts (usa node:fs y better-sqlite3).
+ *
+ * Cada respaldo es una carpeta <respaldos>/<AAAAMMDD-HHMMSS>/ con:
+ *   datos/ficotox.sqlite3   snapshot consistente con la API de respaldo en linea
+ *                           de SQLite (funciona con el servidor encendido y con WAL)
+ *   archivos/<carpeta>/...  informes (PDF y evidencias de envio), evidencias,
+ *                           documentos_sgc y maintenance_reports
+ *   manifest.json           fecha, host, version (commit), motor, conteos por
+ *                           tabla, bitacora (entradas, ultimo id y sello),
+ *                           archivos con tamano y SHA-256, huella de la llave
+ *   llave/llave-bitacora.txt  (separada; solo en el respaldo local) la llave del
+ *                           sello de la bitacora. Nunca JWT_SECRET, SMTP ni otros secretos.
+ * MySQL/MariaDB: se respalda con mysqldump (scripts/backup_ficotox.py y
+ * docs/RESPALDO_Y_RECUPERACION.md); esta implementacion es solo para SQLite.
+ */
+import { createHash, createHmac } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { leerClaveSello, stableJson } from "./audit-chain.mjs";
+
+/* Version del esquema de datos. Subirla cuando una fase cambie tablas o columnas de forma que un respaldo nuevo no sirva en una app anterior. */
+export const ESQUEMA_VERSION = 10;
+export const FORMATO = "ficotox-respaldo";
+export const VERSION_FORMATO = 1;
+
+/* Tablas cuyo numero de filas se registra (y se compara al restaurar). */
+export const TABLAS_PRINCIPALES = [
+  "usuarios",
+  "roles",
+  "rol_acciones",
+  "usuario_roles",
+  "autorizaciones_personal",
+  "asignaciones_muestra",
+  "solicitudes_autorizacion",
+  "muestras_recepcion",
+  "muestras_procesamiento",
+  "muestras_extraccion",
+  "muestras_analisis",
+  "adjuntos",
+  "informes",
+  "envios_informe",
+  "documentos_sgc",
+  "reactivos",
+  "consumibles",
+  "equipos",
+  "mantenimientos",
+  "movimientos",
+  "auditoria",
+];
+
+/* Carpetas de la instancia con archivos que se respaldan. */
+export const CARPETAS_ARCHIVOS = ["informes", "evidencias", "documentos_sgc", "maintenance_reports"];
+
+export const ARCHIVO_LLAVE = path.join(/*turbopackIgnore: true*/ "llave", "llave-bitacora.txt");
+export const CARPETA_ACTAS = "pruebas-restauracion";
+const ID_RE = /^\d{8}-\d{6}(-\d+)?$/;
+
+/* ---------- Entorno (misma resolucion que src/lib/server/config.ts) ---------- */
+
+function cargarArchivoEnv(archivo, env) {
+  let contenido;
+  try {
+    contenido = fs.readFileSync(archivo, "utf8");
+  } catch {
+    return;
+  }
+  for (const linea of contenido.split(/\r?\n/)) {
+    const l = linea.trim();
+    if (!l || l.startsWith("#") || !l.includes("=")) continue;
+    const [clave, ...resto] = l.split("=");
+    const nombre = clave.trim().replace(/^export\s+/, "");
+    const valor = resto.join("=").trim().replace(/^(["'])(.*)\1$/, "$2");
+    if (nombre && !(nombre in env)) env[nombre] = valor;
+  }
+}
+
+/*
+ * Rutas y variables como las ve el servidor: .env (o FICOTOX_ENV_FILE) sin
+ * pisar lo ya definido, SQLITE_PATH, FICOTOX_INSTANCE_DIR y FICOTOX_BACKUP_DIR.
+ */
+export function resolverEntorno(baseDir, env = process.env) {
+  const configurado = String(env.FICOTOX_ENV_FILE || "").trim();
+  cargarArchivoEnv(configurado ? path.resolve(/*turbopackIgnore: true*/ baseDir, configurado) : path.join(/*turbopackIgnore: true*/ baseDir, ".env"), env);
+  const databaseUrl = String(env.DATABASE_URL || "").trim();
+  const motor = databaseUrl && !databaseUrl.startsWith("sqlite:") ? "mysql" : "sqlite";
+  let sqlitePath = null;
+  if (motor === "sqlite") {
+    if (databaseUrl.startsWith("sqlite:")) {
+      const raw = databaseUrl.replace(/^sqlite:\/*/, "");
+      sqlitePath = path.isAbsolute(raw) ? raw : path.resolve(/*turbopackIgnore: true*/ baseDir, raw);
+    } else {
+      sqlitePath = String(env.SQLITE_PATH || "").trim() ? path.resolve(/*turbopackIgnore: true*/ baseDir, String(env.SQLITE_PATH).trim()) : path.join(/*turbopackIgnore: true*/ baseDir, "instance", "ficotox.sqlite3");
+    }
+  }
+  const instanceDir = env.FICOTOX_INSTANCE_DIR ? path.resolve(/*turbopackIgnore: true*/ baseDir, env.FICOTOX_INSTANCE_DIR) : sqlitePath ? path.dirname(sqlitePath) : path.join(/*turbopackIgnore: true*/ baseDir, "instance");
+  const entero = (nombre, porOmision) => {
+    const n = Number.parseInt(String(env[nombre] || ""), 10);
+    return Number.isFinite(n) && n > 0 ? n : porOmision;
+  };
+  return {
+    baseDir,
+    motor,
+    sqlitePath,
+    instanceDir,
+    respaldosDir: env.FICOTOX_BACKUP_DIR ? path.resolve(/*turbopackIgnore: true*/ baseDir, env.FICOTOX_BACKUP_DIR) : path.join(/*turbopackIgnore: true*/ baseDir, "backups"),
+    secretKey: env.SECRET_KEY || "",
+    retencion: entero("RESPALDO_RETENCION", 30),
+    puerto: entero("PORT", entero("FLASK_PORT", 5000)),
+  };
+}
+
+/* ---------- Utilidades ---------- */
+
+export async function sha256Archivo(ruta) {
+  const hash = createHash("sha256");
+  await new Promise((resolve, reject) => {
+    fs.createReadStream(ruta).on("data", (trozo) => hash.update(trozo)).on("end", resolve).on("error", reject);
+  });
+  return hash.digest("hex");
+}
+
+export const huellaLlave = (clave) => createHash("sha256").update(String(clave)).digest("hex");
+
+/*
+ * Sello del manifest: HMAC-SHA256 con la llave de la bitacora sobre el
+ * manifest sin su campo `sello`. Quien altere la base o los archivos de un
+ * respaldo y recalcule las huellas no puede recalcular el sello sin la llave.
+ */
+export const sellarManifest = (manifest, clave) => {
+  const { sello: _sello, ...resto } = manifest;
+  void _sello;
+  return createHmac("sha256", String(clave)).update(stableJson(resto)).digest("hex");
+};
+
+/* Huella del manifest.json tal como esta en disco (para ligar un acta a ese respaldo exacto). */
+export const huellaManifest = (carpeta) => createHash("sha256").update(fs.readFileSync(path.join(/*turbopackIgnore: true*/ carpeta, "manifest.json"))).digest("hex");
+
+/* Rutas que un manifest puede declarar: la base y archivos dentro de las carpetas respaldadas, sin "..", "." ni segmentos vacios. */
+export const RUTA_BASE = "datos/ficotox.sqlite3";
+export function rutaArchivoValida(ruta) {
+  if (typeof ruta !== "string" || !ruta || ruta.includes("\\") || ruta.includes("\0") || path.isAbsolute(ruta)) return false;
+  const partes = ruta.split("/");
+  if (partes.some((p) => !p || p === "." || p === "..")) return false;
+  return partes.length >= 3 && partes[0] === "archivos" && CARPETAS_ARCHIVOS.includes(partes[1]);
+}
+
+/* Archivos de una carpeta (rutas relativas con "/"), sin temporales de escritura (.*.tmp). */
+function listarArchivos(raiz) {
+  const out = [];
+  const recorrer = (dir) => {
+    let entradas = [];
+    try {
+      entradas = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entradas) {
+      const ruta = path.join(/*turbopackIgnore: true*/ dir, e.name);
+      if (e.isDirectory()) recorrer(ruta);
+      else if (e.isFile() && !(e.name.startsWith(".") && e.name.endsWith(".tmp"))) out.push(path.relative(raiz, ruta).split(path.sep).join("/"));
+    }
+  };
+  recorrer(raiz);
+  return out.sort();
+}
+
+/* Version de la app: package.json y commit (leido de .git sin ejecutar git). */
+export function versionApp(baseDir) {
+  let version = null;
+  let commit = null;
+  try {
+    version = JSON.parse(fs.readFileSync(path.join(/*turbopackIgnore: true*/ baseDir, "package.json"), "utf8")).version || null;
+  } catch {
+    version = null;
+  }
+  try {
+    const head = fs.readFileSync(path.join(/*turbopackIgnore: true*/ baseDir, ".git", "HEAD"), "utf8").trim();
+    if (/^[0-9a-f]{40}$/.test(head)) commit = head;
+    else if (head.startsWith("ref: ")) {
+      const ref = head.slice(5);
+      try {
+        commit = fs.readFileSync(path.join(/*turbopackIgnore: true*/ baseDir, ".git", ref), "utf8").trim();
+      } catch {
+        const packed = fs.readFileSync(path.join(/*turbopackIgnore: true*/ baseDir, ".git", "packed-refs"), "utf8");
+        commit = packed.split("\n").find((l) => l.endsWith(` ${ref}`))?.split(" ")[0] || null;
+      }
+    }
+  } catch {
+    commit = null;
+  }
+  return { version, commit: commit || process.env.FICOTOX_COMMIT || null };
+}
+
+/* Conteos por tabla y resumen de la bitacora de una base SQLite. */
+export function inspeccionarBase(db) {
+  const existentes = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name));
+  const conteos = {};
+  for (const tabla of TABLAS_PRINCIPALES) if (existentes.has(tabla)) conteos[tabla] = Number(db.prepare(`SELECT COUNT(*) AS n FROM ${tabla}`).get().n);
+  let bitacora = { entradas: 0, ultimo_id: null, ultimo_hash: null };
+  if (existentes.has("auditoria")) {
+    const ultima = db.prepare("SELECT id, hash FROM auditoria ORDER BY id DESC LIMIT 1").get();
+    bitacora = { entradas: conteos.auditoria ?? 0, ultimo_id: ultima ? Number(ultima.id) : null, ultimo_hash: ultima ? String(ultima.hash) : null };
+  }
+  return { conteos, bitacora };
+}
+
+function idNuevo(respaldosDir, ahora) {
+  const p = (n) => String(n).padStart(2, "0");
+  const base = `${ahora.getFullYear()}${p(ahora.getMonth() + 1)}${p(ahora.getDate())}-${p(ahora.getHours())}${p(ahora.getMinutes())}${p(ahora.getSeconds())}`;
+  let id = base;
+  for (let n = 2; fs.existsSync(path.join(/*turbopackIgnore: true*/ respaldosDir, id)) || fs.existsSync(path.join(/*turbopackIgnore: true*/ respaldosDir, `.${id}.tmp`)); n += 1) id = `${base}-${n}`;
+  return id;
+}
+
+/* ---------- Crear ---------- */
+
+/*
+ * Crea un respaldo de una instancia SQLite. `incluirLlave` (por omision true)
+ * guarda la llave de la bitacora en llave/ (solo respaldo local; las copias
+ * externas la excluyen). Se escribe en una carpeta temporal y se renombra al
+ * final: un respaldo a medias nunca aparece en la lista. `Sqlite` es el
+ * constructor de better-sqlite3 (lo pasa quien llama: el servidor o el script).
+ */
+export async function crearRespaldo({ Sqlite, sqlitePath, instanceDir, respaldosDir, secretKey, baseDir, incluirLlave = true, etiqueta = null, ahora = new Date() }) {
+  if (!sqlitePath) throw new Error("Esta instalación usa MySQL/MariaDB: respalda la base con mysqldump (ver docs/RESPALDO_Y_RECUPERACION.md)");
+  if (!fs.existsSync(sqlitePath)) throw new Error(`No existe la base SQLite: ${sqlitePath}`);
+  fs.mkdirSync(respaldosDir, { recursive: true });
+  const id = idNuevo(respaldosDir, ahora);
+  const tmp = path.join(/*turbopackIgnore: true*/ respaldosDir, `.${id}.tmp`);
+  const final = path.join(/*turbopackIgnore: true*/ respaldosDir, id);
+  fs.mkdirSync(path.join(/*turbopackIgnore: true*/ tmp, "datos"), { recursive: true });
+  try {
+    // 1. Base: API de respaldo en linea (lee paginas de forma consistente aunque haya escrituras).
+    const destinoBase = path.join(/*turbopackIgnore: true*/ tmp, "datos", "ficotox.sqlite3");
+    const origen = new Sqlite(sqlitePath, { readonly: true, fileMustExist: true });
+    try {
+      origen.pragma("busy_timeout = 10000");
+      await origen.backup(destinoBase);
+    } finally {
+      origen.close();
+    }
+    const snapshot = new Sqlite(destinoBase, { readonly: true });
+    let integridad;
+    let inspeccion;
+    try {
+      integridad = String(snapshot.pragma("integrity_check", { simple: true }));
+      inspeccion = inspeccionarBase(snapshot);
+    } finally {
+      snapshot.close();
+    }
+    if (integridad !== "ok") throw new Error(`El snapshot de la base no pasó integrity_check: ${integridad}`);
+
+    // 2. Archivos de la instancia.
+    const archivos = [];
+    for (const carpeta of CARPETAS_ARCHIVOS) {
+      const raiz = path.join(/*turbopackIgnore: true*/ instanceDir, carpeta);
+      for (const relativo of listarArchivos(raiz)) {
+        const destino = path.join(/*turbopackIgnore: true*/ tmp, "archivos", carpeta, ...relativo.split("/"));
+        fs.mkdirSync(path.dirname(destino), { recursive: true });
+        fs.copyFileSync(path.join(/*turbopackIgnore: true*/ raiz, ...relativo.split("/")), destino);
+        archivos.push({ ruta: `archivos/${carpeta}/${relativo}`, tamano: fs.statSync(destino).size, sha256: await sha256Archivo(destino) });
+      }
+    }
+
+    // 3. Llave de la bitacora (separada): nunca otros secretos del .env.
+    const llave = leerClaveSello(secretKey, instanceDir);
+    const guardarLlave = incluirLlave && !!llave;
+    if (guardarLlave) {
+      fs.mkdirSync(path.join(/*turbopackIgnore: true*/ tmp, "llave"), { recursive: true });
+      fs.writeFileSync(path.join(/*turbopackIgnore: true*/ tmp, ARCHIVO_LLAVE), `${llave.clave}\n`, { mode: 0o600 });
+    }
+
+    // 4. Manifest.
+    const manifest = {
+      formato: FORMATO,
+      version_formato: VERSION_FORMATO,
+      id,
+      creado_en: ahora.toISOString(),
+      host: os.hostname(),
+      app: versionApp(baseDir || process.cwd()),
+      esquema_version: ESQUEMA_VERSION,
+      motor: "sqlite",
+      etiqueta: etiqueta || null,
+      base: { ruta: "datos/ficotox.sqlite3", tamano: fs.statSync(destinoBase).size, sha256: await sha256Archivo(destinoBase), integrity_check: integridad },
+      conteos: inspeccion.conteos,
+      bitacora: inspeccion.bitacora,
+      archivos,
+      llave: { incluida: guardarLlave, origen: llave ? llave.origen : null, huella: llave ? huellaLlave(llave.clave) : null, ruta: guardarLlave ? ARCHIVO_LLAVE.split(path.sep).join("/") : null },
+    };
+    // Sellado con la llave de la bitacora (aunque la llave no se incluya en el respaldo).
+    if (llave) manifest.sello = sellarManifest(manifest, llave.clave);
+    fs.writeFileSync(path.join(/*turbopackIgnore: true*/ tmp, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+    fs.renameSync(tmp, final);
+    return { id, carpeta: final, manifest };
+  } catch (error) {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+/* ---------- Listar, actas y retencion ---------- */
+
+export function leerManifest(carpeta) {
+  const datos = JSON.parse(fs.readFileSync(path.join(/*turbopackIgnore: true*/ carpeta, "manifest.json"), "utf8"));
+  if (datos?.formato !== FORMATO) throw new Error("manifest.json no es de un respaldo de FICOTOX");
+  return datos;
+}
+
+/* Actas de prueba de restauracion (JSON), la mas reciente primero. */
+export function listarActas(respaldosDir) {
+  const dir = path.join(/*turbopackIgnore: true*/ respaldosDir, CARPETA_ACTAS);
+  let nombres = [];
+  try {
+    nombres = fs.readdirSync(dir).filter((n) => n.endsWith(".json"));
+  } catch {
+    return [];
+  }
+  const actas = [];
+  for (const nombre of nombres) {
+    try {
+      const acta = JSON.parse(fs.readFileSync(path.join(/*turbopackIgnore: true*/ dir, nombre), "utf8"));
+      actas.push({ ...acta, archivo: nombre.replace(/\.json$/, "") });
+    } catch {
+      /* acta ilegible: se omite */
+    }
+  }
+  return actas.sort((a, b) => String(b.fecha || "").localeCompare(String(a.fecha || "")));
+}
+
+/* Respaldos locales (carpetas con manifest), el mas reciente primero, con su estado de verificacion segun las actas. */
+export function listarRespaldos(respaldosDir) {
+  let nombres = [];
+  try {
+    nombres = fs.readdirSync(respaldosDir).filter((n) => ID_RE.test(n));
+  } catch {
+    return [];
+  }
+  const actas = listarActas(respaldosDir);
+  const out = [];
+  for (const id of nombres) {
+    const carpeta = path.join(/*turbopackIgnore: true*/ respaldosDir, id);
+    try {
+      const m = leerManifest(carpeta);
+      const tamano = (m.base?.tamano || 0) + (m.archivos || []).reduce((t, a) => t + (a.tamano || 0), 0);
+      // Una prueba cuenta para este respaldo solo si se hizo sobre esta carpeta y este manifest exacto (no sobre una copia).
+      let huella = null;
+      try {
+        huella = huellaManifest(carpeta);
+      } catch {
+        huella = null;
+      }
+      const pruebas = actas.filter((a) => a.respaldo_id === id && a.manifest_sha256 === huella && path.resolve(/*turbopackIgnore: true*/ String(a.respaldo_ruta || "")) === path.resolve(/*turbopackIgnore: true*/ carpeta));
+      out.push({
+        id,
+        carpeta,
+        creado_en: m.creado_en,
+        host: m.host,
+        app: m.app,
+        esquema_version: m.esquema_version,
+        etiqueta: m.etiqueta || null,
+        tamano,
+        archivos: (m.archivos || []).length,
+        incluye_llave: !!m.llave?.incluida && fs.existsSync(path.join(/*turbopackIgnore: true*/ carpeta, ARCHIVO_LLAVE)),
+        bitacora: m.bitacora,
+        verificacion: pruebas.length ? { resultado: pruebas[0].resultado, fecha: pruebas[0].fecha, acta: pruebas[0].archivo } : null,
+      });
+    } catch {
+      /* carpeta sin manifest valido: no es un respaldo de esta implementacion */
+    }
+  }
+  return out.sort((a, b) => b.id.localeCompare(a.id));
+}
+
+/*
+ * Conserva los `retencion` respaldos mas recientes y borra los demas, salvo el
+ * ultimo respaldo verificado (con una prueba de restauracion aprobada), que
+ * nunca se elimina. Devuelve los ids eliminados.
+ */
+export function aplicarRetencion(respaldosDir, retencion) {
+  const lista = listarRespaldos(respaldosDir);
+  const verificado = lista.find((r) => r.verificacion?.resultado === "aprobada")?.id || null;
+  const eliminados = [];
+  lista.forEach((r, i) => {
+    if (i < retencion || r.id === verificado) return;
+    fs.rmSync(r.carpeta, { recursive: true, force: true });
+    eliminados.push(r.id);
+  });
+  return eliminados;
+}

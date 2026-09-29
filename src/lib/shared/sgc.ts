@@ -363,11 +363,15 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   enviar: "Envió por correo",
   confirmar_envio: "Registró la confirmación de recepción",
   requiere_enmienda: "Quedó marcado: requiere enmienda",
-  alerta_integridad: "Alerta de integridad del PDF",
+  alerta_integridad: "Alerta de integridad (PDF o evidencia)",
   publicar: "Publicó (vigente)",
   confirmar_lectura: "Confirmó la lectura (leí y comprendí)",
   proponer: "Propuso un documento o cambio",
   exportar: "Exportó (CSV)",
+  adjuntar: "Adjuntó evidencia instrumental",
+  anular_adjunto: "Anuló evidencia instrumental",
+  respaldar: "Creó un respaldo",
+  restaurar_respaldo: "Restauración desde respaldo",
 };
 
 export const AUDIT_ENTITIES: Record<string, string> = {
@@ -385,4 +389,5 @@ export const AUDIT_ENTITIES: Record<string, string> = {
   roles: "Rol",
   sesion: "Sesión",
   reportes_mantenimiento: "Reporte de mantenimiento",
+  respaldos: "Respaldo",
 };

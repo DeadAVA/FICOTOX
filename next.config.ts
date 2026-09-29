@@ -1,6 +1,18 @@
 import type { NextConfig } from "next";
 
+/*
+ * Fase 10: el proxy (src/proxy.ts, CORS de /api/*) guarda en memoria el cuerpo de
+ * las peticiones y por omision lo corta a 10 MB, lo que rompia las subidas de
+ * evidencia de 10 a 25 MB. El limite del proxy sigue a EVIDENCIA_MAX_MB (minimo
+ * 25) mas margen para el multipart. Se fija al construir: subir EVIDENCIA_MAX_MB
+ * por encima de 25 exige volver a correr `npm run build`.
+ */
+const evidenciaMaxMb = Math.max(25, Number.parseInt(process.env.EVIDENCIA_MAX_MB || "", 10) || 25);
+
 const nextConfig: NextConfig = {
+  experimental: {
+    proxyClientMaxBodySize: (evidenciaMaxMb + 2) * 1024 * 1024,
+  },
   // Salida autocontenida (.next/standalone) para desplegar solo con Node.js.
   output: "standalone",
   // Modulos nativos / con requires dinamicos que no deben empaquetarse.
@@ -19,7 +31,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // El trazado de archivos no debe copiar bases de datos, respaldos ni codigo legado al standalone.
   outputFileTracingExcludes: {
-    "*": ["./instance/**", "./backups/**", "./docs/**", "./scripts/**", "./src/**"],
+    "*": ["./instance/**", "./instance-restaurada/**", "./backups/**", "./docs/**", "./scripts/**", "./src/**"],
   },
   // Raiz explicita para Turbopack (evita que tome lockfiles fuera del repo).
   turbopack: { root: __dirname },

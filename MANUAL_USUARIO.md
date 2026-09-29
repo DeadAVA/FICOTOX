@@ -267,6 +267,13 @@ El registro de analisis (folio **A**) captura lo que se midio en el extracto y l
 3. Registre equipo (con su folio de bitacora), condiciones ambientales, y por cada muestra el **resultado**, unidad, limites de deteccion y cuantificacion, incertidumbre y **limite regulatorio**. El sistema sugiere la conformidad (cumple / no cumple) comparando contra el limite; los limites precargados (ASP 20 µg/g, DSP 160 µg/kg, PSP 80 µg/100 g) estan marcados **por confirmar** con la coordinacion tecnica y se pueden editar.
 4. Registre los **controles de calidad** (blanco, material de referencia con lote y caducidad, duplicado) y los insumos adicionales que se descuentan del inventario.
 5. Presione **Registrar analisis**.
+6. **Evidencia instrumental** (Fase 10): abra de nuevo el analisis y, en la seccion **Evidencia instrumental** (antes de las firmas), arrastre o elija el archivo que respalda los resultados: cromatograma, reporte del equipo, hoja de calculo, curva de calibracion, certificado del material de referencia, foto u otro. Elija el **tipo de evidencia**, escriba una **descripcion** (al menos 5 caracteres) y presione **Adjuntar evidencia** (una barra muestra el avance).
+   - Formatos admitidos: PDF, PNG, JPG, TIF, CSV, TXT, XLSX, XLS, ZIP y CDF, hasta 25 MB por archivo (lo fija el administrador). El sistema revisa que el contenido corresponda a la extension y rechaza HTML, SVG, programas y archivos vacios. El mismo archivo no se adjunta dos veces al mismo analisis.
+   - Cada adjunto muestra quien lo subio y cuando, su tamano y su **huella SHA-256** (abreviada; completa al pasar el cursor). **Vista previa** abre PDF e imagenes PNG o JPG en una hoja lateral (los TIF se descargan); **Descargar** baja el archivo. Cada descarga queda en la bitacora y comprueba la huella: si el archivo cambio o falta, aparece un aviso rojo y una alerta de integridad en la bitacora (avise a la coordinacion).
+   - **Anular…** (con motivo y su contrasena) retira un adjunto equivocado; el archivo se conserva y se puede ver con **Mostrar anulados**.
+   - Se adjunta y anula solo mientras el analisis esta **Registrado** (antes de enviarlo a revision) y solo quien puede editarlo: asignado a la muestra (o la coordinacion) y con la autorizacion FX-THF-AP del analisis y su metodo. Si su cuenta es supervisada, adjuntar deja el analisis pendiente del visto bueno de su supervisor.
+   - **Es obligatoria**: sin al menos una evidencia vigente, **Enviar a revision** aparece deshabilitado con la explicacion. Despues de enviarlo, la evidencia queda en solo lectura (siempre descargable para quien puede ver el analisis); si hay que corregirla, el revisor lo devuelve con observaciones. Los analisis aprobados antes de esta regla no la necesitan.
+   - Una **enmienda** (v2, v3...) hereda la evidencia vigente de la version anterior (etiqueta "Heredado de v1"); anular un adjunto en la enmienda no afecta a la version anterior.
 
 Revision y aprobacion (requieren los permisos **Ensayos: R** y **Ensayos: A**):
 
@@ -524,16 +531,16 @@ En la recepcion (o en el menu de su fila) use **Imprimir etiqueta**. Se abre una
 
 ### 13.18 ¿Que puede hacer cada rol?
 
-Resumen del estado final (Fase 9). El detalle por modulo, accion y alcance esta en `docs/CATALOGO_PERMISOS.md`; ademas del rol, capturar y firmar trabajo tecnico exige la autorizacion FX-THF-AP vigente (13.10).
+Resumen del estado final (Fases 9 y 10). El detalle por modulo, accion y alcance esta en `docs/CATALOGO_PERMISOS.md`; ademas del rol, capturar y firmar trabajo tecnico exige la autorizacion FX-THF-AP vigente (13.10).
 
 | Rol | Tareas principales |
 | --- | --- |
-| Administrador técnico del sistema | Administra cuentas y roles (alta, baja, vigencias, bloqueos); no aprueba cambios de acceso ni otorga autorizaciones FX-THF-AP; consulta la bitacora y el estado de las muestras. |
+| Administrador técnico del sistema | Administra cuentas y roles (alta, baja, vigencias, bloqueos); no aprueba cambios de acceso ni otorga autorizaciones FX-THF-AP; consulta la bitacora y el estado de las muestras; crea los respaldos y ejecuta las pruebas de restauracion (13.20). |
 | Responsable General | Aprueba asignaciones de rol, reactivaciones y ampliaciones de vigencia; revisa y autoriza informes y los libera; aprueba documentos; anula con justificacion y aprueba solicitudes; otorga autorizaciones FX-THF-AP. |
 | Coordinador/a de Mejora Continua | Gestiona el SGC: acepta propuestas, hace la revision de calidad, publica y distribuye documentos; excepciones de segregacion; bitacora completa; otorga autorizaciones FX-THF-AP. |
 | Coordinador/a del Área Técnica | Asigna muestras; recibe, procesa, extrae, analiza, revisa y aprueba resultados; revisa, autoriza y libera informes; decide rechazos, desviaciones, cambios de folio y reaperturas; administra equipos e inventario; otorga autorizaciones FX-THF-AP. |
 | Coordinador/a de Investigación y Desarrollo | Captura y revisa ensayos e informes de sus proyectos; hace la revision tecnica de documentos; equipos e inventario. |
-| Técnico Analista | Trabaja las muestras asignadas: procesa, extrae, analiza y envia a revision; crea informes en borrador; registra uso de equipos y movimientos de inventario. |
+| Técnico Analista | Trabaja las muestras asignadas: procesa, extrae, analiza, adjunta la evidencia instrumental y envia a revision; crea informes en borrador; registra uso de equipos y movimientos de inventario. |
 | Técnico Auxiliar | Registra recepciones y procesamientos; uso de equipos y movimientos de inventario. |
 | Administrador/a Auxiliar | Mantenimientos de equipos, inventario y compras; ve el estado de las muestras. |
 | Auditor Interno | Consulta todo (solo lectura), incluida la bitacora y su exportacion. |
@@ -541,10 +548,20 @@ Resumen del estado final (Fase 9). El detalle por modulo, accion y alcance esta 
 
 ### 13.19 Notificaciones y exportacion
 
-- **Campana** (barra lateral): contador y panel con lo que te toca, calculado al momento: muestras asignadas a ti en los ultimos 7 dias; analisis e informes que puedes revisar, aprobar, autorizar o liberar; solicitudes **Por autorizar** y registros **Por supervisar**; documentos por leer y por revisar, aprobar o publicar; mantenimientos vencidos o proximos (si ves equipos); cuentas, roles y autorizaciones que vencen pronto (las tuyas, y las de otros si administras). Cada elemento abre su registro.
+- **Campana** (barra lateral): contador y panel con lo que te toca, calculado al momento: muestras asignadas a ti en los ultimos 7 dias; analisis e informes que puedes revisar, aprobar, autorizar o liberar; solicitudes **Por autorizar** y registros **Por supervisar**; documentos por leer y por revisar, aprobar o publicar; mantenimientos vencidos o proximos (si ves equipos); cuentas, roles y autorizaciones que vencen pronto (las tuyas, y las de otros si administras); y, para el Administrador tecnico y quien revisa en Calidad, **respaldos** sin hacer en las ultimas 24 h o sin prueba de restauracion en 90 dias (13.20). Cada elemento abre su registro.
 - **Exportar la bitacora**: en **Auditoria**, **Exportar CSV** descarga lo que muestran los filtros aplicados (fecha, usuario, accion, modulo, referencia, motivo y los cambios en texto legible).
 - **Exportar el historial de un registro**: en el **Historial** de cada ficha, **Exportar** descarga su linea de tiempo en CSV.
 - Las exportaciones respetan tus permisos y alcances (lo que no puedes ver sale como "datos restringidos") y quedan en la bitacora.
+
+### 13.20 Respaldos (Administracion › Respaldos)
+
+La pantalla **Respaldos** la administra el **Administrador tecnico del sistema** y la consultan en solo lectura Mejora Continua, el Auditor y la Responsable General (quien tiene Calidad: V).
+
+- **Respaldos locales**: cada respaldo es una carpeta en `backups/` con la base (copia consistente tomada sin detener el servidor), los PDF de informes, las evidencias de envio y de analisis, los documentos del SGC y los reportes de mantenimiento, un **manifest** con los conteos y las huellas SHA-256, y la **llave de la bitacora** aparte (solo en el respaldo local). Se muestra su fecha, tamano, si incluye la llave y si ya paso una **prueba de restauracion**.
+- **Crear respaldo ahora** (solo el Administrador tecnico, con su contrasena): crea un respaldo al momento; queda en la bitacora. Los respaldos programados (diarios) los crea el script de respaldo.
+- **Pruebas de restauracion**: cada prueba genera un **acta** (fecha, respaldo, responsable, cada verificacion con ✅/❌, tiempo y conclusion) que se descarga desde la tabla. La ultima prueba aparece arriba.
+- **Avisos**: si no hay respaldo en las ultimas 24 h o no hay prueba de restauracion aprobada en 90 dias, se avisa en esta pantalla, en el Inicio y en la campana.
+- **La restauracion no se hace desde la interfaz**: solo por linea de comandos y con el servidor detenido. La pantalla muestra los comandos; el procedimiento completo esta en `docs/RESPALDO_Y_RECUPERACION.md`.
 
 ## 14. Buenas practicas de uso
 

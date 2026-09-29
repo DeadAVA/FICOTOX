@@ -16,6 +16,7 @@ import { ensureReportesMantenimientoSchema } from "./modules/documents";
 import { ensureInformesSchema } from "./modules/informes";
 import { ensureEquiposSchema, ensureMantenimientosSchema, ensureReactivosSchema } from "./modules/inventory";
 import { ensureAnalysisSchema } from "./modules/samples/analisis";
+import { ensureAdjuntosSchema } from "./adjuntos";
 import { ensureSamplesRecepcionSchema } from "./modules/samples/recepcion";
 import { ensureSamplesProcesamientoSchema } from "./modules/samples/procesamiento";
 import { ensureSamplesExtraccionSchema } from "./modules/samples/extraccion";
@@ -48,6 +49,7 @@ export function ensureInitialSchema(): Promise<void> {
       await ensureSamplesProcesamientoSchema(s);
       await ensureSamplesExtraccionSchema(s);
       await ensureAnalysisSchema(s);
+      await ensureAdjuntosSchema(s);
       await ensureInformesSchema(s);
       await ensureDocumentosSgcSchema(s);
       await ensureDocumentosFlujoSchema(s);

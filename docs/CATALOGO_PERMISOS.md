@@ -1,6 +1,6 @@
 # Catálogo de permisos de FICOTOX
 
-**Estado final vigente (Fase 9).** Refleja el sistema tras las fases 0–7 y 9 (la Fase 8 —incidencias, auditorías internas, compras y proyectos— no está implementada; sus alcances siguen diferidos). Pendientes y decisiones por validar consolidados en `docs/PENDIENTES.md`.
+**Estado final vigente (Fases 9 y 10).** Refleja el sistema tras las fases 0–7 y 9 (la Fase 8 —incidencias, auditorías internas, compras y proyectos— no está implementada; sus alcances siguen diferidos). Pendientes y decisiones por validar consolidados en `docs/PENDIENTES.md`.
 
 Especificación de origen: "Roles y permisos FICOTOX" (FX-MO-2-1), sección 5, con las decisiones anotadas desde la Fase 1. Fuente en el código:
 
@@ -51,6 +51,8 @@ El módulo `aprobaciones` desapareció: revisar y aprobar son acciones de `ensay
 | Anular / restaurar recepción | `muestras:AN` |
 | Crear / editar procesamiento, extracción, análisis | `ensayos:C` / `ensayos:E` |
 | Revisar / aprobar análisis | `ensayos:R` / `ensayos:A` |
+| Adjuntar / anular evidencia instrumental de un análisis (Fase 10) | `ensayos:E` con su alcance, solo en "registrado", asignado (o coordinación) y FX-THF-AP de análisis + método; anular con motivo y reautenticación |
+| Ver y descargar evidencia instrumental (Fase 10) | `ensayos:V` con su alcance (con solo "estado" no se ve) |
 | Anular / restaurar procesamiento, extracción, análisis | `ensayos:AN` |
 | Crear o enmendar informe / editar borrador | `informes:C` / `informes:E` |
 | Revisar informe | `informes:R` |
@@ -65,6 +67,8 @@ El módulo `aprobaciones` desapareció: revisar y aprobar son acciones de `ensay
 | Bitácora y "Verificar integridad" | `calidad:V` |
 | Ver usuarios y roles | `usuarios:V` |
 | Alta / edición / baja de cuentas, asignar y revocar roles, configurar roles | `usuarios:G` |
+| Respaldos: ver (solo lectura) | `usuarios:G` o `calidad:V` (Fase 10) |
+| Respaldos: "Crear respaldo ahora" | `usuarios:G` + reautenticación (Fase 10); la restauración solo por línea de comandos |
 
 Al capturar una extracción o un análisis que declara **equipos usados** se exige además `equipos:C` (alcance `uso` o mayor); si declara **insumos consumidos** (extracción, análisis o procesamiento) se exige `inventario:C` (alcance `movimientos` o mayor).
 
@@ -213,6 +217,11 @@ Otorgan y revocan (con motivo, reautenticación y bitácora): quien tiene `ensay
 - **Enviar** (`informes:A`): solo informes liberados o ya enviados; envío manual con evidencia (siempre) o SMTP (si está configurado); confirmación de recepción por envío. Los correos y evidencias solo los ve quien tiene `informes:V`; la bitácora muestra el correo parcialmente oculto.
 - **Requiere enmienda**: si se aprueba la enmienda de un análisis incluido en un informe autorizado, liberado o enviado, el informe no se libera ni se envía hasta liberar su enmienda.
 - **Revisar un análisis** (`ensayos:R`) exige que el analista lo haya enviado a revisión.
+
+## 6 sexies. Evidencia instrumental y respaldos (Fase 10)
+
+- **Evidencia instrumental** (sección 7, etapa "Resultados"): adjuntar y anular usan las mismas reglas que editar el análisis (`exigirAnalisisEditable`, `exigirAsignacion`, `exigirAutorizaciones`); con una cuenta supervisada el análisis vuelve a quedar pendiente del visto bueno. Adjuntar o anular evidencia cuenta como "elaboró" para la segregación (regla 1: quien la adjuntó no revisa ni aprueba ese análisis). Ver y descargar: `ensayos:V` con su alcance; Mariana (Técnico Auxiliar), Patricia (Responsable General), el Auditor y el revisor la ven; Jorge (Administrador técnico, sin ensayos) no.
+- **Respaldos** (sección 9, "El Administrador técnico ejecutará respaldos y pruebas de recuperación"): la pantalla la ve quien tiene `usuarios:G` (crea respaldos) o `calidad:V` (solo lectura: Mejora Continua, Auditor, Responsable General, coordinaciones con calidad). Los avisos de respaldo y de prueba de restauración llegan a `usuarios:G` y `calidad:A`.
 
 ## 7. Decisiones pendientes de validar con Mejora Continua
 

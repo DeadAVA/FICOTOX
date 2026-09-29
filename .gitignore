@@ -8,6 +8,10 @@ instance/*.db
 instance/maintenance_reports/
 instance/informes/
 instance/documentos_sgc/
+instance/evidencias/
+instance/servidor.lock
+# Fase 10: restauraciones de prueba (scripts/restaurar-ficotox.mjs)
+instance-restaurada/
 instance/test/
 instance/fixtures/
 instance/test-fixture/

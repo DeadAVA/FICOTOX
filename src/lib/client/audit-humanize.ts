@@ -1,6 +1,7 @@
 import type { ApiRecord } from "@/lib/client/types";
 import { ACCION_KEYS, MODULOS, alcanceLabel, isAccion, isModulo } from "@/lib/shared/permisos";
 import { ACCEPTANCE_DECISIONS, ANALYSIS_STATES, AUDIT_ENTITIES, CLIENT_CONTACT_MEDIA, DISPOSAL_TYPES, DOCUMENT_STATES, RECEPTION_DELIVERY_MEDIA, REPORT_DELIVERY_MEDIA, REPORT_STATES, SAMPLE_STATES, STORAGE_PLACES } from "@/lib/shared/sgc";
+import { TIPO_EVIDENCIA_ART, fmtBytes, huellaCorta } from "@/lib/shared/adjuntos";
 import { diaSemana, diasEntre, fechaSola, formatearFecha, formatearFechaHora, formatearFechaLarga, formatearHora, hoyLocal, instanteDe } from "../shared/fechas";
 
 /*
@@ -61,6 +62,7 @@ const ENTITY_NOUN: Record<string, { art: string; noun: string; plural: string }>
   usuarios: { art: "el", noun: "usuario", plural: "usuarios" },
   roles: { art: "el", noun: "rol", plural: "roles" },
   sesion: { art: "la", noun: "sesión", plural: "sesiones" },
+  respaldos: { art: "el", noun: "respaldo", plural: "respaldos" },
 };
 
 export const ACTION_TONE: Record<string, AuditTone> = {
@@ -132,6 +134,11 @@ export const ACTION_TONE: Record<string, AuditTone> = {
   proponer: "brand",
   // Fase 9: exportacion para auditoria.
   exportar: "neutral",
+  // Fase 10: evidencia instrumental y respaldos.
+  adjuntar: "brand",
+  anular_adjunto: "danger",
+  respaldar: "brand",
+  restaurar_respaldo: "warning",
 };
 
 /*
@@ -454,7 +461,7 @@ const STATE_BY_ENTITY: Record<string, Record<string, { label: string }>> = {
 };
 const GENERIC_STATES: Record<string, string> = { pendiente: "Pendiente", vencido: "Vencido", completado: "Completado", programado: "Programado", cancelado: "Cancelado", activo: "Activo", inactivo: "Inactivo", baja: "Dado de baja", vigente: "Vigente", obsoleto: "Obsoleto" };
 
-const CONSUMED_DETAIL = new Set(["enmienda_de", "enmienda", "nueva_revision_de", "avatar", "contrasena", "excepcion", "revisiones_obsoletas", "pdf", "sha256", "a_quien", "medio", "fecha", "decision", "disposicion", "cantidad", "insertados", "actualizados", "ignorados", "errores", "hojas", "movimientos_repuestos", "proveedor", "existe_usuario", "motivo", "permisos", "rol", "rol_id", "asignacion_id", "vigente_desde", "vigente_hasta", "actuo_como", "ip", "tipo", "bloqueado_hasta", "cambios", "roles_acotados", "cambio_obligatorio", "sesiones", "otras_sesiones", "supervisado", "antes", "despues", "tipo_cuenta", "supervisor_id"]);
+const CONSUMED_DETAIL = new Set(["enmienda_de", "enmienda", "nueva_revision_de", "avatar", "contrasena", "excepcion", "revisiones_obsoletas", "pdf", "sha256", "a_quien", "medio", "fecha", "decision", "disposicion", "cantidad", "insertados", "actualizados", "ignorados", "errores", "hojas", "movimientos_repuestos", "proveedor", "existe_usuario", "motivo", "permisos", "rol", "rol_id", "asignacion_id", "vigente_desde", "vigente_hasta", "actuo_como", "ip", "tipo", "bloqueado_hasta", "cambios", "roles_acotados", "cambio_obligatorio", "sesiones", "otras_sesiones", "supervisado", "antes", "despues", "tipo_cuenta", "supervisor_id", "adjunto_id", "tipo_evidencia", "descripcion", "nombre", "tamano_bytes", "vista_previa", "integridad", "esperado", "obtenido", "adjuntos_heredados", "respaldo_id", "archivos", "incluye_llave", "llave_huella", "bitacora_ultimo_id", "tamano", "manifest_sha256", "origen", "modo", "responsable"]);
 const DELIVERY_PHRASE: Record<string, string> = { correo: "por correo electrónico", impreso: "en mano (impreso)", portal: "por el portal o carpeta compartida", otro: "por otro medio" };
 const exceptionLabel = (value: unknown) => {
   const text = String(value);
@@ -781,6 +788,7 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       break;
     case "enmendar":
       action = detalle.enmienda_id ? `abrió una enmienda (versión ${String(detalle.version ?? "?")}) ${de(obj)}` : `registró la versión ${String(detalle.version ?? "?")} ${de(obj)} como enmienda`;
+      if (Number(detalle.adjuntos_heredados)) facts.push(`Heredó ${Number(detalle.adjuntos_heredados)} evidencia(s) instrumental(es) de la versión anterior`);
       break;
     case "sustituir":
       action = `${obj} quedó sustituido por su enmienda${detalle.version ? ` (versión ${String(detalle.version)})` : ""}`;
@@ -836,7 +844,28 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       action = `marcó ${obj} como "requiere enmienda"`;
       break;
     case "alerta_integridad":
-      action = `detectó que el PDF ${de(obj)} no coincide con su huella SHA-256`;
+      if (detalle.adjunto_id) {
+        const que = `${TIPO_EVIDENCIA_ART[String(detalle.tipo_evidencia)] || "la evidencia"} "${String(detalle.descripcion || detalle.nombre || "")}"`;
+        action = detalle.integridad === "faltante" ? `detectó que falta el archivo de ${que} ${de(obj)} (alerta de integridad)` : `detectó una alerta de integridad en ${que} ${de(obj)}: el archivo no coincide con su huella SHA-256`;
+        facts.push(`Archivo: ${String(detalle.nombre || "")}`);
+        if (detalle.esperado) facts.push(`Huella esperada ${huellaCorta(detalle.esperado)}${detalle.obtenido ? ` · obtenida ${huellaCorta(detalle.obtenido)}` : ""}`);
+      } else action = `detectó que el PDF ${de(obj)} no coincide con su huella SHA-256`;
+      break;
+    case "adjuntar":
+    case "anular_adjunto": {
+      const que = `${TIPO_EVIDENCIA_ART[String(detalle.tipo_evidencia)] || "la evidencia"} "${String(detalle.descripcion || "")}"`;
+      action = accion === "adjuntar" ? `adjuntó ${que} ${obj.startsWith("el ") ? `al ${obj.slice(3)}` : `a ${obj}`}` : `anuló ${que} ${de(obj)} (el archivo se conserva)`;
+      if (detalle.nombre) facts.push(`Archivo: ${String(detalle.nombre)}${detalle.tamano_bytes ? ` · ${fmtBytes(Number(detalle.tamano_bytes))}` : ""}`);
+      if (detalle.sha256) facts.push(`SHA-256 ${huellaCorta(detalle.sha256)}`);
+      break;
+    }
+    case "respaldar":
+      action = `creó el respaldo ${referencia || ""}`.trim();
+      if (detalle.archivos !== undefined) facts.push(`${Number(detalle.archivos)} archivo(s) · ${detalle.incluye_llave ? "incluye la llave de la bitácora (solo local)" : "sin llave"}`);
+      break;
+    case "restaurar_respaldo":
+      action = `registró la restauración desde el respaldo ${referencia || ""}`.trim();
+      if (detalle.responsable) facts.push(`Responsable: ${String(detalle.responsable)}`);
       break;
     case "entregar": {
       const to = detalle.a_quien ? ` a ${String(detalle.a_quien)}` : "";
@@ -872,7 +901,12 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       action = `eliminó ${obj}`;
       break;
     case "descargar":
-      action = entidad === "informes" ? `descargó el PDF ${de(obj)}` : `descargó ${obj}`;
+      if (detalle.adjunto_id) {
+        const que = `${TIPO_EVIDENCIA_ART[String(detalle.tipo_evidencia)] || "la evidencia"} "${String(detalle.nombre || "")}"`;
+        // "de el cromatograma" -> "del cromatograma".
+        action = detalle.vista_previa ? `abrió la vista previa ${de(que)} ${de(obj)}` : `descargó ${que} ${de(obj)}`;
+      }
+      else action = entidad === "informes" ? `descargó el PDF ${de(obj)}` : `descargó ${obj}`;
       break;
     case "login":
       action = "inició sesión";

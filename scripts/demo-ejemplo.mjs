@@ -170,6 +170,32 @@ async function pdfEvidencia(folio) {
   return Buffer.concat(partes);
 }
 
+/* Fase 10: cromatograma de la corrida (PDF generado) como evidencia instrumental del analisis. */
+async function pdfCromatograma(folio) {
+  const PDFDocument = require("pdfkit");
+  const doc = new PDFDocument({ size: "LETTER", margin: 56 });
+  const partes = [];
+  doc.on("data", (b) => partes.push(b));
+  const fin = new Promise((resolve) => doc.on("end", resolve));
+  doc.fontSize(16).text(`Cromatograma · ${folio}`, { underline: true }).moveDown(0.5);
+  doc.fontSize(10).text(`LC-MS/MS FX-TCB-MS1 · ${HOY} ${hora()} · muestra D26-001 (mejillón) · ácido okadaico, MRM 803.5 > 255.1`).moveDown();
+  // Ejes y un pico gaussiano sencillo.
+  const x0 = 80, y0 = 420, ancho = 440, alto = 220;
+  doc.moveTo(x0, y0).lineTo(x0 + ancho, y0).stroke().moveTo(x0, y0).lineTo(x0, y0 - alto).stroke();
+  doc.fontSize(8).text("Tiempo de retención (min)", x0 + ancho / 2 - 50, y0 + 8).text("Intensidad", x0 - 60, y0 - alto / 2);
+  doc.moveTo(x0, y0 - 4);
+  for (let i = 0; i <= ancho; i += 2) {
+    const t = i / ancho;
+    const y = y0 - 4 - 200 * Math.exp(-(((t - 0.55) / 0.03) ** 2)) - 3 * Math.sin(i / 7);
+    doc.lineTo(x0 + i, y);
+  }
+  doc.stroke();
+  doc.fontSize(9).text("Pico: tR 6.62 min · área 1.84e5 · 48.9 µg/kg eq. AO", x0 + ancho * 0.55 - 40, y0 - alto - 12);
+  doc.end();
+  await fin;
+  return Buffer.concat(partes);
+}
+
 /* ---------- Escenario ---------- */
 
 async function main() {
@@ -383,6 +409,13 @@ async function main() {
   });
   const AID = analisis.id;
   paso("Luis", `registra el análisis A ${String(analisis.folio_num).padStart(7, "0")} (DSP 48.9 µg/kg, Cumple)`, (await ok("Luis", "GET", `/samples/reception/${RID}`)).item.estado);
+  // Fase 10: evidencia instrumental obligatoria antes de enviar a revisión.
+  const evidencia = new FormData();
+  evidencia.set("archivo", new Blob([await pdfCromatograma(`A ${String(analisis.folio_num).padStart(7, "0")}`)], { type: "application/pdf" }), "cromatograma-D26-001.pdf");
+  evidencia.set("tipo_evidencia", "cromatograma");
+  evidencia.set("descripcion", "Cromatograma LC-MS/MS de la muestra D26-001");
+  const adj = await ok("Luis", "POST", `/samples/analysis/${AID}/adjuntos`, evidencia);
+  paso("Luis", "adjunta el cromatograma (evidencia instrumental)", `SHA-256 ${String(adj.item?.sha256 || "").slice(0, 12)}…`);
   await ok("Luis", "POST", `/samples/analysis/${AID}/enviar-revision`, {});
   paso("Luis", "envía el análisis a revisión", (await ok("Luis", "GET", `/samples/reception/${RID}`)).item.estado);
 

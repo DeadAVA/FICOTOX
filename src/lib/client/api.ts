@@ -193,6 +193,34 @@ export const sendFormAuth = async (url: string, token: string, formData: FormDat
   return data;
 };
 
+/*
+ * Fase 10: como sendFormAuth, pero con avance de la carga (XMLHttpRequest, que
+ * a diferencia de fetch informa el progreso de la subida). Respeta "Actuar
+ * como" y la reautenticacion igual que las demas peticiones.
+ */
+export const sendFormAuthProgress = async (url: string, token: string, formData: FormData, onProgress?: (fraccion: number) => void): Promise<ApiRecord> => {
+  const enviar = (extra: Record<string, string>) =>
+    new Promise<Response>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      for (const [k, v] of Object.entries(extra)) xhr.setRequestHeader(k, v);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) onProgress(event.loaded / event.total);
+      };
+      xhr.onload = () => resolve(new Response(xhr.responseText || "{}", { status: xhr.status, headers: { "Content-Type": xhr.getResponseHeader("content-type") || "application/json" } }));
+      xhr.onerror = () => reject(new Error("No se pudo subir el archivo (conexión interrumpida)"));
+      xhr.send(formData);
+    });
+  const response = await conReauth(token, enviar);
+  const data = await parseJson(response);
+  if (!response.ok) {
+    avisarSesion(response.status, data);
+    throw new Error(data.message || "No se pudo completar la carga");
+  }
+  return data;
+};
+
 /* Equivalente de resolveApiEntity(payload, preferredKeys). */
 export const resolveApiEntity = (payload: unknown, preferredKeys: string[] = []): ApiRecord => {
   if (!payload || typeof payload !== "object") {

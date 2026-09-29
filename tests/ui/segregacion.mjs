@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { adjuntarEvidencia } from "../lib/evidencia.mjs";
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright-core");
 
@@ -46,10 +47,14 @@ const E = (await api("POST", "/samples/extraction", { tipo_registro: "E-D", proc
 // A1 lo elabora QA y queda revisado (para ver "Aprobar" deshabilitado); A2 queda aprobado (para pedir su anulacion).
 const A1 = (await api("POST", "/samples/analysis", { tipo_analisis: "toxinas_lipofilicas", metodo: "hplc_ms_ms", extraccion_id: E, fecha_analisis: "2026-09-20", analista_nombre: "QA", resultados: [{ id_muestra: id, resultado: 50, unidad: "µg/kg", limite_regulatorio: 160, cumple: "cumple" }] }, QA)).data?.id;
 // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+// Fase 10: evidencia instrumental obligatoria para enviar a revision.
+await adjuntarEvidencia(API, QA, A1);
 await api("POST", `/samples/analysis/${A1}/enviar-revision`, {}, QA);
 await api("POST", `/samples/analysis/${A1}/revisar`, {}, TR);
 const A2 = (await api("POST", "/samples/analysis", { tipo_analisis: "toxinas_lipofilicas", metodo: "hplc_ms_ms", extraccion_id: E, fecha_analisis: "2026-09-20", analista_nombre: "QA", resultados: [{ id_muestra: id, resultado: 40, unidad: "µg/kg", limite_regulatorio: 160, cumple: "cumple" }] }, QA)).data?.id;
 // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+// Fase 10: evidencia instrumental obligatoria para enviar a revision.
+await adjuntarEvidencia(API, QA, A2);
 await api("POST", `/samples/analysis/${A2}/enviar-revision`, {}, QA);
 await api("POST", `/samples/analysis/${A2}/revisar`, {}, TR);
 const tokA = await reauth(TR, "ensayos:A", credenciales[RICARDO]);

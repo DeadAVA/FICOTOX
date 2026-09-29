@@ -23,12 +23,13 @@ export async function ensureExcepcionesColumn(s: Session, tabla: TablaConExcepci
 
 /*
  * Personas que elaboraron un registro: quien lo creo y quien edito su contenido
- * (entradas "crear" y "editar" de su bitacora), mas las columnas de autoria que
+ * (entradas "crear" y "editar" de su bitacora; desde la Fase 10 tambien quien
+ * adjunto o anulo evidencia instrumental), mas las columnas de autoria que
  * se pasen (creado_por, elaborado_por) por si la bitacora fuera anterior.
  */
 export async function elaboradoresDe(s: Session, entidad: string, entidadId: number, ...autores: unknown[]): Promise<Set<number>> {
   const filas = await s.query<{ usuario_id: number | null }>(
-    "SELECT DISTINCT usuario_id FROM auditoria WHERE entidad = :entidad AND entidad_id = :id AND accion IN ('crear', 'editar') AND usuario_id IS NOT NULL",
+    "SELECT DISTINCT usuario_id FROM auditoria WHERE entidad = :entidad AND entidad_id = :id AND accion IN ('crear', 'editar', 'adjuntar', 'anular_adjunto') AND usuario_id IS NOT NULL",
     { entidad, id: String(entidadId) },
   );
   const out = new Set<number>();

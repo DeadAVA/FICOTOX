@@ -442,6 +442,13 @@ Módulo encendido (`FEATURES.documentos`); flujo borrador → revision_calidad �
 
 Campana de notificaciones calculada al vuelo en `GET /api/notificaciones` (`src/lib/server/modules/notificaciones.ts`); exportación CSV de la bitácora y del historial de un registro con `GET /api/audit?formato=csv` (mismos filtros y alcances; queda como acción `exportar`); pendientes consolidados en `docs/PENDIENTES.md`.
 
+## 8 undecies. Fase 10 — evidencia instrumental y prueba de restauración (rama `fase-10-cumplimiento`)
+
+- **Evidencia instrumental** en los análisis: tabla genérica `adjuntos` (`src/lib/server/adjuntos.ts`, catálogo en `src/lib/shared/adjuntos.ts`), reglas y endpoints en `src/lib/server/modules/samples/analisis-adjuntos.ts` (`/api/samples/analysis/<id>/adjuntos`, `/api/adjuntos/<id>/archivo`, `/api/adjuntos/<id>/anular`), interfaz `EvidenciaPanel.tsx` en la ranura `interactive` de `FormPage` (activa en solo lectura, antes de las firmas, que van en `tail`). Archivos en `<instance>/evidencias/analisis/<id>/<uuid>.<ext>`; SHA-256 verificado en cada descarga (`X-Integridad-Adjunto`). `EVIDENCIA_OBLIGATORIA_ANALISIS` (true): sin adjunto vigente `enviar-revision` → 409 `evidencia_requerida`. Las enmiendas heredan (filas con `heredado_de`, mismo archivo). `exigirAnalisisEditable` (analisis.ts) es la guarda común de editar y adjuntar.
+- **Pruebas**: `tests/lib/evidencia.mjs` (`pdfDePrueba`, `adjuntarEvidencia`); `reauth-auto.mjs` adjunta un PDF solo si `enviar-revision` responde `evidencia_requerida` (salvo `X-Sin-Evidencia-Auto: 1`). El servidor de prueba usa `EVIDENCIA_MAX_MB=25` y `FICOTOX_BACKUP_DIR=instance/test/backups`.
+- **Respaldo y restauración**: una sola implementación `src/lib/shared/respaldo.mjs` (servidor, `scripts/respaldar-ficotox.mjs`, `scripts/restaurar-ficotox.mjs`, `scripts/backup_ficotox.py`); `evaluarCadena` en `audit-chain.mjs` la comparten `verifyAuditChain` y la restauración. Pantalla **Administración › Respaldos** (`/administracion/respaldos`, `src/lib/server/modules/respaldos.ts`). El servidor escribe `<instance>/servidor.lock`. Procedimiento: `docs/RESPALDO_Y_RECUPERACION.md`. Actas en `backups/pruebas-restauracion/`.
+- Al cambiar el esquema de forma incompatible: subir `ESQUEMA_VERSION` en `respaldo.mjs`.
+
 ## 9. Pendientes conocidos
 
 Lista consolidada y vigente: `docs/PENDIENTES.md`. Lo que sigue es el registro histórico.

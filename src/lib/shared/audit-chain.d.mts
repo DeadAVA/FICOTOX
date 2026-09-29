@@ -45,3 +45,14 @@ export function registroDesdeFila(row: Row): Record<string, unknown>;
 export function sellar(registro: object, clave: string): string;
 export function primerEslabonRoto(filas: Row[], clave: string): number | null;
 export function resolverClaveSello(secretKey: string | undefined | null, instanceDir: string): string;
+
+export interface VerificacionCadena {
+  ok: boolean;
+  total: number;
+  primer_error: number | null;
+  filas_faltantes_al_final: number;
+  filas_faltantes_intermedias: number;
+  triggers_ok: boolean;
+}
+export function evaluarCadena(filas: Row[], clave: string, ultimoIdAsignado: number | null | undefined, triggers: number): VerificacionCadena;
+export function leerClaveSello(secretKey: string | undefined | null, instanceDir: string): { clave: string; origen: "SECRET_KEY" | "auditoria.key" } | null;

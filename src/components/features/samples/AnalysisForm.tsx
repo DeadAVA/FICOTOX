@@ -12,7 +12,7 @@ import { cn } from "@/components/ui/cn";
 import { Field, FormGrid, Input, Select, Textarea, controlClassSm } from "@/components/ui/Field";
 import { DateInput } from "@/components/ui/DateInput";
 import { EmptyState } from "@/components/ui/Primitives";
-import { ActionMenu, useConfirm, usePrompt, type MenuItem } from "@/components/ui/Overlay";
+import { ActionMenu, Tooltip, useConfirm, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { fmtDate, isoDate, parseFloatOrNull, parseIntOrNull, todayIso } from "@/lib/client/format";
 import { findInsumoOption, findUniqueOperativeEquipo, loadInsumoOptions, nextBitacoraFolio } from "@/lib/client/insumos";
@@ -29,6 +29,7 @@ import { formatearHora } from "@/lib/shared/fechas";
 import { AvisoAutorizacion } from "./AvisoAutorizacion";
 import { requisitosAnalisis, requisitosRevisionResultados } from "@/lib/shared/autorizaciones";
 import { firmanteDe, firmantesPayload, type FirmanteState } from "./FirmanteSelect";
+import { EvidenciaPanel } from "./EvidenciaPanel";
 
 /*
  * Registro de analisis: metodo, equipo, condiciones, resultados por muestra
@@ -205,6 +206,11 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
   const readOnly = editing && (["en_revision", "aprobado", "revisado", "sustituido", "anulado", "anulada"].includes(estado) || !canEdit || !!item?.solicitud_pendiente);
   const patch = (changes: Partial<AnalysisFormState>) => setForm((prev) => ({ ...prev, ...changes }));
   const meta = ANALYSIS_TYPES.find((t) => t.value === form.tipo);
+  // Fase 10: evidencia instrumental (vigentes) y si es obligatoria para enviar a revisión.
+  const resumenEvidencia = (item?.adjuntos || {}) as { vigentes?: number; obligatoria?: boolean };
+  const [evidencias, setEvidencias] = useState<number>(Number(resumenEvidencia.vigentes || 0));
+  const evidenciaObligatoria = resumenEvidencia.obligatoria !== false;
+  const faltaEvidencia = evidenciaObligatoria && evidencias === 0;
   const requiereExtraccion = !!meta?.requiere_extraccion;
 
   /* Al vincular una extraccion se cargan sus muestras (sin el blanco) como filas de resultado. */
@@ -345,7 +351,8 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
 
   const handleSave = async () => {
     const payload = { ...buildPayload(), firmantes: firmantesPayload({ analista: analistaCuenta }) };
-    const incompletas = missingSections(sections);
+    // La evidencia se exige al enviar a revisión, no al guardar (y se adjunta después de registrar).
+    const incompletas = missingSections(sections.filter((section) => section.id !== "sec-evidencia"));
     if (incompletas.length) return fail(missingMessage(incompletas), incompletas[0].id);
     if (!payload.tipo_analisis) return fail("Selecciona el tipo de análisis", "sec-datos");
     if (!payload.metodo) return fail("Selecciona el método", "sec-datos");
@@ -467,6 +474,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
     { id: "sec-resultados", label: "Resultados", complete: readOnly ? undefined : resultadosOk },
     { id: "sec-controles", label: "Controles de calidad", optional: true, complete: readOnly || !(form.blancoAceptable || form.mrAceptable || form.dupAceptable) ? undefined : true },
     { id: "sec-insumos", label: "Insumos", optional: true, complete: readOnly || !form.inventarioRows.some((row) => (row.ref || row.nombre || "").trim()) ? undefined : true },
+    { id: "sec-evidencia", label: "Evidencia instrumental", optional: !evidenciaObligatoria, complete: editing && estado === "registrado" ? evidencias > 0 : editing && evidencias > 0 ? true : undefined },
     { id: "sec-personal", label: "Analista", complete: readOnly ? undefined : !!form.analista.trim() },
     { id: "sec-revision", label: "Revisión y aprobación", optional: true },
     ...(editing ? [{ id: "sec-historial", label: "Historial", optional: true }] : []),
@@ -488,6 +496,43 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       sections={sections}
       error={error}
       readOnly={readOnly}
+      interactive={
+        <FormCard id="sec-evidencia" title="Evidencia instrumental" description="Cromatogramas, reportes del equipo, hojas de cálculo, curvas o certificados que respaldan los resultados. Se adjuntan antes de enviar a revisión; después quedan en solo lectura.">
+          {editing && item?.id && token ? (
+            <EvidenciaPanel analisisId={Number(item.id)} token={token} onResumen={(vigentes) => setEvidencias(vigentes)} />
+          ) : (
+            <Callout tone="info">Registra el análisis y después adjunta aquí su evidencia instrumental{evidenciaObligatoria ? " (obligatoria para enviarlo a revisión)" : ""}.</Callout>
+          )}
+        </FormCard>
+      }
+      tail={
+        <>
+        <FormCard id="sec-personal" title="Analista" description="Quién realizó el análisis.">
+          <PersonCard title="Analista" firmante={analistaCuenta} onFirmante={setAnalistaCuenta} name={form.analista} onName={(v) => patch({ analista: v })} signature={form.analistaFirma} onSignature={(v) => patch({ analistaFirma: v })} />
+        </FormCard>
+
+        <FormCard id="sec-revision" title="Revisión y aprobación" description="Una segunda persona revisa; otra distinta aprueba. Solo los análisis aprobados pueden reportarse.">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SignoffCard title="Revisó" name={item?.revisado_nombre} cargo={item?.revisado_cargo} at={item?.revisado_en} note={[item?.revision_observaciones, excepcionDe("revisar") ? `Revisión autorizada por excepción, solicitud #${excepcionDe("revisar")!.solicitud_id}` : null].filter(Boolean).join(" · ") || null} hint={editing ? "Se firma con “Marcar revisado”." : "Después de registrar el análisis."} />
+            <SignoffCard title="Aprobó" name={item?.aprobado_nombre} cargo={item?.aprobado_cargo} at={item?.aprobado_en} note={excepcionDe("aprobar") ? `Aprobación autorizada por excepción, solicitud #${excepcionDe("aprobar")!.solicitud_id}` : null} hint={editing ? "Se firma con “Aprobar” tras la revisión." : "Después de la revisión."} />
+          </div>
+          {editing && estado === "registrado" && !canReview ? <Callout tone="info" className="mt-4">Una persona con permiso de revisar ensayos debe revisar este análisis.</Callout> : null}
+        </FormCard>
+
+        <SignDialog
+          key={sign || "sin-firma"}
+          open={sign !== null}
+          onOpenChange={(open) => !open && setSign(null)}
+          title={sign === "revisar" ? "Marcar análisis como revisado" : "Aprobar análisis"}
+          description={sign === "revisar" ? `Quedará registrado a nombre de ${user?.nombre || user?.email || "tu usuario"}.` : "A partir de la aprobación el resultado puede incluirse en un informe."}
+          confirmLabel={sign === "revisar" ? "Marcar revisado" : "Aprobar"}
+          withObservaciones={sign === "revisar"}
+          loading={signing}
+          critico={sign === "aprobar"}
+          onConfirm={doSign}
+        />
+        </>
+      }
       after={
         editing ? (
           <FormCard id="sec-historial" title="Historial del registro" description="Bitácora de auditoría de este análisis.">
@@ -502,9 +547,19 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
           </Button>
           {moreItems.length ? <ActionMenu items={moreItems} label="Más acciones" header={folioLabel} /> : null}
           {editing && estado === "registrado" && canEdit && !item?.solicitud_pendiente ? (
-            <Button variant="soft" icon={<PaperPlaneTilt size={16} />} onClick={enviarRevision} loading={flujo}>
-              Enviar a revisión
-            </Button>
+            faltaEvidencia ? (
+              <Tooltip content="Adjunta al menos una evidencia instrumental (sección “Evidencia instrumental”) antes de enviar a revisión.">
+                <span tabIndex={0} className="inline-flex">
+                  <Button variant="soft" icon={<PaperPlaneTilt size={16} />} disabled>
+                    Enviar a revisión
+                  </Button>
+                </span>
+              </Tooltip>
+            ) : (
+              <Button variant="soft" icon={<PaperPlaneTilt size={16} />} onClick={enviarRevision} loading={flujo}>
+                Enviar a revisión
+              </Button>
+            )
           ) : null}
           {editing && estado === "en_revision" && canReview ? (
             <Button variant="secondary" icon={<ArrowUUpLeft size={16} />} onClick={devolver} loading={flujo}>
@@ -818,31 +873,6 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       >
         <InventarioRows rows={form.inventarioRows} onChange={(rows) => patch({ inventarioRows: rows })} />
       </FormCard>
-
-      <FormCard id="sec-personal" title="Analista" description="Quién realizó el análisis.">
-        <PersonCard title="Analista" firmante={analistaCuenta} onFirmante={setAnalistaCuenta} name={form.analista} onName={(v) => patch({ analista: v })} signature={form.analistaFirma} onSignature={(v) => patch({ analistaFirma: v })} />
-      </FormCard>
-
-      <FormCard id="sec-revision" title="Revisión y aprobación" description="Una segunda persona revisa; otra distinta aprueba. Solo los análisis aprobados pueden reportarse.">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <SignoffCard title="Revisó" name={item?.revisado_nombre} cargo={item?.revisado_cargo} at={item?.revisado_en} note={[item?.revision_observaciones, excepcionDe("revisar") ? `Revisión autorizada por excepción, solicitud #${excepcionDe("revisar")!.solicitud_id}` : null].filter(Boolean).join(" · ") || null} hint={editing ? "Se firma con “Marcar revisado”." : "Después de registrar el análisis."} />
-          <SignoffCard title="Aprobó" name={item?.aprobado_nombre} cargo={item?.aprobado_cargo} at={item?.aprobado_en} note={excepcionDe("aprobar") ? `Aprobación autorizada por excepción, solicitud #${excepcionDe("aprobar")!.solicitud_id}` : null} hint={editing ? "Se firma con “Aprobar” tras la revisión." : "Después de la revisión."} />
-        </div>
-        {editing && estado === "registrado" && !canReview ? <Callout tone="info" className="mt-4">Una persona con permiso de revisar ensayos debe revisar este análisis.</Callout> : null}
-      </FormCard>
-
-      <SignDialog
-        key={sign || "sin-firma"}
-        open={sign !== null}
-        onOpenChange={(open) => !open && setSign(null)}
-        title={sign === "revisar" ? "Marcar análisis como revisado" : "Aprobar análisis"}
-        description={sign === "revisar" ? `Quedará registrado a nombre de ${user?.nombre || user?.email || "tu usuario"}.` : "A partir de la aprobación el resultado puede incluirse en un informe."}
-        confirmLabel={sign === "revisar" ? "Marcar revisado" : "Aprobar"}
-        withObservaciones={sign === "revisar"}
-        loading={signing}
-        critico={sign === "aprobar"}
-        onConfirm={doSign}
-      />
     </FormPage>
   );
 }

@@ -11,6 +11,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { autorizarTodo } from "./lib/autorizar.mjs";
+import { adjuntarEvidencia } from "./lib/evidencia.mjs";
 import { liberar, registrarEnvio } from "./lib/envio.mjs";
 
 const Database = createRequire(import.meta.url)(process.env.BETTER_SQLITE3 || "better-sqlite3");
@@ -310,6 +311,8 @@ const cadena = async (prefijo, token = QA) => {
 
   // Excepcion de segregacion: el Analista revisa su propio analisis por falta de personal.
   const c6 = await cadena("SOLE", tR);
+  // Fase 10: la evidencia la adjunta quien elaboro el analisis (Ricardo); si la adjuntara QA al enviarlo, QA contaria como elaborador.
+  await adjuntarEvidencia(BASE, tR, c6.A);
   // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
   await api("POST", `/samples/analysis/${c6.A}/enviar-revision`, {}, QA);
   const sinExc = await api("POST", `/samples/analysis/${c6.A}/revisar`, {}, tR);

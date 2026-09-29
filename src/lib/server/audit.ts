@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { construirRegistro, primerEslabonRoto, resolverClaveSello, sellar as sellarRegistro } from "../shared/audit-chain.mjs";
+import { construirRegistro, evaluarCadena, resolverClaveSello, sellar as sellarRegistro } from "../shared/audit-chain.mjs";
 import { advertenciasLlaveBitacora, SECRET_KEY_DESARROLLO } from "../shared/secretos.mjs";
 import type { CurrentUser } from "./auth";
 import { getConfig } from "./config";
@@ -84,7 +84,11 @@ export type AuditAction =
   | "publicar"
   | "confirmar_lectura"
   | "proponer"
-  | "exportar";
+  | "exportar"
+  | "adjuntar"
+  | "anular_adjunto"
+  | "respaldar"
+  | "restaurar_respaldo";
 
 export interface AuditEntry {
   accion: AuditAction;
@@ -270,20 +274,6 @@ export interface AuditVerification {
 export async function verifyAuditChain(s: Session): Promise<AuditVerification> {
   await ensureAuditSchema(s);
   const rows = await s.query<Row>("SELECT * FROM auditoria ORDER BY id ASC");
-  const triggersOk = (await countAuditTriggers(s)) === 2;
-  const lastId = await lastAssignedId(s);
-  const maxId = rows.length ? Number(rows[rows.length - 1].id) : 0;
-  const minId = rows.length ? Number(rows[0].id) : 0;
-  const faltantes = lastId !== null && lastId > maxId ? lastId - maxId : 0;
-  // Los ids son consecutivos: cualquier hueco significa que se borro una entrada.
-  const huecos = rows.length ? maxId - minId + 1 - rows.length : 0;
-  const result = (primerError: number | null): AuditVerification => ({
-    ok: primerError === null && faltantes === 0 && huecos === 0 && triggersOk,
-    total: rows.length,
-    primer_error: primerError,
-    filas_faltantes_al_final: faltantes,
-    filas_faltantes_intermedias: huecos,
-    triggers_ok: triggersOk,
-  });
-  return result(primerEslabonRoto(rows, claveSello()));
+  // Una sola implementacion (audit-chain.mjs), compartida con el script de restauracion.
+  return evaluarCadena(rows, claveSello(), await lastAssignedId(s), await countAuditTriggers(s));
 }

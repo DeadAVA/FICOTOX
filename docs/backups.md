@@ -2,6 +2,12 @@
 
 Los respaldos se generan en `backups/` y despues se copian a Microsoft OneDrive.
 
+> **Fase 10.** La base y los archivos los respalda una sola implementacion en Node
+> (`scripts/respaldar-ficotox.mjs` → `src/lib/shared/respaldo.mjs`), la misma que usa
+> **Administracion › Respaldos**. Este documento cubre la **copia externa** y las tareas
+> programadas; el formato del respaldo, la llave, la retencion, la prueba de
+> restauracion y el paso a paso para restaurar estan en **`docs/RESPALDO_Y_RECUPERACION.md`**.
+
 ## Destino en OneDrive
 
 Si OneDrive esta instalado, el script lo detecta automaticamente desde Windows. En esta PC normalmente usara:
@@ -93,6 +99,12 @@ Por defecto:
 .\scripts\install-ficotox-backup-tasks.cmd
 ```
 
+Frecuencia propuesta en la Fase 10 (diaria, por validar con Mejora Continua; ver `docs/RESPALDO_Y_RECUPERACION.md`):
+
+```powershell
+.\scripts\install-ficotox-backup-tasks.cmd daily
+```
+
 Si prefieres que la base se respalde una vez al mes:
 
 ```powershell
@@ -101,10 +113,11 @@ Si prefieres que la base se respalde una vez al mes:
 
 ## Que incluye cada respaldo
 
-Base de datos:
+Base de datos (`--target database`):
 
-- SQLite local segun `SQLITE_PATH`, o bien `instance/ficotox.sqlite3`.
-- MySQL/MariaDB si `DATABASE_URL` empieza con `mysql` y `mysqldump` esta instalado.
+- **SQLite** (segun `SQLITE_PATH`, o `instance/ficotox.sqlite3`): el script llama a `node scripts/respaldar-ficotox.mjs`, que crea el respaldo local `backups/<AAAAMMDD-HHMMSS>/` (snapshot en linea de la base, PDF de informes y evidencias de envio, evidencias de analisis, documentos SGC, reportes de mantenimiento, `manifest.json` y la llave de la bitacora en `llave/`) y aplica la retencion (`RESPALDO_RETENCION`). Despues empaqueta esa carpeta en `backups/database/ficotox-respaldo-<id>.zip` **sin la llave** y es ese zip el que se copia a OneDrive, rclone o Graph. Con `--incluir-llave` el zip lleva la llave (solo hacia un medio controlado). Requiere Node.js.
+- **MySQL/MariaDB** si `DATABASE_URL` empieza con `mysql` y `mysqldump` esta instalado (volcado `.sql`; los archivos de `instance/` se copian aparte).
+- Nunca se copian `JWT_SECRET`, las contrasenas SMTP ni otros secretos del `.env`.
 
 Codigo:
 

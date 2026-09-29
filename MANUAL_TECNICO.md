@@ -158,6 +158,11 @@ Se leen desde `.env` en la raiz. `FICOTOX_ENV_FILE` permite indicar otro archivo
 | `ALLOWED_EMAIL_DOMAINS` | Dominios de correo admitidos al dar de alta o cambiar el correo de una cuenta (lista separada por comas; vacio = cualquiera). Una cuenta que conserva su correo se edita aunque el dominio ya no este en la lista | Vacio |
 | `SOLICITUD_VENCE_DIAS` | Dias que una solicitud de autorizacion espera al segundo usuario antes de vencer | `7` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Envio del informe desde la plataforma (Fase 6, opcional; todas o ninguna). Sin ellas solo hay envio manual con evidencia. `SMTP_HOST=prueba`: transporte en memoria para pruebas | No definidas |
+| `EVIDENCIA_MAX_MB` | Fase 10: tamano maximo de cada adjunto de evidencia instrumental (MB) | `25` |
+| `EVIDENCIA_OBLIGATORIA_ANALISIS` | Fase 10: "Enviar a revision" exige al menos un adjunto vigente (409 `evidencia_requerida`); no es retroactivo | `true` |
+| `FICOTOX_BACKUP_DIR` | Fase 10: carpeta de los respaldos locales (servidor, scripts y `backup_ficotox.py`) | `backups/` |
+| `RESPALDO_RETENCION` | Fase 10: respaldos locales que se conservan (nunca se borra el ultimo verificado) | `30` |
+| `RESPALDO_AVISO_HORAS` / `PRUEBA_RESTAURACION_AVISO_DIAS` | Fase 10: avisos "sin respaldo" y "sin prueba de restauracion" (Respaldos, Inicio, campana) | `24` / `90` |
 | `CORS_ORIGINS` | Origenes permitidos por CORS (lista separada por comas o `*`); vacio = solo el mismo origen | Vacio (mismo origen) |
 | `HOST` / `PORT` | Host y puerto del lanzador standalone | `0.0.0.0` / `5000` |
 | `FICOTOX_OPEN_BROWSER` | Abrir navegador al iniciar el lanzador | `true` |
@@ -344,6 +349,11 @@ POST   /api/samples/analysis/<id>/revisar      # ensayos:R (cargo: X-Actuar-Como
 POST   /api/samples/analysis/<id>/aprobar      # ensayos:A (segregacion: quien lo elaboro no lo revisa ni aprueba)
 POST   /api/samples/analysis/<id>/anular       # 409 si esta en un informe autorizado
 POST   /api/samples/analysis/<id>/restaurar
+POST   /api/samples/analysis/<id>/enviar-revision  # Fase 10: 409 evidencia_requerida sin adjunto vigente
+GET    /api/samples/analysis/<id>/adjuntos     # Fase 10: evidencia instrumental (items con integridad, edicion {permitido, motivo})
+POST   /api/samples/analysis/<id>/adjuntos     # Fase 10: multipart archivo, tipo_evidencia, descripcion
+GET    /api/adjuntos/<id>/archivo[?inline=1]   # Fase 10: descarga (X-Integridad-Adjunto: ok | alterado | faltante)
+POST   /api/adjuntos/<id>/anular               # Fase 10: { motivo } + reautenticacion adjuntos:anular
 ```
 
 Las rutas aceptan tambien barra final (`/api/samples/reception/`), como el backend anterior.
@@ -567,6 +577,23 @@ Codigo: `src/lib/server/modules/informes.ts` (liberar, integridad, requiere enmi
 - **Requiere enmienda**: al aprobarse la enmienda de un analisis incluido en informes `autorizado`, `liberado` o `enviado`, `marcarRequiereEnmienda` los marca (bitacora `requiere_enmienda`); no se liberan ni envian (409) hasta crear y liberar su enmienda. En la enmienda del informe, `analisisVigentes` cambia cada analisis sustituido por su version aprobada. Lista con `?estado=requiere_enmienda` y aviso `informes_enmienda` en el Inicio.
 - **Pendientes de la Fase 5 resueltos**: revisar un analisis solo en `en_revision` (409 `no_enviado` si esta `registrado`); crear un informe lleva la recepcion a `informe_elaborado` solo si ya esta `validada` o el informe incluye analisis aprobados; con `firmantes.analista` basta (el nombre lo pone la cuenta); la lista de analisis trae `version` para mostrar "vN"; en "En curso" las recepciones `liberadas` van al final con la nota "Falta disposición final".
 
+### 9.4.4 Evidencia instrumental de los analisis (Fase 10)
+
+Codigo: `src/lib/shared/adjuntos.ts` (catalogo, extensiones, firmas de bytes, saneado de nombres), `src/lib/server/adjuntos.ts` (tabla, almacenamiento, integridad, herencia) y `src/lib/server/modules/samples/analisis-adjuntos.ts` (reglas del analisis y endpoints); interfaz en `src/components/features/samples/EvidenciaPanel.tsx` (seccion "Evidencia instrumental" del formato, en la ranura `interactive` de `FormPage`, activa aunque el formato este en solo lectura).
+
+- **Tabla generica `adjuntos`** (reutilizable en incidencias y otros registros; en esta fase solo `entidad = 'analisis'`): `id`, `entidad`, `entidad_id`, `tipo_evidencia`, `descripcion` (≥ 5), `nombre_original` (saneado, solo dato), `nombre_almacenado` (`analisis/<entidad_id>/<uuid>.<ext>`, relativo a `<instance>/evidencias/`), `mime`, `extension`, `tamano_bytes`, `sha256`, `subido_por`, `subido_rol`, `subido_en`, `heredado_de`, `anulado_en`, `anulado_por`, `anulado_rol`, `motivo_anulacion`. Indices `(entidad, entidad_id)` y `sha256`. Nada se borra: anular llena las columnas y el archivo se conserva.
+- **Tipos**: cromatograma, reporte_equipo, hoja_calculo, curva_calibracion, certificado_material_referencia, foto, otro. **Extensiones**: pdf, png, jpg, jpeg, tif, tiff, csv, txt, xlsx, xls, zip, cdf.
+- **Limite del proxy**: `src/proxy.ts` (CORS de `/api/*`) hace que Next guarde el cuerpo en memoria y por omision lo corte a 10 MB; `next.config.ts` fija `experimental.proxyClientMaxBodySize` en `max(25, EVIDENCIA_MAX_MB) + 2` MB **al construir**: subir `EVIDENCIA_MAX_MB` por encima de 25 exige `npm run build`.
+- **Validacion** (`leerArchivo`): 413 por `Content-Length` y por bytes reales (`EVIDENCIA_MAX_MB`); 400 si la extension no esta permitida, si el archivo esta vacio, si la firma de bytes no corresponde (pdf `%PDF-`, png, jpg, tif, zip/xlsx `PK`, xls OLE, cdf `CDF`/HDF5; csv/txt sin bytes nulos) o si el contenido es HTML, SVG, script o ejecutable aunque se renombre (en csv y txt se revisa todo el contenido; ademas se sirven como texto plano, en descarga y con nosniff). El nombre original se sanea (sin rutas, controles ni marcas bidi).
+- **Escritura** (`guardarArchivo`): temporal `.<uuid>.<ext>.<pid>.tmp` en la misma carpeta, SHA-256 calculado por bloques mientras se escribe, `fsync` y `rename` atomico; despues el registro y la bitacora en la transaccion de la peticion. Si la transaccion falla (incluido el 409 de duplicado), el handler hace rollback y `descartarArchivo` borra el archivo. Duplicado: mismo `sha256` vigente en el mismo registro → 409 "Ese archivo ya está adjunto" (en otro registro si se permite).
+- **Reglas** (mismas funciones que la edicion): `exigirAnalisisEditable` (ensayos:E con su alcance, solo en `registrado` → si no 409 "El análisis ya se envió a revisión", sin anulacion ni solicitud pendiente), `exigirAsignacion` (o coordinacion) y `exigirAutorizaciones(requisitosAnalisis(tipo))`. En MySQL la fila del analisis se lee `FOR UPDATE` (un adjunto que llega despues de "Enviar a revision" responde 409). Cuenta supervisada: `aplicarSupervision` deja el analisis pendiente del visto bueno otra vez (no se elude el visto bueno). Anular exige motivo (≥ 5) y reautenticacion `adjuntos:anular`. Adjuntar y anular cuentan como "elaboro" para la segregacion (`elaboradoresDe`).
+- **Ver y descargar**: ensayos:V con su alcance (con solo `estado` → 403; con solo `asignado`, lo asignado). Aprobado, sustituido o anulado: solo lectura, siempre descargable. Anular el analisis no anula sus adjuntos.
+- **Descarga**: `Content-Disposition` (attachment, o inline con `?inline=1` solo para pdf, png y jpg; TIFF siempre se descarga) con el nombre saneado (ASCII + `filename*` UTF-8), `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`, `X-Adjunto-Sha256`. Recalcula el SHA-256: si no coincide, `X-Integridad-Adjunto: alterado` y entrada `alerta_integridad`; si falta el archivo, 404 con `X-Integridad-Adjunto: faltante` y alerta. Cada descarga queda como `descargar` en la bitacora del analisis.
+- **Evidencia obligatoria**: con `EVIDENCIA_OBLIGATORIA_ANALISIS=true`, `enviar-revision` sin adjunto vigente → 409 `evidencia_requerida`. No aplica a analisis ya enviados o aprobados antes de la Fase 10.
+- **Enmiendas**: `enmendarAnalysis` llama `heredarAdjuntos`: filas nuevas con `heredado_de` que apuntan al mismo archivo (sin copiarlo); anular en la version nueva no toca la anterior.
+- **Bitacora** (sobre `muestras_analisis`): `adjuntar`, `anular_adjunto`, `descargar` y `alerta_integridad` con `adjunto_id`, tipo, descripcion, nombre y SHA-256; frases en `audit-humanize.ts` ("Luis adjuntó el cromatograma … al análisis A 0000001").
+- `GET /api/samples/analysis/<id>` incluye `adjuntos: { vigentes, anulados, obligatoria }`.
+
 ### 9.5 Llave de la bitacora
 
 **Nunca vacies ni cambies una `SECRET_KEY` existente** (aunque sea un valor de ejemplo como `change-me`) sin seguir la migracion de abajo: la instalacion que la uso ya sello su bitacora con ella. El `.env.example` la trae vacia solo para instalaciones nuevas.
@@ -584,7 +611,7 @@ Migrar la llave (solo si es imprescindible, con el servidor detenido):
 
 ### 10.1 Tablas principales
 
-`roles`, `permisos` (catalogo de modulos), `rol_acciones` (permisos de la Fase 1), `usuario_roles` (asignaciones con vigencia), `rol_permisos` (modelo anterior, sin uso), `usuarios`, `reactivos`, `consumibles`, `equipos`, `mantenimientos`, `movimientos`, `muestras_recepcion`, `muestras_procesamiento`, `muestras_extraccion`, `muestras_analisis`, `informes`, `documentos_sgc`, `auditoria`, `reportes_mantenimiento`.
+`roles`, `permisos` (catalogo de modulos), `rol_acciones` (permisos de la Fase 1), `usuario_roles` (asignaciones con vigencia), `rol_permisos` (modelo anterior, sin uso), `usuarios`, `reactivos`, `consumibles`, `equipos`, `mantenimientos`, `movimientos`, `muestras_recepcion`, `muestras_procesamiento`, `muestras_extraccion`, `muestras_analisis`, `adjuntos` (Fase 10), `informes`, `documentos_sgc`, `auditoria`, `reportes_mantenimiento`.
 
 Columnas de baja logica y anulacion (`src/lib/server/inventory-baja.ts`, `src/lib/server/samples-flow.ts`): `activo`, `baja_motivo`, `baja_en`, `baja_por` en reactivos, consumibles y equipos; `anulado_en`, `anulado_por`, `motivo_anulacion`, `estado_previo` en las tablas de muestras. `muestras_recepcion` agrega `decision_aceptacion`, `aceptacion_json` (inspeccion, comunicacion al cliente) y `disposicion_json`. Las listas filtran `activo = 1` / `estado <> 'anulada'` salvo `?bajas=1` / `?anuladas=1`.
 
@@ -636,7 +663,7 @@ npm test               # pruebas de API + navegador (ver docs/VALIDACION.md)
 npm run test:api       # solo API
 ```
 
-`npm test` copia la base congelada `instance/fixtures/ficotox-base.sqlite3` (base vacia + roles y usuarios de la Fase 0) a `instance/test/ficotox-test.sqlite3`, crea **solo en esa copia** el rol "QA pruebas automatizadas" (todos los permisos) y el usuario `qa@ficotox.local`, levanta `next dev` en el puerto 3100 sobre la copia, crea los datos de apoyo (`tests/datos-apoyo.mjs`) y corre `tests/api-*.mjs` (flujo completo por HTTP) y `tests/ui/*.mjs` (Playwright contra el Chrome de Playwright mas reciente o `CHROME_PATH`). La base real nunca se toca. Detalle en `docs/VALIDACION.md`.
+`npm test` copia la base congelada `instance/fixtures/ficotox-base.sqlite3` (base vacia + roles y usuarios de la Fase 0) a `instance/test/ficotox-test.sqlite3`, crea **solo en esa copia** el rol "QA pruebas automatizadas" (todos los permisos) y el usuario `qa@ficotox.local`, levanta `next dev` en el puerto 3100 sobre la copia, crea los datos de apoyo (`tests/datos-apoyo.mjs`) y corre `tests/api-*.mjs` (flujo completo por HTTP), `tests/respaldos.mjs` (respaldo y restauracion, Fase 10) y `tests/ui/*.mjs` (Playwright contra el Chrome de Playwright mas reciente o `CHROME_PATH`). El servidor de prueba usa `EVIDENCIA_MAX_MB=25` y `FICOTOX_BACKUP_DIR=instance/test/backups`. La base real nunca se toca. Detalle en `docs/VALIDACION.md`.
 
 Con el servidor levantado:
 
@@ -673,6 +700,17 @@ Recomendaciones:
 ## 15. Respaldo y recuperacion
 
 Ver `docs/backups.md` y `scripts/backup_ficotox.py` (lee `.env` de la raiz y respalda `instance/ficotox.sqlite3` o la base MySQL).
+
+### 15.0 Respaldo y restauracion (Fase 10)
+
+Procedimiento completo (que se respalda, frecuencia, llave, RTO, responsables, paso a paso, acta): **`docs/RESPALDO_Y_RECUPERACION.md`**.
+
+- **Una sola implementacion**: `src/lib/shared/respaldo.mjs` (JavaScript plano con tipos en `respaldo.d.mts`, como `audit-chain.mjs`). La usan el servidor (`src/lib/server/modules/respaldos.ts`), `scripts/respaldar-ficotox.mjs` (`npm run respaldar`), `scripts/restaurar-ficotox.mjs` (`npm run restaurar`) y, a traves del primero, `scripts/backup_ficotox.py`. Quien llama le pasa el constructor de `better-sqlite3`.
+- **Formato**: `backups/<AAAAMMDD-HHMMSS>/` con `datos/ficotox.sqlite3` (API de respaldo en linea de SQLite; `integrity_check` del snapshot), `archivos/{informes,evidencias,documentos_sgc,maintenance_reports}/`, `manifest.json` (formato, fecha, host, version y commit, `esquema_version` = `ESQUEMA_VERSION`, motor, conteos de `TABLAS_PRINCIPALES`, bitacora: entradas, ultimo id y sello, archivos con tamano y SHA-256, llave: incluida, origen y huella, y `sello` = HMAC-SHA256 del manifest con la llave de la bitacora) y `llave/llave-bitacora.txt`. Se escribe en `.<id>.tmp` y se renombra al final. Nunca `JWT_SECRET` ni otros secretos.
+- **Retencion**: `aplicarRetencion` conserva `RESPALDO_RETENCION` y nunca borra el ultimo respaldo con un acta `aprobada`.
+- **Restauracion**: modo prueba por omision (`instance-restaurada/<fecha>/` junto a la instancia); modo real solo con `--destino instance --confirmar`, con el servidor detenido (puerto `PORT` libre y sin `<instance>/servidor.lock` de un pid vivo, que escribe `src/instrumentation-node.ts` al arrancar), respaldo previo automatico y entrada `restaurar_respaldo` (actor sistema) sellada con `audit-chain.mjs`. Antes de copiar, la verificacion 1 exige `base.ruta = datos/ficotox.sqlite3` y que cada archivo sea `archivos/<carpeta respaldada>/…` sin `..` ni rutas absolutas y que origen y destino queden dentro del respaldo y de la carpeta de preparacion; la 4 comprueba ademas el sello del manifest (quien altere la base o los archivos y recalcule las huellas no puede recalcular el sello sin la llave; si la llave viaja dentro del respaldo, el sello solo protege frente a quien no la tenga, por eso la llave se guarda aparte) y lo compara con la llave configurada en la instalacion. La 1 rechaza enlaces simbolicos, directorios y manifests malformados sin abortar el acta. En modo real, una `instance/auditoria.key` distinta de la del respaldo exige `--aceptar-llave-del-respaldo`. Un acta cuenta como verificacion de un respaldo solo si guarda su ruta y la huella de su `manifest.json`. Verificaciones 1–8 y acta en `backups/pruebas-restauracion/<fecha>.md|.json`; salida 1 si falla una verificacion y 2 si el uso es incorrecto o se rechaza el modo real. La verificacion de la cadena es `evaluarCadena` de `audit-chain.mjs`, la misma que usa `verifyAuditChain`.
+- **API**: `GET /api/respaldos` (usuarios:G o calidad:V; respaldos, actas, ultima prueba, avisos, `puede_crear`), `POST /api/respaldos` (usuarios:G + reautenticacion `respaldos:crear`; bitacora `respaldar`), `GET /api/respaldos/actas/<AAAAMMDD-HHMMSS>[?formato=json]`. Avisos (`avisosRespaldo`) en la pantalla, el Inicio y la campana para usuarios:G y calidad:A.
+- **Esquema**: al cambiar tablas o columnas de forma incompatible hacia atras, subir `ESQUEMA_VERSION` en `respaldo.mjs` (la restauracion de un respaldo mas nuevo que la app aborta; uno mas viejo avisa que el arranque migrara).
 
 ### 15.1 Base de pruebas
 
@@ -776,6 +814,8 @@ npm run lint
 npm test                 # regenera la base de prueba si falta (--rebuild-fixture para forzarlo)
 npm run test:fixture     # rehace instance/fixtures/ficotox-base.sqlite3
 npm run seed:roles       # alta idempotente de roles y usuarios (scripts/seed-usuarios.local.json)
+npm run respaldar        # Fase 10: respaldo local (base, archivos, manifest y llave aparte)
+npm run restaurar -- --respaldo <id> --responsable "..."   # Fase 10: prueba de restauracion con acta
 ```
 
 Buscar rutas:

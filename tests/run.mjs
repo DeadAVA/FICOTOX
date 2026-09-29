@@ -101,6 +101,12 @@ process.on("SIGINT", () => {
  * CORS aunque el .env local los cambie (Next no pisa variables ya definidas).
  */
 const ENTORNO_FASE2 = { TRUST_PROXY: "true", JWT_EXPIRES_HOURS: "", CORS_ORIGINS: "", SESION_INACTIVIDAD_MIN: "", ALLOWED_EMAIL_DOMAINS: "cicese.mx,ficotox.local" };
+/*
+ * Fase 10: evidencia con el limite por omision (25 MB: la prueba sube 12 MB, que
+ * pasa por el proxy, y 25 MB + 1, que da 413), evidencia obligatoria, y respaldos
+ * en instance/test/backups (nunca en backups/ real).
+ */
+const ENTORNO_FASE10 = (testDb) => ({ EVIDENCIA_MAX_MB: "25", EVIDENCIA_OBLIGATORIA_ANALISIS: "true", FICOTOX_BACKUP_DIR: path.join(path.dirname(testDb), "backups"), RESPALDO_RETENCION: "" });
 
 /* Levanta el servidor sobre la copia y no devuelve hasta confirmar que es esa base. */
 /* Fase 3: la zona horaria del servidor no debe cambiar ninguna fecha (se arranca en Tijuana y, tras reiniciar, en UTC). */
@@ -108,7 +114,7 @@ const ENTORNO_FASE2 = { TRUST_PROXY: "true", JWT_EXPIRES_HOURS: "", CORS_ORIGINS
 const SMTP_PRUEBA = { SMTP_HOST: "prueba", SMTP_PORT: "2525", SMTP_USER: "ficotox", SMTP_PASS: "prueba", SMTP_FROM: "FICOTOX <informes@ficotox.local>" };
 const SIN_SMTP = { SMTP_HOST: "", SMTP_PORT: "", SMTP_USER: "", SMTP_PASS: "", SMTP_FROM: "" };
 const arrancarServidor = async (tz = "America/Tijuana", smtp = SMTP_PRUEBA) => {
-  server = spawn("npx", ["next", "dev", "-p", String(PORT)], { cwd: root, stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, SQLITE_PATH: testDb, PORT: String(PORT), TZ: tz, ...ENTORNO_FASE2, ...smtp } });
+  server = spawn("npx", ["next", "dev", "-p", String(PORT)], { cwd: root, stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, SQLITE_PATH: testDb, PORT: String(PORT), TZ: tz, ...ENTORNO_FASE2, ...ENTORNO_FASE10(testDb), ...smtp } });
   const salud = await waitFor(`http://localhost:${PORT}/api/health/db`);
   if (!salud) throw new Error("El servidor de pruebas no respondio");
   if (salud.archivo !== esperado) {
@@ -120,7 +126,7 @@ let failed = 0;
 try {
   await arrancarServidor();
   const datosApoyo = path.join(path.dirname(testDb), "datos-apoyo.json");
-  const api = { BASE: `http://localhost:${PORT}/api`, TEST_DB_PATH: testDb, BETTER_SQLITE3: path.join(root, "node_modules/better-sqlite3"), CREDENCIALES_ROLES: CREDENCIALES, DATOS_APOYO_FILE: datosApoyo };
+  const api = { BASE: `http://localhost:${PORT}/api`, TEST_DB_PATH: testDb, BETTER_SQLITE3: path.join(root, "node_modules/better-sqlite3"), CREDENCIALES_ROLES: CREDENCIALES, DATOS_APOYO_FILE: datosApoyo, TEST_PORT: String(PORT), ...ENTORNO_FASE10(testDb) };
 
   // Fase 3: los helpers de fechas dan lo mismo con cualquier zona horaria del proceso.
   for (const tz of ["UTC", "America/Tijuana"]) {
@@ -139,7 +145,7 @@ try {
   }
 
   // api-roles corre despues de api-dsp y api-sgc: crea registros y personas de prueba que alterarian los folios que esas suites esperan.
-  for (const file of ["api-dsp.mjs", "api-sgc.mjs", "api-roles.mjs", "api-seguridad.mjs", "api-segregacion.mjs", "api-autorizaciones.mjs", "api-muestras.mjs", "api-informes.mjs", "api-documentos.mjs", "api-cierre.mjs"]) {
+  for (const file of ["api-dsp.mjs", "api-sgc.mjs", "api-roles.mjs", "api-seguridad.mjs", "api-segregacion.mjs", "api-autorizaciones.mjs", "api-muestras.mjs", "api-informes.mjs", "api-documentos.mjs", "api-cierre.mjs", "api-evidencias.mjs", "respaldos.mjs"]) {
     console.log(`\n=== ${file}`);
     failed += (await run(path.join(here, file), api)) ? 1 : 0;
   }
@@ -162,7 +168,7 @@ try {
     if (!existsSync(chrome)) {
       console.log(`\n(navegador omitido: no se encontro Chrome en ${chrome}; define CHROME_PATH)`);
     } else {
-      for (const file of ["roles.mjs", "dsp.mjs", "sgc.mjs", "seguridad.mjs", "fechas.mjs", "segregacion.mjs", "autorizaciones.mjs", "etiquetas.mjs", "auditoria.mjs"]) {
+      for (const file of ["roles.mjs", "dsp.mjs", "sgc.mjs", "seguridad.mjs", "fechas.mjs", "segregacion.mjs", "autorizaciones.mjs", "etiquetas.mjs", "auditoria.mjs", "evidencias.mjs"]) {
         console.log(`\n=== ui/${file}`);
         failed += (await run(path.join(here, "ui", file), { BASE: `http://localhost:${PORT}`, CHROME_PATH: chrome, CREDENCIALES_ROLES: CREDENCIALES, DATOS_APOYO_FILE: datosApoyo })) ? 1 : 0;
       }

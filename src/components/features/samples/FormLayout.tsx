@@ -92,7 +92,12 @@ function readShowAll(): boolean | null {
   }
 }
 
-export function FormPage({ backHref, backLabel, code, title, status, statusTone = "brand", actions, sections, children, after, readOnly = false, error }: { backHref: string; backLabel: string; code: string; title: ReactNode; status?: string; statusTone?: Tone; actions: ReactNode; sections: FormSectionDef[]; after?: ReactNode; readOnly?: boolean; children: ReactNode; error?: string | null }) {
+/*
+ * `interactive` (Fase 10) va entre `children` y `tail` y sigue activo aunque el
+ * formato este en solo lectura (p. ej. la evidencia instrumental: se consulta y
+ * descarga siempre, antes de las firmas). `tail` vuelve a quedar en solo lectura.
+ */
+export function FormPage({ backHref, backLabel, code, title, status, statusTone = "brand", actions, sections, children, interactive, tail, after, readOnly = false, error }: { backHref: string; backLabel: string; code: string; title: ReactNode; status?: string; statusTone?: Tone; actions: ReactNode; sections: FormSectionDef[]; interactive?: ReactNode; tail?: ReactNode; after?: ReactNode; readOnly?: boolean; children: ReactNode; error?: string | null }) {
   const [openId, setOpenId] = useState(sections[0]?.id || "");
   const [opened, setVisited] = useState<Set<string>>(() => new Set(sections[0]?.id ? [sections[0].id] : []));
   // Al guardar con errores todas las secciones cuentan como vistas: se señalan todos los faltantes.
@@ -283,6 +288,12 @@ export function FormPage({ backHref, backLabel, code, title, status, statusTone 
             <fieldset disabled={readOnly} className={cn("m-0 flex min-w-0 flex-col gap-4 border-0 p-0", readOnly && "form-readonly")}>
               {children}
             </fieldset>
+            {interactive ? <FormPageContext.Provider value={{ ...ctx, readOnly: false }}>{interactive}</FormPageContext.Provider> : null}
+            {tail ? (
+              <fieldset disabled={readOnly} className={cn("m-0 flex min-w-0 flex-col gap-4 border-0 p-0", readOnly && "form-readonly")}>
+                {tail}
+              </fieldset>
+            ) : null}
             {/* En pantallas chicas la cabecera no lleva acciones: van al pie. */}
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line pt-4 sm:hidden">{actions}</div>
             {/* Lo que va en `after` (historial, disposición final) sigue editable aunque el formato esté en solo lectura. */}

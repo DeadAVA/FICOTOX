@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { pdfDePrueba } from "../lib/evidencia.mjs";
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright-core");
 
@@ -232,6 +233,13 @@ try {
   await page.getByText("Separación de funciones").first().waitFor();
   check("QA no puede revisar su propio análisis (botón deshabilitado con explicación)", await page.getByRole("button", { name: "Marcar revisado" }).isDisabled());
   const analisisUrl = page.url();
+  // Fase 10: evidencia instrumental obligatoria; se adjunta desde la sección del formato.
+  await showAll();
+  await page.locator('input[aria-label="Archivo de evidencia"]').setInputFiles({ name: "cromatograma-sgc.pdf", mimeType: "application/pdf", buffer: pdfDePrueba(`Cromatograma UI SGC ${Date.now()}`) });
+  await page.locator('input[id^="evidencia-desc-"]').fill("Cromatograma de la corrida");
+  await page.getByRole("button", { name: "Adjuntar evidencia" }).click();
+  await page.locator("[data-adjunto]").first().waitFor();
+  check("el analista adjunta la evidencia instrumental antes de enviar", true);
   // Fase 6: el analista lo envía a revisión (desde aquí ya no se edita).
   await page.getByRole("button", { name: "Enviar a revisión" }).click();
   await page.getByRole("dialog").getByRole("button", { name: /Enviar a revisión/ }).click();

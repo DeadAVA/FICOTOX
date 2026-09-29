@@ -20,6 +20,9 @@ import { requisitosAnalisis, requisitosRevisionResultados } from "../../../share
 import { exigirAsignacion, filtroAsignadas } from "../../asignaciones";
 import { ensureColumnasFirma, firmanteElegido, guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
 import { marcarRequiereEnmienda } from "../informes";
+import { contarVigentes, heredarAdjuntos, resumenAdjuntos } from "../../adjuntos";
+import { getConfig } from "../../config";
+import type { Permiso } from "../../rbac";
 
 /*
  * Etapa de analisis (ISO/IEC 17025 7.5, 7.7 y 7.8; diagrama de flujo del
@@ -427,7 +430,9 @@ export async function getAnalysis({ request, s, params }: RouteContext): Promise
     const v = evaluarAnalisis(yo, elaboradores, accion);
     return v && !excepcionPara(excepcionesDe(row), yo, accion) ? v.mensaje : null;
   };
-  return json({ item: { ...serializeAnalysis(row), informes, solicitud_pendiente: pendiente ? serializarSolicitud(pendiente) : null, segregacion: { revisar: bloqueo("revisar"), aprobar: bloqueo("aprobar") } } });
+  // Fase 10: resumen de la evidencia instrumental (la lista completa esta en /adjuntos).
+  const adjuntos = { ...(await resumenAdjuntos(s, "analisis", id)), obligatoria: getConfig().EVIDENCIA_OBLIGATORIA_ANALISIS };
+  return json({ item: { ...serializeAnalysis(row), informes, adjuntos, solicitud_pendiente: pendiente ? serializarSolicitud(pendiente) : null, segregacion: { revisar: bloqueo("revisar"), aprobar: bloqueo("aprobar") } } });
 }
 
 export async function createAnalysis({ request, s }: RouteContext): Promise<Response> {
@@ -488,19 +493,32 @@ export async function createAnalysis({ request, s }: RouteContext): Promise<Resp
   }
 }
 
+/*
+ * Quien puede modificar el contenido de un analisis (editarlo o, desde la
+ * Fase 10, adjuntar y anular su evidencia): ensayos:E con su alcance, solo en
+ * "registrado" (enviado a revision, revisado o aprobado ya no se tocan), sin
+ * anulacion ni solicitud pendiente. Lo usan updateAnalysis y los adjuntos.
+ */
+export async function exigirAnalisisEditable(s: Session, user: CurrentUser, antes: Row | null, bloqueado?: (estado: string) => string): Promise<Permiso> {
+  if (!antes) throw new HttpError(404, { message: "Registro no encontrado" });
+  const permiso = await requirePermission(s, user, "ensayos", "E", { objeto: "analisis", borrador: String(antes.estado || "registrado") === "registrado" });
+  // E solo mientras el analisis no se ha enviado a revision (Fase 5); un aprobado se corrige con enmienda.
+  if (["en_revision", "revisado", "aprobado", "sustituido"].includes(String(antes.estado))) {
+    const como = String(antes.estado) === "aprobado" ? "Corrígelo con una enmienda (nueva versión)" : "Pide al revisor que lo devuelva con observaciones";
+    const message = bloqueado ? bloqueado(String(antes.estado)) : `El analisis ya esta ${antes.estado === "en_revision" ? "enviado a revision" : antes.estado}; no se edita. ${como}`;
+    throw new HttpError(409, { message, codigo: "analisis_bloqueado" });
+  }
+  await assertEditableAsync(s, antes, TABLE);
+  return permiso;
+}
+
 export async function updateAnalysis({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
   await ensureAnalysisSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
-  const permiso = await requirePermission(s, user, "ensayos", "E", { objeto: "analisis", borrador: String(antes?.estado || "registrado") === "registrado" });
+  const permiso = await exigirAnalisisEditable(s, user, antes);
   const actuo = cargoActuante(request, permiso);
-  // E solo mientras el analisis no se ha enviado a revision (Fase 5); un aprobado se corrige con enmienda.
-  if (["en_revision", "revisado", "aprobado", "sustituido"].includes(String(antes?.estado))) {
-    const como = String(antes?.estado) === "aprobado" ? "Corrígelo con una enmienda (nueva versión)" : "Pide al revisor que lo devuelva con observaciones";
-    return json({ message: `El analisis ya esta ${antes?.estado === "en_revision" ? "enviado a revision" : antes?.estado}; no se edita. ${como}`, codigo: "analisis_bloqueado" }, 409);
-  }
-  await assertEditableAsync(s, antes, TABLE);
   const payload = await readJson(request);
   const data = normalizePayload(payload);
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: !!(data.equipo_id || data.equipo_nombre), insumosJson: data.uso_inventario_json });
@@ -648,11 +666,16 @@ export async function enviarRevisionAnalysis({ request, s, params }: RouteContex
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "C", { objeto: "analisis", borrador: true }));
   await ensureAnalysisSchema(s);
-  const antes = await snapshotRow(s, TABLE, id);
+  // En MySQL se bloquea la fila: un adjunto o un anulado concurrente espera a que termine el envio.
+  const antes = isSqlite() ? await snapshotRow(s, TABLE, id) : await s.queryOne<Row>(`SELECT * FROM ${TABLE} WHERE id = :id FOR UPDATE`, { id });
   await assertEditableAsync(s, antes, TABLE, "enviar a revision");
   if (String(antes?.estado) !== "registrado") return json({ message: "Solo se envian a revision analisis en estado registrado" }, 409);
   exigirSinSupervisionPendiente(antes, `El analisis ${folioLabel(TABLE, antes)}`, "enviar a revision");
   await exigirAsignacion(s, user, toIntOrNull(antes?.recepcion_id));
+  // Fase 10: evidencia instrumental obligatoria (EVIDENCIA_OBLIGATORIA_ANALISIS, true por omision).
+  if (getConfig().EVIDENCIA_OBLIGATORIA_ANALISIS && !(await contarVigentes(s, "analisis", id))) {
+    return json({ message: "Adjunta al menos una evidencia instrumental antes de enviar a revisión", codigo: "evidencia_requerida" }, 409);
+  }
   const now = new Date().toISOString();
   await s.execute(`UPDATE ${TABLE} SET estado = 'en_revision', enviado_revision_por = :usuario, enviado_revision_en = :fecha, devolucion_observaciones = NULL WHERE id = :id`, { usuario: userIdFromClaims(user), fecha: now, id });
   await advanceState(s, "muestras_recepcion", toIntOrNull(antes?.recepcion_id), "en_revision_tecnica");
@@ -715,8 +738,10 @@ export async function enmendarAnalysis({ request, s, params }: RouteContext): Pr
   const cols = Object.keys(copia);
   const result = await s.execute(`INSERT INTO ${TABLE} (${cols.join(", ")}) VALUES (${cols.map((c) => `:${c}`).join(", ")})`, copia);
   const nuevoId = result.lastrowid as number;
+  // Fase 10: la nueva version hereda la evidencia vigente (mismo archivo, filas nuevas con heredado_de).
+  const heredados = await heredarAdjuntos(s, "analisis", id, nuevoId);
   const despues = await snapshotRow(s, TABLE, nuevoId);
-  await registrarAuditoria(s, user, { accion: "enmendar", entidad: TABLE, entidadId: nuevoId, referencia: folioLabel(TABLE, despues), despues, motivo, detalle: { sustituye_a: id, version, actuo_como: actuo } });
+  await registrarAuditoria(s, user, { accion: "enmendar", entidad: TABLE, entidadId: nuevoId, referencia: folioLabel(TABLE, despues), despues, motivo, detalle: { sustituye_a: id, version, actuo_como: actuo, ...(heredados ? { adjuntos_heredados: heredados } : {}) } });
   await registrarAuditoria(s, user, { accion: "enmendar", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, original), motivo, detalle: { enmienda_id: nuevoId, version } });
   await s.commit();
   return json({ message: `Enmienda creada: version ${version} del analisis ${folioLabel(TABLE, original)}`, id: nuevoId, version }, 201);

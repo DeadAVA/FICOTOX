@@ -140,6 +140,42 @@ export function primerEslabonRoto(filas, clave) {
   return null;
 }
 
+/*
+ * Verificacion completa de la cadena (Fase 10: la comparten el servidor y el
+ * script de restauracion). `filas` en orden de id; `ultimoIdAsignado` es el
+ * ultimo id que dio el motor (sqlite_sequence / AUTO_INCREMENT - 1) o null;
+ * `triggers` cuantos de los dos triggers de proteccion hay.
+ */
+export function evaluarCadena(filas, clave, ultimoIdAsignado, triggers) {
+  const maxId = filas.length ? Number(filas[filas.length - 1].id) : 0;
+  const minId = filas.length ? Number(filas[0].id) : 0;
+  const faltantes = ultimoIdAsignado !== null && ultimoIdAsignado !== undefined && ultimoIdAsignado > maxId ? ultimoIdAsignado - maxId : 0;
+  // Los ids son consecutivos: cualquier hueco significa que se borro una entrada.
+  const huecos = filas.length ? maxId - minId + 1 - filas.length : 0;
+  const primerError = primerEslabonRoto(filas, clave);
+  const triggersOk = triggers === 2;
+  return {
+    ok: primerError === null && faltantes === 0 && huecos === 0 && triggersOk,
+    total: filas.length,
+    primer_error: primerError,
+    filas_faltantes_al_final: faltantes,
+    filas_faltantes_intermedias: huecos,
+    triggers_ok: triggersOk,
+  };
+}
+
+/* Llave configurada sin crear nada: SECRET_KEY (si no es la de desarrollo) o el contenido de auditoria.key, o null. */
+export function leerClaveSello(secretKey, instanceDir) {
+  const configurada = String(secretKey || "").trim();
+  if (configurada && configurada !== SECRET_KEY_DESARROLLO) return { clave: configurada, origen: "SECRET_KEY" };
+  try {
+    const clave = fs.readFileSync(path.join(instanceDir, "auditoria.key"), "utf8").trim();
+    return clave ? { clave, origen: "auditoria.key" } : null;
+  } catch {
+    return null;
+  }
+}
+
 /* Llave del sello: SECRET_KEY configurada o `<instanceDir>/auditoria.key` (se crea si falta). */
 export function resolverClaveSello(secretKey, instanceDir) {
   const configurada = String(secretKey || "").trim();

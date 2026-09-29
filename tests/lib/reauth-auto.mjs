@@ -15,12 +15,16 @@
  * CREDENCIALES_ROLES: Responsable General primero, luego Mejora Continua,
  * luego QA) y devuelve una respuesta 200 con el resultado de la ejecucion
  * (`resultado`) fusionado, mas la `solicitud` aprobada.
+ * Fase 10: si enviar un analisis a revision responde 409 `evidencia_requerida`,
+ * adjunta un cromatograma PDF de prueba con el mismo usuario y repite el envio.
  * Encabezados de control (se quitan antes de enviar):
  *  - `X-Sin-Reauth-Auto: 1`: no reintenta la reautenticacion (para probar el 401).
  *  - `X-Sin-Aprobar-Auto: 1`: no aprueba la solicitud (para probar el flujo).
+ *  - `X-Sin-Evidencia-Auto: 1`: no adjunta evidencia (para probar el 409).
  * Importarlo al inicio de cada suite: `import "./lib/reauth-auto.mjs";`
  */
 import { readFileSync } from "node:fs";
+import { adjuntarEvidencia } from "./evidencia.mjs";
 
 const original = globalThis.fetch;
 const passwords = new Map();
@@ -85,9 +89,22 @@ globalThis.fetch = async (input, init = {}) => {
   const headers = new Headers(init.headers || {});
   const sinAuto = headers.get("x-sin-reauth-auto") === "1";
   const sinAprobar = headers.get("x-sin-aprobar-auto") === "1";
+  const sinEvidencia = headers.get("x-sin-evidencia-auto") === "1";
   headers.delete("x-sin-reauth-auto");
   headers.delete("x-sin-aprobar-auto");
+  headers.delete("x-sin-evidencia-auto");
   let res = await original(input, { ...init, headers });
+  const envio = /\/api\/samples\/analysis\/(\d+)\/enviar-revision$/.exec(url);
+  if (envio && res.status === 409 && !sinEvidencia) {
+    const data = await res.clone().json().catch(() => null);
+    const token = tokenDe(headers);
+    if (data?.codigo === "evidencia_requerida" && token) {
+      const extra = {};
+      for (const h of ["x-forwarded-for", "x-actuar-como"]) if (headers.get(h)) extra[h] = headers.get(h);
+      const subida = await adjuntarEvidencia(url.slice(0, url.indexOf("/api/") + 5), token, Number(envio[1]), { headers: extra, fetchFn: original });
+      if (subida.ok) res = await original(input, { ...init, headers });
+    }
+  }
   const esLogin = /\/api\/auth\/(login|password)$/.test(url) && String(init.method || "GET").toUpperCase() === "POST";
   if (esLogin && res.ok) {
     try {

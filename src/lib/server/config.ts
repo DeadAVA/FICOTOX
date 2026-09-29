@@ -33,6 +33,14 @@ export interface AppConfig {
   SOLICITUD_VENCE_DIAS: number;
   /* Fase 4: validar autorizaciones del personal (FX-THF-AP) al guardar; false solo para cargar datos iniciales. */
   AUTORIZACIONES_OBLIGATORIAS: boolean;
+  /* Fase 10: evidencia instrumental de los analisis (tamano maximo por archivo y si es obligatoria al enviar a revision). */
+  EVIDENCIA_MAX_MB: number;
+  EVIDENCIA_OBLIGATORIA_ANALISIS: boolean;
+  /* Fase 10: respaldos locales (carpeta, cuantos se conservan) y avisos (horas sin respaldo, dias sin prueba de restauracion). */
+  RESPALDOS_DIR: string;
+  RESPALDO_RETENCION: number;
+  RESPALDO_AVISO_HORAS: number;
+  PRUEBA_RESTAURACION_AVISO_DIAS: number;
 }
 
 function envInt(name: string, fallback: number): number {
@@ -137,6 +145,14 @@ export function getConfig(): AppConfig {
     REAUTH_TTL_MIN: envInt("REAUTH_TTL_MIN", 5),
     SOLICITUD_VENCE_DIAS: envInt("SOLICITUD_VENCE_DIAS", 7),
     AUTORIZACIONES_OBLIGATORIAS: envBool("AUTORIZACIONES_OBLIGATORIAS", "true"),
+    EVIDENCIA_MAX_MB: envInt("EVIDENCIA_MAX_MB", 25),
+    EVIDENCIA_OBLIGATORIA_ANALISIS: envBool("EVIDENCIA_OBLIGATORIA_ANALISIS", "true"),
+    // Misma carpeta que scripts/backup_ficotox.py: FICOTOX_BACKUP_DIR o <proyecto>/backups.
+    // turbopackIgnore: la carpeta se decide en tiempo de ejecucion; sin esto el build standalone copiaria backups/.
+    RESPALDOS_DIR: process.env.FICOTOX_BACKUP_DIR ? path.resolve(/*turbopackIgnore: true*/ BASE_DIR, process.env.FICOTOX_BACKUP_DIR) : path.join(/*turbopackIgnore: true*/ BASE_DIR, "backups"),
+    RESPALDO_RETENCION: envInt("RESPALDO_RETENCION", 30),
+    RESPALDO_AVISO_HORAS: envInt("RESPALDO_AVISO_HORAS", 24),
+    PRUEBA_RESTAURACION_AVISO_DIAS: envInt("PRUEBA_RESTAURACION_AVISO_DIAS", 90),
   };
   return cached;
 }
