@@ -9,46 +9,28 @@
  * Segregacion: quien elaboro no revisa ni aprueba; quien hizo la revision de
  * calidad no aprueba. Aprobar y publicar piden reautenticacion.
  */
-import { ensureCalidadSchema } from "./calidad/comun";
+
 import { requireUser, userIdFromClaims, type CurrentUser } from "../auth";
 import { registrarAuditoria, snapshotRow } from "../audit";
-import { isSqlite, type Row, type Session } from "../db";
+import { type Row, type Session } from "../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
 import { permisoDe, requirePermission, type Autorizacion } from "../rbac";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
+
 import { elaboradoresDe, exigirSegregacion, detalleExcepcion } from "../segregacion";
 import { exigirReauth } from "../seguridad";
 import { evaluarDocumento } from "../../shared/segregacion";
 import { hoyLocal } from "../../shared/fechas";
 import { DOCUMENT_KEY_RE, DOCUMENT_REVIEW_YEARS, parseDocumentKey } from "../../shared/sgc";
-import { ensureDocumentosSgcSchema, serializeDocumento } from "./documentos-sgc";
+import { serializeDocumento } from "./documentos-sgc";
 
 const TABLE = "documentos_sgc";
 const DISTRIBUCION = "distribucion_documento";
 const PROPUESTAS = "propuestas_documento";
 
-export async function ensureDocumentosFlujoSchema(s: Session): Promise<void> {
-  if (schemaReady(DISTRIBUCION)) return;
-  await ensureDocumentosSgcSchema(s);
-  const id = isSqlite() ? "id INTEGER PRIMARY KEY AUTOINCREMENT" : "id INT AUTO_INCREMENT PRIMARY KEY";
-  const texto = isSqlite() ? "TEXT" : "LONGTEXT";
-  const fin = isSqlite() ? "" : " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
-  await s.execute(`CREATE TABLE IF NOT EXISTS ${DISTRIBUCION} (${id}, documento_id INT NOT NULL, usuario_id INT NOT NULL, distribuido_por INT DEFAULT NULL, distribuido_en VARCHAR(40) NOT NULL, leido_en VARCHAR(40) DEFAULT NULL)${fin}`);
-  await s.execute(
-    `CREATE TABLE IF NOT EXISTS ${PROPUESTAS} (${id}, tipo VARCHAR(10) NOT NULL, documento_id INT DEFAULT NULL, titulo VARCHAR(220) NOT NULL, motivo ${texto}, propuesto_por INT DEFAULT NULL, propuesto_en VARCHAR(40) NOT NULL,
-      estado VARCHAR(12) NOT NULL DEFAULT 'pendiente', resuelto_por INT DEFAULT NULL, resuelto_en VARCHAR(40) DEFAULT NULL, motivo_resolucion ${texto}, asignado_a INT DEFAULT NULL, documento_creado_id INT DEFAULT NULL)${fin}`,
-  );
-  await addColumnIfMissing(s, PROPUESTAS, "documento_creado_id", "INT DEFAULT NULL");
-  // Fase 11: propuesta nacida de una no conformidad (liga en ambos sentidos).
-  await addColumnIfMissing(s, PROPUESTAS, "nc_id", "INT DEFAULT NULL");
-  markSchemaReady(DISTRIBUCION);
-}
-
 const docRef = (row: Row | null | undefined) => (row ? `${row.clave}-${row.revision}` : "");
 const persona = (user: { nombre?: unknown; email?: unknown }, yo: number, extra: Record<string, unknown> = {}) => ({ nombre: String(user.nombre || user.email || ""), fecha: hoyLocal(), usuario_id: yo, ...extra });
 
 async function documentoEn(s: Session, id: number, estados: string[], que: string): Promise<Row> {
-  await ensureDocumentosFlujoSchema(s);
   const row = await snapshotRow(s, TABLE, id);
   if (!row) throw new HttpError(404, { message: "Documento no encontrado" });
   if (!estados.includes(String(row.estado))) throw new HttpError(409, { message: `No se puede ${que}: el documento está ${row.estado}` });
@@ -161,7 +143,6 @@ export async function publicarDocumento({ request, s, params }: RouteContext): P
 export async function confirmarLectura({ request, s, params }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "documentos", "V");
-  await ensureDocumentosFlujoSchema(s);
   const id = intParam(params.id);
   const yo = userIdFromClaims(user) as number;
   const fila = await s.queryOne<Row>(`SELECT * FROM ${DISTRIBUCION} WHERE documento_id = :doc AND usuario_id = :yo ORDER BY id DESC LIMIT 1`, { doc: id, yo });
@@ -177,7 +158,6 @@ export async function confirmarLectura({ request, s, params }: RouteContext): Pr
 
 /* Documentos vigentes distribuidos a la persona que aun no confirma (Inicio "Documentos por leer"). */
 export async function documentosPorLeer(s: Session, usuarioId: number): Promise<Row[]> {
-  await ensureDocumentosFlujoSchema(s);
   return s.query<Row>(
     `SELECT d.id, d.clave, d.revision, d.titulo, x.distribuido_en FROM ${DISTRIBUCION} x INNER JOIN ${TABLE} d ON d.id = x.documento_id
      WHERE x.usuario_id = :u AND x.leido_en IS NULL AND d.estado = 'vigente' ORDER BY x.distribuido_en`,
@@ -192,7 +172,6 @@ export async function porLeer({ request, s }: RouteContext): Promise<Response> {
 
 /* Distribucion de un documento (quien ya confirmo), para la ficha. */
 export async function distribucionDe(s: Session, documentoId: number): Promise<Row[]> {
-  await ensureDocumentosFlujoSchema(s);
   return s.query<Row>(`SELECT x.usuario_id, u.nombre, u.email, x.distribuido_en, x.leido_en FROM ${DISTRIBUCION} x LEFT JOIN usuarios u ON u.id = x.usuario_id WHERE x.documento_id = :doc ORDER BY u.nombre`, { doc: documentoId });
 }
 
@@ -205,7 +184,6 @@ export function soloAutorizados(auth: Autorizacion): boolean {
 }
 
 export async function documentosDistribuidosA(s: Session, usuarioId: number): Promise<number[]> {
-  await ensureDocumentosFlujoSchema(s);
   return (await s.query<{ documento_id: number }>(`SELECT DISTINCT documento_id FROM ${DISTRIBUCION} WHERE usuario_id = :u`, { u: usuarioId })).map((f) => Number(f.documento_id));
 }
 
@@ -215,7 +193,6 @@ export async function documentosDistribuidosA(s: Session, usuarioId: number): Pr
 export async function proponerDocumento({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "documentos", "V");
-  await ensureDocumentosFlujoSchema(s);
   const payload = await readJson(request);
   const tipo = String(payload.tipo || "nuevo") === "cambio" ? "cambio" : "nuevo";
   const motivo = String(payload.motivo || "").trim();
@@ -239,8 +216,6 @@ export async function proponerDocumento({ request, s }: RouteContext): Promise<R
  * propuesta de cambio documental (nc_id liga ambos sentidos).
  */
 export async function insertarPropuesta(s: Session, user: CurrentUser, datos: { tipo: "nuevo" | "cambio"; documentoId: number | null; titulo: string; motivo: string; ncId?: number | null; ncFolio?: string | null }): Promise<number> {
-  await ensureDocumentosFlujoSchema(s);
-  await addColumnIfMissing(s, PROPUESTAS, "nc_id", "INT DEFAULT NULL");
   const r = await s.execute(`INSERT INTO ${PROPUESTAS} (tipo, documento_id, titulo, motivo, propuesto_por, propuesto_en, nc_id) VALUES (:tipo, :doc, :titulo, :motivo, :yo, :en, :nc)`, { tipo: datos.tipo, doc: datos.documentoId, titulo: datos.titulo, motivo: datos.motivo, yo: userIdFromClaims(user), en: new Date().toISOString(), nc: datos.ncId ?? null });
   await registrarAuditoria(s, user, { accion: "proponer", entidad: PROPUESTAS, entidadId: Number(r.lastrowid), referencia: datos.titulo, motivo: datos.motivo, detalle: { tipo: datos.tipo, documento_id: datos.documentoId, ...(datos.ncFolio ? { nc: datos.ncFolio } : {}) } });
   return Number(r.lastrowid);
@@ -252,8 +227,6 @@ export async function listarPropuestas({ request, s }: RouteContext): Promise<Re
   const permiso = await requirePermission(s, user, "documentos", "V");
   // Fase 9: quien solo ve documentos distribuidos ("autorizados") no ve las propuestas.
   if (soloAutorizados(permiso.auth)) throw new HttpError(403, { message: "Las propuestas no están disponibles con tu alcance de documentos" });
-  await ensureDocumentosFlujoSchema(s);
-  await ensureCalidadSchema(s);
   const filas = await s.query<Row>(
     `SELECT p.*, u.nombre AS propuesto_por_nombre, a.nombre AS asignado_nombre, d.clave AS documento_clave, n.folio_num AS nc_folio FROM ${PROPUESTAS} p
      LEFT JOIN usuarios u ON u.id = p.propuesto_por LEFT JOIN usuarios a ON a.id = p.asignado_a LEFT JOIN ${TABLE} d ON d.id = p.documento_id
@@ -270,7 +243,6 @@ export async function listarPropuestas({ request, s }: RouteContext): Promise<Re
 export async function aceptarPropuesta({ request, s, params }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "documentos", "G");
-  await ensureDocumentosFlujoSchema(s);
   const propuesta = await s.queryOne<Row>(`SELECT * FROM ${PROPUESTAS} WHERE id = :id`, { id: intParam(params.id) });
   if (!propuesta) throw new HttpError(404, { message: "Propuesta no encontrada" });
   if (String(propuesta.estado) !== "pendiente") throw new HttpError(409, { message: `La propuesta ya está ${propuesta.estado}` });
@@ -315,7 +287,6 @@ export async function aceptarPropuesta({ request, s, params }: RouteContext): Pr
 export async function rechazarPropuesta({ request, s, params }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "documentos", "G");
-  await ensureDocumentosFlujoSchema(s);
   const propuesta = await s.queryOne<Row>(`SELECT * FROM ${PROPUESTAS} WHERE id = :id`, { id: intParam(params.id) });
   if (!propuesta) throw new HttpError(404, { message: "Propuesta no encontrada" });
   if (String(propuesta.estado) !== "pendiente") throw new HttpError(409, { message: `La propuesta ya está ${propuesta.estado}` });

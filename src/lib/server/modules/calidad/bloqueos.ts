@@ -8,13 +8,12 @@
  */
 import { isSqlite, type Row, type Session } from "../../db";
 import { HttpError } from "../../http";
-import { ensureCalidadSchema, T } from "./comun";
+import { T } from "./comun";
 import { folioNc } from "../../../shared/calidad";
 
 /* Suspensiones activas (no reanudadas) con el folio de su NC. */
 /* `bloquear`: lectura con FOR UPDATE en MySQL (suspender y reanudar ven lo ultimo confirmado, no la foto de la transaccion). */
 export async function suspensionesActivas(s: Session, filtro?: { tipo: "metodo" | "equipo"; clave: string }, bloquear = false): Promise<Row[]> {
-  await ensureCalidadSchema(s);
   // En MySQL se bloquean solo las filas de suspensiones (sin arrastrar NC ni equipos del JOIN, que invertiria el orden de bloqueo).
   if (bloquear && !isSqlite()) await s.query(`SELECT id FROM ${T.suspensiones} WHERE reanudada_en IS NULL ${filtro ? "AND tipo = :tipo AND clave = :clave" : ""} FOR UPDATE`, filtro ? { tipo: filtro.tipo, clave: filtro.clave } : {});
   return s.query<Row>(
@@ -53,7 +52,6 @@ export async function exigirSinSuspension(s: Session, uso: { metodos?: Array<str
 
 /* Retenciones activas de un informe. */
 export async function retencionesActivas(s: Session, informeId: number): Promise<Row[]> {
-  await ensureCalidadSchema(s);
   return s.query<Row>(`SELECT r.*, n.folio_num AS nc_folio FROM ${T.retenciones} r LEFT JOIN ${T.nc} n ON n.id = r.nc_id WHERE r.informe_id = :id AND r.liberada_en IS NULL ORDER BY r.id`, { id: informeId });
 }
 

@@ -24,37 +24,16 @@ import nodemailer from "nodemailer";
 import { requireUser, userIdFromClaims, type CurrentUser } from "./auth";
 import { registrarAuditoria, snapshotRow } from "./audit";
 import { getConfig } from "./config";
-import { isSqlite, type Row, type Session } from "./db";
+import { type Row, type Session } from "./db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "./http";
 import { cargoActuante, requirePermission } from "./rbac";
-import { markSchemaReady, schemaReady } from "./schema";
+
 import { exigirSinSolicitudPendiente } from "./solicitudes";
-import { ensureInformesSchema, exigirSinRequiereEnmienda, informeFolio } from "./modules/informes";
+import { exigirSinRequiereEnmienda, informeFolio } from "./modules/informes";
 
 const TABLE = "envios_informe";
 const EXTENSIONES = new Set([".pdf", ".png", ".jpg", ".jpeg", ".webp", ".eml", ".msg"]);
 const MAX_BYTES = 15 * 1024 * 1024;
-
-export async function ensureEnviosSchema(s: Session): Promise<void> {
-  if (schemaReady(TABLE)) return;
-  await s.execute(
-    isSqlite()
-      ? `CREATE TABLE IF NOT EXISTS ${TABLE} (
-          id INTEGER PRIMARY KEY AUTOINCREMENT, informe_id INTEGER NOT NULL, version INTEGER NOT NULL,
-          destinatario_nombre VARCHAR(180) NOT NULL, destinatario_correo VARCHAR(180) NOT NULL, enviado_en VARCHAR(40) NOT NULL,
-          enviado_por INTEGER DEFAULT NULL, enviado_rol VARCHAR(120) DEFAULT NULL, medio VARCHAR(10) NOT NULL,
-          evidencia_archivo VARCHAR(200) DEFAULT NULL, evidencia_sha256 VARCHAR(64) DEFAULT NULL, message_id VARCHAR(250) DEFAULT NULL,
-          observaciones TEXT, confirmacion_en VARCHAR(40) DEFAULT NULL, confirmacion_nota TEXT, registrado_en VARCHAR(40) NOT NULL)`
-      : `CREATE TABLE IF NOT EXISTS ${TABLE} (
-          id INT AUTO_INCREMENT PRIMARY KEY, informe_id INT NOT NULL, version INT NOT NULL,
-          destinatario_nombre VARCHAR(180) NOT NULL, destinatario_correo VARCHAR(180) NOT NULL, enviado_en VARCHAR(40) NOT NULL,
-          enviado_por INT DEFAULT NULL, enviado_rol VARCHAR(120) DEFAULT NULL, medio VARCHAR(10) NOT NULL,
-          evidencia_archivo VARCHAR(200) DEFAULT NULL, evidencia_sha256 VARCHAR(64) DEFAULT NULL, message_id VARCHAR(250) DEFAULT NULL,
-          observaciones LONGTEXT, confirmacion_en VARCHAR(40) DEFAULT NULL, confirmacion_nota LONGTEXT, registrado_en VARCHAR(40) NOT NULL,
-          KEY idx_envios_informe (informe_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  );
-  markSchemaReady(TABLE);
-}
 
 /* ---------- Utilidades ---------- */
 
@@ -95,7 +74,6 @@ function transporte(cfg: NonNullable<ReturnType<typeof smtpConfig>>) {
 }
 
 async function informeEnviable(s: Session, id: number): Promise<Row> {
-  await ensureInformesSchema(s);
   const row = await snapshotRow(s, "informes", id);
   if (!row) throw new HttpError(404, { message: "Informe no encontrado" });
   if (!["liberado", "enviado"].includes(String(row.estado))) throw new HttpError(409, { message: `Solo se envían informes liberados (el informe ${informeFolio(row)} está ${row.estado})`, codigo: "no_liberado" });
@@ -108,7 +86,6 @@ async function informeEnviable(s: Session, id: number): Promise<Row> {
 }
 
 async function listar(s: Session, informeId: number): Promise<Row[]> {
-  await ensureEnviosSchema(s);
   return s.query<Row>(
     `SELECT e.*, u.nombre AS enviado_por_nombre FROM ${TABLE} e LEFT JOIN usuarios u ON u.id = e.enviado_por WHERE e.informe_id = :id ORDER BY e.id`,
     { id: informeId },
@@ -148,7 +125,6 @@ export async function listarEnvios({ request, s, params }: RouteContext): Promis
 export async function registrarEnvioManual({ request, s, params }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "informes", "A"));
-  await ensureEnviosSchema(s);
   const informe = await informeEnviable(s, intParam(params.id));
   const contentType = (request.headers.get("content-type") || "").toLowerCase();
   if (!contentType.startsWith("multipart/form-data")) throw new HttpError(400, { message: "Adjunta la evidencia del correo enviado (PDF, imagen o .eml)" });
@@ -179,7 +155,6 @@ export async function enviarPorSmtp({ request, s, params }: RouteContext): Promi
   const actuo = cargoActuante(request, await requirePermission(s, user, "informes", "A"));
   const cfg = smtpConfig();
   if (!cfg) throw new HttpError(404, { message: "El envío desde la plataforma no está configurado (SMTP_*)", codigo: "smtp_no_configurado" });
-  await ensureEnviosSchema(s);
   const informe = await informeEnviable(s, intParam(params.id));
   const payload = await readJson(request);
   const nombre = String(payload.destinatario_nombre || "").trim().slice(0, 180);
@@ -214,7 +189,6 @@ export async function enviarPorSmtp({ request, s, params }: RouteContext): Promi
 export async function confirmarEnvio({ request, s, params }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "informes", "A");
-  await ensureEnviosSchema(s);
   const informeId = intParam(params.id);
   const envio = await s.queryOne<Row>(`SELECT * FROM ${TABLE} WHERE id = :id AND informe_id = :informe`, { id: intParam(params.envio), informe: informeId });
   if (!envio) throw new HttpError(404, { message: "Envío no encontrado" });
@@ -234,7 +208,6 @@ export async function confirmarEnvio({ request, s, params }: RouteContext): Prom
 export async function descargarEvidencia({ request, s, params }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "informes", "V");
-  await ensureEnviosSchema(s);
   const envio = await s.queryOne<Row>(`SELECT * FROM ${TABLE} WHERE id = :id AND informe_id = :informe`, { id: intParam(params.envio), informe: intParam(params.id) });
   if (!envio?.evidencia_archivo) throw new HttpError(404, { message: "Evidencia no encontrada" });
   const ruta = path.join(enviosDir(), String(envio.evidencia_archivo));

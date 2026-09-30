@@ -1,29 +1,11 @@
-import { isSqlite, type Row, type Session } from "./db";
+import { type Row, type Session } from "./db";
 import { finDiaLocal, hoyLocal, inicioDiaLocal } from "../shared/fechas";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "./schema";
+
 import { HttpError } from "./http";
 import type { CurrentUser } from "./auth";
 import { registrarAuditoria } from "./audit";
 import { evaluarCombinacion, type RolEvaluado, type Violacion } from "../shared/combinaciones-roles";
-import {
-  MODULOS,
-  MODULO_KEYS,
-  esTotal,
-  expandirPermisos,
-  isAccion,
-  isAlcance,
-  isModulo,
-  mapaPermisos,
-  alcancePermite,
-  permite,
-  type Accion,
-  type Alcance,
-  type ContextoAlcance,
-  type Modulo,
-  type PermisoFila,
-  type PermisosEfectivos,
-  type PermisosMapa,
-} from "../shared/permisos";
+import { esTotal, expandirPermisos, isAccion, isAlcance, isModulo, mapaPermisos, alcancePermite, permite, type Accion, type Alcance, type ContextoAlcance, type Modulo, type PermisoFila, type PermisosEfectivos, type PermisosMapa } from "../shared/permisos";
 
 /*
  * Control de acceso por rol (Fase 1; FX-MO-2-1).
@@ -58,211 +40,6 @@ export { inicioDiaLocal, finDiaLocal };
 /* Hoy en la zona del laboratorio (America/Tijuana), sin importar la zona del servidor (Fase 3). */
 export function hoy(): string {
   return hoyLocal();
-}
-
-export async function ensureRbacSchema(s: Session): Promise<void> {
-  if (schemaReady("rbac")) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS roles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre VARCHAR(100) NOT NULL UNIQUE,
-        descripcion TEXT,
-        es_sistemico INTEGER NOT NULL DEFAULT 0,
-        activo INTEGER NOT NULL DEFAULT 1
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS roles (
-        id INT NOT NULL AUTO_INCREMENT,
-        nombre VARCHAR(100) NOT NULL,
-        descripcion TEXT,
-        es_sistemico TINYINT(1) NOT NULL DEFAULT 0,
-        activo TINYINT(1) NOT NULL DEFAULT 1,
-        PRIMARY KEY (id),
-        UNIQUE KEY uk_roles_nombre (nombre)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      `,
-  );
-  /* Clave estable del rol del catalogo (las reglas de combinacion la usan en lugar del nombre). */
-  await addColumnIfMissing(s, "roles", "clave", "VARCHAR(60) DEFAULT NULL");
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS permisos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        clave VARCHAR(80) NOT NULL UNIQUE,
-        nombre VARCHAR(120) NOT NULL,
-        descripcion TEXT,
-        activo INTEGER NOT NULL DEFAULT 1
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS permisos (
-        id INT NOT NULL AUTO_INCREMENT,
-        clave VARCHAR(80) NOT NULL,
-        nombre VARCHAR(120) NOT NULL,
-        descripcion TEXT,
-        activo TINYINT(1) NOT NULL DEFAULT 1,
-        PRIMARY KEY (id),
-        UNIQUE KEY uk_permisos_clave (clave)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      `,
-  );
-  /* Modelo anterior (read/create/update/delete por modulo): se conserva sin uso. */
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS rol_permisos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_rol INTEGER NOT NULL,
-        id_permiso INTEGER NOT NULL,
-        can_read INTEGER NOT NULL DEFAULT 0,
-        can_create INTEGER NOT NULL DEFAULT 0,
-        can_update INTEGER NOT NULL DEFAULT 0,
-        can_delete INTEGER NOT NULL DEFAULT 0,
-        UNIQUE (id_rol, id_permiso)
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS rol_permisos (
-        id INT NOT NULL AUTO_INCREMENT,
-        id_rol INT NOT NULL,
-        id_permiso INT NOT NULL,
-        can_read TINYINT(1) NOT NULL DEFAULT 0,
-        can_create TINYINT(1) NOT NULL DEFAULT 0,
-        can_update TINYINT(1) NOT NULL DEFAULT 0,
-        can_delete TINYINT(1) NOT NULL DEFAULT 0,
-        PRIMARY KEY (id),
-        UNIQUE KEY uk_rol_permiso (id_rol, id_permiso)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      `,
-  );
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS rol_acciones (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_rol INTEGER NOT NULL,
-        modulo VARCHAR(30) NOT NULL,
-        accion VARCHAR(4) NOT NULL,
-        alcance VARCHAR(30) NOT NULL DEFAULT 'total',
-        UNIQUE (id_rol, modulo, accion, alcance)
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS rol_acciones (
-        id INT NOT NULL AUTO_INCREMENT,
-        id_rol INT NOT NULL,
-        modulo VARCHAR(30) NOT NULL,
-        accion VARCHAR(4) NOT NULL,
-        alcance VARCHAR(30) NOT NULL DEFAULT 'total',
-        PRIMARY KEY (id),
-        UNIQUE KEY uk_rol_accion (id_rol, modulo, accion, alcance)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      `,
-  );
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS usuario_roles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario_id INTEGER NOT NULL,
-        rol_id INTEGER NOT NULL,
-        vigente_desde VARCHAR(10) NOT NULL,
-        vigente_hasta VARCHAR(10) DEFAULT NULL,
-        motivo TEXT NOT NULL,
-        asignado_por INTEGER DEFAULT NULL,
-        asignado_en VARCHAR(40) NOT NULL,
-        revocado_en VARCHAR(40) DEFAULT NULL,
-        revocado_por INTEGER DEFAULT NULL,
-        motivo_revocacion TEXT,
-        vencimiento_registrado_en VARCHAR(40) DEFAULT NULL
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS usuario_roles (
-        id INT NOT NULL AUTO_INCREMENT,
-        usuario_id INT NOT NULL,
-        rol_id INT NOT NULL,
-        vigente_desde VARCHAR(10) NOT NULL,
-        vigente_hasta VARCHAR(10) DEFAULT NULL,
-        motivo TEXT NOT NULL,
-        asignado_por INT DEFAULT NULL,
-        asignado_en VARCHAR(40) NOT NULL,
-        revocado_en VARCHAR(40) DEFAULT NULL,
-        revocado_por INT DEFAULT NULL,
-        motivo_revocacion TEXT,
-        vencimiento_registrado_en VARCHAR(40) DEFAULT NULL,
-        PRIMARY KEY (id),
-        KEY idx_usuario_roles_usuario (usuario_id),
-        KEY idx_usuario_roles_rol (rol_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      `,
-  );
-  if (isSqlite()) {
-    await s.execute("CREATE INDEX IF NOT EXISTS idx_usuario_roles_usuario ON usuario_roles (usuario_id)");
-    await s.execute("CREATE INDEX IF NOT EXISTS idx_rol_acciones_rol ON rol_acciones (id_rol)");
-  }
-
-  /* Catalogo de modulos (Fase 1). Los modulos del modelo anterior quedan inactivos, no se borran. */
-  for (const modulo of MODULOS) {
-    const params = { clave: modulo.clave, nombre: modulo.nombre, descripcion: modulo.descripcion };
-    await s.execute(
-      isSqlite()
-        ? "INSERT INTO permisos (clave, nombre, descripcion, activo) VALUES (:clave, :nombre, :descripcion, 1) ON CONFLICT(clave) DO UPDATE SET nombre = excluded.nombre, descripcion = excluded.descripcion, activo = 1"
-        : "INSERT INTO permisos (clave, nombre, descripcion, activo) VALUES (:clave, :nombre, :descripcion, 1) ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), descripcion = VALUES(descripcion), activo = 1",
-      params,
-    );
-  }
-  const placeholders = MODULO_KEYS.map((_, i) => `:m${i}`).join(", ");
-  await s.execute(`UPDATE permisos SET activo = 0 WHERE clave NOT IN (${placeholders})`, Object.fromEntries(MODULO_KEYS.map((clave, i) => [`m${i}`, clave])));
-
-  markSchemaReady("rbac");
-}
-
-/*
- * Migracion de usuarios.id_rol (un rol por persona) a usuario_roles. Idempotente:
- * solo toma a quien todavia no tiene ninguna asignacion. Queda en la bitacora.
- * Fase 3: no toca cuentas cuyos roles ya pasaron por el flujo nuevo (rol inicial
- * pendiente o rechazado, roles asignados o revocados): id_rol es solo historico.
- * Corre en el arranque, despues de asegurar usuarios y auditoria.
- */
-export async function migrarRolesUnicos(s: Session): Promise<number> {
-  if (schemaReady("usuario_roles_migracion")) return 0;
-  const pendientes = await s.query<{ id: number; email: string; id_rol: number; rol: string | null }>(
-    `
-    SELECT u.id, u.email, u.id_rol, r.nombre AS rol
-    FROM usuarios u
-    LEFT JOIN roles r ON r.id = u.id_rol
-    WHERE u.id_rol IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM usuario_roles ur WHERE ur.usuario_id = u.id)
-      AND NOT EXISTS (
-        SELECT 1 FROM auditoria a
-        WHERE a.entidad = 'usuarios' AND a.entidad_id = CAST(u.id AS CHAR)
-          AND a.accion IN ('solicitar', 'asignar_rol', 'revocar_rol', 'acotar_rol')
-      )
-    `,
-  );
-  const fecha = new Date().toISOString();
-  for (const fila of pendientes) {
-    if (!fila.rol) continue;
-    const result = await s.execute(
-      "INSERT INTO usuario_roles (usuario_id, rol_id, vigente_desde, vigente_hasta, motivo, asignado_por, asignado_en) VALUES (:usuario_id, :rol_id, :desde, NULL, :motivo, NULL, :fecha)",
-      { usuario_id: fila.id, rol_id: fila.id_rol, desde: hoy(), motivo: "Migración Fase 1", fecha },
-    );
-    await registrarAuditoria(s, null, {
-      accion: "asignar_rol",
-      entidad: "usuarios",
-      entidadId: fila.id,
-      referencia: String(fila.email || fila.id),
-      motivo: "Migración Fase 1",
-      detalle: { rol: fila.rol, rol_id: fila.id_rol, asignacion_id: result.lastrowid, vigente_desde: hoy(), vigente_hasta: null },
-    });
-  }
-  markSchemaReady("usuario_roles_migracion");
-  return pendientes.length;
 }
 
 /* ---------- Roles y permisos de un rol ---------- */
@@ -376,7 +153,6 @@ export function cuentaVigente(fila: { vigente_desde?: unknown; vigente_hasta?: u
  */
 export async function cargarAutorizacion(s: Session, user: CurrentUser | null, opciones: { permitirCambioPendiente?: boolean } = {}): Promise<Autorizacion> {
   if (!user) throw new HttpError(401, { message: "Token requerido" });
-  await ensureRbacSchema(s);
   const userId = Number.parseInt(String(user.sub || ""), 10);
   if (!Number.isFinite(userId)) throw new HttpError(401, { message: "Token invalido" });
   const fila = await s.queryOne<Row>(
@@ -572,25 +348,6 @@ export async function assertAdministratorRemains(s: Session, before: ConteoAdmin
       message: "El cambio dejaria el sistema sin ningun usuario activo con permiso de aprobar cambios de acceso (usuarios:A vigente)",
     });
   }
-}
-
-/*
- * Migracion Fase 3: el Responsable General aprueba los cambios de acceso
- * (usuarios = V A en la matriz). Si el rol existe y no tiene usuarios:A, se le
- * agrega una sola vez, con constancia en la bitacora.
- */
-export async function migrarPermisosFase3(s: Session): Promise<boolean> {
-  const rol = await s.queryOne<{ id: number; nombre: string }>("SELECT id, nombre FROM roles WHERE clave = 'responsable_general'");
-  if (!rol) return false;
-  // Se aplica una sola vez: si ya quedo en la bitacora, no se repite (un administrador puede quitarlo despues).
-  const aplicada = await s.scalar("SELECT id FROM auditoria WHERE entidad = 'roles' AND accion = 'editar' AND motivo LIKE 'Migración Fase 3:%' LIMIT 1");
-  if (aplicada) return false;
-  const tiene = await s.scalar("SELECT id FROM rol_acciones WHERE id_rol = :id AND modulo = 'usuarios' AND accion = 'A'", { id: rol.id });
-  const antes = (await filasDeRoles(s, [rol.id])).get(rol.id) || [];
-  if (!tiene) await s.execute("INSERT INTO rol_acciones (id_rol, modulo, accion, alcance) VALUES (:id, 'usuarios', 'A', 'total')", { id: rol.id });
-  const despues = (await filasDeRoles(s, [rol.id])).get(rol.id) || [];
-  await registrarAuditoria(s, null, { accion: "editar", entidad: "roles", entidadId: rol.id, referencia: rol.nombre, motivo: "Migración Fase 3: el Responsable General aprueba los cambios de acceso (usuarios: V A)", antes: { permisos: antes }, despues: { permisos: despues } });
-  return true;
 }
 
 /* ---------- Combinaciones prohibidas ---------- */

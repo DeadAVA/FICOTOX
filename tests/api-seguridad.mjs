@@ -424,11 +424,12 @@ const temporal = (extra = {}) => ({ tipo_cuenta: "temporal", vigente_hasta: "209
   const dir = mkdtempSync(path.join(os.tmpdir(), "ficotox-secretos-"));
   const envVacio = path.join(dir, "vacio.env");
   writeFileSync(envVacio, "");
-  const correr = (jwt) => spawnSync(process.execPath, [path.join(root, "scripts/start-ficotox.mjs")], { cwd: root, encoding: "utf8", timeout: 20_000, env: { PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: "production", FICOTOX_ENV_FILE: envVacio, FICOTOX_OPEN_BROWSER: "false", PORT: "3199", ...(jwt === undefined ? {} : { JWT_SECRET: jwt }) } });
+  const correr = (jwt) => spawnSync(process.execPath, [path.join(root, "scripts/start-ficotox.mjs")], { cwd: root, encoding: "utf8", timeout: 20_000, env: { PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: "production", FICOTOX_ENV_FILE: envVacio, FICOTOX_OPEN_BROWSER: "false", PORT: "3199", // Fase 12: instancia, base y registros temporales (nunca instance/ real).
+      SQLITE_PATH: path.join(dir, "ficotox.sqlite3"), FICOTOX_INSTANCE_DIR: dir, ...(jwt === undefined ? {} : { JWT_SECRET: jwt }) } });
   const porDefecto = correr("ficotox-jwt-secret");
   const corto = correr("corto-123");
   const falta = correr(undefined);
-  check("produccion: no arranca con JWT_SECRET por defecto, corto o ausente", [porDefecto, corto, falta].every((r) => r.status === 1 && /JWT_SECRET/.test(`${r.stderr}${r.stdout}`)), [porDefecto, corto, falta].map((r) => `${r.status}`).join(" "));
+  check("produccion: no arranca con JWT_SECRET por defecto, corto o ausente (Fase 12: codigo 78, sin reintentos)", [porDefecto, corto, falta].every((r) => r.status === 78 && /JWT_SECRET/.test(`${r.stderr}${r.stdout}`)), [porDefecto, corto, falta].map((r) => `${r.status}`).join(" "));
   const { erroresSecretosProduccion } = await import("../src/lib/shared/secretos.mjs");
   check("validacion de secretos: 32+ caracteres aceptado; fuera de produccion no bloquea", erroresSecretosProduccion({ NODE_ENV: "production", JWT_SECRET: "x".repeat(32) }).length === 0 && erroresSecretosProduccion({ NODE_ENV: "development" }).length === 0);
 

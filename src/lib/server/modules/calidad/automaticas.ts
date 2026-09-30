@@ -14,7 +14,7 @@
 import type { CurrentUser } from "../../auth";
 import { registrarAuditoria } from "../../audit";
 import { type Row, type Session } from "../../db";
-import { ahora, ensureCalidadSchema, siguienteFolio, T } from "./comun";
+import { ahora, siguienteFolio, T } from "./comun";
 import { folioIncidencia } from "../../../shared/calidad";
 import { hoyLocal } from "../../../shared/fechas";
 
@@ -43,7 +43,6 @@ interface NuevaAutomatica {
  *   anularla como falso positivo no debe hacerla renacer en cada consulta o descarga.
  */
 export async function registrarIncidenciaAutomatica(s: Session, nueva: NuevaAutomatica): Promise<number | null> {
-  await ensureCalidadSchema(s);
   const incluirAnuladas = nueva.origen === "alerta_integridad";
   const existente = await s.scalar(`SELECT id FROM ${T.incidencias} WHERE clave_automatica = :clave${incluirAnuladas ? "" : " AND estado <> 'anulada'"} LIMIT 1`, { clave: nueva.clave });
   if (existente) return null;

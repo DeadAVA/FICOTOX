@@ -1,13 +1,9 @@
 import { requireUser } from "../auth";
 import { isOperationalError } from "../db";
 import { json, type RouteContext } from "../http";
-import { ensureMovimientosSchema } from "../inventory-usage";
+
 import { cargarAutorizacion, permisoDe, recortarPorModulo } from "../rbac";
-import { ensureConsumiblesSchema } from "./consumables";
-import { ensureEquiposSchema, ensureMantenimientosSchema, ensureReactivosSchema } from "./inventory";
-import { ensureSamplesExtraccionSchema } from "./samples/extraccion";
-import { ensureSamplesProcesamientoSchema } from "./samples/procesamiento";
-import { ensureSamplesRecepcionSchema } from "./samples/recepcion";
+
 import { hoyLocal, sumarDias } from "../../shared/fechas";
 
 /* Portado de modules/dashboard/endpoints.py del backend Flask original. */
@@ -17,14 +13,6 @@ export async function dashboardOverview({ request, s }: RouteContext): Promise<R
   const auth = await cargarAutorizacion(s, user);
 
   try {
-    await ensureReactivosSchema(s);
-    await ensureConsumiblesSchema(s);
-    await ensureEquiposSchema(s);
-    await ensureMantenimientosSchema(s);
-    await ensureMovimientosSchema(s);
-    await ensureSamplesRecepcionSchema(s);
-    await ensureSamplesProcesamientoSchema(s);
-    await ensureSamplesExtraccionSchema(s);
 
     // Dia local del laboratorio como parametro (date('now')/CURDATE() darian el dia UTC del servidor).
     const maintenanceDateFilter = ":hoy AND :en30";

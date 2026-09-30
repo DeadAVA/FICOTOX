@@ -98,9 +98,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const toggleCollapsed = () => writeCollapsed(!collapsed);
 
-  useEffect(() => {
+  // Al cambiar de pantalla se cierra el panel movil (ajuste de estado durante el render, sin efecto en cascada).
+  const [rutaAnterior, setRutaAnterior] = useState(pathname);
+  if (rutaAnterior !== pathname) {
+    setRutaAnterior(pathname);
     setMobileOpen(false);
-  }, [pathname]);
+  }
 
   // Si la ventana crece a escritorio con el panel abierto, se cierra (si no, quedaría bloqueando el scroll sin verse).
   useEffect(() => {

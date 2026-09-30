@@ -15,7 +15,7 @@ import { userIdFromClaims } from "../../auth";
 import { isSqlite, type Row, type Session } from "../../db";
 import { HttpError } from "../../http";
 import { cargarAutorizacion, permisoDe, requirePermission, type Autorizacion, type Permiso } from "../../rbac";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "../../schema";
+
 import type { Accion } from "../../../shared/permisos";
 import { hoyLocal } from "../../../shared/fechas";
 
@@ -30,109 +30,6 @@ export const T = {
   suspensiones: "suspensiones",
   retenciones: "retenciones_informe",
 } as const;
-
-const idCol = () => (isSqlite() ? "id INTEGER PRIMARY KEY AUTOINCREMENT" : "id INT AUTO_INCREMENT PRIMARY KEY");
-const texto = () => (isSqlite() ? "TEXT" : "LONGTEXT");
-const fin = () => (isSqlite() ? "" : " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-async function indice(s: Session, tabla: string, nombre: string, columnas: string, unico = false): Promise<void> {
-  if (isSqlite()) {
-    await s.execute(`CREATE ${unico ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${nombre} ON ${tabla} (${columnas})`);
-    return;
-  }
-  const existe = await s.scalar("SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i", { t: tabla, i: nombre });
-  if (!Number(existe || 0)) await s.execute(`CREATE ${unico ? "UNIQUE " : ""}INDEX ${nombre} ON ${tabla} (${columnas})`);
-}
-
-/* Columnas de anulacion y de excepcion de segregacion (comunes). */
-const ANULACION = `anulado_en VARCHAR(40) DEFAULT NULL, anulado_por INT DEFAULT NULL, anulado_rol VARCHAR(120) DEFAULT NULL, motivo_anulacion TEXT, estado_previo VARCHAR(30) DEFAULT NULL`;
-
-/* Una sola vez por proceso; sin commit (lo confirma el bootstrap o la peticion). */
-export async function ensureCalidadSchema(s: Session): Promise<void> {
-  if (schemaReady("calidad_fase11")) return;
-  const tx = texto();
-  await s.execute(
-    `CREATE TABLE IF NOT EXISTS ${T.incidencias} (
-      ${idCol()}, folio_num INT NOT NULL, tipo VARCHAR(30) NOT NULL, fecha_hora_ocurrencia VARCHAR(40) NOT NULL,
-      descripcion ${tx} NOT NULL, accion_inmediata ${tx}, impacto_resultados VARCHAR(12) NOT NULL DEFAULT 'desconocido',
-      estado VARCHAR(20) NOT NULL DEFAULT 'reportada',
-      reportada_por INT DEFAULT NULL, reportada_nombre VARCHAR(180) DEFAULT NULL, reportada_rol VARCHAR(120) DEFAULT NULL, reportada_en VARCHAR(40) NOT NULL,
-      origen_automatico VARCHAR(30) DEFAULT NULL, clave_automatica VARCHAR(200) DEFAULT NULL,
-      en_evaluacion_por INT DEFAULT NULL, en_evaluacion_en VARCHAR(40) DEFAULT NULL,
-      evaluada_por INT DEFAULT NULL, evaluada_rol VARCHAR(120) DEFAULT NULL, evaluada_en VARCHAR(40) DEFAULT NULL,
-      decision_evaluacion VARCHAR(20) DEFAULT NULL, justificacion ${tx}, nc_id INT DEFAULT NULL,
-      ${ANULACION}, excepciones_json ${tx}
-    )${fin()}`,
-  );
-  await indice(s, T.incidencias, "uq_incidencias_folio", "folio_num", true);
-  await indice(s, T.incidencias, "idx_incidencias_reportada", "reportada_por");
-  await indice(s, T.incidencias, "idx_incidencias_clave_auto", "clave_automatica");
-  await s.execute(`CREATE TABLE IF NOT EXISTS ${T.registros} (${idCol()}, incidencia_id INT NOT NULL, entidad VARCHAR(40) NOT NULL, entidad_id INT NOT NULL, referencia VARCHAR(160) DEFAULT NULL)${fin()}`);
-  await indice(s, T.registros, "idx_inc_registros_inc", "incidencia_id");
-  await indice(s, T.registros, "idx_inc_registros_entidad", "entidad, entidad_id");
-  await s.execute(
-    `CREATE TABLE IF NOT EXISTS ${T.nc} (
-      ${idCol()}, folio_num INT NOT NULL, origen VARCHAR(30) NOT NULL, incidencia_id INT DEFAULT NULL,
-      clasificacion VARCHAR(12) DEFAULT NULL, requisito_incumplido ${tx}, descripcion ${tx} NOT NULL,
-      responsable_id INT DEFAULT NULL, estado VARCHAR(24) NOT NULL DEFAULT 'abierta',
-      creada_por INT DEFAULT NULL, creada_rol VARCHAR(120) DEFAULT NULL, creada_en VARCHAR(40) NOT NULL,
-      analisis_iniciado_en VARCHAR(40) DEFAULT NULL, acciones_iniciadas_en VARCHAR(40) DEFAULT NULL, verificacion_iniciada_en VARCHAR(40) DEFAULT NULL,
-      afecta_resultados_emitidos VARCHAR(12) DEFAULT NULL, trabajo_detenido VARCHAR(12) DEFAULT NULL, notificar_cliente VARCHAR(12) DEFAULT NULL,
-      impacto_notas ${tx}, impacto_evaluado_por INT DEFAULT NULL, impacto_evaluado_en VARCHAR(40) DEFAULT NULL,
-      metodo_causa VARCHAR(20) DEFAULT NULL, desarrollo_causa ${tx}, causa_raiz ${tx},
-      requiere_accion_correctiva VARCHAR(4) DEFAULT NULL, justificacion_sin_accion ${tx},
-      requiere_actualizar_riesgos INT NOT NULL DEFAULT 0, nota_riesgos ${tx},
-      requiere_cambio_documental INT NOT NULL DEFAULT 0, propuesta_documento_id INT DEFAULT NULL,
-      verificacion_programada VARCHAR(10) DEFAULT NULL, reaperturas INT NOT NULL DEFAULT 0,
-      cerrada_por INT DEFAULT NULL, cerrada_rol VARCHAR(120) DEFAULT NULL, cerrada_en VARCHAR(40) DEFAULT NULL, conclusion ${tx},
-      archivo_pdf VARCHAR(200) DEFAULT NULL, pdf_sha256 VARCHAR(64) DEFAULT NULL,
-      ${ANULACION}, excepciones_json ${tx}
-    )${fin()}`,
-  );
-  await indice(s, T.nc, "uq_no_conformidades_folio", "folio_num", true);
-  await indice(s, T.nc, "idx_nc_responsable", "responsable_id");
-  await s.execute(`CREATE TABLE IF NOT EXISTS ${T.afectados} (${idCol()}, nc_id INT NOT NULL, entidad VARCHAR(40) NOT NULL, entidad_id INT NOT NULL, referencia VARCHAR(160) DEFAULT NULL, agregado_por INT DEFAULT NULL, agregado_en VARCHAR(40) NOT NULL)${fin()}`);
-  await indice(s, T.afectados, "idx_nc_afectados_nc", "nc_id");
-  await s.execute(
-    `CREATE TABLE IF NOT EXISTS ${T.verificaciones} (${idCol()}, nc_id INT NOT NULL, fecha_programada VARCHAR(10) DEFAULT NULL, verificada_por INT DEFAULT NULL, verificada_rol VARCHAR(120) DEFAULT NULL,
-      verificada_en VARCHAR(40) NOT NULL, resultado VARCHAR(12) NOT NULL, comentarios ${tx})${fin()}`,
-  );
-  await indice(s, T.verificaciones, "idx_nc_verif_nc", "nc_id");
-  await s.execute(
-    `CREATE TABLE IF NOT EXISTS ${T.acciones} (
-      ${idCol()}, nc_id INT NOT NULL, descripcion ${tx} NOT NULL, responsable_id INT DEFAULT NULL, fecha_compromiso VARCHAR(10) DEFAULT NULL,
-      estado VARCHAR(16) NOT NULL DEFAULT 'pendiente', creada_por INT DEFAULT NULL, creada_en VARCHAR(40) NOT NULL, iniciada_en VARCHAR(40) DEFAULT NULL,
-      implementada_por INT DEFAULT NULL, implementada_en VARCHAR(40) DEFAULT NULL, descripcion_implementacion ${tx},
-      cancelada_por INT DEFAULT NULL, cancelada_en VARCHAR(40) DEFAULT NULL, motivo_cancelacion ${tx},
-      reasignada_en VARCHAR(40) DEFAULT NULL, motivo_reasignacion ${tx}
-    )${fin()}`,
-  );
-  await indice(s, T.acciones, "idx_acciones_nc", "nc_id");
-  await indice(s, T.acciones, "idx_acciones_responsable", "responsable_id");
-  await s.execute(`CREATE TABLE IF NOT EXISTS ${T.comunicaciones} (${idCol()}, nc_id INT NOT NULL, fecha VARCHAR(10) NOT NULL, medio VARCHAR(20) NOT NULL, contacto VARCHAR(180) NOT NULL, resumen ${tx} NOT NULL, informe_ids_json ${tx}, registrado_por INT DEFAULT NULL, registrado_en VARCHAR(40) NOT NULL)${fin()}`);
-  await indice(s, T.comunicaciones, "idx_nc_com_nc", "nc_id");
-  await s.execute(
-    `CREATE TABLE IF NOT EXISTS ${T.suspensiones} (
-      ${idCol()}, tipo VARCHAR(10) NOT NULL, clave VARCHAR(40) NOT NULL, nc_id INT NOT NULL, motivo ${tx} NOT NULL,
-      suspendida_por INT DEFAULT NULL, suspendida_rol VARCHAR(120) DEFAULT NULL, suspendida_en VARCHAR(40) NOT NULL, estado_previo_equipo VARCHAR(30) DEFAULT NULL,
-      reanudada_por INT DEFAULT NULL, reanudada_rol VARCHAR(120) DEFAULT NULL, reanudada_en VARCHAR(40) DEFAULT NULL, motivo_reanudacion ${tx}, excepciones_json ${tx}
-    )${fin()}`,
-  );
-  await indice(s, T.suspensiones, "idx_suspensiones_clave", "tipo, clave");
-  await s.execute(
-    `CREATE TABLE IF NOT EXISTS ${T.retenciones} (${idCol()}, nc_id INT NOT NULL, informe_id INT NOT NULL, motivo ${tx} NOT NULL, retenido_por INT DEFAULT NULL, retenido_rol VARCHAR(120) DEFAULT NULL, retenido_en VARCHAR(40) NOT NULL,
-      liberada_por INT DEFAULT NULL, liberada_rol VARCHAR(120) DEFAULT NULL, liberada_en VARCHAR(40) DEFAULT NULL, motivo_liberacion ${tx})${fin()}`,
-  );
-  await indice(s, T.retenciones, "idx_retenciones_informe", "informe_id");
-  // Responsables anteriores (JSON de ids): las reglas 8 y 9 tambien los cuentan.
-  await addColumnIfMissing(s, T.nc, "responsables_previos", `${tx}`);
-  await addColumnIfMissing(s, T.acciones, "responsables_previos", `${tx}`);
-  // Propuesta de cambio documental ligada a la NC (Fase 7).
-  if (await s.scalar(isSqlite() ? "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'propuestas_documento'" : "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'propuestas_documento'")) {
-    await addColumnIfMissing(s, "propuestas_documento", "nc_id", "INT DEFAULT NULL");
-  }
-  markSchemaReady("calidad_fase11");
-}
 
 export const ahora = () => new Date().toISOString();
 
@@ -177,7 +74,6 @@ export interface AccesoCalidad {
  * el admin tecnico (V bitacora) y quien no tiene calidad reciben 403.
  */
 export async function accesoCalidad(s: Session, user: CurrentUser, objeto: "incidencia" | "nc" | "accion_correctiva" = "incidencia"): Promise<AccesoCalidad> {
-  await ensureCalidadSchema(s);
   const auth = await cargarAutorizacion(s, user);
   const permiso = permisoDe(auth, "calidad", "V", { objeto });
   if (!permiso) throw new HttpError(403, { message: "Permiso denegado para ver incidencias y no conformidades (calidad:V)", required: { module: "calidad", action: "V" } });
@@ -190,7 +86,6 @@ export async function accesoCalidad(s: Session, user: CurrentUser, objeto: "inci
 }
 
 export async function exigirCalidad(s: Session, user: CurrentUser, accion: Accion, objeto: "incidencia" | "nc" | "accion_correctiva" = "nc", auth?: Autorizacion): Promise<Permiso> {
-  await ensureCalidadSchema(s);
   return requirePermission(s, user, "calidad", accion, { objeto }, auth);
 }
 

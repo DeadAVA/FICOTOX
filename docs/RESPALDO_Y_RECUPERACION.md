@@ -15,7 +15,7 @@ Cada respaldo es una carpeta `backups/<AAAAMMDD-HHMMSS>/` (o `FICOTOX_BACKUP_DIR
 | `archivos/evidencias/` | Evidencia instrumental de los análisis (Fase 10). | Respalda los resultados. Su SHA-256 está en `adjuntos.sha256`. |
 | `archivos/documentos_sgc/` | Archivos de los documentos del SGC. | Control documental (8.3). Su SHA-256 está en `archivo_sha256`. |
 | `archivos/maintenance_reports/` | Reportes de mantenimiento en PDF. | Historial de equipos. |
-| `manifest.json` | Fecha y hora, equipo (host), versión de la app (commit), versión de esquema, motor, conteo de filas por tabla, número de entradas de la bitácora con el id y el sello de la última, lista de archivos con tamaño y SHA-256, si incluye la llave con su **huella** (SHA-256 de la llave, nunca la llave) y el **sello del manifest** (HMAC-SHA256 con la llave de la bitácora). | Permite verificar el respaldo completo antes de confiar en él. |
+| `manifest.json` | Fecha y hora, equipo (host), versión de la app (commit), versión de esquema (la real de la base respaldada, de `schema_migraciones`; `null` si es anterior a las migraciones) y la de la app (`esquema_app`), motor, conteo de filas por tabla, número de entradas de la bitácora con el id y el sello de la última, lista de archivos con tamaño y SHA-256, si incluye la llave con su **huella** (SHA-256 de la llave, nunca la llave) y el **sello del manifest** (HMAC-SHA256 con la llave de la bitácora). | Permite verificar el respaldo completo antes de confiar en él. |
 | `llave/llave-bitacora.txt` | La llave del sello de la bitácora: `SECRET_KEY`, o `instance/auditoria.key` si es la que se usa. | Sin ella no se puede verificar la bitácora restaurada. |
 
 **No se respalda:**
@@ -24,7 +24,7 @@ Cada respaldo es una carpeta `backups/<AAAAMMDD-HHMMSS>/` (o `FICOTOX_BACKUP_DIR
 - `node_modules`, `.next` y el código. El código se respalda aparte con `backup_ficotox.py --target code`, y el `.env` queda excluido también ahí.
 - Los temporales de escritura (`.*.tmp`).
 
-**MySQL/MariaDB:** este formato es solo para SQLite. Con `DATABASE_URL=mysql://...` la base se respalda con `mysqldump --single-transaction --routines --triggers` (lo hace `scripts/backup_ficotox.py --target database`) y se restaura con `mysql ficotox < respaldo.sql`. Los archivos de `instance/` se copian aparte. La verificación automática de la bitácora de un volcado MySQL no está implementada.
+**MySQL/MariaDB:** este formato es solo para SQLite (procedimiento con `mysqldump` y verificación de la bitácora con `verificar-instalacion` en `docs/INSTALACION.md`, «MySQL/MariaDB»). Con `DATABASE_URL=mysql://...` la base se respalda con `mysqldump --single-transaction --routines --triggers` (lo hace `scripts/backup_ficotox.py --target database`) y se restaura con `mysql ficotox < respaldo.sql`. Los archivos de `instance/` se copian aparte. Para verificar la bitácora de un volcado: restaurarlo en una base de prueba y correr `npm run verificar-instalacion` con `DATABASE_URL` apuntando a ella (Fase 12).
 
 ## 2. Cómo se crea un respaldo
 
@@ -79,7 +79,7 @@ El **modo prueba** (por omisión) restaura en `instance-restaurada/<fecha>/` y *
 
 1. `manifest.json` válido, rutas seguras (solo `datos/ficotox.sqlite3` y `archivos/<carpeta respaldada>/…`, sin `..`, sin enlaces simbólicos ni directorios; si no, no se copia nada) y SHA-256 de cada archivo del respaldo (detecta un respaldo alterado). Un manifest malformado también queda como ❌ en el acta.
 2. `PRAGMA integrity_check = ok` de la base restaurada.
-3. Esquema compatible: si el respaldo es de una versión **más nueva** que la app, falla (hay que actualizar primero). Si es más vieja, avisa que el arranque migrará las tablas.
+3. Esquema compatible (Fase 12: mismo motor de migraciones que el servidor): si el respaldo es de una versión **más nueva** que la app, o su esquema tiene diferencias desconocidas, falla. Si es más vieja (o anterior a las migraciones, reconocida por línea base), se restaura y **se migra** a la versión actual; la migración queda en la bitácora de la base restaurada.
 4. Llave: su huella coincide con la del manifest y el **sello del manifest** es válido con ella (detecta un respaldo alterado aunque se hayan recalculado las huellas). También se compara con la llave **configurada en esta instalación** y el acta dice si coincide.
    - **Alcance del sello:** protege de verdad los respaldos que **no** llevan la llave (copias externas). Si la llave viaja dentro del respaldo, quien pueda escribir ese respaldo puede resellarlo; por eso la llave se guarda **aparte** y, ante la duda, la prueba se repite con `--llave <la guardada aparte>` o en la instalación del laboratorio (donde el acta confirma que es la misma llave).
 5. Cadena de la bitácora íntegra con esa llave: sellos, huecos de id, filas faltantes al final y triggers. Usa la misma verificación que **Verificar integridad**.
@@ -95,7 +95,7 @@ La copia restaurada de `instance-restaurada/<fecha>/` contiene **datos del labor
 
 Solo ante una pérdida o corrupción de datos, y con la decisión registrada.
 
-1. **Avisar** al personal y **detener el servidor** de FICOTOX (cerrar el proceso de `npm run start:standalone` o el servicio).
+1. **Avisar** al personal y **detener el servidor** de FICOTOX con `npm run detener` (Fase 12: detiene al lanzador y al servidor sin que se relance; en Windows, desde PowerShell como administrador si corre como servicio).
 2. **Elegir el respaldo**: el más reciente verificado en **Administración › Respaldos**, o en `backups/`.
 3. **Ubicar la llave**: la del respaldo (`llave/`) o la guardada aparte (`--llave <ruta>`). Si la instancia usa `SECRET_KEY`, el `.env` debe tener **la misma** llave del respaldo. Si no, el script se niega.
 4. **Ejecutar:**

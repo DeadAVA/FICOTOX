@@ -9,13 +9,7 @@ import { porAutorizarDe } from "../solicitudes";
 import { autorizacionesPorVencer, permisoAdministrar } from "../autorizaciones";
 import { ACCIONES_CRITICAS } from "../../shared/acciones-criticas";
 import { vencimientosProximos } from "./admin";
-import { ensureConsumiblesSchema } from "./consumables";
-import { ensureInformesSchema } from "./informes";
-import { ensureEquiposSchema, ensureMantenimientosSchema, ensureReactivosSchema } from "./inventory";
-import { ensureAnalysisSchema } from "./samples/analisis";
-import { ensureSamplesExtraccionSchema } from "./samples/extraccion";
-import { ensureSamplesProcesamientoSchema } from "./samples/procesamiento";
-import { ensureSamplesRecepcionSchema } from "./samples/recepcion";
+
 import { diasDesde, formatearFecha, hoyLocal, sumarDias } from "../../shared/fechas";
 import { esCoordinacion, filtroAsignadas, soloAsignado } from "../asignaciones";
 import { FEATURES } from "../../shared/features";
@@ -84,11 +78,6 @@ const daysSince = (iso: string | null): number => diasDesde(iso);
 export async function inicioEnCurso({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "muestras", "V");
-  await ensureSamplesRecepcionSchema(s);
-  await ensureSamplesProcesamientoSchema(s);
-  await ensureSamplesExtraccionSchema(s);
-  await ensureAnalysisSchema(s);
-  await ensureInformesSchema(s);
 
   /*
    * Fase 5: cada analista (captura ensayos sin ser coordinacion) o quien tiene el
@@ -287,12 +276,6 @@ const MODULO_AVISO: Record<string, Modulo> = {
 export async function inicioAvisos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const auth = await cargarAutorizacion(s, user);
-  await ensureReactivosSchema(s);
-  await ensureConsumiblesSchema(s);
-  await ensureEquiposSchema(s);
-  await ensureMantenimientosSchema(s);
-  await ensureAnalysisSchema(s);
-  await ensureInformesSchema(s);
 
   // Dia local del laboratorio como parametro (date('now')/CURDATE() darian el dia UTC del servidor).
   const today = ":hoy";

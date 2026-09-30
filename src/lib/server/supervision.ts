@@ -3,7 +3,7 @@ import { registrarAuditoria, snapshotRow } from "./audit";
 import type { Row, Session } from "./db";
 import { HttpError, json, readJson, type RouteContext } from "./http";
 import { cargarAutorizacion, permisoDe, soloSupervisado, type Permiso } from "./rbac";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "./schema";
+
 import { getConfig } from "./config";
 import { exigirReauth } from "./seguridad";
 import type { Modulo } from "../shared/permisos";
@@ -64,21 +64,6 @@ const PREFIJO_FOLIO: Partial<Record<TablaSupervisable, string>> = {
 
 export function esTablaSupervisable(tabla: string): tabla is TablaSupervisable {
   return Object.prototype.hasOwnProperty.call(SUPERVISABLES, tabla);
-}
-
-/* Columnas de supervision de cada tabla supervisable. */
-export async function ensureSupervisionColumns(s: Session, tabla: TablaSupervisable): Promise<void> {
-  if (schemaReady(`supervision_${tabla}`)) return;
-  await addColumnIfMissing(s, tabla, "requiere_supervision", "INT NOT NULL DEFAULT 0");
-  // pendiente | regresado | aprobado (NULL si nunca requirio supervision)
-  await addColumnIfMissing(s, tabla, "supervision_estado", "VARCHAR(20) DEFAULT NULL");
-  await addColumnIfMissing(s, tabla, "supervisor_id", "INT DEFAULT NULL");
-  await addColumnIfMissing(s, tabla, "supervision_solicitada_por", "INT DEFAULT NULL");
-  await addColumnIfMissing(s, tabla, "supervision_solicitada_en", "VARCHAR(40) DEFAULT NULL");
-  await addColumnIfMissing(s, tabla, "supervision_observaciones", "TEXT");
-  await addColumnIfMissing(s, tabla, "supervisado_por", "INT DEFAULT NULL");
-  await addColumnIfMissing(s, tabla, "supervisado_en", "VARCHAR(40) DEFAULT NULL");
-  markSchemaReady(`supervision_${tabla}`);
 }
 
 export interface MarcaSupervision {
@@ -151,7 +136,6 @@ export async function bandejaSupervision({ request, s }: RouteContext): Promise<
   const porSupervisar: Row[] = [];
   const regresados: Row[] = [];
   for (const tabla of Object.keys(SUPERVISABLES) as TablaSupervisable[]) {
-    await ensureSupervisionColumns(s, tabla);
     const def = SUPERVISABLES[tabla];
     const filas = await s.query<Row>(
       `SELECT t.*, u.nombre AS solicitante_nombre FROM ${tabla} t LEFT JOIN usuarios u ON u.id = t.supervision_solicitada_por
@@ -182,7 +166,6 @@ export async function bandejaSupervision({ request, s }: RouteContext): Promise<
 export async function contarPorSupervisar(s: Session, userId: number): Promise<Row[]> {
   const out: Row[] = [];
   for (const tabla of Object.keys(SUPERVISABLES) as TablaSupervisable[]) {
-    await ensureSupervisionColumns(s, tabla);
     const filas = await s.query<Row>(`SELECT * FROM ${tabla} WHERE requiere_supervision = 1 AND supervision_estado = 'pendiente' AND supervisor_id = :yo ORDER BY supervision_solicitada_en ASC LIMIT 20`, { yo: userId });
     for (const fila of filas) out.push({ tabla, id: Number(fila.id), tipo: SUPERVISABLES[tabla].etiqueta, referencia: referenciaDe(tabla, fila), href: SUPERVISABLES[tabla].href(Number(fila.id)) });
   }
@@ -193,7 +176,6 @@ async function registroSupervisado(s: Session, user: CurrentUser, params: Record
   const tabla = String(params.tabla || "");
   if (!esTablaSupervisable(tabla)) throw new HttpError(404, { message: "Tipo de registro no supervisable" });
   const id = Number.parseInt(String(params.id || ""), 10);
-  await ensureSupervisionColumns(s, tabla);
   const auth = await cargarAutorizacion(s, user);
   const row = Number.isFinite(id) ? await snapshotRow(s, tabla, id) : null;
   if (!row) throw new HttpError(404, { message: "Registro no encontrado" });

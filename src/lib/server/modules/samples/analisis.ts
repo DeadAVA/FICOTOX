@@ -6,21 +6,21 @@ import { restoreInventoryUsage } from "../../inventory-usage";
 import { cargoActuante, requirePermission } from "../../rbac";
 import { exigirReauth } from "../../seguridad";
 import { exigirSinSolicitudPendiente, pendientesDe, respuestaSolicitud, serializarSolicitud } from "../../solicitudes";
-import { detalleExcepcion, elaboradoresDe, ensureExcepcionesColumn, excepcionesDe, exigirSegregacion } from "../../segregacion";
+import { detalleExcepcion, elaboradoresDe, excepcionesDe, exigirSegregacion } from "../../segregacion";
 import { evaluarAnalisis, excepcionPara, type Violacion } from "../../../shared/segregacion";
 import { aplicarSupervision, exigirSinSupervisionPendiente, filtroSupervision, marcaSupervision } from "../../supervision";
 import { recordBitacoraFolios } from "../inventory";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "../../schema";
-import { advanceState, anularOSolicitar, validarRecepcionSiCompleta, applyStageInventory, assertEditableAsync, assertOrigin, conSolicitudes, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
+
+import { advanceState, anularOSolicitar, validarRecepcionSiCompleta, applyStageInventory, assertEditableAsync, assertOrigin, conSolicitudes, deletionNotAllowed, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
 import { ANALYSIS_METHODS, ANALYSIS_TYPES, CONFORMITY_OPTIONS } from "../../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toFloatOrNull, toIntOrNull } from "../helpers";
-import { ensureSupervisionColumns } from "../../supervision";
+
 import { exigirAutorizaciones, requisitosEquipos } from "../../autorizaciones";
 import { metodoDeTipoAnalisis, requisitosAnalisis, requisitosRevisionResultados } from "../../../shared/autorizaciones";
 import { exigirSinSuspension, idsDeEquipos } from "../calidad/bloqueos";
 import { incidenciasPorEquiposNoAptos } from "../calidad/automaticas";
 import { exigirAsignacion, filtroAsignadas } from "../../asignaciones";
-import { ensureColumnasFirma, firmanteElegido, guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
+import { firmanteElegido, guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
 import { marcarRequiereEnmienda } from "../informes";
 import { contarVigentes, heredarAdjuntos, resumenAdjuntos } from "../../adjuntos";
 import { getConfig } from "../../config";
@@ -44,161 +44,6 @@ const CONFORMITY = new Set(CONFORMITY_OPTIONS.map((item) => item.value));
 
 /* Fase 5: el analista (trabajo tecnico: autorizacion de analisis y metodo) se elige de las cuentas activas. */
 const firmasAnalisis = (tipo: unknown): RolFirma[] => [{ rol: "analista", columnaNombre: "analista_nombre", etiqueta: "Analista", requisitos: requisitosAnalisis(tipo) }];
-
-export async function ensureAnalysisSchema(s: Session): Promise<void> {
-  if (schemaReady("muestras_analisis")) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS muestras_analisis (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        folio_num INTEGER NOT NULL UNIQUE,
-        tipo_registro VARCHAR(2) NOT NULL DEFAULT 'A',
-        tipo_analisis VARCHAR(40) NOT NULL,
-        metodo VARCHAR(40) NOT NULL,
-        metodo_otro VARCHAR(160) DEFAULT NULL,
-        metodo_referencia VARCHAR(160) DEFAULT NULL,
-        metodo_documento_id INTEGER DEFAULT NULL,
-        recepcion_id INTEGER DEFAULT NULL,
-        procesamiento_id INTEGER DEFAULT NULL,
-        extraccion_id INTEGER DEFAULT NULL,
-        fecha_analisis DATE DEFAULT NULL,
-        hora_inicio VARCHAR(20) DEFAULT NULL,
-        hora_fin VARCHAR(20) DEFAULT NULL,
-        equipo_id INTEGER DEFAULT NULL,
-        equipo_nombre VARCHAR(150) DEFAULT NULL,
-        equipo_clave_bitacora VARCHAR(60) DEFAULT NULL,
-        equipo_folio_bitacora VARCHAR(60) DEFAULT NULL,
-        condiciones_json TEXT,
-        resultados_json TEXT,
-        controles_json TEXT,
-        uso_inventario_json TEXT,
-        observaciones TEXT,
-        analista_nombre VARCHAR(180) DEFAULT NULL,
-        analista_firma TEXT,
-        revisado_por INTEGER DEFAULT NULL,
-        revisado_nombre VARCHAR(180) DEFAULT NULL,
-        revisado_en VARCHAR(40) DEFAULT NULL,
-        revisado_firma TEXT,
-        revision_observaciones TEXT,
-        aprobado_por INTEGER DEFAULT NULL,
-        aprobado_nombre VARCHAR(180) DEFAULT NULL,
-        aprobado_en VARCHAR(40) DEFAULT NULL,
-        aprobado_firma TEXT,
-        estado VARCHAR(30) NOT NULL DEFAULT 'registrado',
-        creado_por INTEGER DEFAULT NULL,
-        actualizado_por INTEGER DEFAULT NULL,
-        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS muestras_analisis (
-        id INT NOT NULL AUTO_INCREMENT,
-        folio_num INT NOT NULL,
-        tipo_registro VARCHAR(2) NOT NULL DEFAULT 'A',
-        tipo_analisis VARCHAR(40) NOT NULL,
-        metodo VARCHAR(40) NOT NULL,
-        metodo_otro VARCHAR(160) DEFAULT NULL,
-        metodo_referencia VARCHAR(160) DEFAULT NULL,
-        metodo_documento_id INT DEFAULT NULL,
-        recepcion_id INT DEFAULT NULL,
-        procesamiento_id INT DEFAULT NULL,
-        extraccion_id INT DEFAULT NULL,
-        fecha_analisis DATE DEFAULT NULL,
-        hora_inicio VARCHAR(20) DEFAULT NULL,
-        hora_fin VARCHAR(20) DEFAULT NULL,
-        equipo_id INT DEFAULT NULL,
-        equipo_nombre VARCHAR(150) DEFAULT NULL,
-        equipo_clave_bitacora VARCHAR(60) DEFAULT NULL,
-        equipo_folio_bitacora VARCHAR(60) DEFAULT NULL,
-        condiciones_json LONGTEXT,
-        resultados_json LONGTEXT,
-        controles_json LONGTEXT,
-        uso_inventario_json LONGTEXT,
-        observaciones TEXT,
-        analista_nombre VARCHAR(180) DEFAULT NULL,
-        analista_firma LONGTEXT,
-        revisado_por INT DEFAULT NULL,
-        revisado_nombre VARCHAR(180) DEFAULT NULL,
-        revisado_en VARCHAR(40) DEFAULT NULL,
-        revisado_firma LONGTEXT,
-        revision_observaciones TEXT,
-        aprobado_por INT DEFAULT NULL,
-        aprobado_nombre VARCHAR(180) DEFAULT NULL,
-        aprobado_en VARCHAR(40) DEFAULT NULL,
-        aprobado_firma LONGTEXT,
-        estado VARCHAR(30) NOT NULL DEFAULT 'registrado',
-        creado_por INT DEFAULT NULL,
-        actualizado_por INT DEFAULT NULL,
-        creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-        actualizado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        UNIQUE KEY uq_muestras_analisis_folio_num (folio_num),
-        KEY idx_muestras_analisis_recepcion (recepcion_id),
-        KEY idx_muestras_analisis_extraccion (extraccion_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-      `,
-  );
-  await addColumnIfMissing(s, TABLE, "metodo_documento_id", "INT DEFAULT NULL");
-  await ensureAnulacionColumns(s, TABLE);
-  await ensureActuoColumns(s, TABLE);
-  // Fase 1: rol (cargo) con el que se reviso y aprobo.
-  await addColumnIfMissing(s, TABLE, "revisado_rol_id", "INT DEFAULT NULL");
-  await addColumnIfMissing(s, TABLE, "revisado_cargo", "VARCHAR(120) DEFAULT NULL");
-  await addColumnIfMissing(s, TABLE, "aprobado_rol_id", "INT DEFAULT NULL");
-  await addColumnIfMissing(s, TABLE, "aprobado_cargo", "VARCHAR(120) DEFAULT NULL");
-  await ensureSupervisionColumns(s, "muestras_analisis");
-  await ensureExcepcionesColumn(s, "muestras_analisis");
-  // Fase 5: enmiendas versionadas (mismo folio, version + 1, sustituye_a) y devolucion con observaciones.
-  await addColumnIfMissing(s, TABLE, "version", "INT NOT NULL DEFAULT 1");
-  await addColumnIfMissing(s, TABLE, "sustituye_a", "INT DEFAULT NULL");
-  await addColumnIfMissing(s, TABLE, "motivo_enmienda", "TEXT");
-  await addColumnIfMissing(s, TABLE, "enviado_revision_por", "INT DEFAULT NULL");
-  await addColumnIfMissing(s, TABLE, "enviado_revision_en", "VARCHAR(40) DEFAULT NULL");
-  await addColumnIfMissing(s, TABLE, "devolucion_observaciones", "TEXT");
-  await ensureColumnasFirma(s, TABLE, firmasAnalisis(""));
-  await migrarUnicidadFolioVersion(s);
-  markSchemaReady("muestras_analisis");
-}
-
-/*
- * Fase 5: la unicidad del folio pasa de UNIQUE(folio_num) a UNIQUE(folio_num,
- * version), para que la enmienda conserve el folio. Idempotente.
- */
-async function migrarUnicidadFolioVersion(s: Session): Promise<void> {
-  if (isSqlite()) {
-    const indices = await s.query<{ name: string; unique: number }>(`PRAGMA index_list("${TABLE}")`);
-    let soloFolio = false;
-    for (const indice of indices) {
-      if (!indice.unique) continue;
-      const cols = (await s.query<{ name: string }>(`PRAGMA index_info("${indice.name}")`)).map((c) => c.name);
-      if (cols.length === 1 && cols[0] === "folio_num") soloFolio = true;
-    }
-    if (!soloFolio) return;
-    const sql = String((await s.scalar("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = :t", { t: TABLE })) || "");
-    const nuevo = sql
-      .replace(/CREATE TABLE\s+(IF NOT EXISTS\s+)?["`]?muestras_analisis["`]?/i, "CREATE TABLE muestras_analisis_v5")
-      .replace(/folio_num\s+INTEGER\s+NOT\s+NULL\s+UNIQUE/i, "folio_num INTEGER NOT NULL")
-      .replace(/\)\s*$/, ", UNIQUE (folio_num, version))");
-    if (nuevo === sql || !nuevo.includes("muestras_analisis_v5")) throw new Error("No se pudo migrar la unicidad del folio de analisis");
-    await s.execute("DROP TABLE IF EXISTS muestras_analisis_v5");
-    await s.execute(nuevo);
-    await s.execute(`INSERT INTO muestras_analisis_v5 SELECT * FROM ${TABLE}`);
-    await s.execute(`DROP TABLE ${TABLE}`);
-    await s.execute(`ALTER TABLE muestras_analisis_v5 RENAME TO ${TABLE}`);
-    return;
-  }
-  const filas = await s.query<{ INDEX_NAME: string; COLUMN_NAME: string }>(
-    "SELECT INDEX_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND NON_UNIQUE = 0 AND INDEX_NAME <> 'PRIMARY' ORDER BY INDEX_NAME, SEQ_IN_INDEX",
-    { t: TABLE },
-  );
-  const porIndice = new Map<string, string[]>();
-  for (const f of filas) porIndice.set(f.INDEX_NAME, [...(porIndice.get(f.INDEX_NAME) || []), f.COLUMN_NAME]);
-  for (const [nombre, cols] of porIndice) if (cols.length === 1 && cols[0] === "folio_num") await s.execute(`ALTER TABLE ${TABLE} DROP INDEX \`${nombre}\``);
-  if (!porIndice.has("uq_muestras_analisis_folio_version")) await s.execute(`ALTER TABLE ${TABLE} ADD UNIQUE KEY uq_muestras_analisis_folio_version (folio_num, version)`);
-}
-
 
 export function serializeAnalysis(row: Row): Row {
   const item: Row = { ...row };
@@ -343,7 +188,6 @@ async function resolveChain(s: Session, data: AnalysisData): Promise<void> {
   await assertOrigin(s, "muestras_recepcion", data.recepcion_id, { requireAccepted: true });
 }
 
-
 async function snapshotEquipo(s: Session, data: AnalysisData): Promise<void> {
   if (!data.equipo_id) return;
   const row = await s.queryOne<{ nombre: string; clave_bitacora: string | null }>("SELECT nombre, clave_bitacora FROM equipos WHERE id = :id", { id: data.equipo_id });
@@ -353,11 +197,9 @@ async function snapshotEquipo(s: Session, data: AnalysisData): Promise<void> {
   }
 }
 
-
 export async function getNextFolio({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "ensayos", "V");
-  await ensureAnalysisSchema(s);
   return json({ next_folio: await nextFolioNum(s, TABLE) });
 }
 
@@ -367,7 +209,6 @@ export async function listAnalyses({ request, s }: RouteContext): Promise<Respon
   const supFiltro = filtroSupervision(request, "a", permiso.auth.userId);
   // Fase 5: filtro "Mis muestras".
   const asignadas = await filtroAsignadas(s, permiso.auth.userId, "a.recepcion_id", searchParam(request, "mias") === "1");
-  await ensureAnalysisSchema(s);
   const search = searchParam(request, "search");
   const estado = searchParam(request, "estado");
   const recepcionId = toIntOrNull(searchParam(request, "recepcion_id")) || 0;
@@ -416,7 +257,6 @@ export async function getAnalysis({ request, s, params }: RouteContext): Promise
   const id = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "ensayos", "V");
-  await ensureAnalysisSchema(s);
   const row = await s.queryOne(`SELECT * FROM ${TABLE} WHERE id = :id`, { id });
   if (!row) return json({ message: "Registro no encontrado" }, 404);
   // Informes que reportan este analisis (el LIKE acota; la lista JSON decide).
@@ -441,7 +281,6 @@ export async function createAnalysis({ request, s }: RouteContext): Promise<Resp
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "ensayos", "C", { objeto: "analisis", borrador: true });
   const actuo = cargoActuante(request, permiso);
-  await ensureAnalysisSchema(s);
   const payload = await readJson(request);
   const data = normalizePayload(payload);
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: !!(data.equipo_id || data.equipo_nombre), insumosJson: data.uso_inventario_json });
@@ -493,7 +332,8 @@ export async function createAnalysis({ request, s }: RouteContext): Promise<Resp
     return json({ message: "Analisis registrado", id, folio_num: data.folio_num }, 201);
   } catch (error) {
     await s.rollback();
-    if (isFolioConflict(error)) return json({ message: "El folio de analisis ya existe" }, 409);
+    // Fase 12: si el folio lo asigno el servidor, el choque es de concurrencia: se relanza y apiRoute reintenta.
+    if (isFolioConflict(error) && toIntOrNull(payload.folio_num)) return json({ message: "El folio de analisis ya existe" }, 409);
     throw error;
   }
 }
@@ -520,7 +360,6 @@ export async function exigirAnalisisEditable(s: Session, user: CurrentUser, ante
 export async function updateAnalysis({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
-  await ensureAnalysisSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   const permiso = await exigirAnalisisEditable(s, user, antes);
   const actuo = cargoActuante(request, permiso);
@@ -591,7 +430,6 @@ export async function deleteAnalysis({ request, s }: RouteContext): Promise<Resp
 export async function violacionParaExcepcionAnalisis(s: Session, user: CurrentUser, id: number, accion: string): Promise<{ violacion: Violacion | null; row: Row }> {
   if (accion !== "revisar" && accion !== "aprobar") throw new HttpError(400, { message: "En un análisis la excepción aplica a revisar o aprobar" });
   await requirePermission(s, user, "ensayos", accion === "revisar" ? "R" : "A");
-  await ensureAnalysisSchema(s);
   const row = await snapshotRow(s, TABLE, id);
   if (!row) throw new HttpError(404, { message: "Análisis no encontrado" });
   // Fase 6: se revisa lo enviado a revision.
@@ -605,7 +443,6 @@ export async function reviewAnalysis({ request, s, params }: RouteContext): Prom
   const id = intParam(params.id);
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "R"));
-  await ensureAnalysisSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   await assertEditableAsync(s, antes, TABLE, "revisar");
   // Fase 6: solo se revisa lo que el analista envio a revision.
@@ -633,7 +470,6 @@ export async function approveAnalysis({ request, s, params }: RouteContext): Pro
   const id = intParam(params.id);
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "A"));
-  await ensureAnalysisSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   await assertEditableAsync(s, antes, TABLE, "aprobar");
   if (String(antes?.estado) !== "revisado") return json({ message: "El analisis debe estar revisado antes de aprobarse" }, 409);
@@ -673,7 +509,6 @@ export async function enviarRevisionAnalysis({ request, s, params }: RouteContex
   const id = intParam(params.id);
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "C", { objeto: "analisis", borrador: true }));
-  await ensureAnalysisSchema(s);
   // En MySQL se bloquea la fila: un adjunto o un anulado concurrente espera a que termine el envio.
   const antes = isSqlite() ? await snapshotRow(s, TABLE, id) : await s.queryOne<Row>(`SELECT * FROM ${TABLE} WHERE id = :id FOR UPDATE`, { id });
   await assertEditableAsync(s, antes, TABLE, "enviar a revision");
@@ -698,7 +533,6 @@ export async function devolverAnalysis({ request, s, params }: RouteContext): Pr
   const id = intParam(params.id);
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "R"));
-  await ensureAnalysisSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   await assertEditableAsync(s, antes, TABLE, "devolver");
   if (String(antes?.estado) !== "en_revision") return json({ message: "Solo se devuelven analisis enviados a revision" }, 409);
@@ -724,7 +558,6 @@ export async function enmendarAnalysis({ request, s, params }: RouteContext): Pr
   const id = intParam(params.id);
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "C", { objeto: "analisis", borrador: true }));
-  await ensureAnalysisSchema(s);
   const original = await snapshotRow(s, TABLE, id);
   if (!original) return json({ message: "Registro no encontrado" }, 404);
   if (String(original.estado) !== "aprobado") return json({ message: "Solo se enmiendan analisis aprobados; los demas se corrigen antes de aprobarse" }, 409);
@@ -759,7 +592,6 @@ export async function anularAnalysis({ request, s, params }: RouteContext): Prom
   const id = intParam(params.id);
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "AN"));
-  await ensureAnalysisSchema(s);
   const motivo = await readMotivo(request);
   await exigirReauth(s, request, user, "ensayos:AN");
   const { row, solicitud } = await anularOSolicitar(s, user, TABLE, id, motivo, actuo);
@@ -772,7 +604,6 @@ export async function restaurarAnalysis({ request, s, params }: RouteContext): P
   const id = intParam(params.id);
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "AN"));
-  await ensureAnalysisSchema(s);
   await exigirReauth(s, request, user, "ensayos:AN");
   const { row, solicitud } = await restaurarOSolicitar(s, user, TABLE, id, await readMotivo(request), actuo);
   await s.commit();
@@ -782,7 +613,6 @@ export async function restaurarAnalysis({ request, s, params }: RouteContext): P
 
 /* Usado por informes: analisis aprobados de una recepcion. */
 export async function approvedAnalysesForReception(s: Session, recepcionId: number): Promise<Row[]> {
-  await ensureAnalysisSchema(s);
   const rows = await s.query(`SELECT * FROM ${TABLE} WHERE recepcion_id = :id AND estado = 'aprobado' ORDER BY folio_num`, { id: recepcionId });
   return rows.map(serializeAnalysis);
 }

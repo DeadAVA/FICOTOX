@@ -17,7 +17,19 @@
     "demo:ejemplo": "node scripts/demo-ejemplo.mjs",
     "respaldar": "node scripts/respaldar-ficotox.mjs",
     "restaurar": "node scripts/restaurar-ficotox.mjs",
-    "start:standalone": "node scripts/start-ficotox.mjs"
+    "start:standalone": "node scripts/start-ficotox.mjs",
+    "migrar": "node scripts/migrar-ficotox.mjs",
+    "prueba-carga": "node tests/carga.mjs",
+    "configurar": "node scripts/configurar-ficotox.mjs",
+    "instancia-nueva": "node scripts/instancia-nueva-ficotox.mjs",
+    "instalar-servicio": "node scripts/servicio-ficotox.mjs instalar",
+    "quitar-servicio": "node scripts/servicio-ficotox.mjs quitar",
+    "actualizar": "node scripts/actualizar-ficotox.mjs",
+    "verificar-instalacion": "node scripts/verificar-instalacion.mjs",
+    "test:mysql": "node tests/mysql.mjs",
+    "sqlite-a-mysql": "node scripts/sqlite-a-mysql.mjs",
+    "detener": "node scripts/detener-ficotox.mjs",
+    "reiniciar": "node scripts/detener-ficotox.mjs --reiniciar"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

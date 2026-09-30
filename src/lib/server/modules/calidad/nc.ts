@@ -41,22 +41,9 @@ import { exigirReauth } from "../../seguridad";
 import { crearSolicitud, pendientesDe, respuestaSolicitud, serializarSolicitud } from "../../solicitudes";
 import { detalleExcepcion, excepcionesDe, exigirSegregacion } from "../../segregacion";
 import { evaluarCierreNc, evaluarReanudacion, evaluarVerificacion, excepcionPara } from "../../../shared/segregacion";
-import {
-  CLASIFICACION_NC_LABEL,
-  ESTADOS_ACCION,
-  ESTADOS_NC,
-  METODOS_CAUSA,
-  METODOS_SUSPENDIBLES,
-  MEDIOS_COMUNICACION,
-  ORIGEN_NC_LABEL,
-  ORIGENES_NC,
-  accionVencida,
-  folioIncidencia,
-  folioNc,
-  RANGO_NC,
-} from "../../../shared/calidad";
+import { CLASIFICACION_NC_LABEL, ESTADOS_ACCION, ESTADOS_NC, METODOS_CAUSA, METODOS_SUSPENDIBLES, MEDIOS_COMUNICACION, ORIGEN_NC_LABEL, ORIGENES_NC, accionVencida, folioIncidencia, folioNc, RANGO_NC } from "../../../shared/calidad";
 import { finDiaLocal, formatearFecha, formatearFechaHora, hoyLocal, inicioDiaLocal } from "../../../shared/fechas";
-import { accesoCalidad, ahora, conPrevio, ensureCalidadSchema, exigirTexto, filaBloqueada, ncVisible, personaVigente, previosDe, respuestaCsv, siguienteFolio, T, type AccesoCalidad } from "./comun";
+import { accesoCalidad, ahora, conPrevio, exigirTexto, filaBloqueada, ncVisible, personaVigente, previosDe, respuestaCsv, siguienteFolio, T, type AccesoCalidad } from "./comun";
 import { accionVisible } from "./adjuntos";
 import { retencionesActivas, suspensionesActivas } from "./bloqueos";
 import { referenciaDe } from "./registros";
@@ -123,7 +110,6 @@ const auditar = (s: Session, user: CurrentUser, nc: Row, accion: Parameters<type
 /* ---------- Crear ---------- */
 
 export async function crearNcInterna(s: Session, user: CurrentUser, actuo: { cargo: string }, datos: { origen: string; incidencia_id?: number | null; descripcion: string; clasificacion?: unknown; requisito_incumplido?: unknown; responsable_id?: unknown }): Promise<Row> {
-  await ensureCalidadSchema(s);
   if (!ORIGENES.has(datos.origen)) throw new HttpError(400, { message: "Elige el origen de la NC" });
   const descripcion = exigirTexto(datos.descripcion, 20, "Describe la no conformidad");
   const clasificacion = datos.clasificacion ? String(datos.clasificacion) : null;
@@ -632,7 +618,6 @@ export async function liberarRetencion({ request, s, params }: RouteContext): Pr
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "calidad", "A", { objeto: "nc" });
   const actuo = cargoActuante(request, permiso);
-  await ensureCalidadSchema(s);
   const ret = await filaBloqueada(s, T.retenciones, intParam(params.id));
   if (!ret) throw new HttpError(404, { message: "Retención no encontrada" });
   if (ret.liberada_en) throw new HttpError(409, { message: "La retención ya se liberó" });
@@ -691,7 +676,6 @@ export async function reanudar({ request, s, params }: RouteContext): Promise<Re
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "calidad", "A", { objeto: "nc" });
   const actuo = cargoActuante(request, permiso);
-  await ensureCalidadSchema(s);
   // Mismo orden de bloqueo que suspender (equipo y despues suspensiones) para no cruzarse en MySQL.
   const previa = await s.queryOne<Row>(`SELECT tipo, clave FROM ${T.suspensiones} WHERE id = :id`, { id: intParam(params.id) });
   if (previa?.tipo === "equipo") await filaBloqueada(s, "equipos", Number(previa.clave));
@@ -913,7 +897,6 @@ export async function violacionParaExcepcionNc(s: Session, user: CurrentUser, id
 export async function violacionParaExcepcionSuspension(s: Session, user: CurrentUser, id: number, accion: string) {
   if (accion !== "reanudar") throw new HttpError(400, { message: "En una suspensión la excepción aplica a reanudar" });
   await requirePermission(s, user, "calidad", "A", { objeto: "nc" });
-  await ensureCalidadSchema(s);
   const su = await s.queryOne<Row>(`SELECT su.*, n.folio_num AS nc_folio FROM ${T.suspensiones} su LEFT JOIN ${T.nc} n ON n.id = su.nc_id WHERE su.id = :id`, { id });
   if (!su) throw new HttpError(404, { message: "Suspensión no encontrada" });
   if (su.reanudada_en) throw new HttpError(409, { message: "Ya se reanudó" });

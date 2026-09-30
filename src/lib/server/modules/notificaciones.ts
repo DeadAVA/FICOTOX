@@ -12,15 +12,13 @@ import { cargarAutorizacion, permisoDe, type Autorizacion } from "../rbac";
 import { contarPorSupervisar } from "../supervision";
 import { porAutorizarDe } from "../solicitudes";
 import { autorizacionesPorVencer } from "../autorizaciones";
-import { ensureAsignacionesSchema } from "../asignaciones";
+
 import { ACCIONES_CRITICAS } from "../../shared/acciones-criticas";
 import { FEATURES } from "../../shared/features";
 import { formatearFecha, hoyLocal, sumarDias } from "../../shared/fechas";
 import { vencimientosProximos } from "./admin";
-import { documentosPorLeer, ensureDocumentosFlujoSchema } from "./documentos-flujo";
-import { ensureInformesSchema } from "./informes";
-import { ensureEquiposSchema, ensureMantenimientosSchema } from "./inventory";
-import { ensureAnalysisSchema } from "./samples/analisis";
+import { documentosPorLeer } from "./documentos-flujo";
+
 import { avisosRespaldo, recibeAvisosRespaldo } from "./respaldos";
 
 export interface Notificacion {
@@ -40,7 +38,6 @@ export async function notificacionesDe(s: Session, auth: Autorizacion): Promise<
   const puede = (modulo: Parameters<typeof permisoDe>[1], accion: Parameters<typeof permisoDe>[2]) => !!permisoDe(auth, modulo, accion);
 
   // Muestras asignadas a la persona en los ultimos 7 dias.
-  await ensureAsignacionesSchema(s);
   const desde = new Date(Date.now() - 7 * 86_400_000).toISOString();
   const asignadas = await s.query<Row>(
     `SELECT a.recepcion_id, a.asignado_en, r.folio_num, r.solicitante FROM asignaciones_muestra a LEFT JOIN muestras_recepcion r ON r.id = a.recepcion_id
@@ -50,7 +47,6 @@ export async function notificacionesDe(s: Session, auth: Autorizacion): Promise<
   for (const a of asignadas) out.push({ tipo: "muestra_asignada", titulo: `Muestra asignada R ${pad(a.folio_num)}`, detalle: `${a.solicitante || ""} · ${formatearFecha(a.asignado_en)}`.replace(/^ · /, ""), href: `/muestras/recepcion/${a.recepcion_id}`, tono: "info" });
 
   // Analisis que puede revisar o aprobar (no los que elaboro).
-  await ensureAnalysisSchema(s);
   const estadosAnalisis = [puede("ensayos", "R") ? "en_revision" : null, puede("ensayos", "A") ? "revisado" : null].filter(Boolean) as string[];
   if (estadosAnalisis.length) {
     const filas = await s.query<Row>(`SELECT id, folio_num, version, estado FROM muestras_analisis WHERE estado IN (${estadosAnalisis.map((e) => `'${e}'`).join(", ")}) AND COALESCE(creado_por, 0) <> :yo ORDER BY id LIMIT ${LIMITE}`, { yo });
@@ -58,7 +54,6 @@ export async function notificacionesDe(s: Session, auth: Autorizacion): Promise<
   }
 
   // Informes que puede revisar, autorizar o liberar (no los que elaboro).
-  await ensureInformesSchema(s);
   const estadosInforme = [puede("informes", "R") ? "borrador" : null, ...(puede("informes", "A") ? ["en_revision", "autorizado"] : [])].filter(Boolean) as string[];
   if (estadosInforme.length) {
     const filas = await s.query<Row>(`SELECT id, folio_num, version, estado FROM informes WHERE estado IN (${estadosInforme.map((e) => `'${e}'`).join(", ")}) AND COALESCE(creado_por, 0) <> :yo AND COALESCE(requiere_enmienda, 0) = 0 ORDER BY id LIMIT ${LIMITE}`, { yo });
@@ -73,7 +68,6 @@ export async function notificacionesDe(s: Session, auth: Autorizacion): Promise<
   // Documentos por leer y por revisar, aprobar o publicar.
   if (FEATURES.documentos && puede("documentos", "V")) {
     for (const d of await documentosPorLeer(s, yo)) out.push({ tipo: "documento_leer", titulo: `Por leer: ${d.clave} rev. ${d.revision}`, detalle: String(d.titulo || ""), href: `/documentos?documento=${d.id}`, tono: "info" });
-    await ensureDocumentosFlujoSchema(s);
     const estadosDoc = [...(puede("documentos", "G") ? ["revision_calidad", "aprobado"] : []), puede("documentos", "R") ? "revision_tecnica" : null, puede("documentos", "A") ? "por_aprobar" : null].filter(Boolean) as string[];
     if (estadosDoc.length) {
       const filas = await s.query<Row>(`SELECT id, clave, revision, estado FROM documentos_sgc WHERE estado IN (${estadosDoc.map((e) => `'${e}'`).join(", ")}) AND COALESCE(creado_por, 0) <> :yo AND COALESCE(asignado_a, 0) <> :yo ORDER BY id LIMIT ${LIMITE}`, { yo });
@@ -84,8 +78,6 @@ export async function notificacionesDe(s: Session, auth: Autorizacion): Promise<
 
   // Mantenimientos vencidos o proximos (si ve equipos).
   if (puede("equipos", "V")) {
-    await ensureEquiposSchema(s);
-    await ensureMantenimientosSchema(s);
     const hoy = hoyLocal();
     const filas = await s.query<Row>(
       `SELECT mt.id, mt.tipo, mt.fecha_programada, mt.estado, e.nombre AS equipo FROM mantenimientos mt LEFT JOIN equipos e ON e.id = mt.id_equipo

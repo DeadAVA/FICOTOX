@@ -34,7 +34,7 @@ Fecha: 2026-09-07. Objetivo: migrar backend (Flask) y frontend (HTML/CSS/JS vani
 | `backend/app/extensions.py` (db, cors) | `src/lib/server/db.ts`, `src/proxy.ts` |
 | `backend/app/utils/auth.py` | `src/lib/server/auth.ts` |
 | `backend/app/utils/rbac.py` | `src/lib/server/rbac.ts` |
-| `backend/app/utils/schema.py` | `src/lib/server/schema.ts` |
+| `backend/app/utils/schema.py` | `src/lib/server/schema.ts` (retirado en la Fase 12: `src/lib/server/migraciones/`) |
 | `backend/app/utils/users.py` | `src/lib/server/users.ts` |
 | `backend/app/utils/inventory_usage.py` | `src/lib/server/inventory-usage.ts` |
 | `backend/app/modules/<m>/*.py` | `src/lib/server/modules/<m>.ts` + `src/app/api/**/route.ts` |

@@ -1,6 +1,6 @@
-# Pendientes de FICOTOX (fases 0 a 11)
+# Pendientes de FICOTOX (fases 0 a 12)
 
-Lista única y vigente de pendientes, riesgos y decisiones por validar al cierre de la Fase 11. Sale de MANUAL_TECNICO.md (§20), MANUAL_USUARIO.md, docs/CATALOGO_PERMISOS.md (§7), docs/CONTEXTO_AGENTE.md (§9) y los resúmenes de cada fase. Ya se quitaron los duplicados y lo que resolvieron fases posteriores. El origen de cada punto va entre paréntesis.
+Lista única y vigente de pendientes, riesgos y decisiones por validar al cierre de la Fase 12. Sale de MANUAL_TECNICO.md (§20), MANUAL_USUARIO.md, docs/CATALOGO_PERMISOS.md (§7), docs/CONTEXTO_AGENTE.md (§9) y los resúmenes de cada fase. Ya se quitaron los duplicados y lo que resolvieron fases posteriores. El origen de cada punto va entre paréntesis.
 
 Ya resuelto, así que no se repite abajo:
 - La A de informes de la Coord. Técnica exige la autorización FX-THF-AP (Fase 4).
@@ -11,6 +11,13 @@ Ya resuelto, así que no se repite abajo:
 - En la Fase 9, el alcance "autorizados" ya se aplica también a la descarga del archivo, al resumen y a las propuestas de documentos.
 - Fase 10: adjuntar evidencia instrumental a los análisis (sección 7, "Resultados") y la prueba documentada de restauración de respaldos con acta (sección 9 y PVVC).
 - Fase 11: incidencias, no conformidades y acciones correctivas (7.10 y 8.7), con el alcance `incidencias` aplicado, las reglas de segregación 7–10, suspensiones de método o equipo y retención de informes; la tabla `adjuntos` ya sirve también a incidencias y acciones correctivas.
+- Fase 12: migraciones versionadas (`schema_migraciones`, checksum, línea base, bloqueo, respaldo previo) en lugar de `ensure*Schema()`; el servidor no arranca con deriva, checksum alterado o base más nueva.
+- Fase 12: el historial de un registro (vista, CSV y solicitudes) aplica los alcances de la ficha (asignado, autorizados, propio, incidencias): lo no visible es 404.
+- Fase 12: el CSV de la bitácora avisa si quedó cortado (fila final, encabezados, nombre «-parcial», aviso en la interfaz y en la bitácora) y se exporta por periodo; el límite subió a 50 000 filas (`BITACORA_CSV_MAX_FILAS`).
+- Fase 12: línea base de lint en 0.
+- Fase 12: folios de todas las series con restricción única y reintento (MySQL o dos procesos): ya no hay 500 por folio duplicado; los interbloqueos de MySQL (p. ej. suspensiones simultáneas) también se reintentan.
+- Fase 12: la evidencia grande se recibe antes de abrir la sesión de base (ya no retiene a los demás mientras llega).
+- Fase 12: instalación y operación en producción: configurar, instancia-nueva, servicio con arranque automático y firewall, HTTPS opcional, registros con rotación, actualizar y verificar-instalacion (`docs/INSTALACION.md`).
 - Fase 11: el paquete standalone ya no lleva `instance/`, respaldos, pruebas, `.env` ni llaves (`scripts/limpiar-standalone.mjs` y `tests/standalone.mjs`).
 
 ## Validar con Mejora Continua
@@ -43,12 +50,16 @@ Ya resuelto, así que no se repite abajo:
 - Fase 11 · una incidencia escalada a una NC que después se anula no se vuelve a evaluar ("solo hacia adelante"): se anula y, si hace falta, se reporta de nuevo.
 - Fase 11 · quien es responsable solo de una acción ve la NC completa (impacto, comunicaciones, retenciones); de las incidencias ajenas agrupadas, solo folio y estado. Confirmar.
 - Fase 11 · suspensión desde dos NC: suspender lo que la misma NC ya suspende responde 409; otra NC sí puede suspenderlo y sigue suspendido hasta que todas lo reanuden. Confirmar esta lectura de los dos casos límite.
+- Fase 12 · motor de base de datos: recomendación SQLite con umbrales para pasar a MySQL (`docs/DECISION_BASE_DE_DATOS.md`). Aprobar.
+- Fase 12 · la IP fija o reservada de la computadora del laboratorio y si se activa HTTPS (certificado institucional o propio).
 - Fase 10 · evidencia: confirmar que la evidencia es obligatoria para todos los tipos de análisis (hoy `EVIDENCIA_OBLIGATORIA_ANALISIS` aplica a todos, incluido plancton) y si el revisor debe poder adjuntar (hoy solo quien puede editar, en "registrado").
 
 ## Mejoras técnicas
 
-- Migraciones ligeras y no versionadas (`ensure*Schema` en lugar de migraciones numeradas) (MANUAL_TECNICO §20, CONTEXTO_AGENTE §9).
-- Validar el sistema completo en MySQL/MariaDB; hasta ahora todo se probó en SQLite. Para uso multiusuario en producción conviene MySQL (MANUAL_TECNICO §20, CONTEXTO_AGENTE §9).
+- Fase 12 · MySQL/MariaDB sin probar contra un servidor real (no había Docker): correr `npm run test:mysql` (Docker o `MYSQL_TEST_URL`) antes de usar MySQL. El DDL MySQL de la migración base no declara las llaves foráneas ni algunos índices secundarios que creaba el código anterior en MySQL (MANUAL_TECNICO §20).
+- Fase 12 · la contraseña se verifica con `scryptSync` (~20–25 ms que bloquean el proceso en cada inicio de sesión o reautenticación). Con el volumen del laboratorio no se nota; si crece, pasar a `crypto.scrypt` asíncrono.
+- Fase 12 · «Crear respaldo ahora» con miles de archivos tarda decenas de segundos (48 s medidos bajo carga continua); ya no retiene a nadie (solo la foto de la base va con la sesión), pero la pantalla espera todo ese tiempo. Si molesta, hacerlo en segundo plano con aviso al terminar.
+- Fase 12 · la tarea programada de respaldo (Fase 10) se crea con el usuario que la instala y requiere Python; para que corra sin sesión abierta hay que marcar «Ejecutar tanto si el usuario inició sesión como si no» (docs/INSTALACION.md, paso 11).
 - Los secretos por defecto (SECRET_KEY y demás) solo sirven para desarrollo (MANUAL_TECNICO §20).
 - `better-sqlite3` requiere Node.js LTS con binarios precompilados (MANUAL_TECNICO §20).
 - La enmienda de un análisis no vuelve a descontar inventario, porque nace sin insumos (Fase 5, MANUAL_TECNICO §20).
@@ -64,22 +75,17 @@ Ya resuelto, así que no se repite abajo:
 - Documentos: "Devolver con observaciones" no revisa la segregación (Fase 7, resumen).
 - Documentos: al aceptar una propuesta de "cambio" no se confirma que el original siga vigente (Fase 7, resumen).
 - Documentos: queda en `src/app/(app)/documentos/page.tsx` un mapa local con `en_revision`, sin efecto (Fase 7, resumen).
-- Deuda de lint: 12 problemas previos en ConsumibleSheet, ReactivoSheet, AppShell y administracion/roles/page (línea base desde la Fase 0).
 
-- El historial de un registro (vista y CSV) solo exige V del módulo: no aplica los alcances "autorizados" ni "asignado" (el Estudiante o un técnico con alcance limitado podrían consultar o exportar el historial de un documento no distribuido o de una muestra no asignada). (Fase 9, revisión; src/lib/server/modules/audit.ts)
-- La exportación CSV de la bitácora corta en 5000 filas por omisión (máximo 20000) sin avisar que el resultado quedó truncado. (Fase 9, revisión)
 - La columna "Módulo" del CSV de la bitácora muestra la clave interna (ensayos, equipos) en lugar de una etiqueta. (Fase 9, revisión)
 - Notificaciones: cuentas y roles avisan con 7 días de anticipación y las autorizaciones con 30; decidir si se unifican o documentarlo. (Fase 9, revisión)
 
 - Fase 10: los respaldos por terminal o tarea programada no escriben en la bitácora (su registro es el manifest); solo "Crear respaldo ahora" de la interfaz queda en ella.
 - Fase 10: el respaldo y la restauración con verificación automática son solo para SQLite; en MySQL/MariaDB se usa mysqldump y la verificación de la cadena del volcado no está implementada.
 - Fase 10: los TIFF no tienen vista previa en la plataforma (Chrome y Firefox no los muestran); se descargan.
-- Fase 10 · rendimiento con SQLite: las peticiones se atienden una a la vez (una sola conexión), así que subir una evidencia grande (hasta 25 MB) o "Crear respaldo ahora" con muchos archivos retiene al resto de las peticiones mientras dura. Con el volumen actual son segundos; si crece, leer el archivo antes de abrir la sesión de base o programar los respaldos fuera de horario.
 
 - Fase 11: la alerta de integridad de un respaldo (y su incidencia automática) se registra al abrir Administración › Respaldos o al consultar `GET /api/respaldos` con el acta fallida, no en el momento en que la prueba de restauración por terminal escribe el acta. El acta y el aviso de "prueba de restauración" siguen visibles.
 - Fase 11: la incidencia automática de "equipo no apto" se evalúa al guardar (estado y calibración de ese momento); si el equipo se corrige después, la incidencia automática queda y se cierra sin NC.
-- Fase 11 · MySQL: dos suspensiones simultáneas del mismo método desde NC distintas pueden chocar por el bloqueo de hueco del índice (InnoDB aborta una: 500 con rollback completo, se reintenta). Si ocurre en producción, serializar con una fila centinela por método.
-- Fase 11: el MySQL de las transiciones de calidad (FOR UPDATE, CAST de la clave de equipo) se probó solo en SQLite, como el resto del sistema. En MySQL, dos incidencias creadas al mismo tiempo pueden chocar en el folio (MAX+1, el mismo patrón de los demás folios) y la petición perdedora responde 500 y se reintenta; la deduplicación de incidencias automáticas se apoya en la misma transacción (sin índice único, porque una anulada no debe impedir una nueva).
+- Fase 11: el MySQL de las transiciones de calidad (FOR UPDATE, CAST de la clave de equipo) se probó solo en SQLite, como el resto del sistema (ver Fase 12 · MySQL). Desde la Fase 12 los folios duplicados y los interbloqueos se reintentan (ya no dan 500); la deduplicación de incidencias automáticas se apoya en la misma transacción (sin índice único, porque una anulada no debe impedir una nueva).
 
 ## Resto de la antigua Fase 8 (no implementado)
 

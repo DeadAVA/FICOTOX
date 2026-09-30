@@ -36,7 +36,7 @@ FICOTOX/
 │   ├── app/                 # layout, rutas de la interfaz y route handlers /api/*
 │   ├── components/          # ui (sistema de diseño), shell, session y features por dominio
 │   ├── lib/client/          # API client, sesion, store, hooks, formato, importaciones Excel/CSV
-│   ├── lib/server/          # config, db, auth (JWT), rbac, esquema y modulos de negocio
+│   ├── lib/server/          # config, db, auth (JWT), rbac, migraciones y modulos de negocio
 │   └── proxy.ts             # CORS para /api/* (equivale a middleware)
 ├── public/vendor/xlsx/      # SheetJS (lectura de Excel en el navegador)
 ├── scripts/                 # lanzador standalone, respaldo y tareas programadas
@@ -55,16 +55,31 @@ npm install
 npm run dev                  # http://localhost:3000
 ```
 
-Producción:
+Producción (guía paso a paso para el laboratorio: [`docs/INSTALACION.md`](./docs/INSTALACION.md)):
 
 ```bash
+npm ci
+npm run configurar                       # .env seguro: JWT_SECRET, SECRET_KEY (solo si no existe), HOST, PORT, dominios, SMTP
 npm run build
-npm run start:standalone     # lanza .next/standalone en HOST:PORT (por defecto 0.0.0.0:5000)
+npm run instancia-nueva -- --confirmar   # base vacía con migraciones + Administrador técnico y Responsable General (mueve la anterior)
+npm run instalar-servicio                # arranque automático, reinicio si falla y regla de firewall (quitar-servicio lo retira)
+npm run verificar-instalacion            # ✅/⚠️/❌ y reporte en <instancia>/verificaciones/
 ```
+
+| Comando | Qué hace |
+| --- | --- |
+| `npm run start:standalone` | Lanza `.next/standalone` en HOST:PORT (0.0.0.0:5000); HTTPS si `TLS_CERT`/`TLS_KEY`; registros en `<instancia>/logs`. |
+| `npm run migrar [-- --estado \| --simular]` | Migraciones versionadas del esquema (el servidor también las aplica al arrancar, con respaldo previo). |
+| `npm run actualizar [-- --git]` | Respaldo → detener → build (si falla, deja todo como estaba) → migrar → arrancar → verificar. |
+| `npm run detener` / `npm run reiniciar` | Detiene (o reinicia) al lanzador y al servidor sin que se relance; en Windows úsalo en lugar de `schtasks /End`. |
+| `npm run respaldar` / `npm run restaurar` | Respaldo local y prueba de restauración con acta (Fase 10). |
+| `npm run prueba-carga` | Prueba de carga (10 usuarios; requiere build). |
+| `npm run test:mysql` | Pruebas contra MySQL/MariaDB (Docker o `MYSQL_TEST_URL`). |
+| `npm run sqlite-a-mysql` | Pasa una base SQLite a MySQL (ver `docs/DECISION_BASE_DE_DATOS.md`). |
 
 Variables de entorno relevantes: `SECRET_KEY`, `JWT_SECRET`, `JWT_EXPIRES_HOURS`, `DATABASE_URL`, `SQLITE_PATH`, `ALLOWED_EMAIL_DOMAINS`, `CORS_ORIGINS` (ver `.env.example` y `src/lib/server/config.ts`).
 
-La base SQLite vive en `instance/ficotox.sqlite3` (se crea sola si no existe) y los PDF de reportes en `instance/maintenance_reports/`.
+La base SQLite vive en `instance/ficotox.sqlite3` (el esquema lo crean y actualizan las migraciones de `src/lib/server/migraciones/`) y los PDF de reportes en `instance/maintenance_reports/`.
 
 ### Roles y usuarios iniciales
 
@@ -72,7 +87,7 @@ El arranque ya no crea ningún rol ni concede permisos. Los 10 roles del laborat
 
 ```bash
 cp scripts/seed-usuarios.example.json scripts/seed-usuarios.local.json   # ignorado por git: escribir aquí las contraseñas
-npm run dev            # solo la primera vez en una base nueva: abrir /api/health/db para crear el esquema y detenerlo
+npm run migrar         # crea o actualiza el esquema (versionado)
 npm run seed:roles     # node scripts/seed-roles-usuarios.mjs (idempotente; solo SQLite; servidor detenido)
 ```
 
@@ -86,6 +101,9 @@ Es idempotente y también carga la matriz en roles que ya existían sin ella. Ca
 - [`docs/DISENO_UI.md`](./docs/DISENO_UI.md) — sistema de diseño: tokens, tipografía, navegación y estados.
 - [`docs/MIGRACION_NEXTJS.md`](./docs/MIGRACION_NEXTJS.md) — plan, decisiones y resultado de la migración desde Flask.
 - [`docs/CATALOGO_PERMISOS.md`](./docs/CATALOGO_PERMISOS.md) — matriz de roles y permisos, alcances, combinaciones prohibidas y decisiones pendientes.
+- [`docs/INSTALACION.md`](./docs/INSTALACION.md) — instalación, operación, actualización y solución de problemas en la computadora del laboratorio.
+- [`docs/DECISION_BASE_DE_DATOS.md`](./docs/DECISION_BASE_DE_DATOS.md) — SQLite o MySQL: medidas, recomendación, umbrales y procedimiento de cambio.
+- [`docs/RESPALDO_Y_RECUPERACION.md`](./docs/RESPALDO_Y_RECUPERACION.md) — respaldos, restauración y prueba documentada.
 
 ---
 

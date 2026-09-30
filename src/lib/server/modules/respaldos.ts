@@ -15,10 +15,11 @@ import path from "node:path";
 import { requireUser } from "../auth";
 import { registrarAuditoria } from "../audit";
 import { getConfig } from "../config";
+import { withSession } from "../db";
 import { HttpError, json, type RouteContext } from "../http";
 import { cargarAutorizacion, permisoDe, requirePermission, type Autorizacion } from "../rbac";
 import { exigirReauth } from "../seguridad";
-import { aplicarRetencion, CARPETA_ACTAS, crearRespaldo, listarActas, listarRespaldos } from "../../shared/respaldo.mjs";
+import { aplicarRetencion, CARPETA_ACTAS, completarRespaldo, iniciarRespaldo, listarActas, listarRespaldos } from "../../shared/respaldo.mjs";
 import { formatearFechaHora } from "../../shared/fechas";
 
 const ACTA_RE = /^\d{8}-\d{6}(-\d+)?$/;
@@ -102,28 +103,59 @@ export async function listarRespaldosApi({ request, s }: RouteContext): Promise<
   });
 }
 
-/* POST /api/respaldos: crear respaldo ahora (usuarios:G + reautenticacion respaldos:crear). */
-export async function crearRespaldoApi({ request, s }: RouteContext): Promise<Response> {
-  const user = await requireUser(request);
-  await requirePermission(s, user, "usuarios", "G");
-  await exigirReauth(s, request, user, "respaldos:crear");
+/*
+ * POST /api/respaldos: crear respaldo ahora (usuarios:G + reautenticacion respaldos:crear).
+ * Fase 12: no pasa por apiRoute porque trabaja en tres tiempos, y solo el primero retiene
+ * la sesion (en SQLite, a todas las peticiones):
+ *   1. sesion: permisos, reautenticacion y la FOTO de la base (la copia en linea se reiniciaria
+ *      con escrituras de otra conexion; con la sesion tomada no hay ninguna de este proceso);
+ *   2. sin sesion: copiar y huellear los archivos (informes, evidencias, documentos, calidad),
+ *      escribir el manifest y aplicar la retencion; los archivos son de solo insercion;
+ *   3. sesion corta: la entrada de la bitacora.
+ */
+export async function crearRespaldoPost(request: Request): Promise<Response> {
   const cfg = getConfig();
-  if (!cfg.SQLITE_PATH) throw new HttpError(501, { message: "Esta instalación usa MySQL/MariaDB: el respaldo se hace con mysqldump (ver docs/RESPALDO_Y_RECUPERACION.md)", codigo: "respaldo_mysql" });
-  // better-sqlite3 es un modulo nativo externo (serverExternalPackages); lo recibe respaldo.mjs.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Sqlite = require("better-sqlite3");
-  const { id, manifest } = await crearRespaldo({ Sqlite, sqlitePath: cfg.SQLITE_PATH, instanceDir: cfg.INSTANCE_DIR, respaldosDir: cfg.RESPALDOS_DIR, secretKey: process.env.SECRET_KEY || "", baseDir: cfg.BASE_DIR, incluirLlave: true });
-  const eliminados = aplicarRetencion(cfg.RESPALDOS_DIR, cfg.RESPALDO_RETENCION);
-  const tamano = manifest.base.tamano + manifest.archivos.reduce((t, a) => t + a.tamano, 0);
-  await registrarAuditoria(s, user, {
-    accion: "respaldar",
-    entidad: "respaldos",
-    entidadId: id,
-    referencia: id,
-    detalle: { respaldo_id: id, archivos: manifest.archivos.length, tamano, incluye_llave: manifest.llave.incluida, llave_huella: manifest.llave.huella ? `${manifest.llave.huella.slice(0, 12)}…` : null, bitacora_ultimo_id: manifest.bitacora.ultimo_id, ...(eliminados.length ? { retencion_eliminados: eliminados.join(", ") } : {}) },
-  });
-  await s.commit();
-  return json({ message: `Respaldo ${id} creado`, id, archivos: manifest.archivos.length, incluye_llave: manifest.llave.incluida, eliminados }, 201);
+  const ruta = new URL(request.url).pathname;
+  try {
+    // 1. Permisos, reautenticacion y foto de la base.
+    const inicio = await withSession(async (s) => {
+      try {
+        const user = await requireUser(request);
+        await requirePermission(s, user, "usuarios", "G");
+        await exigirReauth(s, request, user, "respaldos:crear");
+        if (!cfg.SQLITE_PATH) throw new HttpError(501, { message: "Esta instalación usa MySQL/MariaDB: el respaldo se hace con mysqldump (ver docs/RESPALDO_Y_RECUPERACION.md)", codigo: "respaldo_mysql" });
+        // better-sqlite3 es un modulo nativo externo (serverExternalPackages); lo recibe respaldo.mjs.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const Sqlite = require("better-sqlite3");
+        const iniciado = await iniciarRespaldo({ Sqlite, sqlitePath: cfg.SQLITE_PATH, instanceDir: cfg.INSTANCE_DIR, respaldosDir: cfg.RESPALDOS_DIR, secretKey: process.env.SECRET_KEY || "", baseDir: cfg.BASE_DIR, incluirLlave: true });
+        await s.commit();
+        return { user, iniciado };
+      } catch (error) {
+        await s.rollback();
+        throw error;
+      }
+    });
+    // 2. Archivos, manifest y retencion, sin retener a nadie.
+    const { id, manifest } = await completarRespaldo(inicio.iniciado);
+    const eliminados = aplicarRetencion(cfg.RESPALDOS_DIR, cfg.RESPALDO_RETENCION);
+    const tamano = manifest.base.tamano + manifest.archivos.reduce((t, a) => t + a.tamano, 0);
+    // 3. Bitacora.
+    await withSession(async (s) => {
+      await registrarAuditoria(s, inicio.user, {
+        accion: "respaldar",
+        entidad: "respaldos",
+        entidadId: id,
+        referencia: id,
+        detalle: { respaldo_id: id, archivos: manifest.archivos.length, tamano, incluye_llave: manifest.llave.incluida, llave_huella: manifest.llave.huella ? `${manifest.llave.huella.slice(0, 12)}…` : null, bitacora_ultimo_id: manifest.bitacora.ultimo_id, ...(eliminados.length ? { retencion_eliminados: eliminados.join(", ") } : {}) },
+      });
+      await s.commit();
+    });
+    return json({ message: `Respaldo ${id} creado`, id, archivos: manifest.archivos.length, incluye_llave: manifest.llave.incluida, eliminados }, 201);
+  } catch (error) {
+    if (error instanceof HttpError) return json(error.body, error.status);
+    console.error(`[api] POST ${ruta}`, error);
+    return json({ message: "Error interno del servidor" }, 500);
+  }
 }
 
 /* GET /api/respaldos/actas/:nombre (?formato=json): el acta de una prueba de restauracion. */

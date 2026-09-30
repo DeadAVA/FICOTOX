@@ -1,5 +1,6 @@
 import { apiRoute } from "@/lib/server/http";
-import { crearRespaldoApi, listarRespaldosApi } from "@/lib/server/modules/respaldos";
+import { crearRespaldoPost, listarRespaldosApi } from "@/lib/server/modules/respaldos";
 
 export const GET = apiRoute(listarRespaldosApi);
-export const POST = apiRoute(crearRespaldoApi);
+// Fase 12: sin apiRoute (maneja su propia sesion en tres tiempos; ver crearRespaldoPost).
+export const POST = crearRespaldoPost;

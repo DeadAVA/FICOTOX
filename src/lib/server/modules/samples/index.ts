@@ -2,9 +2,6 @@ import { requireUser } from "../../auth";
 import { isSqlite } from "../../db";
 import { json, type RouteContext } from "../../http";
 import { cargarAutorizacion, permisoDe, recortarPorModulo, requirePermission, soloEstado } from "../../rbac";
-import { ensureSamplesExtraccionSchema } from "./extraccion";
-import { ensureSamplesProcesamientoSchema } from "./procesamiento";
-import { ensureSamplesRecepcionSchema } from "./recepcion";
 
 /* Portado de modules/samples/endpoints.py del backend Flask original. */
 
@@ -16,16 +13,9 @@ function folioExpression(fallbackPrefix: string): string {
     : `CONCAT(COALESCE(NULLIF(tipo_registro, ''), '${fallbackPrefix}'), '-', LPAD(folio_num, 7, '0'))`;
 }
 
-async function ensureAll(ctx: RouteContext): Promise<void> {
-  await ensureSamplesRecepcionSchema(ctx.s);
-  await ensureSamplesProcesamientoSchema(ctx.s);
-  await ensureSamplesExtraccionSchema(ctx.s);
-}
-
 export async function samplesSummary(ctx: RouteContext): Promise<Response> {
   const user = await requireUser(ctx.request);
   const auth = await cargarAutorizacion(ctx.s, user);
-  await ensureAll(ctx);
 
   const summary = await ctx.s.queryOne(
     `
@@ -58,7 +48,6 @@ export async function listSamples(ctx: RouteContext): Promise<Response> {
   const muestras = permisoDe(auth, "muestras", "V");
   const ensayos = permisoDe(auth, "ensayos", "V");
   if (!muestras && !ensayos) await requirePermission(ctx.s, user, "muestras", "V", undefined, auth);
-  await ensureAll(ctx);
 
   const rows = await ctx.s.query(
     `
@@ -92,7 +81,6 @@ export async function listSamples(ctx: RouteContext): Promise<Response> {
 export async function listPendingSamples(ctx: RouteContext): Promise<Response> {
   const user = await requireUser(ctx.request);
   await requirePermission(ctx.s, user, "ensayos", "V");
-  await ensureAll(ctx);
 
   const rows = await ctx.s.query(
     `

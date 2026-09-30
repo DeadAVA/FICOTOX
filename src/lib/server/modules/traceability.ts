@@ -1,20 +1,13 @@
 import { requireUser } from "../auth";
 import { json, type RouteContext } from "../http";
-import { ensureMovimientosSchema } from "../inventory-usage";
+
 import { requirePermission } from "../rbac";
-import { ensureSamplesExtraccionSchema } from "./samples/extraccion";
-import { ensureSamplesProcesamientoSchema } from "./samples/procesamiento";
-import { ensureSamplesRecepcionSchema } from "./samples/recepcion";
 
 /* Portado de modules/traceability/endpoints.py del backend Flask original. */
 
 export async function flowStatus({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "muestras", "V");
-  await ensureSamplesRecepcionSchema(s);
-  await ensureSamplesProcesamientoSchema(s);
-  await ensureSamplesExtraccionSchema(s);
-  await ensureMovimientosSchema(s);
 
   const data = await s.queryOne(
     `
@@ -35,7 +28,6 @@ export async function flowStatus({ request, s }: RouteContext): Promise<Response
 export async function recentEvents({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "V");
-  await ensureMovimientosSchema(s);
 
   const rows = await s.query(
     `

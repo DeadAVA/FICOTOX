@@ -1,11 +1,11 @@
 import { requireUser, userIdFromClaims, type CurrentUser } from "./auth";
-import { ENTIDADES_REGISTRO_CALIDAD, exigirVerRegistroCalidad } from "./modules/calidad/acceso-historial";
+import { exigirVerRegistro, MODULO_DE_REGISTRO } from "./acceso-registro";
 import { registrarAuditoria } from "./audit";
 import { getConfig } from "./config";
-import { isSqlite, type Row, type Session } from "./db";
+import { type Row, type Session } from "./db";
 import { HttpError, json, readJson, type RouteContext } from "./http";
 import { cargarAutorizacion, cargoActuante, permisoDe, requirePermission, type Autorizacion } from "./rbac";
-import { markSchemaReady, schemaReady } from "./schema";
+
 import { exigirReauth } from "./seguridad";
 import { ACCIONES_CRITICAS, permisoParaAprobar, TIPOS_SOLICITUD, type EstadoSolicitud, type TipoSolicitud } from "../shared/acciones-criticas";
 import { evaluarSegundoUsuario } from "../shared/segregacion";
@@ -24,65 +24,6 @@ import { evaluarSegundoUsuario } from "../shared/segregacion";
  *   misma transaccion; si falla, la solicitud sigue pendiente.
  * - El solicitante puede cancelarla. Vencen a los SOLICITUD_VENCE_DIAS dias.
  */
-
-export async function ensureSolicitudesSchema(s: Session): Promise<void> {
-  if (schemaReady("solicitudes")) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS solicitudes_autorizacion (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tipo VARCHAR(40) NOT NULL,
-        modulo VARCHAR(30) NOT NULL,
-        entidad VARCHAR(60) NOT NULL,
-        entidad_id VARCHAR(40) NOT NULL,
-        referencia VARCHAR(160) DEFAULT NULL,
-        accion VARCHAR(40) NOT NULL,
-        datos_json TEXT,
-        motivo TEXT NOT NULL,
-        solicitado_por INTEGER NOT NULL,
-        solicitado_rol VARCHAR(120) DEFAULT NULL,
-        solicitado_en VARCHAR(40) NOT NULL,
-        estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
-        resuelto_por INTEGER DEFAULT NULL,
-        resuelto_rol VARCHAR(120) DEFAULT NULL,
-        resuelto_en VARCHAR(40) DEFAULT NULL,
-        motivo_resolucion TEXT,
-        vence_en VARCHAR(40) NOT NULL
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS solicitudes_autorizacion (
-        id INT NOT NULL AUTO_INCREMENT,
-        tipo VARCHAR(40) NOT NULL,
-        modulo VARCHAR(30) NOT NULL,
-        entidad VARCHAR(60) NOT NULL,
-        entidad_id VARCHAR(40) NOT NULL,
-        referencia VARCHAR(160) DEFAULT NULL,
-        accion VARCHAR(40) NOT NULL,
-        datos_json LONGTEXT,
-        motivo TEXT NOT NULL,
-        solicitado_por INT NOT NULL,
-        solicitado_rol VARCHAR(120) DEFAULT NULL,
-        solicitado_en VARCHAR(40) NOT NULL,
-        estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
-        resuelto_por INT DEFAULT NULL,
-        resuelto_rol VARCHAR(120) DEFAULT NULL,
-        resuelto_en VARCHAR(40) DEFAULT NULL,
-        motivo_resolucion TEXT,
-        vence_en VARCHAR(40) NOT NULL,
-        PRIMARY KEY (id),
-        KEY idx_solicitudes_entidad (entidad, entidad_id, estado),
-        KEY idx_solicitudes_estado (estado, vence_en)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      `,
-  );
-  if (isSqlite()) {
-    await s.execute("CREATE INDEX IF NOT EXISTS idx_solicitudes_entidad ON solicitudes_autorizacion (entidad, entidad_id, estado)");
-    await s.execute("CREATE INDEX IF NOT EXISTS idx_solicitudes_estado ON solicitudes_autorizacion (estado, vence_en)");
-  }
-  markSchemaReady("solicitudes");
-}
 
 const ahoraIso = () => new Date().toISOString();
 
@@ -134,7 +75,6 @@ export interface NuevaSolicitud {
  * bitacora del registro. Devuelve la fila y la respuesta 202 lista para enviar.
  */
 export async function crearSolicitud(s: Session, user: CurrentUser, nueva: NuevaSolicitud): Promise<Solicitud> {
-  await ensureSolicitudesSchema(s);
   const motivo = String(nueva.motivo || "").trim();
   if (motivo.length < 5) throw new HttpError(400, { message: "Indica el motivo de la solicitud (al menos 5 caracteres)" });
   /*
@@ -206,14 +146,12 @@ async function excepcionPendiente(s: Session, nueva: NuevaSolicitud, solicitante
  * de la transaccion de la accion.
  */
 export async function solicitudPendiente(s: Session, entidad: string, entidadId: number | string): Promise<Solicitud | null> {
-  await ensureSolicitudesSchema(s);
   const fila = await s.queryOne<Solicitud>("SELECT * FROM solicitudes_autorizacion WHERE entidad = :entidad AND entidad_id = :id AND estado = 'pendiente' AND tipo <> 'excepcion_segregacion' AND vence_en > :ahora ORDER BY id DESC LIMIT 1", { entidad, id: String(entidadId), ahora: ahoraIso() });
   return fila || null;
 }
 
 /* Solicitudes pendientes de varios registros de una entidad (para las listas). */
 export async function pendientesDe(s: Session, entidad: string, ids: Array<number | string>): Promise<Map<string, Solicitud>> {
-  await ensureSolicitudesSchema(s);
   const out = new Map<string, Solicitud>();
   if (!ids.length) return out;
   const placeholders = ids.map((_, i) => `:i${i}`).join(", ");
@@ -238,7 +176,6 @@ async function vencer(s: Session, fila: Solicitud): Promise<void> {
 
 /* Barrido: marca vencidas las pendientes que pasaron su plazo (bootstrap, una vez por minuto). */
 export async function vencerSolicitudes(s: Session): Promise<number> {
-  await ensureSolicitudesSchema(s);
   const filas = await s.query<Solicitud>("SELECT * FROM solicitudes_autorizacion WHERE estado = 'pendiente' AND vence_en <= :ahora", { ahora: ahoraIso() });
   for (const fila of filas) await vencer(s, fila);
   return filas.length;
@@ -274,7 +211,6 @@ function puedeAprobar(auth: Autorizacion, solicitud: Solicitud): boolean {
 export async function listarSolicitudes({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const auth = await cargarAutorizacion(s, user);
-  await ensureSolicitudesSchema(s);
   // Las vencidas se marcan y se confirman antes de listar.
   if (await vencerSolicitudes(s)) await s.commit();
   const url = new URL(request.url);
@@ -293,8 +229,8 @@ export async function listarSolicitudes({ request, s }: RouteContext): Promise<R
   });
   if (entidad && entidadId) {
     const modulo = permisoParaAprobar("anular_registro", entidad).modulo;
-    // Fase 11: en calidad se ve el registro como su ficha (el alcance "bitacora" o "incidencias" no basta para lo ajeno).
-    if (ENTIDADES_REGISTRO_CALIDAD.has(entidad)) await exigirVerRegistroCalidad(s, user, entidad, Number.parseInt(entidadId, 10) || 0);
+    // Fase 11/12: se ve como la ficha del registro (alcances asignado, autorizados, propio e incidencias; lo no visible es 404).
+    if (MODULO_DE_REGISTRO[entidad]) await exigirVerRegistro(s, user, auth, entidad, entidadId);
     else if (!permisoDe(auth, modulo, "V")) throw new HttpError(403, { message: `Permiso denegado para ${modulo}:V` });
     const filas = await s.query<Solicitud>("SELECT * FROM solicitudes_autorizacion WHERE entidad = :entidad AND entidad_id = :id ORDER BY id DESC LIMIT 200", { entidad, id: entidadId });
     return json({ items: filas.map(decorar), total: filas.length });
@@ -307,7 +243,6 @@ export async function listarSolicitudes({ request, s }: RouteContext): Promise<R
 
 /* Cuantas solicitudes pendientes puede aprobar la persona (aviso del Inicio). */
 export async function porAutorizarDe(s: Session, auth: Autorizacion): Promise<Solicitud[]> {
-  await ensureSolicitudesSchema(s);
   const filas = await s.query<Solicitud>("SELECT * FROM solicitudes_autorizacion WHERE estado = 'pendiente' AND vence_en > :ahora ORDER BY id ASC LIMIT 100", { ahora: ahoraIso() });
   return filas.filter((f) => puedeAprobar(auth, f));
 }
@@ -315,7 +250,6 @@ export async function porAutorizarDe(s: Session, auth: Autorizacion): Promise<So
 /* ---------- Resolver ---------- */
 
 async function cargarPendiente(s: Session, params: Record<string, string | string[]>): Promise<Solicitud> {
-  await ensureSolicitudesSchema(s);
   const id = Number.parseInt(String(params.id || ""), 10);
   const fila = Number.isFinite(id) ? await s.queryOne<Solicitud>("SELECT * FROM solicitudes_autorizacion WHERE id = :id", { id }) : null;
   if (!fila) throw new HttpError(404, { message: "Solicitud no encontrada" });

@@ -27,17 +27,15 @@ import { estaAsignado, exigirAsignacion, soloAsignado } from "../../asignaciones
 import { folioLabel } from "../../samples-flow";
 import { getConfig } from "../../config";
 import { toIntOrNull } from "../helpers";
-import { adjuntoPorId, ensureAdjuntosSchema, integridadAdjunto, listarAdjuntos, serializarAdjunto } from "../../adjuntos";
+import { adjuntoPorId, integridadAdjunto, listarAdjuntos, serializarAdjunto } from "../../adjuntos";
 import { EXTENSIONES_EVIDENCIA, MOTIVO_MIN } from "../../../shared/adjuntos";
 import { requisitosAnalisis } from "../../../shared/autorizaciones";
-import { ensureAnalysisSchema, exigirAnalisisEditable } from "./analisis";
+import { exigirAnalisisEditable } from "./analisis";
 
 const TABLE = "muestras_analisis";
 
 /* Analisis de la peticion; en MySQL con la fila bloqueada para que el estado no cambie a mitad (concurrencia con "Enviar a revision"). */
 async function analisisDe(s: Session, id: number, bloquear = false): Promise<Row> {
-  await ensureAnalysisSchema(s);
-  await ensureAdjuntosSchema(s);
   const row = bloquear && !isSqlite() ? await s.queryOne<Row>(`SELECT * FROM ${TABLE} WHERE id = :id FOR UPDATE`, { id }) : await snapshotRow(s, TABLE, id);
   if (!row) throw new HttpError(404, { message: "Análisis no encontrado" });
   return row;
@@ -70,7 +68,6 @@ async function exigirVerEvidencia(s: Session, user: CurrentUser, row: Row): Prom
   }
   return permiso;
 }
-
 
 /* GET /api/samples/analysis/:id/adjuntos */
 export async function listarAdjuntosAnalisis({ request, s, params }: RouteContext): Promise<Response> {
@@ -132,7 +129,6 @@ export async function subirAdjuntoAnalisis({ request, s, params }: RouteContext)
  * o accion correctiva (Fase 11) los resuelve el modulo de calidad con sus reglas.
  */
 async function adjuntoDe(s: Session, adjuntoId: number): Promise<Row> {
-  await ensureAdjuntosSchema(s);
   const adjunto = await adjuntoPorId(s, adjuntoId);
   if (!adjunto) throw new HttpError(404, { message: "Adjunto no encontrado" });
   return adjunto;

@@ -24,8 +24,8 @@
  *   roles Fase 1"), sellado con src/lib/shared/audit-chain.mjs, la misma
  *   implementacion que usa el servidor. Al terminar se recalcula la cadena.
  * - Solo SQLite, con el servidor detenido. La base debe tener el esquema de la
- *   Fase 1: si es nueva o anterior, arranca FICOTOX una vez y abre
- *   /api/health/db (crea las tablas y migra usuarios.id_rol), detenlo y repite.
+ *   Fase 1: si es nueva o anterior, aplica las migraciones (npm run migrar;
+ *   Fase 12) y repite. En produccion se usa npm run instancia-nueva.
  *   En MySQL, roles y asignaciones se dan de alta desde Administracion.
  * - Contrasenas con hashPassword() de src/lib/server/password.ts (Node 22.18+ o 24).
  */
@@ -122,20 +122,20 @@ const firma = (filas) => filas.map((f) => `${f.modulo}:${f.accion}:${f.alcance}`
 
 /* ---------- Base ---------- */
 
-if (!fs.existsSync(sqlitePath)) fail(`No existe la base ${sqlitePath}.\nArranca FICOTOX una vez (npm run dev y abre /api/health/db) para que cree el esquema, detenlo y vuelve a correr este script.`);
+if (!fs.existsSync(sqlitePath)) fail(`No existe la base ${sqlitePath}.\nCrea el esquema con npm run migrar (o usa npm run instancia-nueva -- --confirmar en una instalación nueva) y vuelve a correr este script.`);
 const Database = require("better-sqlite3");
 const db = new Database(sqlitePath);
 const tablas = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name));
-const faltan = ["roles", "rol_acciones", "usuario_roles", "usuarios", "auditoria"].filter((tabla) => !tablas.has(tabla));
+const faltan = ["roles", "rol_acciones", "usuario_roles", "usuarios", "auditoria", ...(personas.some((p) => p.autorizaciones) ? ["autorizaciones_personal"] : [])].filter((tabla) => !tablas.has(tabla));
 const columnasUsuarios = tablas.has("usuarios") ? db.prepare("PRAGMA table_info(usuarios)").all().map((c) => c.name) : [];
 if (personas.some((p) => p.temporal) && !columnasUsuarios.includes("tipo_cuenta")) {
   db.close();
-  fail("La base no tiene las columnas de cuentas temporales de la Fase 2 (usuarios.tipo_cuenta).\nArranca FICOTOX una vez y abre /api/health/db para crearlas; luego detenlo y repite.");
+  fail("La base no tiene las columnas de cuentas temporales de la Fase 2 (usuarios.tipo_cuenta).\nAplica las migraciones pendientes con npm run migrar y repite.");
 }
 const columnasRoles = tablas.has("roles") ? db.prepare("PRAGMA table_info(roles)").all().map((c) => c.name) : [];
 if (faltan.length || !columnasRoles.includes("clave")) {
   db.close();
-  fail(`La base no tiene el esquema de la Fase 1 (faltan: ${[...faltan, ...(columnasRoles.includes("clave") ? [] : ["roles.clave"])].join(", ")}).\nArranca FICOTOX una vez y abre /api/health/db para crearlo; luego detenlo y repite.`);
+  fail(`La base no tiene el esquema de la Fase 1 (faltan: ${[...faltan, ...(columnasRoles.includes("clave") ? [] : ["roles.clave"])].join(", ")}).\nAplica las migraciones pendientes con npm run migrar y repite.`);
 }
 
 const CLAVE = resolverClaveSello(process.env.SECRET_KEY, instanceDir);
@@ -246,13 +246,7 @@ const alta = db.transaction(() => {
     auditar({ accion: "asignar_rol", entidad: "usuarios", entidadId: usuario.id, referencia: email, detalle: { rol: persona.rol, rol_id: roleId, asignacion_id: Number(lastInsertRowid), vigente_desde: hoy, vigente_hasta: hasta, sin_solicitud: "script de alta (seed)" } });
     resumen.asignaciones.push(`${email} → ${persona.rol}`);
   }
-  // Fase 4: autorizaciones de ejemplo (misma tabla que crea el servidor).
-  db.exec(`CREATE TABLE IF NOT EXISTS autorizaciones_personal (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, usuario_id INTEGER NOT NULL, tipo VARCHAR(20) NOT NULL, clave VARCHAR(60) NOT NULL,
-    vigente_desde VARCHAR(10) NOT NULL, vigente_hasta VARCHAR(10) DEFAULT NULL, folio_fx_thf_ap VARCHAR(80) DEFAULT NULL,
-    otorgada_por INTEGER DEFAULT NULL, otorgada_rol VARCHAR(120) DEFAULT NULL, otorgada_en VARCHAR(40) DEFAULT NULL, motivo TEXT,
-    revocada_en VARCHAR(40) DEFAULT NULL, revocada_por INTEGER DEFAULT NULL, motivo_revocacion TEXT, vencimiento_registrado_en VARCHAR(40) DEFAULT NULL
-  )`);
+  // Fase 4: autorizaciones de ejemplo (la tabla la crean las migraciones; Fase 12: sin DDL aqui).
   const porCorreo = (email) => db.prepare("SELECT * FROM usuarios WHERE LOWER(email) = LOWER(?) LIMIT 1").get(email);
   const rolDe = (email) => personas.find((p) => String(p.email).toLowerCase() === email)?.rol || null;
   for (const demo of AUTORIZACIONES_DEMO) {

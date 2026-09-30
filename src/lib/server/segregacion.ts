@@ -1,6 +1,6 @@
 import { type Row, type Session } from "./db";
 import { HttpError } from "./http";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "./schema";
+
 import { excepcionPara, type ExcepcionSegregacion, type Violacion } from "../shared/segregacion";
 
 /*
@@ -15,12 +15,6 @@ import { excepcionPara, type ExcepcionSegregacion, type Violacion } from "../sha
 // Fase 11: incidencias (evaluar), no conformidades (verificar, cerrar) y suspensiones (reanudar).
 export const TABLAS_CON_EXCEPCION = ["muestras_analisis", "informes", "documentos_sgc", "incidencias", "no_conformidades", "suspensiones"] as const;
 export type TablaConExcepcion = (typeof TABLAS_CON_EXCEPCION)[number];
-
-export async function ensureExcepcionesColumn(s: Session, tabla: TablaConExcepcion): Promise<void> {
-  if (schemaReady(`excepciones_${tabla}`)) return;
-  await addColumnIfMissing(s, tabla, "excepciones_json", "TEXT");
-  markSchemaReady(`excepciones_${tabla}`);
-}
 
 /*
  * Personas que elaboraron un registro: quien lo creo y quien edito su contenido
@@ -65,7 +59,6 @@ export function exigirSegregacion(violacion: Violacion | null, row: Row | null |
 
 /* Deja constancia en el registro de una excepcion aprobada (la usa el ejecutor de la solicitud). */
 export async function registrarExcepcion(s: Session, tabla: TablaConExcepcion, id: number, excepcion: ExcepcionSegregacion): Promise<void> {
-  await ensureExcepcionesColumn(s, tabla);
   const row = await s.queryOne<Row>(`SELECT excepciones_json FROM ${tabla} WHERE id = :id`, { id });
   if (!row) throw new HttpError(404, { message: "El registro de la excepción ya no existe" });
   const lista = excepcionesDe(row).filter((e) => !(Number(e.usuario_id) === Number(excepcion.usuario_id) && e.accion === excepcion.accion));

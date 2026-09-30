@@ -1,9 +1,9 @@
 import type { CurrentUser } from "./auth";
 import { registrarAuditoria, snapshotRow } from "./audit";
-import { isIntegrityError, type Row, type Session } from "./db";
+import { esConflictoDeFolio, type Row, type Session } from "./db";
 import { HttpError, readJson } from "./http";
 import { consumeConsumible, consumeReactivo, restoreInventoryUsage } from "./inventory-usage";
-import { addColumnIfMissing } from "./schema";
+
 import { requirePermission, type Autorizacion } from "./rbac";
 import { exigirSinSupervisionPendiente } from "./supervision";
 import { crearSolicitud, exigirSinSolicitudPendiente, pendientesDe, serializarSolicitud, type Solicitud } from "./solicitudes";
@@ -68,17 +68,6 @@ const STATE_RANK: Record<string, number> = {
   cerrada: 5,
 };
 
-/* Columnas de anulacion que comparten todas las tablas del flujo. */
-export async function ensureAnulacionColumns(s: Session, table: string): Promise<void> {
-  await addColumnIfMissing(s, table, "anulado_en", "VARCHAR(40) DEFAULT NULL");
-  await addColumnIfMissing(s, table, "anulado_por", "INT DEFAULT NULL");
-  await addColumnIfMissing(s, table, "motivo_anulacion", "TEXT");
-  await addColumnIfMissing(s, table, "estado_previo", "VARCHAR(30) DEFAULT NULL");
-  // Fase 1: rol (cargo) con el que se anulo.
-  await addColumnIfMissing(s, table, "anulado_rol_id", "INT DEFAULT NULL");
-  await addColumnIfMissing(s, table, "anulado_cargo", "VARCHAR(120) DEFAULT NULL");
-}
-
 /* Rol con el que actua quien captura, firma, revisa, aprueba o anula (rbac.cargoActuante). */
 export interface Actuo {
   rol_id: number;
@@ -99,12 +88,6 @@ export async function exigirUsoDeRecursos(s: Session, user: CurrentUser, auth: A
     insumos = [];
   }
   if (Array.isArray(insumos) && insumos.length) await requirePermission(s, user, "inventario", "C", { objeto: "movimiento" }, auth);
-}
-
-/* Columnas con el rol de quien capturo el registro (Fase 1). */
-export async function ensureActuoColumns(s: Session, table: string): Promise<void> {
-  await addColumnIfMissing(s, table, "creado_rol_id", "INT DEFAULT NULL");
-  await addColumnIfMissing(s, table, "creado_cargo", "VARCHAR(120) DEFAULT NULL");
 }
 
 export function folioLabel(table: SampleTable, row: Row | null | undefined): string {
@@ -393,8 +376,7 @@ export async function nextFolioNum(s: Session, table: SampleTable | "informes", 
 
 /* Violacion de unicidad del folio (indice uq_*_folio_num o restriccion sobre folio_num). */
 export function isFolioConflict(error: unknown): boolean {
-  const message = String((error as { message?: unknown })?.message || "");
-  return isIntegrityError(error) && /folio/i.test(message);
+  return esConflictoDeFolio(error);
 }
 
 /* ---------- Inventario de una etapa ---------- */

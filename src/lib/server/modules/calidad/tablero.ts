@@ -9,7 +9,7 @@ import { HttpError, json, type RouteContext } from "../../http";
 import { permisoDe, type Autorizacion } from "../../rbac";
 import { CLASIFICACION_NC_LABEL, TIPO_INCIDENCIA_LABEL, accionVencida, folioIncidencia, folioNc } from "../../../shared/calidad";
 import { formatearFecha, hoyLocal, sumarDias } from "../../../shared/fechas";
-import { accesoCalidad, ensureCalidadSchema, previosDe, T } from "./comun";
+import { accesoCalidad, previosDe, T } from "./comun";
 import { suspensionesActivas } from "./bloqueos";
 
 /* GET /api/calidad/indicadores (calidad:V total) */
@@ -56,7 +56,6 @@ export interface AvisoCalidad {
 
 /* Avisos de calidad para el Inicio y la campana (solo lo que aplica a la persona). */
 export async function avisosCalidad(s: Session, auth: Autorizacion): Promise<AvisoCalidad[]> {
-  await ensureCalidadSchema(s);
   const out: AvisoCalidad[] = [];
   const yo = auth.userId;
   const puede = (accion: "R" | "A" | "G") => !!permisoDe(auth, "calidad", accion, { objeto: "nc" });

@@ -17,7 +17,8 @@
  * Verificaciones (en ambos modos, cada una en el acta con ✅/❌):
  *   1. manifest valido y SHA-256 de cada archivo del respaldo
  *   2. PRAGMA integrity_check = ok
- *   3. esquema compatible (mas nuevo que la app: aborta; mas viejo: aviso)
+ *   3. esquema compatible (Fase 12: mismo mecanismo que las migraciones; mas
+ *      nuevo que la app o con deriva de esquema: falla; mas viejo: se migra)
  *   4. llave: su huella coincide con la del manifest
  *   5. cadena de la bitacora integra con esa llave (alteraciones, huecos, triggers)
  *   6. conteos por tabla iguales al manifest
@@ -33,9 +34,16 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { COLUMNAS_AUDITORIA, construirRegistro, evaluarCadena, leerClaveSello, sellar } from "../src/lib/shared/audit-chain.mjs";
-import { ARCHIVO_LLAVE, CARPETA_ACTAS, CARPETAS_ARCHIVOS, ESQUEMA_VERSION, RUTA_BASE, crearRespaldo, huellaLlave, huellaManifest, inspeccionarBase, leerManifest, resolverEntorno, rutaArchivoValida, sellarManifest, sha256Archivo, versionApp } from "../src/lib/shared/respaldo.mjs";
+import { adaptadorSqlite, aplicarMigraciones, estadoMigraciones } from "../src/lib/server/migraciones/motor.mjs";
+import { bloqueoVivo as bloqueoCompartido } from "../src/lib/shared/bloqueo.mjs";
+import { ARCHIVO_LLAVE, CARPETA_ACTAS, CARPETAS_ARCHIVOS, ESQUEMA_VERSION, RUTA_BASE, crearRespaldo, hacerPrivado, huellaLlave, huellaManifest, inspeccionarBase, leerManifest, resolverEntorno, rutaArchivoValida, sellarManifest, sha256Archivo, versionApp } from "../src/lib/shared/respaldo.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+/* Fase 12: una base restaurada no tiene ningun proceso migrandola: si el respaldo trae el bloqueo de migracion tomado (de otro equipo o pid), se libera. */
+function liberarBloqueoMigracion(conexion) {
+  if (conexion.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migraciones_bloqueo'").get()) conexion.prepare("UPDATE schema_migraciones_bloqueo SET pid = NULL, host = NULL, desde = NULL WHERE id = 1").run();
+}
 const Sqlite = createRequire(import.meta.url)("better-sqlite3");
 const args = process.argv.slice(2);
 const valor = (nombre) => {
@@ -90,20 +98,8 @@ async function servicioEn(puerto) {
   }
 }
 
-/* Archivo de bloqueo del servidor (<instancia>/servidor.lock, lo escribe al arrancar): vivo si el pid existe. */
-function bloqueoVivo(instanceDir) {
-  const archivo = path.join(instanceDir, "servidor.lock");
-  if (!fs.existsSync(archivo)) return null;
-  try {
-    const datos = JSON.parse(fs.readFileSync(archivo, "utf8"));
-    process.kill(Number(datos.pid), 0);
-    return datos;
-  } catch (error) {
-    // ESRCH: el proceso ya no existe (bloqueo huerfano). EPERM: existe (de otro usuario).
-    if (error && error.code === "EPERM") return { pid: "desconocido" };
-    return null;
-  }
-}
+/* Archivo de bloqueo del servidor (<instancia>/servidor.lock): vivo si el pid existe y es posterior al arranque del sistema (Fase 12, src/lib/shared/bloqueo.mjs). */
+const bloqueoVivo = (instanceDir) => bloqueoCompartido(path.join(instanceDir, "servidor.lock"));
 
 if (modoReal) {
   if (!confirmar) salir("Modo real rechazado: restaurar sobre la instancia real exige --destino instance --confirmar.");
@@ -210,18 +206,31 @@ if (manifest) {
 }
 
 let db = null;
+let planMigracion = null;
 if (restauradaDb) {
   db = new Sqlite(restauradaDb);
   // 2. integrity_check.
   const integridad = String(db.pragma("integrity_check", { simple: true }));
   check(2, "PRAGMA integrity_check", integridad === "ok", integridad);
 
-  // 3. Esquema.
-  const version = Number(manifest.esquema_version || 0);
-  if (version > ESQUEMA_VERSION) check(3, "Esquema compatible", false, `el respaldo es de una versión más nueva (esquema ${version}) que esta aplicación (esquema ${ESQUEMA_VERSION}); actualiza la aplicación antes de restaurar`);
+  // 3. Esquema (Fase 12): el mismo mecanismo de las migraciones. Mas nuevo que la app o con deriva: falla.
+  const version = manifest.esquema_version === null || manifest.esquema_version === undefined ? null : Number(manifest.esquema_version);
+  if (version !== null && version > ESQUEMA_VERSION) check(3, "Esquema compatible", false, `el respaldo es de una versión más nueva (esquema ${version}) que esta aplicación (esquema ${ESQUEMA_VERSION}); actualiza la aplicación antes de restaurar`);
   else {
-    check(3, "Esquema compatible", true, version === ESQUEMA_VERSION ? `esquema ${version} (igual al de la aplicación)` : `esquema ${version} anterior al de la aplicación (${ESQUEMA_VERSION}); el arranque del servidor migrará las tablas`);
-    if (version < ESQUEMA_VERSION) observaciones.push(`El respaldo usa el esquema ${version}; al arrancar, el servidor agregará las tablas y columnas de la versión ${ESQUEMA_VERSION}.`);
+    try {
+      planMigracion = await estadoMigraciones(adaptadorSqlite(db), { Sqlite });
+      const lista = planMigracion.pendientes.map((m) => m.version).join(", ");
+      const detalle =
+        planMigracion.tipo === "versionada"
+          ? planMigracion.pendientes.length ? `esquema ${planMigracion.version}; se aplicarán las migraciones ${lista} (hasta la ${ESQUEMA_VERSION})` : `esquema ${planMigracion.version} (igual al de la aplicación)`
+          : planMigracion.tipo === "sin_versionar"
+            ? `base anterior a las migraciones reconocida como versión ${planMigracion.lineaBase}; se registrará como línea base y se aplicarán las migraciones ${lista || "(ninguna)"}`
+            : "base vacía";
+      check(3, "Esquema compatible", true, detalle);
+      if (planMigracion.pendientes.length || planMigracion.lineaBase !== null) observaciones.push(`La base del respaldo se migró a la versión ${ESQUEMA_VERSION} después de verificarla (${detalle}).`);
+    } catch (error) {
+      check(3, "Esquema compatible", false, error.message.replace(/\n\s*/g, " "));
+    }
   }
 
   // 4. Llave (la del respaldo o --llave) y comparacion con la llave configurada en esta instalacion.
@@ -355,11 +364,28 @@ if (modoReal && db && !fallidas.length) {
       const v = evaluarCadena(real.prepare("SELECT * FROM auditoria ORDER BY id ASC").all(), llave, seq ? Number(seq.seq) : null, triggers);
       entradaRestauracion = { id: Number(real.prepare("SELECT MAX(id) AS id FROM auditoria").get().id), cadena_ok: v.ok, total: v.total };
       if (!v.ok) fallidas.push({ n: 5, nombre: "Cadena tras la restauración", ok: false, detalle: "la cadena no quedó íntegra tras agregar la entrada de restauración" });
+      // Fase 12: un respaldo de una version anterior queda migrado a la actual (cada migracion, en la bitacora).
+      liberarBloqueoMigracion(real);
+      const migracion = await aplicarMigraciones(adaptadorSqlite(real), { Sqlite, clave: llave, appCommit: versionApp(root).commit, respaldo: async () => respaldo, avisar: (m) => console.log(`  [migraciones] ${m}`) });
+      if (migracion.aplicadas.length || migracion.lineaBase !== null) observaciones.push(`Migraciones aplicadas a la instancia restaurada: ${migracion.lineaBase !== null ? `línea base ${migracion.lineaBase}; ` : ""}${migracion.aplicadas.map((m) => m.version).join(", ") || "ninguna"}.`);
     } finally {
       real.close();
     }
     restaurado = true;
+    // Fase 12: la base y los archivos restaurados, solo para el usuario de FICOTOX (POSIX).
+    hacerPrivado(entorno.instanceDir);
     console.log(`Instancia restaurada en ${entorno.instanceDir}; entrada de bitácora #${entradaRestauracion?.id} (cadena ${entradaRestauracion?.cadena_ok ? "íntegra" : "ROTA"}).`);
+  }
+}
+// Modo prueba: la copia restaurada tambien se migra (queda lista para levantar un servidor sobre ella).
+if (!modoReal && db && !fallidas.length && planMigracion && (planMigracion.pendientes.length || planMigracion.lineaBase !== null)) {
+  try {
+    liberarBloqueoMigracion(db);
+    await aplicarMigraciones(adaptadorSqlite(db), { Sqlite, clave: llave, appCommit: versionApp(root).commit, respaldo: async () => respaldo, avisar: (m) => console.log(`  [migraciones] ${m}`) });
+  } catch (error) {
+    const f = { n: 3, nombre: "Esquema compatible", ok: false, detalle: `la migración de la copia restaurada falló: ${error.message}` };
+    fallidas.push(f);
+    verificaciones.push(f);
   }
 }
 if (db) db.close();
@@ -436,4 +462,7 @@ const md = [
 fs.writeFileSync(path.join(actasDir, `${nombreActa}.md`), md);
 console.log(`\nActa: ${path.join(actasDir, `${nombreActa}.md`)}`);
 console.log(`Resultado: ${resultado.toUpperCase()}`);
+hacerPrivado(preparacion);
+// Fase 12: la prueba deja una copia completa de los datos: se dice donde y que se borre al revisarla.
+if (!modoReal && fs.existsSync(preparacion)) console.log(`Copia restaurada (datos completos del laboratorio): ${preparacion}\nRevísala si hace falta y bórrala al terminar (el acta queda como evidencia).`);
 process.exit(fallidas.length ? 1 : 0);

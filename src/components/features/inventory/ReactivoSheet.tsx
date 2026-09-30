@@ -189,9 +189,12 @@ export function ImportReactivosSheet({ open, onClose }: { open: boolean; onClose
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Nombre del archivo elegido (en estado: leer el ref durante el render no se actualiza ni es valido en React 19).
+  const [nombreArchivo, setNombreArchivo] = useState("");
 
   const handleFile = async () => {
     const file = fileRef.current?.files?.[0];
+    setNombreArchivo(file?.name || "");
     setSummary(null);
     setErrors([]);
     if (!file) {
@@ -259,7 +262,7 @@ export function ImportReactivosSheet({ open, onClose }: { open: boolean; onClose
           <label htmlFor="import-reactivos-file" className="flex cursor-pointer items-center gap-3 rounded-card border border-dashed border-line-strong bg-surface-2/50 px-4 py-4 transition-colors hover:border-brand hover:bg-brand-faint">
             <FileXls size={26} className="text-brand" />
             <span className="flex flex-col">
-              <span className="text-[13.5px] font-medium text-ink">{fileRef.current?.files?.[0]?.name || "Elegir archivo .xlsx o .xls"}</span>
+              <span className="text-[13.5px] font-medium text-ink">{nombreArchivo || "Elegir archivo .xlsx o .xls"}</span>
               <span className="text-[12.5px] text-ink-3">Se lee en tu navegador antes de enviarlo.</span>
             </span>
             <input ref={fileRef} id="import-reactivos-file" type="file" className="sr-only" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={handleFile} />

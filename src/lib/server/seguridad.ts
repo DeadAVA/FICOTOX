@@ -2,9 +2,8 @@ import { createHash, randomBytes } from "node:crypto";
 import type { CurrentUser } from "./auth";
 import { registrarAuditoria } from "./audit";
 import { getConfig } from "./config";
-import { isSqlite, type Row, type Session } from "./db";
+import { type Row, type Session } from "./db";
 import { HttpError } from "./http";
-import { markSchemaReady, schemaReady } from "./schema";
 
 /*
  * Seguridad de cuentas (Fase 2; FX-MO-2-1, secciones 10 y 11):
@@ -14,72 +13,6 @@ import { markSchemaReady, schemaReady } from "./schema";
  * - Reautenticacion: token de un solo uso, de vida corta, ligado a la persona
  *   y a la accion critica que va a realizar.
  */
-
-export async function ensureSeguridadSchema(s: Session): Promise<void> {
-  if (schemaReady("seguridad")) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS intentos_acceso (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email VARCHAR(150) NOT NULL,
-        usuario_id INTEGER DEFAULT NULL,
-        ip VARCHAR(64) NOT NULL,
-        tipo VARCHAR(20) NOT NULL,
-        exito INTEGER NOT NULL DEFAULT 0,
-        fecha VARCHAR(40) NOT NULL
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS intentos_acceso (
-        id INT NOT NULL AUTO_INCREMENT,
-        email VARCHAR(150) NOT NULL,
-        usuario_id INT DEFAULT NULL,
-        ip VARCHAR(64) NOT NULL,
-        tipo VARCHAR(20) NOT NULL,
-        exito TINYINT(1) NOT NULL DEFAULT 0,
-        fecha VARCHAR(40) NOT NULL,
-        PRIMARY KEY (id),
-        KEY idx_intentos_email (email, fecha),
-        KEY idx_intentos_ip (ip, fecha)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      `,
-  );
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS reautenticaciones (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        token_hash VARCHAR(64) NOT NULL UNIQUE,
-        usuario_id INTEGER NOT NULL,
-        accion VARCHAR(60) NOT NULL,
-        creado_en VARCHAR(40) NOT NULL,
-        expira_en VARCHAR(40) NOT NULL,
-        usado_en VARCHAR(40) DEFAULT NULL
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS reautenticaciones (
-        id INT NOT NULL AUTO_INCREMENT,
-        token_hash VARCHAR(64) NOT NULL,
-        usuario_id INT NOT NULL,
-        accion VARCHAR(60) NOT NULL,
-        creado_en VARCHAR(40) NOT NULL,
-        expira_en VARCHAR(40) NOT NULL,
-        usado_en VARCHAR(40) DEFAULT NULL,
-        PRIMARY KEY (id),
-        UNIQUE KEY uk_reauth_token (token_hash)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      `,
-  );
-  // Fase 3: la reautenticacion es solo con contrasena; la tabla de id_token de la Fase 2 ya no se usa.
-  await s.execute("DROP TABLE IF EXISTS reauth_idtokens");
-  if (isSqlite()) {
-    await s.execute("CREATE INDEX IF NOT EXISTS idx_intentos_email ON intentos_acceso (email, fecha)");
-    await s.execute("CREATE INDEX IF NOT EXISTS idx_intentos_ip ON intentos_acceso (ip, fecha)");
-  }
-  markSchemaReady("seguridad");
-}
 
 /* ---------- IP del cliente ---------- */
 
@@ -117,7 +50,6 @@ export interface EstadoAcceso {
 
 /* ¿Esta bloqueada la cuenta (por su correo) o la IP? No distingue si la cuenta existe. */
 export async function estadoAcceso(s: Session, email: string, ip: string): Promise<EstadoAcceso> {
-  await ensureSeguridadSchema(s);
   const cfg = getConfig();
   const ahora = Date.now();
   const usuario = await s.queryOne<{ bloqueado_hasta: string | null }>("SELECT bloqueado_hasta FROM usuarios WHERE LOWER(email) = LOWER(:email)", { email });
@@ -142,7 +74,6 @@ export async function estadoAcceso(s: Session, email: string, ip: string): Promi
  * bitacora. Devuelve true si este fallo provoco el bloqueo.
  */
 export async function registrarIntento(s: Session, datos: { email: string; ip: string; tipo: "login" | "reauth"; exito: boolean; usuario?: Row | null }): Promise<boolean> {
-  await ensureSeguridadSchema(s);
   const cfg = getConfig();
   const email = datos.email.trim().toLowerCase().slice(0, 150);
   const usuarioId = datos.usuario ? Number(datos.usuario.id) : null;
@@ -182,10 +113,8 @@ export async function registrarIntento(s: Session, datos: { email: string; ip: s
 
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
-
 /* Emite un token de reautenticacion (se guarda solo su hash). */
 export async function emitirReauth(s: Session, usuarioId: number, accion: string): Promise<{ token: string; expira_en: string }> {
-  await ensureSeguridadSchema(s);
   const token = randomBytes(32).toString("hex");
   const expira = new Date(Date.now() + minutos(getConfig().REAUTH_TTL_MIN)).toISOString();
   await s.execute("INSERT INTO reautenticaciones (token_hash, usuario_id, accion, creado_en, expira_en) VALUES (:hash, :usuario_id, :accion, :creado, :expira)", {
@@ -205,7 +134,6 @@ export async function emitirReauth(s: Session, usuarioId: number, accion: string
  * handler falla despues, el rollback lo deja disponible de nuevo).
  */
 export async function exigirReauth(s: Session, request: Request, user: CurrentUser, accion: string): Promise<void> {
-  await ensureSeguridadSchema(s);
   const token = (request.headers.get("x-reauth") || "").trim();
   if (!token) {
     throw new HttpError(401, { message: "Esta acción requiere confirmar tu identidad (vuelve a escribir tu contraseña)", codigo: "reauth_required", accion });

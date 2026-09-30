@@ -60,10 +60,13 @@ reales del laboratorio; **la implementación debe ser fiel a ellos**):
   matriz en `scripts/roles-catalogo.json`.
 - Todos los handlers pasan por `apiRoute` (`src/lib/server/http.ts`), que abre una
   sesión de base, hace `commit` al final o `rollback` si algo falla.
-- Esquemas: funciones `ensure*Schema()` (creación idempotente de tablas y
-  columnas). **Se ejecutan una sola vez por proceso** (registro compartido en
-  `src/lib/server/schema.ts`) y **ninguna hace `commit`**; solo `bootstrap.ts`
-  confirma el DDL en su propia transacción.
+- Esquema (Fase 12): **migraciones versionadas** en `src/lib/server/migraciones/`
+  (`motor.mjs`, `pasos.mjs`, `0009`…`0012`), tabla `schema_migraciones` con
+  checksum; el servidor migra al arrancar (`migrar-arranque.ts` desde
+  `instrumentation-node.ts`) y no arranca con deriva, checksum alterado o base más
+  nueva. Ya **no existen** `ensure*Schema()` ni `schema.ts`: un cambio de esquema es
+  una migración nueva (nunca editar una publicada). Queda solo
+  `asegurarTriggersBitacora()` como defensa. MANUAL_TECNICO §10.2.
 - Cliente: componentes en `src/components`, catálogos compartidos
   servidor+cliente en `src/lib/shared/`, estado con `useResource`/`invalidate`
   (`src/lib/client/store.ts`).
@@ -136,9 +139,9 @@ Son decisiones explícitas del usuario o correcciones de auditoría ya validadas
    solicitud de segundo usuario (`excepcion_segregacion`). Ya no existen
    `TWO_PERSON_RULE` ni `permitir_misma_persona`.
 6. **Permisos**: un permiso ausente en un rol significa "no concedido".
-   `ensureRbacSchema` **no crea roles ni rellena permisos** (Fase 0: se quitó el
+   Nada al arrancar crea roles ni rellena permisos (Fase 0: se quitó el
    rol "Super Admin" y el relleno por nombre de rol / `es_sistemico` / módulo
-   nuevo). Solo asegura las tablas y el catálogo de módulos. Ninguna verificación
+   nuevo). El catálogo de módulos lo crea la migración base. Ninguna verificación
    usa el nombre de un rol: las reglas de combinación usan permisos o `roles.clave`.
 11. **Siempre queda un administrador**: un cambio (revocar, desactivar, dar de
     baja, editar permisos) que deje en cero a los usuarios activos con
@@ -156,9 +159,9 @@ Son decisiones explícitas del usuario o correcciones de auditoría ya validadas
 7. **Insumos dados de baja**: no se pueden elegir en un registro nuevo (409), pero
    un registro que ya los declaraba se sigue editando y repone **hasta la
    cantidad que ya tenía**.
-8. **Esquemas**: ninguna `ensure*Schema()` hace `commit`. Si se rompe eso, el
-   rollback de los handlers deja de funcionar (fue un bug real que corrompió
-   inventario).
+8. **Esquemas**: ningún handler hace DDL ni `commit` a mitad (Fase 12: el DDL vive
+   solo en migraciones). Un `commit` a mitad rompe el rollback de los handlers
+   (fue un bug real que corrompió inventario).
 9. **Bitácora**: la llave del sello es `SECRET_KEY` o, si no está configurada,
    `instance/auditoria.key` (aleatoria, autogenerada, gitignored). **Respaldarla
    junto con la base**: si cambia, la verificación de lo ya escrito falla.
@@ -182,8 +185,9 @@ Son decisiones explícitas del usuario o correcciones de auditoría ya validadas
 - `src/lib/server/inventory-usage.ts` — descuento y reposición de inventario.
 - `src/lib/server/inventory-baja.ts` — bajas lógicas.
 - `src/lib/server/informe-pdf.ts` — render del informe (7.8.2).
-- `src/lib/server/schema.ts` — helpers de migración + memoización de esquemas.
-- `src/lib/server/bootstrap.ts` — arranque: crea y confirma todos los esquemas.
+- `src/lib/server/migraciones/` — migraciones versionadas (Fase 12); `migrar-arranque.ts` las aplica al arrancar.
+- `src/lib/server/acceso-registro.ts` — historial de un registro con los alcances de su ficha (Fase 12).
+- `scripts/lib/operacion.mjs` — entorno, base, llave y servicio para los scripts de operación (Fase 12).
 - `src/lib/server/modules/` — `auth`, `admin`, `dashboard`, `inventory`,
   `consumables`, `documents`, `documentos-sgc`, `informes`, `audit`,
   `traceability`, y `samples/{recepcion,procesamiento,extraccion,analisis}.ts`.
@@ -211,7 +215,7 @@ Son decisiones explícitas del usuario o correcciones de auditoría ya validadas
 
 ```bash
 npm run typecheck     # TypeScript
-npm run lint          # ESLint — baseline: 12 problemas preexistentes
+npm run lint          # ESLint — baseline: 0 (Fase 12)
 npm run build         # build de producción
 npm test              # API + navegador
 npm run test:api      # solo API
@@ -238,8 +242,10 @@ npm run test:reset-db # solo regenerar la base de prueba
   `tests/api-integridad.mjs` (7, corre **al final** porque rompe la bitácora).
 - Navegador: `playwright-core` + el Chrome de Playwright más reciente en
   `~/Library/Caches/ms-playwright/chromium-*/...` (override con `CHROME_PATH`).
-- **Baseline de lint**: 12 problemas en `ConsumibleSheet.tsx`, `ReactivoSheet.tsx`,
-  `AppShell.tsx` y `administracion/roles/page.tsx`. Cualquier otro es un hallazgo.
+- **Baseline de lint**: 0 (Fase 12). Cualquier problema es un hallazgo.
+- Fase 12, sin servidor de pruebas: `tests/migraciones.mjs`, `tests/operacion.mjs`,
+  `tests/concurrencia.mjs` (los corre `npm test` al final). Fuera de `npm test`:
+  `npm run prueba-carga` y `npm run test:mysql`.
 
 ## 8. Estado (historial hasta 2026-09-11; la Fase 0 está en 8 bis)
 
@@ -458,6 +464,14 @@ Campana de notificaciones calculada al vuelo en `GET /api/notificaciones` (`src/
 - **Build**: `postbuild` = `scripts/limpiar-standalone.mjs`; rutas con `/*turbopackIgnore: true*/`. `tests/standalone.mjs` verifica el paquete y que arranque con la instancia de fuera.
 - **Pruebas**: `tests/lib/calidad.mjs` (helpers: `sesiones`, `cadena`, `informeLiberado`, `fila`), `tests/api-incidencias.mjs`, `tests/api-no-conformidades.mjs`, `tests/ui/no-conformidades.mjs`. `npm test -- --solo=<suite>` corre una sola.
 
+## 8 terdecies. Fase 12 — preparación para producción (rama `fase-12-produccion`)
+
+- **Migraciones** (§10.2 del manual): `src/lib/server/migraciones/` y `npm run migrar [--estado|--simular]`. Versiones 9–12 (coinciden con `ESQUEMA_VERSION` 10/11 de los respaldos anteriores). Línea base de bases anteriores por esquema normalizado; deriva → aborta sin tocar. Bloqueo en `schema_migraciones_bloqueo` + `servidor.lock`. Respaldo `pre-migracion` antes; entrada «Sistema aplicó la migración N». `restaurar-ficotox.mjs` migra respaldos viejos y rechaza los más nuevos. Fixtures congeladas del código anterior en `tests/fixtures/esquema-anterior-fase{9,10,11}.sqlite3`.
+- **Motor**: pragmas WAL/NORMAL/busy_timeout/foreign_keys (`db.ts`); `apiRoute` recibe el cuerpo antes de la sesión y reintenta folio duplicado, `SQLITE_BUSY*` e interbloqueos MySQL (3 intentos → 409 `conflicto_concurrencia`). `docs/DECISION_BASE_DE_DATOS.md`: SQLite recomendado, umbrales y `npm run sqlite-a-mysql`. MySQL **no probado** (sin Docker); `npm run test:mysql` listo.
+- **Operación**: `npm run configurar`, `instancia-nueva -- --confirmar`, `instalar-servicio`/`quitar-servicio`, `actualizar`, `verificar-instalacion` (reporte en `<instancia>/verificaciones/`). HTTPS con `TLS_CERT`/`TLS_KEY` (`scripts/https-lanzador.mjs`); registros en `<instancia>/logs` (`scripts/lib/registro.mjs`). Guía del personal: `docs/INSTALACION.md`.
+- **Deuda**: historial con alcances (`acceso-registro.ts`; 404 si no visible, también CSV y solicitudes); CSV de la bitácora con aviso de truncado y por periodo; lint 0.
+- **Pruebas**: `tests/api-produccion.mjs` (en la lista de API), `tests/migraciones.mjs`, `tests/operacion.mjs`, `tests/concurrencia.mjs`, `tests/carga.mjs`, `tests/mysql.mjs`.
+
 ## 9. Pendientes conocidos
 
 Lista consolidada y vigente: `docs/PENDIENTES.md`. Lo que sigue es el registro histórico.
@@ -479,9 +493,8 @@ Lista consolidada y vigente: `docs/PENDIENTES.md`. Lo que sigue es el registro h
    alerta de stock bajo compara `cantidad_actual <= stock_minimo` (0<=0 marca
    todo); no hay lotes; caducidad y calibración son solo informativas; falta
    historial de verificación de equipos y registro de preparación de reactivos.
-4. **Migraciones no versionadas** (`ensure*Schema()` en vez de migraciones con
-   número de versión).
-5. Validar el sistema en MySQL (hasta ahora todo se probó en SQLite).
+4. ~~Migraciones no versionadas~~ (resuelto en la Fase 12).
+5. Validar el sistema en MySQL con `npm run test:mysql` (hasta ahora todo se probó en SQLite; ver `docs/DECISION_BASE_DE_DATOS.md`).
 6. **Catálogo de clientes/solicitantes** (la inducción PVVC lo lista como dato
    maestro): hoy el solicitante es texto libre en la recepción.
 7. **Registro de preparación de reactivos** (folio FX-TCR-PR-…): los formatos ASP

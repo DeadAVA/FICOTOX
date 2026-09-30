@@ -1,6 +1,6 @@
 import { requireUser, userIdFromClaims } from "../../auth";
 import { registrarAuditoria, snapshotRow } from "../../audit";
-import { isSqlite, type Row, type Session } from "../../db";
+import { type Row, type Session } from "../../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../../http";
 import { restoreInventoryUsage } from "../../inventory-usage";
 import { cargoActuante, requirePermission } from "../../rbac";
@@ -8,14 +8,14 @@ import { exigirReauth } from "../../seguridad";
 import { evaluarSupervisionCaptura } from "../../../shared/segregacion";
 import { respuestaSolicitud } from "../../solicitudes";
 import { aplicarSupervision, filtroSupervision, marcaSupervision } from "../../supervision";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "../../schema";
-import { advanceState, anularOSolicitar, applyStageInventory, assertEditableAsync, assertOrigin, conSolicitudes, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
+
+import { advanceState, anularOSolicitar, applyStageInventory, assertEditableAsync, assertOrigin, conSolicitudes, deletionNotAllowed, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
-import { ensureSupervisionColumns } from "../../supervision";
+
 import { exigirAutorizaciones } from "../../autorizaciones";
 import { requisitosProcesamiento } from "../../../shared/autorizaciones";
 import { exigirAsignacion, filtroAsignadas } from "../../asignaciones";
-import { ensureColumnasFirma, guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
+import { guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
 
 /*
  * Portado de modules/samples/procesamiento.py del backend Flask original.
@@ -24,98 +24,6 @@ import { ensureColumnasFirma, guardarFirmantes, resolverFirmantes, type RolFirma
  */
 
 const TABLE = "muestras_procesamiento";
-
-export async function ensureSamplesProcesamientoSchema(s: Session): Promise<void> {
-  if (schemaReady("muestras_procesamiento")) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS muestras_procesamiento (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        folio_num INTEGER NOT NULL UNIQUE,
-        tipo_registro VARCHAR(2) NOT NULL DEFAULT 'P',
-        clave_revision VARCHAR(50) DEFAULT 'FX-TCF-GMP',
-        fecha_emision DATE DEFAULT NULL,
-        fecha_procesamiento DATE DEFAULT NULL,
-        hora_procesamiento VARCHAR(20) DEFAULT NULL,
-        recepcion_id INTEGER DEFAULT NULL,
-        folio_recepcion_num INTEGER DEFAULT NULL,
-        muestra_tipo VARCHAR(20) DEFAULT NULL,
-        id_interno VARCHAR(100) DEFAULT NULL,
-        lote_seleccion_json TEXT,
-        tipo_organismo_json TEXT,
-        parte_organismo_json TEXT,
-        bivalvos_steps_json TEXT,
-        sardinas_steps_json TEXT,
-        otro_procesamiento TEXT,
-        resguardo_json TEXT,
-        observaciones_generales TEXT,
-        nombre_quien_proceso VARCHAR(180) DEFAULT NULL,
-        nombre_quien_superviso VARCHAR(180) DEFAULT NULL,
-        firma_quien_proceso TEXT,
-        firma_quien_superviso TEXT,
-        estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
-        creado_por INTEGER DEFAULT NULL,
-        actualizado_por INTEGER DEFAULT NULL,
-        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS muestras_procesamiento (
-        id INT NOT NULL AUTO_INCREMENT,
-        folio_num INT NOT NULL,
-        tipo_registro VARCHAR(2) NOT NULL DEFAULT 'P',
-        clave_revision VARCHAR(50) DEFAULT 'FX-TCF-GMP',
-        fecha_emision DATE DEFAULT NULL,
-        fecha_procesamiento DATE DEFAULT NULL,
-        hora_procesamiento VARCHAR(20) DEFAULT NULL,
-        recepcion_id INT DEFAULT NULL,
-        folio_recepcion_num INT DEFAULT NULL,
-        muestra_tipo VARCHAR(20) DEFAULT NULL,
-        id_interno VARCHAR(100) DEFAULT NULL,
-        lote_seleccion_json LONGTEXT,
-        tipo_organismo_json LONGTEXT,
-        parte_organismo_json LONGTEXT,
-        bivalvos_steps_json LONGTEXT,
-        sardinas_steps_json LONGTEXT,
-        otro_procesamiento TEXT,
-        resguardo_json LONGTEXT,
-        observaciones_generales TEXT,
-        nombre_quien_proceso VARCHAR(180) DEFAULT NULL,
-        nombre_quien_superviso VARCHAR(180) DEFAULT NULL,
-        firma_quien_proceso LONGTEXT,
-        firma_quien_superviso LONGTEXT,
-        estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
-        creado_por INT DEFAULT NULL,
-        actualizado_por INT DEFAULT NULL,
-        creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-        actualizado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        UNIQUE KEY uq_muestras_procesamiento_folio_num (folio_num),
-        KEY idx_muestras_procesamiento_recepcion_id (recepcion_id),
-        KEY idx_muestras_procesamiento_creado_por (creado_por),
-        KEY idx_muestras_procesamiento_actualizado_por (actualizado_por),
-        CONSTRAINT fk_muestras_procesamiento_recepcion FOREIGN KEY (recepcion_id) REFERENCES muestras_recepcion(id) ON DELETE SET NULL,
-        CONSTRAINT fk_muestras_procesamiento_creado_por FOREIGN KEY (creado_por) REFERENCES usuarios(id) ON DELETE SET NULL,
-        CONSTRAINT fk_muestras_procesamiento_actualizado_por FOREIGN KEY (actualizado_por) REFERENCES usuarios(id) ON DELETE SET NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-      `,
-  );
-  await addColumnIfMissing(s, "muestras_procesamiento", "lote_seleccion_json", "LONGTEXT AFTER `id_interno`");
-  await addColumnIfMissing(s, "muestras_procesamiento", "firma_quien_proceso", "LONGTEXT AFTER `nombre_quien_superviso`");
-  await addColumnIfMissing(s, "muestras_procesamiento", "firma_quien_superviso", "LONGTEXT AFTER `firma_quien_proceso`");
-  await addColumnIfMissing(s, "muestras_procesamiento", "uso_inventario_json", "TEXT DEFAULT NULL");
-  /* "Otro" del formato: tipo de organismo y parte del organismo escritos a mano. */
-  await addColumnIfMissing(s, "muestras_procesamiento", "tipo_organismo_otro", "VARCHAR(180) DEFAULT NULL");
-  await addColumnIfMissing(s, "muestras_procesamiento", "parte_organismo_otro", "VARCHAR(180) DEFAULT NULL");
-  await ensureAnulacionColumns(s, TABLE);
-  await ensureActuoColumns(s, TABLE);
-  await ensureSupervisionColumns(s, "muestras_procesamiento");
-  await ensureColumnasFirma(s, "muestras_procesamiento", FIRMAS_PROCESAMIENTO);
-  markSchemaReady("muestras_procesamiento");
-}
-
 
 const ORIGEN_REQUERIDO = "El procesamiento debe partir de una recepción de muestra aceptada";
 
@@ -166,7 +74,6 @@ function normalizePayload(raw: Record<string, unknown>) {
   };
 }
 
-
 async function replaceInventoryUsage(s: Session, processingId: number, data: ProcessingData, userId: number | null, declaradosAntes: Map<string, number>): Promise<void> {
   await restoreInventoryUsage(s, `PROC-${processingId}-INS-`);
   await applyStageInventory(s, "PROC", processingId, data.uso_inventario_json, `Procesamiento de muestra folio ${data.folio_num}`, userId, declaradosAntes);
@@ -191,11 +98,9 @@ function serializeRow(row: Row): Row {
   return item;
 }
 
-
 export async function getNextFolio({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "ensayos", "V");
-  await ensureSamplesProcesamientoSchema(s);
   return json({ next_folio: await nextFolioNum(s, TABLE) });
 }
 
@@ -205,7 +110,6 @@ export async function listProcessingSamples({ request, s }: RouteContext): Promi
   const supFiltro = filtroSupervision(request, "p", permiso.auth.userId);
   // Fase 5: filtro "Mis muestras".
   const asignadas = await filtroAsignadas(s, permiso.auth.userId, "p.recepcion_id", searchParam(request, "mias") === "1");
-  await ensureSamplesProcesamientoSchema(s);
 
   const search = searchParam(request, "search");
   const includeAnuladas = searchParam(request, "anuladas") === "1";
@@ -242,7 +146,6 @@ export async function getProcessingSample({ request, s, params }: RouteContext):
   const processingId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "ensayos", "V");
-  await ensureSamplesProcesamientoSchema(s);
 
   const row = await s.queryOne(
     `
@@ -274,7 +177,6 @@ export async function createProcessingSample({ request, s }: RouteContext): Prom
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "ensayos", "C", { objeto: "procesamiento", borrador: true });
   const actuo = cargoActuante(request, permiso);
-  await ensureSamplesProcesamientoSchema(s);
 
   const payload = await readJson(request);
   const data = normalizePayload(payload);
@@ -338,7 +240,8 @@ export async function createProcessingSample({ request, s }: RouteContext): Prom
     return json({ message: "Procesamiento creado", id }, 201);
   } catch (error) {
     await s.rollback();
-    if (isFolioConflict(error)) {
+    // Fase 12: si el folio lo asigno el servidor, el choque es de concurrencia: se relanza y apiRoute reintenta.
+    if (isFolioConflict(error) && toIntOrNull(payload.folio_num)) {
       return json({ message: "El folio de procesamiento ya existe" }, 409);
     }
     throw error;
@@ -348,7 +251,6 @@ export async function createProcessingSample({ request, s }: RouteContext): Prom
 export async function updateProcessingSample({ request, s, params }: RouteContext): Promise<Response> {
   const processingId = intParam(params.id);
   const user = await requireUser(request);
-  await ensureSamplesProcesamientoSchema(s);
 
   const antes = await snapshotRow(s, TABLE, processingId);
   const permiso = await requirePermission(s, user, "ensayos", "E", { objeto: "procesamiento", borrador: String(antes?.estado || "registrada") === "registrada" });
@@ -440,7 +342,6 @@ export async function anularProcessingSample({ request, s, params }: RouteContex
   const processingId = intParam(params.id);
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "AN"));
-  await ensureSamplesProcesamientoSchema(s);
   const motivo = await readMotivo(request);
   await exigirReauth(s, request, user, "ensayos:AN");
   const { row, solicitud } = await anularOSolicitar(s, user, TABLE, processingId, motivo, actuo);
@@ -453,7 +354,6 @@ export async function restaurarProcessingSample({ request, s, params }: RouteCon
   const processingId = intParam(params.id);
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "AN"));
-  await ensureSamplesProcesamientoSchema(s);
   await exigirReauth(s, request, user, "ensayos:AN");
   const { row, solicitud } = await restaurarOSolicitar(s, user, TABLE, processingId, await readMotivo(request), actuo);
   await s.commit();

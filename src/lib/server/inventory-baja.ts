@@ -2,7 +2,7 @@ import { userIdFromClaims, type CurrentUser } from "./auth";
 import { registrarAuditoria, snapshotRow } from "./audit";
 import type { Session } from "./db";
 import { json } from "./http";
-import { addColumnIfMissing } from "./schema";
+
 import { exigirReauth } from "./seguridad";
 
 /*
@@ -13,13 +13,6 @@ import { exigirReauth } from "./seguridad";
  */
 
 export type BajaTable = "reactivos" | "consumibles" | "equipos";
-
-export async function ensureBajaColumns(s: Session, table: BajaTable): Promise<void> {
-  await addColumnIfMissing(s, table, "activo", "TINYINT(1) NOT NULL DEFAULT 1");
-  await addColumnIfMissing(s, table, "baja_motivo", "TEXT");
-  await addColumnIfMissing(s, table, "baja_en", "VARCHAR(40) DEFAULT NULL");
-  await addColumnIfMissing(s, table, "baja_por", "INT DEFAULT NULL");
-}
 
 export function itemRef(table: BajaTable, row: Record<string, unknown> | null | undefined): string {
   if (!row) return table;

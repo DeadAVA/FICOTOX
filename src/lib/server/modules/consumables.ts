@@ -1,50 +1,15 @@
 import { requireUser, userIdFromClaims } from "../auth";
 import { registrarAuditoria, snapshotRow } from "../audit";
-import { type Session } from "../db";
+
 import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
-import { darDeBaja, ensureBajaColumns, reactivarItem } from "../inventory-baja";
-import { ensureMovimientosSchema } from "../inventory-usage";
+import { darDeBaja, reactivarItem } from "../inventory-baja";
+
 import { requirePermission } from "../rbac";
 import { aplicarSupervision, marcaSupervision } from "../supervision";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
+
 import { searchParam, toIntOrNull, utcTimestampReference } from "./helpers";
-import { ensureSupervisionColumns } from "../supervision";
 
 /* Portado de modules/inventory/consumables.py del backend Flask original. */
-
-export async function ensureConsumiblesSchema(s: Session): Promise<void> {
-  if (schemaReady("consumibles")) return;
-  await s.execute(
-    `
-    CREATE TABLE IF NOT EXISTS consumibles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        producto VARCHAR(180) NOT NULL,
-        marca VARCHAR(120) DEFAULT NULL,
-        proveedor VARCHAR(180) DEFAULT NULL,
-        catalogo_parte_cas VARCHAR(180) DEFAULT NULL,
-        fecha_ingreso DATE DEFAULT NULL,
-        tamano_capacidad VARCHAR(120) DEFAULT NULL,
-        contenedor VARCHAR(120) DEFAULT NULL,
-        piezas INTEGER DEFAULT 0,
-        cantidad_por_pieza INTEGER DEFAULT NULL,
-        stock_maximo INTEGER DEFAULT NULL,
-        creado_por INTEGER DEFAULT NULL,
-        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    `,
-  );
-  await addColumnIfMissing(s, "consumibles", "stock_maximo", "INTEGER DEFAULT NULL");
-  await ensureBajaColumns(s, "consumibles");
-  await s.execute(
-    `
-    UPDATE consumibles
-    SET stock_maximo = piezas
-    WHERE stock_maximo IS NULL AND piezas IS NOT NULL AND piezas > 0
-    `,
-  );
-  await ensureSupervisionColumns(s, "consumibles");
-  markSchemaReady("consumibles");
-}
 
 interface ConsumablePayload {
   producto: string;
@@ -218,7 +183,6 @@ const SELECT_COLUMNS = `
 export async function getConsumables({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "V");
-  await ensureConsumiblesSchema(s);
 
   const search = new URL(request.url).searchParams.get("search") ?? "";
   const rows = await s.query(
@@ -235,7 +199,6 @@ export async function getConsumables({ request, s }: RouteContext): Promise<Resp
 export async function createConsumable({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" }));
-  await ensureConsumiblesSchema(s);
 
   const data = normalizePayload(await readJson(request));
   if (!data.producto) {
@@ -259,7 +222,6 @@ export async function getConsumable({ request, s, params }: RouteContext): Promi
   const consumableId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "V");
-  await ensureConsumiblesSchema(s);
 
   const row = await s.queryOne(`${SELECT_COLUMNS} WHERE id = :id LIMIT 1`, { id: consumableId });
   if (!row) {
@@ -272,7 +234,6 @@ export async function updateConsumable({ request, s, params }: RouteContext): Pr
   const consumableId = intParam(params.id);
   const user = await requireUser(request);
   const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "E", { objeto: "catalogo_inventario" }));
-  await ensureConsumiblesSchema(s);
 
   const data = normalizePayload(await readJson(request));
   if (!data.producto) {
@@ -305,8 +266,6 @@ export async function refillConsumable({ request, s, params }: RouteContext): Pr
   const consumableId = intParam(params.id);
   const user = await requireUser(request);
   const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "movimiento" }));
-  await ensureConsumiblesSchema(s);
-  await ensureMovimientosSchema(s);
 
   const data = await readJson(request);
   const amount = toIntOrNull(data.cantidad);
@@ -360,7 +319,6 @@ export async function deleteConsumable({ request, s, params }: RouteContext): Pr
   const consumableId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "AN");
-  await ensureConsumiblesSchema(s);
   return darDeBaja(s, user, "consumibles", consumableId, await readJson(request), "Consumible", request);
 }
 
@@ -368,7 +326,6 @@ export async function reactivarConsumable({ request, s, params }: RouteContext):
   const consumableId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "G");
-  await ensureConsumiblesSchema(s);
   return reactivarItem(s, user, "consumibles", consumableId, await readJson(request), "Consumible", request);
 }
 
@@ -381,7 +338,6 @@ export async function importConsumables({ request, s }: RouteContext): Promise<R
   const user = await requireUser(request);
   // La importacion masiva no se hace bajo supervision (no hay visto bueno por fila).
   if (marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" }))) throw new HttpError(403, { message: "La importación masiva no está disponible para capturas bajo supervisión" });
-  await ensureConsumiblesSchema(s);
   let inserted = 0;
 
   const contentType = request.headers.get("content-type") || "";

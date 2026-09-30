@@ -11,75 +11,15 @@
 import { requireUser, userIdFromClaims, type CurrentUser } from "./auth";
 import { registrarAuditoria } from "./audit";
 import { getConfig } from "./config";
-import { isSqlite, type Row, type Session } from "./db";
+import { type Row, type Session } from "./db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "./http";
 import { cargarAutorizacion, cargoActuante, permisoDe, requirePermission, type Autorizacion, type Permiso } from "./rbac";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "./schema";
+
 import { exigirReauth } from "./seguridad";
-import {
-  ACTIVIDADES_AUTORIZABLES,
-  estadoAutorizacion,
-  etiquetaAutorizacion,
-  faltantes,
-  mensajeFaltante,
-  METODOS_AUTORIZABLES,
-  requisitoEquipo,
-  type AutorizacionPersonal,
-  type Requisito,
-  type TipoAutorizacion,
-} from "../shared/autorizaciones";
+import { ACTIVIDADES_AUTORIZABLES, estadoAutorizacion, etiquetaAutorizacion, faltantes, mensajeFaltante, METODOS_AUTORIZABLES, requisitoEquipo, type AutorizacionPersonal, type Requisito, type TipoAutorizacion } from "../shared/autorizaciones";
 import { esFechaSola, hoyLocal, sumarDias } from "../shared/fechas";
 
 const TABLE = "autorizaciones_personal";
-
-export async function ensureAutorizacionesSchema(s: Session): Promise<void> {
-  if (schemaReady(TABLE)) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS ${TABLE} (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario_id INTEGER NOT NULL,
-        tipo VARCHAR(20) NOT NULL,
-        clave VARCHAR(60) NOT NULL,
-        vigente_desde VARCHAR(10) NOT NULL,
-        vigente_hasta VARCHAR(10) DEFAULT NULL,
-        folio_fx_thf_ap VARCHAR(80) DEFAULT NULL,
-        otorgada_por INTEGER DEFAULT NULL,
-        otorgada_rol VARCHAR(120) DEFAULT NULL,
-        otorgada_en VARCHAR(40) DEFAULT NULL,
-        motivo TEXT,
-        revocada_en VARCHAR(40) DEFAULT NULL,
-        revocada_por INTEGER DEFAULT NULL,
-        motivo_revocacion TEXT,
-        vencimiento_registrado_en VARCHAR(40) DEFAULT NULL
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS ${TABLE} (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        usuario_id INT NOT NULL,
-        tipo VARCHAR(20) NOT NULL,
-        clave VARCHAR(60) NOT NULL,
-        vigente_desde VARCHAR(10) NOT NULL,
-        vigente_hasta VARCHAR(10) DEFAULT NULL,
-        folio_fx_thf_ap VARCHAR(80) DEFAULT NULL,
-        otorgada_por INT DEFAULT NULL,
-        otorgada_rol VARCHAR(120) DEFAULT NULL,
-        otorgada_en VARCHAR(40) DEFAULT NULL,
-        motivo LONGTEXT,
-        revocada_en VARCHAR(40) DEFAULT NULL,
-        revocada_por INT DEFAULT NULL,
-        motivo_revocacion LONGTEXT,
-        vencimiento_registrado_en VARCHAR(40) DEFAULT NULL,
-        KEY idx_autorizaciones_usuario (usuario_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      `,
-  );
-  await addColumnIfMissing(s, TABLE, "vencimiento_registrado_en", "VARCHAR(40) DEFAULT NULL");
-  if (isSqlite()) await s.execute(`CREATE INDEX IF NOT EXISTS idx_autorizaciones_usuario ON ${TABLE} (usuario_id)`);
-  markSchemaReady(TABLE);
-}
 
 /* ---------- Lectura ---------- */
 
@@ -102,7 +42,6 @@ async function serializar(s: Session, filas: Row[]): Promise<AutorizacionPersona
 }
 
 export async function autorizacionesDe(s: Session, usuarioId: number): Promise<AutorizacionPersonal[]> {
-  await ensureAutorizacionesSchema(s);
   const filas = await s.query<Row>(`SELECT * FROM ${TABLE} WHERE usuario_id = :id ORDER BY revocada_en IS NOT NULL, tipo, clave, id DESC`, { id: usuarioId });
   return serializar(s, filas);
 }
@@ -191,7 +130,6 @@ export async function otorgarAutorizacion({ request, s, params }: RouteContext):
   const yo = userIdFromClaims(user) as number;
   exigirOtraPersona(yo, usuarioId, "otorgarte");
   const persona = await cuenta(s, usuarioId);
-  await ensureAutorizacionesSchema(s);
   const payload = await readJson(request);
   const tipo = String(payload.tipo || "") as TipoAutorizacion;
   const clave = String(payload.clave || "").trim();
@@ -253,7 +191,6 @@ export async function autorizarEquipoA(s: Session, request: Request, user: Curre
   const out = { autorizados: [] as Array<{ usuario_id: number; email: string }>, omitidos: [] as Array<{ usuario_id: number; motivo: string }> };
   if (!ids.length) return out;
   const { permiso } = await exigirAdministrar(s, user);
-  await ensureAutorizacionesSchema(s);
   await exigirReauth(s, request, user, "autorizaciones:otorgar");
   const actuo = cargoActuante(request, permiso);
   const yo = userIdFromClaims(user) as number;
@@ -291,7 +228,6 @@ export async function revocarAutorizacion({ request, s, params }: RouteContext):
   const yo = userIdFromClaims(user) as number;
   exigirOtraPersona(yo, usuarioId, "revocarte");
   const persona = await cuenta(s, usuarioId);
-  await ensureAutorizacionesSchema(s);
   const fila = await s.queryOne<Row>(`SELECT * FROM ${TABLE} WHERE id = :id AND usuario_id = :usuario`, { id: autorizacionId, usuario: usuarioId });
   if (!fila) throw new HttpError(404, { message: "Autorización no encontrada" });
   if (fila.revocada_en) throw new HttpError(409, { message: "La autorización ya estaba revocada" });
@@ -318,7 +254,6 @@ export async function revocarAutorizacion({ request, s, params }: RouteContext):
 
 /* Deja en la bitacora (una vez) las autorizaciones cuya vigencia termino. Barrido del bootstrap. */
 export async function registrarVencimientosAutorizaciones(s: Session): Promise<number> {
-  await ensureAutorizacionesSchema(s);
   const filas = await s.query<Row>(
     `SELECT a.*, u.email FROM ${TABLE} a LEFT JOIN usuarios u ON u.id = a.usuario_id
      WHERE a.revocada_en IS NULL AND a.vencimiento_registrado_en IS NULL AND a.vigente_hasta IS NOT NULL AND a.vigente_hasta < :hoy`,
@@ -345,7 +280,6 @@ export async function registrarVencimientosAutorizaciones(s: Session): Promise<n
  * para quien las administra, las de todo el personal.
  */
 export async function autorizacionesPorVencer(s: Session, auth: Autorizacion, dias = 30): Promise<Array<AutorizacionPersonal & { persona: string; propia: boolean }>> {
-  await ensureAutorizacionesSchema(s);
   const hoy = hoyLocal();
   const limite = sumarDias(hoy, dias);
   const todas = !!permisoAdministrar(auth);

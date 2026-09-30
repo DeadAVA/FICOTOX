@@ -20,6 +20,7 @@ tests/ui/fail.png
 # Node / Next.js
 node_modules/
 .next/
+.next-anterior/
 out/
 build/
 dist/
@@ -46,3 +47,17 @@ instance/auditoria.key
 
 # Contrasenas de los usuarios iniciales (scripts/seed-roles-usuarios.mjs)
 scripts/seed-usuarios.local.json
+
+# Fase 12: registros, verificaciones, servicio generado, adjuntos y firmas de la instancia
+instance/logs/
+instance/verificaciones/
+instance/servicio/
+instance/lanzador.lock
+instance/detener
+instance/servidor.lock.toma/
+instance/*.sqlite3-wal
+instance/*.sqlite3-shm
+instance/tls/
+instance/calidad/
+instance/adjuntos/
+instance/llave-bitacora.huella

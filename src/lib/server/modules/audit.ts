@@ -1,6 +1,6 @@
 import { requireUser } from "../auth";
-import { exigirVerRegistroCalidad } from "./calidad/acceso-historial";
-import { advertenciaLlaveBitacora, ensureAuditSchema, origenLlaveBitacora, registrarAuditoria, verifyAuditChain } from "../audit";
+import { exigirVerRegistro } from "../acceso-registro";
+import { advertenciaLlaveBitacora, origenLlaveBitacora, registrarAuditoria, verifyAuditChain } from "../audit";
 import { AUDIT_ACTIONS, AUDIT_ENTITIES } from "../../shared/sgc";
 import { formatearFechaHora, hoyLocal } from "../../shared/fechas";
 import { type Row } from "../db";
@@ -84,11 +84,14 @@ const ENTITY_MODULE: Record<string, Modulo> = {
   incidencias: "calidad",
   no_conformidades: "calidad",
   acciones_correctivas: "calidad",
+  suspensiones: "calidad",
 };
+
+/* Filas por archivo CSV de la bitacora (Fase 12): mas alla, exportacion por periodos. */
+export const LIMITE_CSV = Number.parseInt(process.env.BITACORA_CSV_MAX_FILAS || "", 10) > 0 ? Number.parseInt(String(process.env.BITACORA_CSV_MAX_FILAS), 10) : 50_000;
 
 export async function listAudit({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await ensureAuditSchema(s);
   const entidad = searchParam(request, "entidad");
   const entidadId = searchParam(request, "entidad_id");
   // El historial de un registro concreto lo puede ver quien puede leer el modulo
@@ -97,15 +100,18 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
   const auth = await cargarAutorizacion(s, user);
   // Fase 11: el historial de una incidencia o NC lo ve quien ve ese registro (con alcance "incidencias", solo lo propio).
   const historialCalidad = !!(entidad && entidadId && ENTIDADES_CALIDAD.has(entidad));
-  if (historialCalidad) await exigirVerRegistroCalidad(s, user, entidad, Number(entidadId));
-  else await requirePermission(s, user, modulo || "calidad", "V", undefined, auth);
+  // Fase 12: el historial de cualquier registro aplica los alcances de su ficha (asignado, autorizados, propio); lo no visible es 404.
+  if (entidad && entidadId && modulo) await exigirVerRegistro(s, user, auth, entidad, entidadId);
+  else await requirePermission(s, user, "calidad", "V", undefined, auth);
   const accion = searchParam(request, "accion");
   const usuario = searchParam(request, "usuario");
   const search = searchParam(request, "search");
   const desde = searchParam(request, "desde");
   const hasta = searchParam(request, "hasta");
   const csv = searchParam(request, "formato") === "csv";
-  const limit = Math.min(Math.max(Number.parseInt(searchParam(request, "limit") || (csv ? "5000" : "200"), 10) || 200, 1), csv ? 20000 : 1000);
+  // Fase 12: el CSV llega hasta 50 000 filas por archivo; si hay mas, se avisa (en el archivo, en los encabezados y en la interfaz)
+  // y se exporta por periodos (desde/hasta). Se pide una fila de mas para saber si se corto.
+  const limit = Math.min(Math.max(Number.parseInt(searchParam(request, "limit") || (csv ? String(LIMITE_CSV) : "200"), 10) || 200, 1), csv ? LIMITE_CSV : 1000);
   // Fase 9: filtro por modulo (las entidades cuyo historial pertenece a ese modulo).
   const moduloFiltro = searchParam(request, "modulo");
   /*
@@ -136,7 +142,7 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
       ${sinAccesos ? "AND accion NOT IN ('login', 'login_fallido', 'reauth_fallida', 'cerrar_sesiones')" : ""}
       ${antesDe ? "AND id < :antes_de" : ""}
     ORDER BY id DESC
-    LIMIT ${limit}
+    LIMIT ${limit + 1}
     `,
     {
       entidad,
@@ -154,11 +160,13 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
       ...Object.fromEntries(accionesLista.map((a, i) => [`acc${i}`, a])),
     },
   );
+  const truncado = rows.length > limit;
+  if (truncado) rows.length = limit;
   const total = calidadTotal(auth) || historialCalidad;
   const items = rows.map((row) => sinMotivoDeCalidad(recortar(serialize(row), historialCalidad || datosVisibles(auth, row.entidad)), total));
   if (csv) {
     // Fase 9: exportacion para auditoria, con los mismos filtros y alcances; queda en la bitacora.
-    await registrarAuditoria(s, user, { accion: "exportar", entidad: entidad && entidadId ? entidad : "auditoria", entidadId: entidad && entidadId ? entidadId : null, referencia: entidad && entidadId ? `Historial ${AUDIT_ENTITIES[entidad] || entidad} #${entidadId}` : "Bitácora", detalle: { formato: "csv", filas: items.length, filtros: { entidad, entidad_id: entidadId, accion, usuario, search, desde, hasta, modulo: moduloFiltro } } });
+    await registrarAuditoria(s, user, { accion: "exportar", entidad: entidad && entidadId ? entidad : "auditoria", entidadId: entidad && entidadId ? entidadId : null, referencia: entidad && entidadId ? `Historial ${AUDIT_ENTITIES[entidad] || entidad} #${entidadId}` : "Bitácora", detalle: { formato: "csv", filas: items.length, truncado, filtros: { entidad, entidad_id: entidadId, accion, usuario, search, desde, hasta, modulo: moduloFiltro } } });
     await s.commit();
     // Una celda que empieza con =, +, -, @, tab o retorno se neutraliza con ' (inyeccion de formulas en hojas de calculo).
     const celda = (v: unknown) => {
@@ -170,9 +178,11 @@ export async function listAudit({ request, s }: RouteContext): Promise<Response>
       const entidadItem = String(item.entidad || "");
       lineas.push([formatearFechaHora(item.fecha_hora), item.usuario_nombre || "sistema", item.usuario_email, AUDIT_ACTIONS[String(item.accion)] || item.accion, ENTITY_MODULE[entidadItem] || AUDIT_ENTITIES[entidadItem] || entidadItem, `${AUDIT_ENTITIES[entidadItem] || entidadItem}${item.entidad_id ? ` #${item.entidad_id}` : ""}`, item.referencia, item.motivo, item.datos_restringidos ? "(datos restringidos por tu alcance)" : cambiosLegibles(item.cambios)].map(celda).join(","));
     }
-    return new Response(`\uFEFF${lineas.join("\r\n")}\r\n`, { status: 200, headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="bitacora-${hoyLocal()}.csv"` } });
+    // Nunca se corta en silencio: la ultima fila lo dice y los encabezados lo informan a la interfaz.
+    if (truncado) lineas.push([`AVISO: exportación PARCIAL, cortada en ${items.length} filas (hay más registros). Exporta por periodo con los filtros Desde/Hasta para obtener el resto.`].map(celda).join(","));
+    return new Response(`\uFEFF${lineas.join("\r\n")}\r\n`, { status: 200, headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="bitacora-${hoyLocal()}${truncado ? "-parcial" : ""}.csv"`, "X-Bitacora-Filas": String(items.length), "X-Bitacora-Truncado": truncado ? "1" : "0", "Access-Control-Expose-Headers": "X-Bitacora-Filas, X-Bitacora-Truncado" } });
   }
-  return json({ items, total: rows.length });
+  return json({ items, total: rows.length, truncado });
 }
 
 /* Cambios en texto legible: "campo: antes → despues; ..." y el detalle como "clave=valor". */
@@ -195,7 +205,6 @@ export async function getAuditEntry({ request, s, params }: RouteContext): Promi
   const user = await requireUser(request);
   const auth = await cargarAutorizacion(s, user);
   await requirePermission(s, user, "calidad", "V", undefined, auth);
-  await ensureAuditSchema(s);
   const id = Number.parseInt(String(params.id || ""), 10);
   const row = await s.queryOne<Row>("SELECT * FROM auditoria WHERE id = :id", { id });
   if (!row) return json({ message: "Registro no encontrado" }, 404);
@@ -219,7 +228,6 @@ export async function verifyAudit({ request, s }: RouteContext): Promise<Respons
 export async function auditSummary({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "calidad", "V");
-  await ensureAuditSchema(s);
   const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
   const summary = await s.queryOne(
     `

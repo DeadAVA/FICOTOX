@@ -4,16 +4,16 @@ import path from "node:path";
 import { requireUser, userIdFromClaims, type CurrentUser } from "../auth";
 import { registrarAuditoria, snapshotRow } from "../audit";
 import { getConfig } from "../config";
-import { isIntegrityError, isSqlite, type Row, type Session } from "../db";
+import { isIntegrityError, type Row, type Session } from "../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
 import { requirePermission } from "../rbac";
 import { exigirReauth } from "../seguridad";
 import { crearSolicitud, detalleSolicitud, respuestaSolicitud, type ContextoEjecucion } from "../solicitudes";
-import { detalleExcepcion, elaboradoresDe, ensureExcepcionesColumn, excepcionesDe, exigirSegregacion } from "../segregacion";
+import { detalleExcepcion, elaboradoresDe, excepcionesDe, exigirSegregacion } from "../segregacion";
 import { evaluarDocumento, type Violacion } from "../../shared/segregacion";
 import { formatearFecha, hoyLocal } from "../../shared/fechas";
 import { distribucionDe, documentosDistribuidosA, soloAutorizados } from "./documentos-flujo";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
+
 import { readMotivo } from "../samples-flow";
 import { DOCUMENT_AREAS, DOCUMENT_KEY_RE, DOCUMENT_REVIEW_YEARS, DOCUMENT_TYPES, parseDocumentKey } from "../../shared/sgc";
 import { secureFilename } from "./documents";
@@ -34,91 +34,6 @@ import { searchParam, strippedOrNull, toIntOrNull } from "./helpers";
 const TABLE = "documentos_sgc";
 const TYPES = new Set(DOCUMENT_TYPES.map((item) => item.value));
 const AREAS = new Set(DOCUMENT_AREAS.map((item) => item.value));
-
-export async function ensureDocumentosSgcSchema(s: Session): Promise<void> {
-  if (schemaReady("documentos_sgc")) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS documentos_sgc (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        clave VARCHAR(40) NOT NULL,
-        revision INTEGER NOT NULL DEFAULT 1,
-        titulo VARCHAR(220) NOT NULL,
-        tipo VARCHAR(2) NOT NULL,
-        area VARCHAR(4) NOT NULL,
-        es_externo INTEGER NOT NULL DEFAULT 0,
-        origen_externo VARCHAR(180) DEFAULT NULL,
-        descripcion TEXT,
-        cambios TEXT,
-        fecha_emision DATE DEFAULT NULL,
-        fecha_vigencia DATE DEFAULT NULL,
-        fecha_proxima_revision DATE DEFAULT NULL,
-        elaboro_json TEXT,
-        reviso_json TEXT,
-        aprobo_json TEXT,
-        distribucion TEXT,
-        archivo_nombre VARCHAR(255) DEFAULT NULL,
-        archivo_original VARCHAR(255) DEFAULT NULL,
-        archivo_sha256 VARCHAR(64) DEFAULT NULL,
-        reemplaza_id INTEGER DEFAULT NULL,
-        estado VARCHAR(20) NOT NULL DEFAULT 'borrador',
-        motivo_estado TEXT,
-        creado_por INTEGER DEFAULT NULL,
-        actualizado_por INTEGER DEFAULT NULL,
-        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE (clave, revision)
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS documentos_sgc (
-        id INT NOT NULL AUTO_INCREMENT,
-        clave VARCHAR(40) NOT NULL,
-        revision INT NOT NULL DEFAULT 1,
-        titulo VARCHAR(220) NOT NULL,
-        tipo VARCHAR(2) NOT NULL,
-        area VARCHAR(4) NOT NULL,
-        es_externo TINYINT(1) NOT NULL DEFAULT 0,
-        origen_externo VARCHAR(180) DEFAULT NULL,
-        descripcion TEXT,
-        cambios TEXT,
-        fecha_emision DATE DEFAULT NULL,
-        fecha_vigencia DATE DEFAULT NULL,
-        fecha_proxima_revision DATE DEFAULT NULL,
-        elaboro_json LONGTEXT,
-        reviso_json LONGTEXT,
-        aprobo_json LONGTEXT,
-        distribucion TEXT,
-        archivo_nombre VARCHAR(255) DEFAULT NULL,
-        archivo_original VARCHAR(255) DEFAULT NULL,
-        archivo_sha256 VARCHAR(64) DEFAULT NULL,
-        reemplaza_id INT DEFAULT NULL,
-        estado VARCHAR(20) NOT NULL DEFAULT 'borrador',
-        motivo_estado TEXT,
-        creado_por INT DEFAULT NULL,
-        actualizado_por INT DEFAULT NULL,
-        creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-        actualizado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        UNIQUE KEY uq_documentos_sgc_clave_revision (clave, revision),
-        KEY idx_documentos_sgc_estado (estado)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-      `,
-  );
-  await addColumnIfMissing(s, TABLE, "archivo_sha256", "VARCHAR(64) DEFAULT NULL");
-  await ensureExcepcionesColumn(s, "documentos_sgc");
-  // Fase 7: flujo de control documental.
-  for (const [col, def] of [
-    ["requiere_revision_tecnica", "INT NOT NULL DEFAULT 0"],
-    ["revision_tecnica_json", "LONGTEXT"],
-    ["publico_json", "LONGTEXT"],
-    ["asignado_a", "INT DEFAULT NULL"],
-    ["devolucion_observaciones", "TEXT"],
-  ]) await addColumnIfMissing(s, TABLE, col, def);
-  await s.execute(`UPDATE ${TABLE} SET estado = 'revision_calidad' WHERE estado = 'en_revision'`);
-  markSchemaReady("documentos_sgc");
-}
 
 function filesDir(): string {
   const folder = path.join(getConfig().INSTANCE_DIR, "documentos_sgc");
@@ -243,7 +158,6 @@ function docRef(row: Row | null | undefined): string {
 export async function listDocumentos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "documentos", "V");
-  await ensureDocumentosSgcSchema(s);
   // Fase 7: con alcance "autorizados" solo los documentos vigentes distribuidos a la persona.
   const autorizados = soloAutorizados(permiso.auth) ? await documentosDistribuidosA(s, permiso.auth.userId) : null;
   const search = searchParam(request, "search");
@@ -274,7 +188,6 @@ export async function listDocumentos({ request, s }: RouteContext): Promise<Resp
 export async function listaMaestra({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "documentos", "V");
-  await ensureDocumentosSgcSchema(s);
   const autorizados = soloAutorizados(permiso.auth) ? await documentosDistribuidosA(s, permiso.auth.userId) : null;
   const rows = await s.query(
     `
@@ -313,7 +226,6 @@ export async function listaMaestra({ request, s }: RouteContext): Promise<Respon
 export async function documentosSummary({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "documentos", "V");
-  await ensureDocumentosSgcSchema(s);
   const today = hoyLocal();
   // Fase 9: estados del flujo de la Fase 7; con alcance "autorizados", solo los vigentes distribuidos.
   if (soloAutorizados(permiso.auth)) {
@@ -341,7 +253,6 @@ export async function getDocumento({ request, s, params }: RouteContext): Promis
   const id = intParam(params.id);
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "documentos", "V");
-  await ensureDocumentosSgcSchema(s);
   const row = await snapshotRow(s, TABLE, id);
   if (!row) return json({ message: "Documento no encontrado" }, 404);
   // Fase 7: con alcance "autorizados" solo un vigente distribuido a la persona, sin versiones anteriores.
@@ -356,7 +267,6 @@ export async function getDocumento({ request, s, params }: RouteContext): Promis
 export async function createDocumento({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "documentos", "C", { objeto: "documento", borrador: true });
-  await ensureDocumentosSgcSchema(s);
   const { data, file } = await readPayload(request);
   const normalized = normalize(data, null);
   const invalid = validate(normalized);
@@ -401,7 +311,6 @@ export async function updateDocumento({ request, s, params }: RouteContext): Pro
   const id = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "documentos", "E", { objeto: "documento", borrador: true });
-  await ensureDocumentosSgcSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Documento no encontrado" }, 404);
   if (String(antes.estado) !== "borrador") return json({ message: "Solo se editan documentos en borrador (un revisor puede devolverlo); para cambiar uno vigente crea una nueva revision" }, 409);
@@ -436,7 +345,6 @@ export async function enviarRevision({ request, s, params }: RouteContext): Prom
   const id = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "documentos", "E", { objeto: "documento", borrador: true });
-  await ensureDocumentosSgcSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Documento no encontrado" }, 404);
   if (String(antes.estado) !== "borrador") return json({ message: "Solo los borradores se envian a revision" }, 409);
@@ -458,7 +366,6 @@ export async function violacionParaExcepcionDocumento(s: Session, user: CurrentU
   if (accion !== "revisar" && accion !== "aprobar") throw new HttpError(400, { message: "En un documento la excepción aplica a revisar o aprobar" });
   if (accion === "revisar") await requirePermission(s, user, "documentos", "G");
   else await requirePermission(s, user, "documentos", "A");
-  await ensureDocumentosSgcSchema(s);
   const row = await snapshotRow(s, TABLE, id);
   if (!row) throw new HttpError(404, { message: "Documento no encontrado" });
   const estado = accion === "revisar" ? "revision_calidad" : "por_aprobar";
@@ -476,7 +383,6 @@ export async function aprobarDocumento({ request, s, params }: RouteContext): Pr
   const id = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "documentos", "A");
-  await ensureDocumentosSgcSchema(s);
   const antes = await snapshotRow(s, TABLE, id);
   if (!antes) return json({ message: "Documento no encontrado" }, 404);
   if (String(antes.estado) !== "por_aprobar") return json({ message: "Solo se aprueban documentos por aprobar (con sus revisiones terminadas)" }, 409);
@@ -500,7 +406,6 @@ export async function obsoletarDocumento({ request, s, params }: RouteContext): 
   const id = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "documentos", "G");
-  await ensureDocumentosSgcSchema(s);
   const motivo = await readMotivo(request);
   if (motivo.length < 5) return json({ message: "Indica el motivo (al menos 5 caracteres)" }, 400);
   const antes = await snapshotRow(s, TABLE, id);
@@ -527,7 +432,6 @@ export async function cancelarDocumento({ request, s, params }: RouteContext): P
   const id = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "documentos", "AN");
-  await ensureDocumentosSgcSchema(s);
   const motivo = await readMotivo(request);
   if (motivo.length < 5) return json({ message: "Indica el motivo (al menos 5 caracteres)" }, 400);
   const antes = await snapshotRow(s, TABLE, id);
@@ -546,7 +450,6 @@ export async function nuevaRevision({ request, s, params }: RouteContext): Promi
   const id = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "documentos", "C", { objeto: "documento", borrador: true });
-  await ensureDocumentosSgcSchema(s);
   const original = await snapshotRow(s, TABLE, id);
   if (!original) return json({ message: "Documento no encontrado" }, 404);
   // Una revision nueva parte de una que llego a estar vigente (FX-MC 8.3): un
@@ -601,7 +504,6 @@ export async function getDocumentoArchivo({ request, s, params }: RouteContext):
   const id = intParam(params.id);
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "documentos", "V");
-  await ensureDocumentosSgcSchema(s);
   const row = await snapshotRow(s, TABLE, id);
   if (!row || !row.archivo_nombre) return json({ message: "Archivo no encontrado" }, 404);
   // Fase 9: con alcance "autorizados" solo se descargan documentos vigentes distribuidos a la persona.

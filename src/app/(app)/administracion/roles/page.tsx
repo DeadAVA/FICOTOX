@@ -54,7 +54,7 @@ function RolesContent() {
     { enabled: !!token },
   );
 
-  const roles = resource.data || [];
+  const roles = useMemo(() => resource.data || [], [resource.data]);
   const rows = useMemo(() => {
     const term = normalizeText(search);
     return term ? roles.filter((role) => normalizeText(`${role.nombre || ""} ${role.descripcion || ""}`).includes(term)) : roles;

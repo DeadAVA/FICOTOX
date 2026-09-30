@@ -6,8 +6,8 @@
  *   npm run test:fixture
  *
  * 1. Levanta `next dev` en un puerto libre (TEST_FIXTURE_PORT, 3101) sobre una
- *    base nueva en instance/test-fixture/ y abre /api/health/db para que el
- *    arranque cree el esquema; comprueba que el servidor usa esa base.
+ *    base nueva en instance/test-fixture/: al arrancar, el servidor aplica las
+ *    migraciones versionadas (Fase 12) a la base vacia; comprueba que usa esa base.
  * 2. Lo detiene y corre el script de roles con contrasenas aleatorias (las
  *    pruebas las vuelven a generar en cada corrida: reset-test-db.mjs).
  * 3. Copia la base (y la llave de la bitacora, si se genero una) a instance/fixtures/.
@@ -17,10 +17,12 @@ import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const Sqlite = createRequire(import.meta.url)("better-sqlite3");
 const PORT = Number(process.env.TEST_FIXTURE_PORT || 3101);
 const BUILD_DIR = path.join(root, "instance/test-fixture");
 const BUILD_DB = path.join(BUILD_DIR, "ficotox-fixture.sqlite3");
@@ -77,6 +79,11 @@ export async function buildFixture() {
   const code = await runNode(["scripts/seed-roles-usuarios.mjs", "--db", BUILD_DB, "--usuarios", usuariosFile], { FICOTOX_INSTANCE_DIR: BUILD_DIR });
   if (code !== 0) throw new Error("El script de roles y usuarios fallo al generar la base de prueba");
 
+  // Fase 12: el servidor usa WAL; se consolida el -wal y se deja en modo DELETE para copiar un solo archivo.
+  const consolidar = new Sqlite(BUILD_DB);
+  consolidar.pragma("wal_checkpoint(TRUNCATE)");
+  consolidar.pragma("journal_mode = DELETE");
+  consolidar.close();
   mkdirSync(FIXTURE_DIR, { recursive: true });
   for (const suffix of ["", "-wal", "-shm", "-journal"]) if (existsSync(FIXTURE + suffix)) rmSync(FIXTURE + suffix);
   copyFileSync(BUILD_DB, FIXTURE);

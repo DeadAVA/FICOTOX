@@ -45,4 +45,9 @@ if (quedan.length) {
   console.error(`[standalone] ERROR: el paquete aun contiene datos o secretos:\n${quedan.map((r) => `  - ${path.relative(root, r)}`).join("\n")}`);
   process.exit(1);
 }
+// Fase 12: version del codigo con que se compilo (la compara npm run verificar-instalacion).
+{
+  const { versionApp } = await import("../src/lib/shared/respaldo.mjs");
+  fs.writeFileSync(path.join(paquete, "ficotox-build.json"), `${JSON.stringify({ ...versionApp(root), compilado_en: new Date().toISOString() })}\n`);
+}
 console.log(`[standalone] paquete limpio${quitar.length ? ` (se quitaron: ${quitar.map((r) => path.relative(paquete, r)).join(", ")})` : ""}: sin .env, bases, llaves ni respaldos`);

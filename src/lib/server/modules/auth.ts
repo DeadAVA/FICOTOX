@@ -4,11 +4,11 @@ import { registrarAuditoria } from "../audit";
 import { getConfig } from "../config";
 import { isOperationalError, type Row, type Session } from "../db";
 import { HttpError, json, readJson, type RouteContext } from "../http";
-import { cargarAutorizacion, cuentaVigente, ensureRbacSchema, filasDeRoles, hoy, MENSAJE_CUENTA_NO_VIGENTE } from "../rbac";
+import { cargarAutorizacion, cuentaVigente, filasDeRoles, hoy, MENSAJE_CUENTA_NO_VIGENTE } from "../rbac";
 import { emitirReauth, estadoAcceso, ipDe, MENSAJE_ACCESO_FALLIDO, registrarIntento } from "../seguridad";
 import { hashPassword, validatePasswordStrength } from "../password";
 import { expandirPermisos, mapaPermisos, permite } from "../../shared/permisos";
-import { ensureUsuariosSchema } from "../users";
+
 import { verifyPassword } from "../password";
 
 /* Acceso con usuario y contrasena del sistema (Fase 3: se retiro el proveedor externo de identidad). */
@@ -97,7 +97,6 @@ export async function loginWithEmail({ request, s }: RouteContext): Promise<Resp
 
   let row: Row | null;
   try {
-    await ensureUsuariosSchema(s);
     row = await getUserByEmail(s, email);
   } catch (error) {
     if (isOperationalError(error)) {
@@ -131,8 +130,6 @@ export async function loginWithEmail({ request, s }: RouteContext): Promise<Resp
 
 export async function me({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await ensureRbacSchema(s);
-  await ensureUsuariosSchema(s);
   // Nombre, avatar, roles y permisos se leen de la base (no del token) para reflejar cambios sin volver a entrar.
   return json(await perfilSesion(s, user));
 }
@@ -143,7 +140,6 @@ export async function me({ request, s }: RouteContext): Promise<Response> {
  */
 export async function personal({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await ensureUsuariosSchema(s);
   await cargarAutorizacion(s, user);
   const usuarios = (await s.query<Row>("SELECT id, nombre, vigente_desde, vigente_hasta FROM usuarios WHERE COALESCE(activo, 1) = 1 ORDER BY nombre")).filter((u) => cuentaVigente(u));
   const asignaciones = await s.query<Row>(
@@ -191,7 +187,6 @@ export async function personal({ request, s }: RouteContext): Promise<Response> 
 /* La persona elige su avatar del catalogo (o vuelve al de omision con null). Queda en la bitacora. */
 export async function updateMyAvatar({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await ensureUsuariosSchema(s);
   await cargarAutorizacion(s, user, { permitirCambioPendiente: true });
   const payload = await readJson(request);
   const avatar = payload.avatar === null || payload.avatar === "" ? null : payload.avatar;

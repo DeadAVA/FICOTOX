@@ -6,26 +6,8 @@ import { registrarAuditoria, snapshotRow } from "../audit";
 import { getConfig } from "../config";
 import { isIntegrityError, type Row, type Session } from "../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
-import {
-  afectadosPorCambioDeRol,
-  assertAdministratorRemains,
-  countActiveAdministrators,
-  cuentaVigente,
-  ensureRbacSchema,
-  finDiaLocal,
-  inicioDiaLocal,
-  filasDeRoles,
-  guardarFilasRol,
-  hoy,
-  mensajeViolaciones,
-  normalizarFilas,
-  requirePermission,
-  rolesComprometidos,
-  rolesVigentes,
-  toBit,
-  type Permiso,
-} from "../rbac";
-import { ensureUsuariosSchema, normalizeUserPayload } from "../users";
+import { afectadosPorCambioDeRol, assertAdministratorRemains, countActiveAdministrators, cuentaVigente, finDiaLocal, inicioDiaLocal, filasDeRoles, guardarFilasRol, hoy, mensajeViolaciones, normalizarFilas, requirePermission, rolesComprometidos, rolesVigentes, toBit, type Permiso } from "../rbac";
+import { normalizeUserPayload } from "../users";
 import { hashPassword, validatePasswordStrength } from "../password";
 import { exigirReauth } from "../seguridad";
 import { crearSolicitud, datosDe, detalleSolicitud, respuestaSolicitud, serializarSolicitud, type ContextoEjecucion, type Solicitud } from "../solicitudes";
@@ -78,7 +60,6 @@ function fechaValida(value: unknown): string | null {
 export async function listPermissions({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "usuarios", "V");
-  await ensureRbacSchema(s);
   return json({ modulos: MODULOS, acciones: ACCIONES, alcances: ALCANCES, items: MODULOS.map((m) => ({ clave: m.clave, nombre: m.nombre, descripcion: m.descripcion })) });
 }
 
@@ -101,7 +82,6 @@ export async function listRoles({ request, s }: RouteContext): Promise<Response>
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "usuarios", "V");
   if (soloPropio(permiso)) throw new HttpError(403, { message: "Tu alcance en usuarios es solo tu propia cuenta" });
-  await ensureRbacSchema(s);
   const rows = await rolesConConteo(s);
   const filas = await filasDeRoles(s, rows.map((r) => Number(r.id)));
   const items = rows.map((row) => ({ ...row, permisos: filas.get(Number(row.id)) || [] }));
@@ -113,7 +93,6 @@ export async function getRoleDetail({ request, s, params }: RouteContext): Promi
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "usuarios", "V");
   if (soloPropio(permiso)) throw new HttpError(403, { message: "Tu alcance en usuarios es solo tu propia cuenta" });
-  await ensureRbacSchema(s);
   const role = await s.queryOne("SELECT id, nombre, descripcion, clave, es_sistemico, activo FROM roles WHERE id = :id", { id: roleId });
   if (!role) return json({ message: "Rol no encontrado" }, 404);
   const permisos = (await filasDeRoles(s, [roleId])).get(roleId) || [];
@@ -141,7 +120,6 @@ function datosRol(payload: Record<string, unknown>) {
 export async function createRole({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "usuarios", "G");
-  await ensureRbacSchema(s);
   const payload = await readJson(request);
   const data = datosRol(payload);
   if (!data.nombre) return json({ message: "El nombre del rol es obligatorio" }, 400);
@@ -165,7 +143,6 @@ export async function updateRole({ request, s, params }: RouteContext): Promise<
   const roleId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "usuarios", "G");
-  await ensureRbacSchema(s);
   const antes = await snapshotRow(s, "roles", roleId);
   if (!antes) return json({ message: "Rol no encontrado" }, 404);
   const payload = await readJson(request);
@@ -218,7 +195,6 @@ export async function deleteRole({ request, s, params }: RouteContext): Promise<
   const roleId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "usuarios", "G");
-  await ensureRbacSchema(s);
   const role = await s.queryOne<{ id: number; es_sistemico: number }>("SELECT id, es_sistemico FROM roles WHERE id = :id", { id: roleId });
   if (!role) return json({ message: "Rol no encontrado" }, 404);
   if (role.es_sistemico) return json({ message: "No se puede eliminar un rol sistemico" }, 403);
@@ -285,7 +261,6 @@ function conRoles(row: Row, asignaciones: Row[]): Row {
 export async function listUsuarios({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "usuarios", "V");
-  await ensureUsuariosSchema(s);
   const rows = soloPropio(permiso)
     ? await s.query(`${USUARIO_SELECT} WHERE u.id = :id`, { id: permiso.auth.userId })
     : await s.query(`${USUARIO_SELECT} ORDER BY u.id DESC LIMIT 200`);
@@ -299,7 +274,6 @@ export async function getUsuario({ request, s, params }: RouteContext): Promise<
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "usuarios", "V");
   if (soloPropio(permiso) && userId !== permiso.auth.userId) throw new HttpError(403, { message: "Tu alcance en usuarios es solo tu propia cuenta" });
-  await ensureUsuariosSchema(s);
   const row = await s.queryOne(`${USUARIO_SELECT} WHERE u.id = :id LIMIT 1`, { id: userId });
   if (!row) return json({ message: "Usuario no encontrado" }, 404);
   const asignaciones = (await asignacionesDe(s, [userId])).get(userId) || [];
@@ -459,7 +433,6 @@ async function solicitarAsignacion(s: Session, actor: CurrentUser, usuario: Row,
 
 /* Ejecutor de la solicitud "asignar_rol" (se vuelve a validar al aprobar). */
 export async function ejecutarAsignacionRol(ctx: ContextoEjecucion): Promise<Record<string, unknown>> {
-  await ensureUsuariosSchema(ctx.s);
   const usuario = await snapshotRow(ctx.s, "usuarios", Number(ctx.solicitud.entidad_id));
   if (!usuario) throw new HttpError(404, { message: "La cuenta de la solicitud ya no existe" });
   const prep = await prepararAsignacion(ctx.s, usuario, { rol_id: ctx.datos.rol_id, vigente_desde: ctx.datos.vigente_desde, vigente_hasta: ctx.datos.vigente_hasta, motivo: ctx.datos.motivo });
@@ -469,7 +442,6 @@ export async function ejecutarAsignacionRol(ctx: ContextoEjecucion): Promise<Rec
 
 /* Ejecutor de "reactivar_cuenta". */
 export async function ejecutarReactivacion(ctx: ContextoEjecucion): Promise<Record<string, unknown>> {
-  await ensureUsuariosSchema(ctx.s);
   const userId = Number(ctx.solicitud.entidad_id);
   const antes = await snapshotRow(ctx.s, "usuarios", userId);
   if (!antes) throw new HttpError(404, { message: "La cuenta de la solicitud ya no existe" });
@@ -482,7 +454,6 @@ export async function ejecutarReactivacion(ctx: ContextoEjecucion): Promise<Reco
 
 /* Ejecutor de "ampliar_vigencia" (los roles no se extienden solos; se reasignan). */
 export async function ejecutarAmpliacionVigencia(ctx: ContextoEjecucion): Promise<Record<string, unknown>> {
-  await ensureUsuariosSchema(ctx.s);
   const userId = Number(ctx.solicitud.entidad_id);
   const antes = await snapshotRow(ctx.s, "usuarios", userId);
   if (!antes) throw new HttpError(404, { message: "La cuenta de la solicitud ya no existe" });
@@ -507,7 +478,6 @@ export async function ejecutarAmpliacionVigencia(ctx: ContextoEjecucion): Promis
 export async function createUsuario({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "usuarios", "G");
-  await ensureUsuariosSchema(s);
   const payload = await readJson(request);
   const validated = validateUsuarioPayload(payload, { passwordRequired: true });
   if (validated.error) return validated.error;
@@ -548,7 +518,6 @@ export async function updateUsuario({ request, s, params }: RouteContext): Promi
   const userId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "usuarios", "G");
-  await ensureUsuariosSchema(s);
   const antesUsuario = await snapshotRow(s, "usuarios", userId);
   if (!antesUsuario) return json({ message: "Usuario no encontrado" }, 404);
   const payload = await readJson(request);
@@ -690,7 +659,6 @@ export async function deleteUsuario({ request, s, params }: RouteContext): Promi
   const userId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "usuarios", "G");
-  await ensureUsuariosSchema(s);
   if (String(user.sub) === String(userId)) return json({ message: "No puedes dar de baja tu propio usuario activo" }, 403);
   // Las cuentas no se eliminan: la bitacora y los registros firmados siguen apuntando a ellas.
   const payload = await readJson(request);
@@ -714,7 +682,6 @@ export async function desbloquearUsuario({ request, s, params }: RouteContext): 
   const userId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "usuarios", "G");
-  await ensureUsuariosSchema(s);
   const usuario = await snapshotRow(s, "usuarios", userId);
   if (!usuario) return json({ message: "Usuario no encontrado" }, 404);
   const motivo = motivoDe(await readJson(request));
@@ -740,7 +707,6 @@ export async function restablecerPassword({ request, s, params }: RouteContext):
   const userId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "usuarios", "G");
-  await ensureUsuariosSchema(s);
   if (String(user.sub) === String(userId)) return json({ message: "Para tu propia cuenta usa Cambiar contraseña en Mi cuenta" }, 403);
   const usuario = await snapshotRow(s, "usuarios", userId);
   if (!usuario) return json({ message: "Usuario no encontrado" }, 404);
@@ -766,7 +732,6 @@ export async function asignarRolUsuario({ request, s, params }: RouteContext): P
   const userId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "usuarios", "G");
-  await ensureUsuariosSchema(s);
   noASiMismo(user, userId);
   const usuario = await snapshotRow(s, "usuarios", userId);
   if (!usuario) return json({ message: "Usuario no encontrado" }, 404);
@@ -782,7 +747,6 @@ export async function revocarRolUsuario({ request, s, params }: RouteContext): P
   const asignacionId = intParam(params.asignacion);
   const user = await requireUser(request);
   await requirePermission(s, user, "usuarios", "G");
-  await ensureUsuariosSchema(s);
   noASiMismo(user, userId);
   const asignacion = await s.queryOne<Row>(
     "SELECT ur.*, r.nombre AS rol, u.email FROM usuario_roles ur LEFT JOIN roles r ON r.id = ur.rol_id LEFT JOIN usuarios u ON u.id = ur.usuario_id WHERE ur.id = :id AND ur.usuario_id = :usuario_id",
@@ -813,7 +777,6 @@ export async function revocarRolUsuario({ request, s, params }: RouteContext): P
 
 const ACCIONES_ACCESO = ["bloquear", "desbloquear", "asignar_rol", "revocar_rol", "vencer_rol", "acotar_rol", "cambiar_vigencia", "restablecer_password", "baja", "reactivar", "cerrar_sesiones", "crear"];
 
-
 function csvCelda(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
   // Evita que Excel interprete formulas (inyeccion CSV).
@@ -834,7 +797,6 @@ function csv(encabezados: string[], filas: unknown[][]): string {
 export async function revisionAccesos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "usuarios", "V");
-  await ensureUsuariosSchema(s);
   const url = new URL(request.url);
   const fecha = hoy();
   const desde = fechaValida(url.searchParams.get("desde")) || sumarDias(fecha, -30);
@@ -935,7 +897,6 @@ export async function revisionAccesos({ request, s }: RouteContext): Promise<Res
  * `supervisorId`: solo las cuentas que esa persona supervisa.
  */
 export async function vencimientosProximos(s: Session, dias: number, supervisorId?: number): Promise<Row[]> {
-  await ensureUsuariosSchema(s);
   const fecha = hoy();
   const limite = sumarDias(fecha, dias);
   const filtro = supervisorId ? "AND u.supervisor_id = :sup" : "";

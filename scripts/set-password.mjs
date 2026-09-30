@@ -1,72 +1,69 @@
 #!/usr/bin/env node
 /*
- * Asigna o restablece la contrasena local de un usuario (solo SQLite).
+ * Restablece la contrasena local de un usuario desde la terminal (solo SQLite).
+ * Es el recurso de emergencia cuando nadie con usuarios:G puede entrar; en la
+ * operacion normal se usa Administracion > Usuarios > Restablecer contrasena.
  *
- *   node scripts/set-password.mjs <correo> <contrasena>
+ *   node scripts/set-password.mjs <correo> "<contrasena temporal>" --motivo "<por que>"
  *
- * Lee SQLITE_PATH de .env (o usa instance/ficotox.sqlite3) y guarda el hash
- * con el mismo formato que src/lib/server/password.ts (scrypt).
+ * Fase 12:
+ * - exige el servidor detenido (servidor.lock) y la base migrada;
+ * - aplica la misma politica de contrasenas que la aplicacion (validatePasswordStrength);
+ * - deja la contrasena como TEMPORAL: debe cambiarse al entrar (debe_cambiar_password=1)
+ *   y cierra las sesiones abiertas de esa cuenta (token_version + 1);
+ * - queda en la bitacora como "sistema" con el motivo (sellado con la misma llave);
+ * - sin DDL: la columna la crean las migraciones.
+ * Lee .env (o FICOTOX_ENV_FILE) como el servidor. Requiere Node 22.18+ o 24.
  */
-import { randomBytes, scryptSync } from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { COLUMNAS_AUDITORIA, construirRegistro, sellar } from "../src/lib/shared/audit-chain.mjs";
+import { argumento, claveBitacora, entornoDe, servidorEncendido, Sqlite } from "./lib/operacion.mjs";
 
-const require = createRequire(import.meta.url);
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-const [email, password] = process.argv.slice(2);
-if (!email || !password) {
-  console.error("Uso: node scripts/set-password.mjs <correo> <contrasena>");
+const args = process.argv.slice(2);
+const [email, password] = args.filter((a, i) => !a.startsWith("--") && args[i - 1] !== "--motivo");
+const motivo = String(argumento(args, "--motivo") || "").trim();
+const salir = (mensaje) => {
+  console.error(mensaje);
   process.exit(1);
-}
-if (password.length < 8) {
-  console.error("La contrasena debe tener al menos 8 caracteres");
-  process.exit(1);
-}
+};
+if (!email || !password || motivo.length < 5) salir('Uso: node scripts/set-password.mjs <correo> "<contraseña temporal>" --motivo "<por qué>" (el motivo queda en la bitácora)');
 
-function loadEnvFile(file) {
-  if (!fs.existsSync(file)) return;
-  for (const rawLine of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#") || !line.includes("=")) continue;
-    const [key, ...rest] = line.split("=");
-    const name = key.trim();
-    const value = rest.join("=").trim().replace(/^["']|["']$/g, "");
-    if (!(name in process.env)) process.env[name] = value;
-  }
+const entorno = entornoDe();
+if (entorno.motor !== "sqlite") salir("Este script solo aplica a SQLite. En MySQL restablece la contraseña desde Administración › Usuarios.");
+const vivo = servidorEncendido(entorno.instanceDir);
+if (vivo) salir(`El servidor está encendido (pid ${vivo.pid}). Detenlo antes de restablecer la contraseña desde la terminal.`);
+
+// password.ts es TypeScript (Node lo carga sin compilar): se calla solo el aviso de tipo de modulo.
+const avisosPorOmision = process.listeners("warning");
+process.removeAllListeners("warning");
+process.on("warning", (aviso) => {
+  if (aviso?.code !== "MODULE_TYPELESS_PACKAGE_JSON") for (const l of avisosPorOmision) l(aviso);
+});
+let passwordModule;
+try {
+  passwordModule = await import("../src/lib/server/password.ts");
+} catch (error) {
+  salir(`No se pudo cargar src/lib/server/password.ts (${error.message}). Usa Node 22.18+ o 24.`);
 }
-loadEnvFile(path.join(rootDir, ".env"));
+const { hashPassword, validatePasswordStrength } = passwordModule;
 
-if ((process.env.DATABASE_URL || "").trim()) {
-  console.error("Este script solo aplica a SQLite. Para MySQL cambia la contrasena desde la pantalla de Usuarios.");
-  process.exit(1);
+const db = new Sqlite(entorno.sqlitePath, { fileMustExist: true });
+try {
+  const columnas = db.prepare("PRAGMA table_info(usuarios)").all().map((c) => c.name);
+  if (!columnas.includes("debe_cambiar_password") || !db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migraciones'").get()) salir("La base no está migrada: corre primero npm run migrar.");
+  const usuario = db.prepare("SELECT id, nombre, email FROM usuarios WHERE LOWER(email) = LOWER(?)").get(email);
+  if (!usuario) salir(`No se encontró el usuario ${email}`);
+  const debil = validatePasswordStrength(String(password), { email: usuario.email, nombre: usuario.nombre });
+  if (debil) salir(debil);
+  const clave = claveBitacora(entorno);
+  if (!clave) salir("No hay llave de la bitácora (SECRET_KEY o auditoria.key): no se puede registrar el cambio.");
+  const insertar = db.prepare(`INSERT INTO auditoria (${COLUMNAS_AUDITORIA.join(", ")}) VALUES (${COLUMNAS_AUDITORIA.map((c) => `@${c}`).join(", ")})`);
+  db.transaction(() => {
+    db.prepare("UPDATE usuarios SET password_hash = ?, debe_cambiar_password = 1, token_version = COALESCE(token_version, 0) + 1 WHERE id = ?").run(hashPassword(String(password)), usuario.id);
+    const previo = db.prepare("SELECT hash FROM auditoria ORDER BY id DESC LIMIT 1").get();
+    const registro = construirRegistro({ accion: "restablecer_password", entidad: "usuarios", entidadId: usuario.id, referencia: usuario.email, motivo, detalle: { via: "scripts/set-password.mjs", debe_cambiar_password: true } }, { sub: null, nombre: "sistema", email: null }, previo?.hash || null);
+    insertar.run({ ...registro, hash: sellar(registro, clave) });
+  })();
+} finally {
+  db.close();
 }
-
-const configured = (process.env.SQLITE_PATH || "").trim();
-const sqlitePath = configured ? path.resolve(rootDir, configured) : path.join(rootDir, "instance", "ficotox.sqlite3");
-if (!fs.existsSync(sqlitePath)) {
-  console.error(`No existe la base de datos: ${sqlitePath}`);
-  process.exit(1);
-}
-
-const Database = require("better-sqlite3");
-const db = new Database(sqlitePath);
-const columns = db.prepare("PRAGMA table_info(usuarios)").all().map((column) => column.name);
-if (!columns.includes("password_hash")) {
-  db.exec("ALTER TABLE usuarios ADD COLUMN password_hash VARCHAR(255) DEFAULT NULL");
-}
-
-const salt = randomBytes(16);
-const derived = scryptSync(password, salt, 64, { N: 16384 });
-const hash = `scrypt$16384$${salt.toString("base64")}$${derived.toString("base64")}`;
-
-const result = db.prepare("UPDATE usuarios SET password_hash = ? WHERE LOWER(email) = LOWER(?)").run(hash, email);
-db.close();
-
-if (result.changes === 0) {
-  console.error(`No se encontro el usuario ${email}`);
-  process.exit(1);
-}
-console.log(`Contrasena actualizada para ${email}`);
+console.log(`Contraseña temporal asignada a ${email}: deberá cambiarla al entrar. Quedó en la bitácora (motivo: ${motivo}).`);

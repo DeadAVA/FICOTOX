@@ -18,37 +18,21 @@ import { requireUser, userIdFromClaims, type CurrentUser } from "./auth";
 import { registrarAuditoria } from "./audit";
 import { vigentesDe } from "./autorizaciones";
 import { getConfig } from "./config";
-import { isSqlite, type Row, type Session } from "./db";
+import { type Row, type Session } from "./db";
 import { HttpError, json, readJson, type RouteContext } from "./http";
 import { verifyPassword } from "./password";
 import { rolesVigentes } from "./rbac";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "./schema";
+
 import { faltantes, type Requisito } from "../shared/autorizaciones";
 
 const TOKENS = "firmas_tokens";
 const VIGENCIA_MIN = 10;
-
-export async function ensureFirmasSchema(s: Session): Promise<void> {
-  if (schemaReady(TOKENS)) return;
-  await s.execute(
-    isSqlite()
-      ? `CREATE TABLE IF NOT EXISTS ${TOKENS} (
-          id INTEGER PRIMARY KEY AUTOINCREMENT, token_hash VARCHAR(64) NOT NULL UNIQUE, usuario_id INTEGER NOT NULL,
-          solicitado_por INTEGER NOT NULL, creado_en VARCHAR(40) NOT NULL, expira_en VARCHAR(40) NOT NULL, usado_en VARCHAR(40) DEFAULT NULL)`
-      : `CREATE TABLE IF NOT EXISTS ${TOKENS} (
-          id INT AUTO_INCREMENT PRIMARY KEY, token_hash VARCHAR(64) NOT NULL, usuario_id INT NOT NULL,
-          solicitado_por INT NOT NULL, creado_en VARCHAR(40) NOT NULL, expira_en VARCHAR(40) NOT NULL, usado_en VARCHAR(40) DEFAULT NULL,
-          UNIQUE KEY uq_firmas_tokens_hash (token_hash)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  );
-  markSchemaReady(TOKENS);
-}
 
 const hashToken = (token: string) => createHash("sha256").update(`${token}:${getConfig().SECRET_KEY}`).digest("hex");
 
 /* POST /api/firmas/confirmar { usuario_id, password }: el firmante confirma con su contrasena. */
 export async function confirmarFirmante({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await ensureFirmasSchema(s);
   const payload = await readJson(request);
   const usuarioId = Number(payload.usuario_id) || 0;
   const fila = await s.queryOne<Row>("SELECT id, nombre, email, activo, password_hash, bloqueado_hasta FROM usuarios WHERE id = :id", { id: usuarioId });
@@ -71,7 +55,6 @@ export async function confirmarFirmante({ request, s }: RouteContext): Promise<R
 /* Consume un token de firma: debe ser de ese firmante, emitido para esta sesion, vigente y sin usar. */
 async function consumirToken(s: Session, token: string, firmanteId: number, sesionId: number): Promise<boolean> {
   if (!token) return false;
-  await ensureFirmasSchema(s);
   const fila = await s.queryOne<Row>(`SELECT * FROM ${TOKENS} WHERE token_hash = :h`, { h: hashToken(token) });
   if (!fila || fila.usado_en || Number(fila.usuario_id) !== firmanteId || Number(fila.solicitado_por) !== sesionId || String(fila.expira_en) < new Date().toISOString()) return false;
   const r = await s.execute(`UPDATE ${TOKENS} SET usado_en = :en WHERE id = :id AND usado_en IS NULL`, { en: new Date().toISOString(), id: fila.id });
@@ -88,13 +71,6 @@ export interface RolFirma {
   etiqueta: string;
   /* Autorizaciones FX-THF-AP que necesita el firmante (trabajo tecnico). */
   requisitos?: Requisito[];
-}
-
-export async function ensureColumnasFirma(s: Session, tabla: string, roles: RolFirma[]): Promise<void> {
-  for (const r of roles) {
-    await addColumnIfMissing(s, tabla, `${r.rol}_usuario_id`, "INT DEFAULT NULL");
-    await addColumnIfMissing(s, tabla, `${r.rol}_cargo`, "VARCHAR(120) DEFAULT NULL");
-  }
 }
 
 async function cargoDe(s: Session, usuarioId: number): Promise<string | null> {

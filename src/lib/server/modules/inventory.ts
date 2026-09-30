@@ -3,16 +3,15 @@ import { suspensionesActivas } from "./calidad/bloqueos";
 import { folioNc } from "../../shared/calidad";
 import { registrarAuditoria, snapshotRow } from "../audit";
 import { isIntegrityError, isSqlite, type Row, type Session } from "../db";
-import { darDeBaja, ensureBajaColumns, itemRef, reactivarItem } from "../inventory-baja";
+import { darDeBaja, itemRef, reactivarItem } from "../inventory-baja";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
-import { ensureMovimientosSchema } from "../inventory-usage";
+
 import { cargarAutorizacion, recortarPorModulo, requirePermission } from "../rbac";
 import { exigirReauth } from "../seguridad";
 import { aplicarSupervision, exigirSinSupervisionPendiente, marcaSupervision } from "../supervision";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "../schema";
-import { ensureConsumiblesSchema } from "./consumables";
+
 import { firstTruthy, isTruthy, searchParam, toFloatOrNull, toIntOrNull, toStrOrNull, utcTimestampReference } from "./helpers";
-import { ensureSupervisionColumns } from "../supervision";
+
 import { finDiaLocal, hoyLocal, inicioDiaLocal, sumarDias } from "../../shared/fechas";
 import { autorizarEquipoA } from "../autorizaciones";
 
@@ -358,137 +357,6 @@ async function findExistingReactivoId(s: Session, data: Record<string, unknown>)
   return null;
 }
 
-export async function ensureReactivosSchema(s: Session): Promise<void> {
-  if (schemaReady("reactivos")) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS reactivos (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          nombre VARCHAR(180) DEFAULT NULL,
-          numero_cas VARCHAR(120) DEFAULT NULL,
-          categoria VARCHAR(120) DEFAULT NULL,
-          cantidad_actual REAL DEFAULT 0,
-          unidad VARCHAR(40) DEFAULT NULL,
-          ubicacion VARCHAR(180) DEFAULT NULL,
-          fecha_vencimiento DATE DEFAULT NULL,
-          stock_minimo REAL DEFAULT 0
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS reactivos (
-          id INT NOT NULL AUTO_INCREMENT,
-          nombre VARCHAR(180) DEFAULT NULL,
-          numero_cas VARCHAR(120) DEFAULT NULL,
-          categoria VARCHAR(120) DEFAULT NULL,
-          cantidad_actual DECIMAL(12,4) DEFAULT 0,
-          unidad VARCHAR(40) DEFAULT NULL,
-          ubicacion VARCHAR(180) DEFAULT NULL,
-          fecha_vencimiento DATE DEFAULT NULL,
-          stock_minimo DECIMAL(12,4) DEFAULT 0,
-          PRIMARY KEY (id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-      `,
-  );
-
-  const columnDefinitions: Array<[string, string]> = [
-    ["tipo_reactivo", "VARCHAR(80) DEFAULT NULL"],
-    ["id_reactivo", "VARCHAR(120) DEFAULT NULL"],
-    ["codigo_interno", "VARCHAR(120) DEFAULT NULL"],
-    ["producto", "VARCHAR(180) DEFAULT NULL"],
-    ["marca", "VARCHAR(120) DEFAULT NULL"],
-    ["proveedor", "VARCHAR(180) DEFAULT NULL"],
-    ["catalogo", "VARCHAR(120) DEFAULT NULL"],
-    ["numero_parte", "VARCHAR(120) DEFAULT NULL"],
-    ["cas", "VARCHAR(120) DEFAULT NULL"],
-    ["catalogo_parte_cas_lote", "VARCHAR(180) DEFAULT NULL"],
-    ["localizacion", "VARCHAR(180) DEFAULT NULL"],
-    ["sub_localizacion", "VARCHAR(180) DEFAULT NULL"],
-    ["caducidad", "DATE DEFAULT NULL"],
-    ["fecha_apertura", "DATE DEFAULT NULL"],
-    ["fecha_ingreso", "DATE DEFAULT NULL"],
-    ["fecha_preparacion", "DATE DEFAULT NULL"],
-    ["contenedor", "VARCHAR(120) DEFAULT NULL"],
-    ["capacidad_litros", "DECIMAL(12,4) DEFAULT NULL"],
-    ["capacidad_kilos", "DECIMAL(12,4) DEFAULT NULL"],
-    ["capacidad", "DECIMAL(12,4) DEFAULT NULL"],
-    ["unidad_capacidad", "VARCHAR(40) DEFAULT NULL"],
-    ["piezas", "INT DEFAULT NULL"],
-    ["total_litros_2025", "DECIMAL(12,4) DEFAULT NULL"],
-    ["cantidad_total", "DECIMAL(12,4) DEFAULT NULL"],
-    ["unidad_total", "VARCHAR(40) DEFAULT NULL"],
-    ["restante_190126", "DECIMAL(12,4) DEFAULT NULL"],
-    ["restante", "DECIMAL(12,4) DEFAULT NULL"],
-    ["lote", "VARCHAR(120) DEFAULT NULL"],
-    ["parte", "VARCHAR(120) DEFAULT NULL"],
-    ["serie", "VARCHAR(120) DEFAULT NULL"],
-    ["descripcion", "TEXT"],
-    ["nuevo_usado", "VARCHAR(30) DEFAULT NULL"],
-    ["estado", "VARCHAR(80) DEFAULT NULL"],
-    ["metodo", "VARCHAR(120) DEFAULT NULL"],
-    ["observaciones", "TEXT"],
-    ["item_name", "VARCHAR(180) DEFAULT NULL"],
-    ["informacion_extra", "TEXT"],
-    ["nombre_crm", "VARCHAR(180) DEFAULT NULL"],
-    ["lot_number", "VARCHAR(120) DEFAULT NULL"],
-    ["url", "VARCHAR(255) DEFAULT NULL"],
-    ["estado_reactivo", "VARCHAR(40) DEFAULT NULL"],
-    ["volumen", "VARCHAR(80) DEFAULT NULL"],
-    ["vendor", "VARCHAR(180) DEFAULT NULL"],
-    ["catalogo", "VARCHAR(120) DEFAULT NULL"],
-    ["amount_in_stock", "DECIMAL(12,4) DEFAULT NULL"],
-    ["expiration_date", "DATE DEFAULT NULL"],
-    ["cas_number", "VARCHAR(120) DEFAULT NULL"],
-    ["bottle_tag_color", "VARCHAR(80) DEFAULT NULL"],
-    ["date_opened", "DATE DEFAULT NULL"],
-    ["formula", "VARCHAR(180) DEFAULT NULL"],
-    ["id_interno", "VARCHAR(120) DEFAULT NULL"],
-    ["physical_state", "VARCHAR(80) DEFAULT NULL"],
-    ["estado_fisico", "VARCHAR(80) DEFAULT NULL"],
-    ["presentacion", "VARCHAR(120) DEFAULT NULL"],
-    ["tipo_sustancia", "VARCHAR(120) DEFAULT NULL"],
-    ["extra_json", "LONGTEXT"],
-    ["creado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP"],
-    ["actualizado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"],
-    ["stock_maximo", "DECIMAL(12,4) DEFAULT NULL"],
-    ["activo", "TINYINT(1) NOT NULL DEFAULT 1"],
-    ["baja_motivo", "TEXT"],
-    ["baja_en", "VARCHAR(40) DEFAULT NULL"],
-    ["baja_por", "INT DEFAULT NULL"],
-  ];
-  for (const [columnName, columnDefinition] of columnDefinitions) {
-    await addColumnIfMissing(s, "reactivos", columnName, columnDefinition);
-  }
-  await s.execute(
-    `
-    UPDATE reactivos
-    SET stock_maximo = COALESCE(
-        capacidad_litros,
-        capacidad_kilos,
-        cantidad_total,
-        total_litros_2025,
-        amount_in_stock,
-        cantidad_actual,
-        piezas,
-        volumen
-    )
-    WHERE stock_maximo IS NULL
-      AND COALESCE(
-        capacidad_litros,
-        capacidad_kilos,
-        cantidad_total,
-        total_litros_2025,
-        amount_in_stock,
-        cantidad_actual,
-        piezas,
-        volumen
-      ) IS NOT NULL
-    `,
-  );
-  await ensureSupervisionColumns(s, "reactivos");
-  markSchemaReady("reactivos");
-}
-
 function strip(value: unknown): string {
   return String(value || "").trim();
 }
@@ -618,9 +486,6 @@ const REACTIVO_UPDATE_ASSIGNMENTS = REACTIVO_COLUMNS.map((column) => `${column} 
 export async function inventorySummary({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const auth = await cargarAutorizacion(s, user);
-  await ensureReactivosSchema(s);
-  await ensureConsumiblesSchema(s);
-  await ensureEquiposSchema(s);
 
   // Las mismas reglas que usan las listas (ver `isReactivoLow` en el cliente y el filtro
   // "Con alerta de calibración"): así el aviso del Inicio siempre coincide con lo que se ve al abrirlo.
@@ -663,7 +528,6 @@ export async function inventorySummary({ request, s }: RouteContext): Promise<Re
 export async function listReactivos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "V");
-  await ensureReactivosSchema(s);
 
   const search = searchParam(request, "search");
   const rows = await s.query(
@@ -705,7 +569,6 @@ export async function getReactivo({ request, s, params }: RouteContext): Promise
   const reactivoId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "V");
-  await ensureReactivosSchema(s);
 
   const row = await s.queryOne("SELECT * FROM reactivos WHERE id = :id", { id: reactivoId });
   if (!row) {
@@ -717,7 +580,6 @@ export async function getReactivo({ request, s, params }: RouteContext): Promise
 export async function createReactivo({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" }));
-  await ensureReactivosSchema(s);
 
   const data = normalizeReactivoPayload(await readJson(request));
   if (!data.tipo_reactivo || !data.nombre) {
@@ -738,7 +600,6 @@ export async function updateReactivo({ request, s, params }: RouteContext): Prom
   const reactivoId = intParam(params.id);
   const user = await requireUser(request);
   const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "E", { objeto: "catalogo_inventario" }));
-  await ensureReactivosSchema(s);
 
   const antes = await snapshotRow(s, "reactivos", reactivoId);
   if (!antes) {
@@ -773,8 +634,6 @@ export async function refillReactivo({ request, s, params }: RouteContext): Prom
   const reactivoId = intParam(params.id);
   const user = await requireUser(request);
   const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "movimiento" }));
-  await ensureReactivosSchema(s);
-  await ensureMovimientosSchema(s);
 
   const payload = await readJson(request);
   const amount = toFloatOrNull(payload.cantidad);
@@ -842,7 +701,6 @@ export async function importReactivos({ request, s }: RouteContext): Promise<Res
   const user = await requireUser(request);
   // La importacion masiva no se hace bajo supervision (no hay visto bueno por fila).
   if (marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" }))) throw new HttpError(403, { message: "La importación masiva no está disponible para capturas bajo supervisión" });
-  await ensureReactivosSchema(s);
 
   const payload = await readJson(request);
   const sheets = payload.sheets;
@@ -948,7 +806,6 @@ export async function deleteReactivo({ request, s, params }: RouteContext): Prom
   const reactivoId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "AN");
-  await ensureReactivosSchema(s);
   return darDeBaja(s, user, "reactivos", reactivoId, await readJson(request), "Reactivo", request);
 }
 
@@ -956,158 +813,12 @@ export async function reactivarReactivo({ request, s, params }: RouteContext): P
   const reactivoId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "G");
-  await ensureReactivosSchema(s);
   return reactivarItem(s, user, "reactivos", reactivoId, await readJson(request), "Reactivo", request);
 }
 
 // ---------------------------------------------------------------------------
 // Equipos y mantenimientos
 // ---------------------------------------------------------------------------
-
-export async function ensureEquiposSchema(s: Session): Promise<void> {
-  if (schemaReady("equipos")) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS equipos (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          nombre VARCHAR(150) NOT NULL,
-          marca VARCHAR(100) DEFAULT NULL,
-          modelo VARCHAR(100) DEFAULT NULL,
-          numero_serie VARCHAR(100) DEFAULT NULL UNIQUE,
-          ubicacion VARCHAR(150) DEFAULT NULL,
-          id_responsable INTEGER DEFAULT NULL,
-          fecha_prox_calibracion DATE DEFAULT NULL,
-          estado VARCHAR(40) NOT NULL DEFAULT 'operativo',
-          creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS equipos (
-          id INT NOT NULL AUTO_INCREMENT,
-          nombre VARCHAR(150) NOT NULL,
-          marca VARCHAR(100) DEFAULT NULL,
-          modelo VARCHAR(100) DEFAULT NULL,
-          numero_serie VARCHAR(100) DEFAULT NULL,
-          ubicacion VARCHAR(150) DEFAULT NULL,
-          id_responsable INT DEFAULT NULL,
-          fecha_prox_calibracion DATE DEFAULT NULL,
-          estado ENUM('operativo','mantenimiento','fuera_servicio','calibracion_pendiente') NOT NULL DEFAULT 'operativo',
-          creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (id),
-          UNIQUE KEY numero_serie (numero_serie),
-          KEY id_responsable (id_responsable)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-      `,
-  );
-  for (const [columnName, columnDefinition] of [
-    ["marca", "VARCHAR(100) DEFAULT NULL"],
-    ["modelo", "VARCHAR(100) DEFAULT NULL"],
-    ["numero_serie", "VARCHAR(100) DEFAULT NULL"],
-    ["ubicacion", "VARCHAR(150) DEFAULT NULL"],
-    ["id_responsable", "INT DEFAULT NULL"],
-    ["fecha_prox_calibracion", "DATE DEFAULT NULL"],
-    ["estado", "ENUM('operativo','mantenimiento','fuera_servicio','calibracion_pendiente') NOT NULL DEFAULT 'operativo'"],
-    ["creado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP"],
-    // Clave de la bitacora de uso del equipo (FX-TCB-<equipo>-<num>/<rev>), se copia a los formatos de extraccion.
-    ["clave_bitacora", "VARCHAR(60) DEFAULT NULL"],
-  ] as Array<[string, string]>) {
-    await addColumnIfMissing(s, "equipos", columnName, columnDefinition);
-  }
-  await ensureBajaColumns(s, "equipos");
-  // Último folio anotado en la bitácora del equipo: los formatos sugieren el siguiente.
-  await addColumnIfMissing(s, "equipos", "ultimo_folio_bitacora", "VARCHAR(60) DEFAULT NULL");
-  await ensureSupervisionColumns(s, "equipos");
-  markSchemaReady("equipos");
-}
-
-export async function ensureMantenimientosSchema(s: Session): Promise<void> {
-  if (schemaReady("mantenimientos")) return;
-  await ensureEquiposSchema(s);
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS mantenimientos (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          id_equipo INTEGER NOT NULL,
-          tipo VARCHAR(40) NOT NULL,
-          fecha_programada DATE NOT NULL,
-          fecha_realizado DATE DEFAULT NULL,
-          tecnico_proveedor VARCHAR(150) DEFAULT NULL,
-          estado VARCHAR(40) DEFAULT 'programado',
-          observaciones TEXT,
-          id_responsable INTEGER DEFAULT NULL,
-          creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS mantenimientos (
-          id INT NOT NULL AUTO_INCREMENT,
-          id_equipo INT NOT NULL,
-          tipo ENUM('preventivo','correctivo','calibracion') NOT NULL,
-          fecha_programada DATE NOT NULL,
-          fecha_realizado DATE DEFAULT NULL,
-          tecnico_proveedor VARCHAR(150) DEFAULT NULL,
-          estado ENUM('programado','en_proceso','completado','vencido','cancelado') DEFAULT 'programado',
-          observaciones TEXT,
-          id_responsable INT DEFAULT NULL,
-          creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (id),
-          KEY id_equipo (id_equipo),
-          KEY id_responsable (id_responsable)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-      `,
-  );
-  for (const [columnName, columnDefinition] of [
-    ["fecha_realizado", "DATE DEFAULT NULL"],
-    ["tecnico_proveedor", "VARCHAR(150) DEFAULT NULL"],
-    ["estado", "ENUM('programado','en_proceso','completado','vencido','cancelado') DEFAULT 'programado'"],
-    ["observaciones", "TEXT"],
-    ["id_responsable", "INT DEFAULT NULL"],
-    ["creado_en", "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP"],
-  ] as Array<[string, string]>) {
-    await addColumnIfMissing(s, "mantenimientos", columnName, columnDefinition);
-  }
-  if (!isSqlite()) {
-    // Los mantenimientos se cancelan (no se borran): el ENUM debe admitir el estado.
-    await s.execute("ALTER TABLE mantenimientos MODIFY estado ENUM('programado','en_proceso','completado','vencido','cancelado') DEFAULT 'programado'");
-  }
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS reportes_mantenimiento (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          codigo VARCHAR(50) NOT NULL UNIQUE,
-          id_mantenimiento INTEGER NOT NULL,
-          version VARCHAR(20) NOT NULL,
-          estado VARCHAR(40) DEFAULT 'borrador',
-          id_responsable INTEGER DEFAULT NULL,
-          fecha_reporte DATE NOT NULL,
-          archivo_url TEXT,
-          creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS reportes_mantenimiento (
-          id INT NOT NULL AUTO_INCREMENT,
-          codigo VARCHAR(50) NOT NULL,
-          id_mantenimiento INT NOT NULL,
-          version VARCHAR(20) NOT NULL,
-          estado ENUM('borrador','en_revision','aprobado','publicado') DEFAULT 'borrador',
-          id_responsable INT DEFAULT NULL,
-          fecha_reporte DATE NOT NULL,
-          archivo_url TEXT,
-          creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (id),
-          UNIQUE KEY codigo (codigo),
-          KEY id_mantenimiento (id_mantenimiento),
-          KEY id_responsable (id_responsable)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-      `,
-  );
-  await ensureSupervisionColumns(s, "mantenimientos");
-  markSchemaReady("mantenimientos");
-}
 
 function normalizeEquipoPayload(raw: Record<string, unknown>) {
   const payload = raw || {};
@@ -1157,7 +868,6 @@ const EQUIPO_SELECT = `
 export async function listEquipos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "equipos", "V");
-  await ensureEquiposSchema(s);
 
   const search = searchParam(request, "search");
   const estado = searchParam(request, "estado");
@@ -1183,7 +893,6 @@ export async function getEquipo({ request, s, params }: RouteContext): Promise<R
   const equipoId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "equipos", "V");
-  await ensureEquiposSchema(s);
 
   const row = await s.queryOne(`${EQUIPO_SELECT} WHERE e.id = :id LIMIT 1`, { id: equipoId });
   if (!row) {
@@ -1195,7 +904,6 @@ export async function getEquipo({ request, s, params }: RouteContext): Promise<R
 export async function createEquipo({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const supervision = marcaSupervision(await requirePermission(s, user, "equipos", "C", { objeto: "equipo" }));
-  await ensureEquiposSchema(s);
 
   const payload = await readJson(request);
   const data = normalizeEquipoPayload(payload);
@@ -1240,7 +948,6 @@ export async function updateEquipo({ request, s, params }: RouteContext): Promis
   const equipoId = intParam(params.id);
   const user = await requireUser(request);
   const supervision = marcaSupervision(await requirePermission(s, user, "equipos", "E", { objeto: "equipo" }));
-  await ensureEquiposSchema(s);
 
   const data = normalizeEquipoPayload(await readJson(request));
   if (!data.nombre) {
@@ -1298,7 +1005,6 @@ export async function deleteEquipo({ request, s, params }: RouteContext): Promis
   const equipoId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "equipos", "AN");
-  await ensureEquiposSchema(s);
   return darDeBaja(s, user, "equipos", equipoId, await readJson(request), "Equipo", request);
 }
 
@@ -1306,14 +1012,12 @@ export async function reactivarEquipo({ request, s, params }: RouteContext): Pro
   const equipoId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "equipos", "G");
-  await ensureEquiposSchema(s);
   return reactivarItem(s, user, "equipos", equipoId, await readJson(request), "Equipo", request);
 }
 
 export async function listConsumiblesInventory({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "V");
-  await ensureConsumiblesSchema(s);
 
   const rows = await s.query(
     `
@@ -1330,7 +1034,6 @@ export async function listConsumiblesInventory({ request, s }: RouteContext): Pr
 export async function listMovimientos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "V");
-  await ensureMovimientosSchema(s);
 
   const rows = await s.query(
     `
@@ -1399,7 +1102,6 @@ const MANTENIMIENTO_SELECT = `
 export async function listMantenimientos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "equipos", "V");
-  await ensureMantenimientosSchema(s);
 
   const search = searchParam(request, "search");
   const tipo = searchParam(request, "tipo");
@@ -1426,7 +1128,6 @@ export async function getMantenimiento({ request, s, params }: RouteContext): Pr
   const mantenimientoId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "equipos", "V");
-  await ensureMantenimientosSchema(s);
 
   const row = await s.queryOne(`${MANTENIMIENTO_SELECT} WHERE mt.id = :id LIMIT 1`, { id: mantenimientoId });
   if (!row) {
@@ -1468,7 +1169,6 @@ export async function syncEquipoEstado(s: Session, equipoId: number, proximaCali
 export async function createMantenimiento({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const supervision = marcaSupervision(await requirePermission(s, user, "equipos", "C", { objeto: "mantenimiento" }));
-  await ensureMantenimientosSchema(s);
 
   const payload = await readJson(request);
   const data = normalizeMantenimientoPayload(payload);
@@ -1509,7 +1209,6 @@ export async function updateMantenimiento({ request, s, params }: RouteContext):
   const mantenimientoId = intParam(params.id);
   const user = await requireUser(request);
   const supervision = marcaSupervision(await requirePermission(s, user, "equipos", "E", { objeto: "mantenimiento" }));
-  await ensureMantenimientosSchema(s);
 
   const payload = await readJson(request);
   const data = normalizeMantenimientoPayload(payload);
@@ -1562,7 +1261,6 @@ export async function deleteMantenimiento({ request, s, params }: RouteContext):
   const mantenimientoId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "equipos", "AN");
-  await ensureMantenimientosSchema(s);
 
   let rowcount: number;
   try {
@@ -1607,7 +1305,6 @@ export async function recordBitacoraFolios(s: Session, entries: Array<{ equipoId
     const folio = toStrOrNull(entry.folio, 60);
     if (!id || !folio || seen.has(id)) continue;
     seen.add(id);
-    await ensureEquiposSchema(s);
     const row = await s.queryOne<{ ultimo_folio_bitacora: string | null }>("SELECT ultimo_folio_bitacora FROM equipos WHERE id = :id", { id });
     if (!row) continue;
     const previo = row.ultimo_folio_bitacora ? String(row.ultimo_folio_bitacora) : "";

@@ -25,7 +25,6 @@ import { requirePermission } from "../../rbac";
 import { folioLabel } from "../../samples-flow";
 import { LEGACY_RECEPTION_SAMPLE_TYPES, RECEPTION_SAMPLE_TYPES, STORAGE_PLACES } from "../../../shared/sgc";
 import { safeJsonLoad } from "../helpers";
-import { ensureSamplesRecepcionSchema } from "./recepcion";
 
 const TABLE = "muestras_recepcion";
 
@@ -66,7 +65,6 @@ function etiquetasDe(row: Row): Etiqueta[] {
 async function cargar(ctx: RouteContext): Promise<{ row: Row; user: Awaited<ReturnType<typeof requireUser>> }> {
   const user = await requireUser(ctx.request);
   await requirePermission(ctx.s, user, "muestras", "V");
-  await ensureSamplesRecepcionSchema(ctx.s);
   const row = await ctx.s.queryOne<Row>(`SELECT * FROM ${TABLE} WHERE id = :id`, { id: intParam(ctx.params.id) });
   if (!row) throw new HttpError(404, { message: "Registro no encontrado" });
   return { row, user };

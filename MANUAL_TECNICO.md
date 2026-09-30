@@ -50,7 +50,7 @@ ficotox/
         db.ts                # sesiones SQLite/MySQL con SQL parametrizado
         auth.ts              # JWT (HS256)
         rbac.ts              # permisos por modulo/accion
-        schema.ts            # migraciones ligeras (ADD COLUMN IF MISSING)
+        migraciones/         # migraciones versionadas (Fase 12; motor.mjs, pasos.mjs, NNNN_*.mjs)
         users.ts             # esquema de usuarios
         inventory-usage.ts   # descuento de inventario + movimientos
         health.ts
@@ -95,8 +95,7 @@ Durante cada request de API:
 
 1. `apiRoute` abre una sesion de base de datos (`withSession`).
 2. El handler valida el JWT (`requireUser`) y el permiso RBAC (`requirePermission`).
-3. Se ejecutan las funciones `ensure*Schema()` para crear o completar tablas.
-4. Se ejecuta el SQL parametrizado y se hace `commit()`; si el handler falla, se hace `rollback()`.
+3. Se ejecuta el SQL parametrizado y se hace `commit()`; si el handler falla, se hace `rollback()`.
 
 Flujo general:
 
@@ -165,7 +164,13 @@ Se leen desde `.env` en la raiz. `FICOTOX_ENV_FILE` permite indicar otro archivo
 | `RESPALDO_AVISO_HORAS` / `PRUEBA_RESTAURACION_AVISO_DIAS` | Fase 10: avisos "sin respaldo" y "sin prueba de restauracion" (Respaldos, Inicio, campana) | `24` / `90` |
 | `CORS_ORIGINS` | Origenes permitidos por CORS (lista separada por comas o `*`); vacio = solo el mismo origen | Vacio (mismo origen) |
 | `HOST` / `PORT` | Host y puerto del lanzador standalone | `0.0.0.0` / `5000` |
-| `FICOTOX_OPEN_BROWSER` | Abrir navegador al iniciar el lanzador | `true` |
+| `FICOTOX_OPEN_BROWSER` | Abrir navegador al iniciar el lanzador (el servicio lo apaga) | `true` |
+| `FICOTOX_INSTANCE_DIR` | Fase 12: carpeta de la instancia (base, archivos, llave, `logs/`, `verificaciones/`, `servicio/`) | carpeta de `SQLITE_PATH` o `instance/` |
+| `MIGRAR_AL_ARRANCAR` | Fase 12: aplicar al arrancar las migraciones pendientes (con respaldo `pre-migracion`); `false` = no arranca si hay pendientes | `true` |
+| `MIGRAR_MYSQL_RESPALDO_HECHO` | Fase 12, solo MySQL: declara que ya se respaldo con `mysqldump` (sin ella, el servidor no migra al arrancar) | `false` |
+| `TLS_CERT` / `TLS_KEY` / `TLS_CA` | Fase 12: HTTPS opcional (PEM; rutas relativas a la raiz). Los dos primeros juntos o ninguno | No definidas (HTTP) |
+| `LOG_DIR` / `LOG_MAX_MB` / `LOG_RETENCION_DIAS` | Fase 12: registros del servidor (carpeta, tamano de rotacion, dias que se conservan) | `<instancia>/logs` / `10` / `90` |
+| `BITACORA_CSV_MAX_FILAS` | Fase 12: filas maximas por CSV de la bitacora (si hay mas, el archivo lo avisa) | `50000` |
 
 Se aceptan tambien los nombres anteriores `FLASK_HOST`, `FLASK_PORT` y `FLASK_OPEN_BROWSER`.
 
@@ -474,7 +479,7 @@ Helpers de API en `src/lib/client/api.ts`: `getJsonAuth`, `sendJsonAuth`, `sendF
 
 Los tokens se emiten en login y se firman con `JWT_SECRET` usando HS256. Desde la Fase 1 **el token solo identifica a la persona** (`sub`, `email`, `nombre`, `iat`, `exp`): los roles y permisos se calculan en cada peticion desde la base, asi que revocar o vencer un rol tiene efecto inmediato sin volver a iniciar sesion. Una cuenta desactivada o fuera de vigencia recibe 401 aunque su token siga vigente; desde la Fase 2 el token lleva `tv` (token_version) para revocarlo.
 
-El acceso local requiere correo y contrasena. Las contrasenas se guardan en `usuarios.password_hash` con scrypt (`src/lib/server/password.ts`, formato `scrypt$N$salt$hash`) y se validan en `POST /api/auth/login`; un correo inexistente o una contrasena incorrecta responden 401 con el mismo mensaje. Los usuarios se crean con contrasena desde la pantalla de Usuarios (minimo 10 caracteres; Fase 2) y `scripts/set-password.mjs <correo> <contrasena>` permite asignarla desde la terminal en instalaciones SQLite.
+El acceso local requiere correo y contrasena. Las contrasenas se guardan en `usuarios.password_hash` con scrypt (`src/lib/server/password.ts`, formato `scrypt$N$salt$hash`) y se validan en `POST /api/auth/login`; un correo inexistente o una contrasena incorrecta responden 401 con el mismo mensaje. Los usuarios se crean con contrasena desde la pantalla de Usuarios (minimo 10 caracteres; Fase 2) y `scripts/set-password.mjs <correo> "<temporal>" --motivo "..."` (Fase 12: servidor detenido; contrasena temporal con cambio obligatorio y entrada «sistema» en la bitacora) permite asignarla desde la terminal en instalaciones SQLite.
 
 Los endpoints protegidos llaman a `requireUser(request)`, que:
 
@@ -492,7 +497,7 @@ Detalle completo, matriz y decisiones pendientes: **`docs/CATALOGO_PERMISOS.md`*
 - **Servidor**: cada endpoint llama `requirePermission(s, user, modulo, accion, contexto?)` (`src/lib/server/rbac.ts`), que carga la persona (activa) y sus roles vigentes desde la base, exige la accion y, con contexto, el alcance (`{ objeto, borrador, propio }`). Devuelve los alcances y los roles que otorgan la accion. `soloEstado(permiso)` recorta las respuestas de muestras con alcance `estado`. No queda ninguna verificacion por nombre de rol ni el modulo `aprobaciones`.
 - **Cargo con el que se actua**: `cargoActuante(request, permiso)` elige el rol (uno solo, o el que llega en `X-Actuar-Como`; si hay varios y no llega, 409 `ELEGIR_CARGO` con las opciones). El cliente (`src/lib/client/api.ts` + `ActuarComoProvider`) pide "Actuar como" y repite la peticion. Se guarda en `creado_rol_id/creado_cargo`, `revisado_*`, `aprobado_*`, `autorizado_*`, `elaborado_*`, `anulado_*`, `entrega_json` y en la bitacora (`actuo_como`).
 - **Captura con recursos**: una extraccion o un analisis con equipos usados exige ademas `equipos:C` (alcance `uso` o mayor); con insumos, `inventario:C` (alcance `movimientos` o mayor).
-- **El arranque no crea roles ni concede permisos**: solo asegura tablas y el catalogo de modulos. Los roles se cargan con `scripts/seed-roles-usuarios.mjs` o desde Administracion > Roles.
+- **El arranque no crea roles ni concede permisos**: solo aplica las migraciones pendientes (Fase 12; el catalogo de modulos lo crea la migracion base). Los roles se cargan con `scripts/seed-roles-usuarios.mjs` o desde Administracion > Roles.
 - **Vencimientos**: `barrerVencimientos()` (bootstrap, una vez por minuto antes de atender peticiones) deja `vencer_rol` en la bitacora para cada asignacion cuya vigencia termino.
 - **Interfaz**: `useSession().can(modulo, accion = "V", contexto?)` y `alcance(modulo, accion)`; los permisos se vuelven a pedir cada minuto y al volver a la ventana. Una persona sin roles vigentes solo ve "Sin permisos asignados".
 
@@ -540,7 +545,7 @@ Todas las fechas pasan por `src/lib/shared/fechas.ts`. Una fecha sin hora ("AAAA
 
 Segunda capa, ademas del rol: la persona que actua (usuario de la sesion) debe tener autorizacion vigente para la actividad, el metodo y los equipos del formato. Codigo: `src/lib/shared/autorizaciones.ts` (catalogo y requisitos por formato, compartido con la interfaz) y `src/lib/server/autorizaciones.ts` (tabla, validacion, alta/revocacion, vencimientos y avisos).
 
-- **Tabla `autorizaciones_personal`**: `id`, `usuario_id`, `tipo` (`metodo` | `equipo` | `actividad`), `clave`, `vigente_desde`, `vigente_hasta` (nullable), `folio_fx_thf_ap` (folio del formato en papel), `otorgada_por`, `otorgada_rol`, `otorgada_en`, `motivo`, `revocada_en`, `revocada_por`, `motivo_revocacion`, `vencimiento_registrado_en`. Nada se borra: revocar llena las columnas de revocacion. Esquema en `ensureAutorizacionesSchema` (bootstrap).
+- **Tabla `autorizaciones_personal`**: `id`, `usuario_id`, `tipo` (`metodo` | `equipo` | `actividad`), `clave`, `vigente_desde`, `vigente_hasta` (nullable), `folio_fx_thf_ap` (folio del formato en papel), `otorgada_por`, `otorgada_rol`, `otorgada_en`, `motivo`, `revocada_en`, `revocada_por`, `motivo_revocacion`, `vencimiento_registrado_en`. Nada se borra: revocar llena las columnas de revocacion. Esquema en la migracion base (`0009_base_fase9.mjs`).
 - **Catalogo**: metodos `ASP`, `DSP`, `PSP`, `pigmentos`, `plancton`, `otro` (mapeados desde `tipo_analisis`); actividades `recepcion`, `procesamiento`, `extraccion`, `analisis`, `revision_resultados`, `aprobacion_resultados`, `revision_informe`, `autorizacion_informe`; equipos: cualquier equipo activo del inventario (`clave` = id del equipo; se muestra su clave de bitacora o nombre).
 - **Vigente**: no revocada y el dia local del laboratorio (`hoyLocal`) cae entre `vigente_desde` y `vigente_hasta` (estados calculados: vigente, por_iniciar, vencida, revocada).
 - **Requisitos al guardar** (`exigirAutorizaciones`): recepcion (crear/editar) -> `recepcion`; procesamiento -> `procesamiento`; extraccion -> `extraccion` + metodo del tipo (E-A -> ASP, E-D -> DSP) + cada equipo de `equipos_json` que exista en `equipos` (`requisitosEquipos`); analisis -> `analisis` + metodo del tipo de analisis + `equipo_id` si esta en el inventario; revisar/aprobar analisis -> `revision_resultados`/`aprobacion_resultados` + metodo; revisar/autorizar informe -> `revision_informe`/`autorizacion_informe`. Sin autorizacion vigente: 403 `{ codigo: "no_autorizado", message: "No tienes autorización vigente para extracción DSP (FX-THF-AP)", faltan: [...] }`. Los insumos y equipos fuera del inventario no se validan.
@@ -598,7 +603,7 @@ Codigo: `src/lib/shared/adjuntos.ts` (catalogo, extensiones, firmas de bytes, sa
 
 Codigo: `src/lib/shared/calidad.ts` (catalogos, folios, `accionVencida`), `src/lib/server/modules/calidad/` (`comun.ts` esquema y acceso, `incidencias.ts`, `nc.ts`, `automaticas.ts`, `bloqueos.ts`, `adjuntos.ts`, `registros.ts`, `nc-pdf.ts`, `tablero.ts`, `acceso-historial.ts`), `src/lib/server/adjuntos-operaciones.ts` (subir, servir y anular adjuntos, compartido con los analisis) y rutas `src/app/api/calidad/**`. Interfaz en `src/components/features/calidad/` y `src/app/(app)/calidad/`.
 
-- **Tablas** (`ensureCalidadSchema`, SQL portable, sin commit): `incidencias` (folio `INC 0000001`; tipo, `fecha_hora_ocurrencia`, descripcion ≥ 20, `accion_inmediata`, `impacto_resultados` si/no/desconocido, estado, `reportada_por/nombre/rol/en`, `origen_automatico` + `clave_automatica`, evaluacion, `nc_id`, anulacion, `excepciones_json`), `incidencia_registros` (entidad, entidad_id, referencia; varias por incidencia), `no_conformidades` (folio `NC 0000001`; origen, clasificacion, requisito, descripcion, `responsable_id`, estado y fecha de cada etapa, impacto, causa, `requiere_accion_correctiva` + justificacion, riesgos, `requiere_cambio_documental` + `propuesta_documento_id`, `verificacion_programada`, `reaperturas`, cierre, `archivo_pdf` + `pdf_sha256`, anulacion), `nc_registros_afectados`, `nc_verificaciones`, `acciones_correctivas` (responsable, fecha compromiso, estado pendiente/en_proceso/implementada/cancelada, implementacion, cancelacion y reasignacion con motivo), `nc_comunicaciones`, `suspensiones` (tipo metodo/equipo, clave, `estado_previo_equipo`, reanudacion) y `retenciones_informe`. `propuestas_documento.nc_id` liga la propuesta documental (Fase 7) con la NC. Nada se borra.
+- **Tablas** (migracion `0011_calidad.mjs`, SQL para ambos motores): `incidencias` (folio `INC 0000001`; tipo, `fecha_hora_ocurrencia`, descripcion ≥ 20, `accion_inmediata`, `impacto_resultados` si/no/desconocido, estado, `reportada_por/nombre/rol/en`, `origen_automatico` + `clave_automatica`, evaluacion, `nc_id`, anulacion, `excepciones_json`), `incidencia_registros` (entidad, entidad_id, referencia; varias por incidencia), `no_conformidades` (folio `NC 0000001`; origen, clasificacion, requisito, descripcion, `responsable_id`, estado y fecha de cada etapa, impacto, causa, `requiere_accion_correctiva` + justificacion, riesgos, `requiere_cambio_documental` + `propuesta_documento_id`, `verificacion_programada`, `reaperturas`, cierre, `archivo_pdf` + `pdf_sha256`, anulacion), `nc_registros_afectados`, `nc_verificaciones`, `acciones_correctivas` (responsable, fecha compromiso, estado pendiente/en_proceso/implementada/cancelada, implementacion, cancelacion y reasignacion con motivo), `nc_comunicaciones`, `suspensiones` (tipo metodo/equipo, clave, `estado_previo_equipo`, reanudacion) y `retenciones_informe`. `propuestas_documento.nc_id` liga la propuesta documental (Fase 7) con la NC. Nada se borra.
 - **Estados**: incidencia `reportada → en_evaluacion → cerrada_sin_nc | escalada_a_nc` (+ `anulada`); NC `abierta → en_analisis → acciones_en_curso → en_verificacion → cerrada` (+ `anulada`), solo hacia adelante (`POST /nc/:id/avanzar`, 409 si se salta o retrocede); "no eficaz" regresa a `en_analisis` y suma `reaperturas` (bitacora `reabrir`); para volver a `acciones_en_curso` hace falta al menos una accion creada despues de esa verificacion (409 `reapertura_sin_accion`). Lo que permitio avanzar no se vacia despues (409 `dato_de_etapa`). Al reanudar un equipo se restaura su estado previo y se aplica la regla de mantenimientos del inventario (`syncEquipoEstado`). La lista y la ficha del informe marcan "Retenido" y bloquean liberar y enviar como "requiere enmienda". Requisitos: `en_analisis` exige responsable e impacto; `acciones_en_curso`, metodo + causa raiz (≥ 10), `requiere_accion_correctiva = si` y al menos una accion; `en_verificacion`, todas implementadas o canceladas y al menos una implementada. Transiciones con `UPDATE … WHERE estado = :actual` y lectura `FOR UPDATE` en MySQL (`filaBloqueada`); doble cierre → 409.
 - **Verificacion por NC** (no por accion): la eficacia se juzga sobre la causa raiz, que es de la NC; una sola verificacion evita cerrar con acciones sueltas verificadas y la causa sin eliminar. Regla 8: nadie que sea responsable de una accion no cancelada de la NC la verifica.
 - **Permisos** (`accesoCalidad`, servidor): reportar calidad:C (cualquier alcance, **sin supervision**: `crearIncidencia` no llama `aplicarSupervision`); ver calidad:V total o, con `incidencias`, solo lo propio (incidencias `reportada_por`, NC donde es responsable o responsable de una accion; lo ajeno responde 404 por lista, ficha, busqueda, filtro por registro, CSV, historial, campana y adjuntos); evaluar R; crear NC R o G; editar G o el responsable con C+ (`puedeEditar`); implementar el responsable de la accion o G; verificar R; suspender y retener R; reanudar y liberar A + reautenticacion `calidad:A`; cerrar A + reautenticacion; anular AN + reautenticacion `calidad:AN` → solicitud `anular_calidad` (segundo usuario). Reglas 7–10 en `REGLAS_SEGREGACION` (version `2026-09-29.1`; la 8 cuenta responsables actuales y anteriores de las acciones —columna `responsables_previos`— y a quien las marco implementadas; la 9, al responsable actual y a los anteriores de la NC), con la excepcion de segregacion existente (`excepciones_json` en incidencias, NC y suspensiones). El Admin tecnico (calidad V bitacora) no ve incidencias ni NC; `/api/solicitudes?entidad=<tabla de calidad>` usa `exigirVerRegistroCalidad` (la misma visibilidad de la ficha; suspensiones, solo V total). Ligar un registro al reportar exige V de su modulo (`MODULO_REGISTRO`). En la ficha de una NC, quien tiene alcance `incidencias` ve de las incidencias ajenas agrupadas solo folio y estado.
@@ -631,13 +636,21 @@ Migrar la llave (solo si es imprescindible, con el servidor detenido):
 
 Columnas de baja logica y anulacion (`src/lib/server/inventory-baja.ts`, `src/lib/server/samples-flow.ts`): `activo`, `baja_motivo`, `baja_en`, `baja_por` en reactivos, consumibles y equipos; `anulado_en`, `anulado_por`, `motivo_anulacion`, `estado_previo` en las tablas de muestras. `muestras_recepcion` agrega `decision_aceptacion`, `aceptacion_json` (inspeccion, comunicacion al cliente) y `disposicion_json`. Las listas filtran `activo = 1` / `estado <> 'anulada'` salvo `?bajas=1` / `?anuladas=1`.
 
-### 10.2 Migraciones ligeras
+### 10.2 Migraciones versionadas (Fase 12)
 
-No se usan migraciones versionadas. Cada modulo tiene funciones `ensure*Schema()` que crean tablas si no existen y agregan columnas faltantes con `addColumnIfMissing` (`src/lib/server/schema.ts`), con variantes para SQLite y MySQL.
+El esquema tiene version. Las migraciones viven en `src/lib/server/migraciones/` (JavaScript plano, las usan igual el servidor y los scripts):
 
-Excepcion: `muestras_extraccion` cambio su unicidad de `UNIQUE(folio_num)` a `UNIQUE(tipo_registro, folio_num)` (cada formato de extraccion, `E-A` ASP y `E-D` DSP, lleva su propia serie de folios). `ensureSamplesExtraccionSchema()` detecta la restriccion vieja y la migra una sola vez: en SQLite copia el archivo a `instance/backups/ficotox-<fecha>-pre-folio-por-tipo.sqlite3` y reconstruye la tabla dentro de la transaccion; en MySQL reemplaza el indice unico. Si la reconstruccion falla, la transaccion se revierte y la tabla queda intacta.
+- `NNNN_nombre.mjs` exporta `version`, `nombre` y `pasos`; `up(db, motor)` ejecuta los pasos con `pasos.mjs`. Solo hacia adelante. Cada paso es declarativo (`tabla`, `indice`, `columna`, `trigger`, `catalogo`) con su SQL para SQLite y para MySQL, y comprueba antes si ya existe (idempotente).
+- Las versiones empiezan en **9** para coincidir con las bases anteriores: `0009_base_fase9` crea el esquema completo de la Fase 9 (tablas, indices, triggers de la bitacora y catalogo de modulos), `0010_adjuntos` (Fase 10), `0011_calidad` (Fase 11) y `0012_firmas_tokens` (la tabla que el codigo anterior creaba al primer uso). `VERSION_ACTUAL` = la ultima; `ESQUEMA_VERSION` de los respaldos es la misma.
+- `motor.mjs`: tabla `schema_migraciones` (version, nombre, `checksum` SHA-256 de los pasos, `aplicada_en`, `duracion_ms`, `app_commit`, `modo` aplicada/baseline) y `schema_migraciones_bloqueo` (una fila; se toma con un `UPDATE` atomico, con pid/equipo/hora; un bloqueo de un proceso muerto se libera). Cada migracion corre en su propia transaccion (SQLite: `BEGIN IMMEDIATE`; si falla, rollback y el error trae la ruta del respaldo previo) y deja en la bitacora «Sistema aplico la migracion N» (`accion` migrar, `entidad` esquema).
+- **MySQL**: el DDL confirma solo (no hay transacciones de DDL). Cada paso es idempotente y la migracion se registra al final, asi que una migracion interrumpida se **reanuda** al volver a correr (los pasos hechos se saltan). Tambien la creacion inicial en una base vacia: una tabla de control sin filas con un subconjunto exacto de las tablas de la 0009 se reconoce como creacion interrumpida (no como deriva) y se completa. El respaldo previo es con `mysqldump` (fuera de la aplicacion; `--respaldo-hecho` / `MIGRAR_MYSQL_RESPALDO_HECHO`).
+- **Linea base** de bases anteriores (sin `schema_migraciones`): se normaliza su esquema (tablas, columnas con tipo/NOT NULL/default/PK, indices y triggers, sin importar el orden) y se compara con el esperado de las versiones 11, 10 y 9 (el esperado se obtiene aplicando las migraciones a una base en memoria). Si coincide, se registran esas versiones como `baseline` (sin ejecutar nada) y se aplica lo que falta. `firmas_tokens` se acepta presente o ausente antes de la 12. **Cualquier otra diferencia aborta** con el reporte de diferencias y sin tocar la base (ni crear las tablas de control).
+- El servidor no arranca (mensaje `[migraciones] FICOTOX no arranca: …` y `process.exit(1)`) si una migracion falla, si el checksum de una migracion aplicada cambio, si la base es mas nueva que la aplicacion o si el esquema tiene deriva. `src/lib/server/migrar-arranque.ts` lo hace desde `instrumentation-node.ts`, con conexion propia, respaldo `pre-migracion` (`crearRespaldo`) y la llave de la bitacora.
+- `npm run migrar [-- --estado | --simular]` (`scripts/migrar-ficotox.mjs`): exige el servidor detenido (`servidor.lock`), hace su propio respaldo y usa el mismo motor. `scripts/restaurar-ficotox.mjs` usa el mismo mecanismo: un respaldo de una version anterior se restaura y se migra; uno de una version mayor, o con deriva, se rechaza (verificacion 3).
+- `tests/build-fixture.mjs` y la base de prueba se generan con las migraciones. `tests/fixtures/esquema-anterior-fase{9,10,11}.sqlite3` son las bases (sin datos) que creaba el codigo anterior, congeladas desde `main`; `tests/migraciones.mjs` comprueba que una base nueva es identica a la del codigo anterior y todos los casos limite.
+- **Se retiraron** todas las funciones `ensure*Schema()`, `addColumnIfMissing` y `src/lib/server/schema.ts` (crear o alterar tablas en cada request), y las migraciones de datos de las fases 0 a 3 que corrian al arrancar (ya aplicadas en todas las bases conocidas). Queda **una sola defensa** en tiempo de ejecucion: `asegurarTriggersBitacora()` (`audit.ts`) vuelve a crear los dos triggers que impiden UPDATE/DELETE en `auditoria` si alguien los quito (la verificacion de integridad ademas lo reporta).
 
-Columnas agregadas en esta version: `muestras_extraccion.equipos_json` (equipos utilizados con clave y folio de bitacora) y `equipos.clave_bitacora`.
+**Agregar una migracion**: nuevo archivo `NNNN_nombre.mjs` con la version siguiente y sus pasos para ambos motores; importarlo en `motor.mjs`. Nunca editar una migracion ya publicada (el checksum lo detecta): los cambios van en una migracion nueva.
 
 ### 10.2.1 Tipos de extraccion
 
@@ -647,13 +660,18 @@ Los tipos, claves y helpers de folio viven en `src/lib/shared/extraction.ts` (co
 
 Las filas de `uso_inventario_json` generadas por el protocolo llevan `origen: "protocolo"` y `campo`; al reabrir, el formulario las recalcula y solo conserva como manuales las que no vienen del protocolo (las anteriores a este cambio, sin `origen`, se casan por tipo y referencia).
 
-### 10.2.2 Esquemas y transacciones
+### 10.2.2 Motor SQLite, sesiones y concurrencia (Fase 12)
 
-Cada `ensure*Schema()` se ejecuta **una sola vez por proceso** (registro compartido en `src/lib/server/schema.ts`: `schemaReady` / `markSchemaReady`). El arranque (`bootstrap.ts`) las corre todas y confirma en una transaccion propia; si falla, llama a `resetSchemaMemo()` para repetir el DDL en el siguiente intento. Ninguna de ellas hace `commit` por su cuenta: antes lo hacian a mitad del handler, y eso impedia deshacer los cambios de datos cuando la operacion fallaba despues (por ejemplo, al reponer inventario y abortar la edicion).
+- Pragmas al abrir (`src/lib/server/db.ts`, `PRAGMAS_SQLITE`): `journal_mode=WAL` (lectores y un escritor sin bloquearse; los respaldos en linea no detienen al servidor), `synchronous=NORMAL` (con WAL, una transaccion confirmada sobrevive a una caida del proceso; ante un corte de luz se puede perder la ultima fraccion de segundo, nunca se corrompe la base; `FULL` duplica el costo de cada escritura sin beneficio medible para el laboratorio), `busy_timeout=5000` (si un script tiene la base, se espera en vez de fallar) y `foreign_keys=ON` (el esquema de SQLite no declara llaves foraneas; `PRAGMA foreign_key_check` = 0 en la base real).
+- Una sesion (transaccion) por request (`apiRoute` en `http.ts`). En SQLite las sesiones de un proceso van en serie (una conexion). El cuerpo de la peticion (p. ej. una evidencia de 25 MB) se recibe **antes** de tomar la sesion, para no retener a los demas mientras llega.
+- **Folios**: todas las series tienen restriccion unica (`folio_num` de recepcion, procesamiento, extraccion por tipo, analisis e informes por version, incidencias y NC; `codigo` de reportes de mantenimiento). Si dos altas simultaneas calculan el mismo folio (MySQL, o dos procesos sobre la misma base SQLite), `apiRoute` repite la peticion completa en una transaccion nueva (hasta 3 intentos, con espera breve); tambien ante `SQLITE_BUSY*`, `ER_LOCK_DEADLOCK` y `ER_LOCK_WAIT_TIMEOUT`. Si se agota, 409 `conflicto_concurrencia` (nunca 500). Cada reintento queda en el registro del servidor. El choque se reconoce en `esConflictoDeFolio` (`db.ts`): SQLite nombra la columna y MySQL/MariaDB el indice (el UNIQUE sin nombre de extracciones se llama como su primera columna, `tipo_registro`). Los handlers de alta solo responden 409 «el folio ya existe» cuando el folio lo escribio la persona; si lo asigno el servidor, relanzan el error para que `apiRoute` reintente. No se reintenta una peticion cuyo handler ya confirmo una parte (`Session.confirmado`, p. ej. registrar un envio y despues mandar el correo): repetirla duplicaria efectos; responde 409.
+- **Suspensiones (MySQL)**: un solo orden de bloqueo (equipo y despues suspensiones; `nc.ts`, `bloqueos.ts`) para no cruzarse; un interbloqueo residual se reintenta.
+- «Crear respaldo ahora» (`crearRespaldoPost`, sin `apiRoute`) trabaja en tres tiempos: con la sesion tomada solo la **foto de la base** (`iniciarRespaldo`; la API de respaldo en linea de SQLite reinicia la copia si otra conexion escribe, y con la sesion tomada no escribe ninguna de este proceso); **sin sesion**, la copia y las huellas de los archivos, el manifest y la retencion (`completarRespaldo`; los archivos son de solo insercion); y una sesion corta para la bitacora. Con 10 usuarios de carga, ninguna otra peticion paso de 300 ms mientras se respaldaba.
+- Medidas y decision del motor: `docs/DECISION_BASE_DE_DATOS.md`.
 
 ### 10.3 Capa de datos
 
-`src/lib/server/db.ts` abre una sesion por request. Los parametros se escriben como `:nombre` en ambos motores. En SQLite las sesiones se serializan (una sola conexion `better-sqlite3`); en MySQL cada sesion usa una conexion del pool.
+`src/lib/server/db.ts` abre una sesion por request. Los parametros se escriben como `:nombre` en ambos motores. En SQLite las sesiones se serializan (una sola conexion `better-sqlite3`); en MySQL cada sesion usa una conexion del pool. El SQL especifico de un motor va siempre detras de `isSqlite()` (p. ej. `printf`/`LPAD`, `sqlite_master`/`INFORMATION_SCHEMA`).
 
 ## 11. Movimientos e inventario
 
@@ -678,6 +696,8 @@ npm run build          # build de produccion
 npm test               # pruebas de API + navegador (ver docs/VALIDACION.md)
 npm run test:api       # solo API
 ```
+
+Fase 12, tambien dentro de `npm test`: `tests/api-produccion.mjs` (historial con alcances, CSV parcial, folios y suspensiones simultaneas), `tests/migraciones.mjs`, `tests/operacion.mjs` (configurar, instancia-nueva, servicio, registros, puerto ocupado, HTTPS, actualizar con build fallido, verificar-instalacion) y `tests/concurrencia.mjs` (dos servidores sobre la misma base). Fuera de `npm test`: `npm run prueba-carga` (10 usuarios; reporte en `instance/test/carga/`) y `npm run test:mysql` (Docker o `MYSQL_TEST_URL`).
 
 `npm test` copia la base congelada `instance/fixtures/ficotox-base.sqlite3` (base vacia + roles y usuarios de la Fase 0) a `instance/test/ficotox-test.sqlite3`, crea **solo en esa copia** el rol "QA pruebas automatizadas" (todos los permisos) y el usuario `qa@ficotox.local`, levanta `next dev` en el puerto 3100 sobre la copia, crea los datos de apoyo (`tests/datos-apoyo.mjs`) y corre `tests/api-*.mjs` (flujo completo por HTTP; `api-incidencias.mjs` y `api-no-conformidades.mjs` en la Fase 11), `tests/respaldos.mjs` (respaldo y restauracion, Fase 10), `tests/standalone.mjs` (paquete standalone, Fase 11) y `tests/ui/*.mjs` (Playwright contra el Chrome de Playwright mas reciente o `CHROME_PATH`). El servidor de prueba usa `EVIDENCIA_MAX_MB=25` y `FICOTOX_BACKUP_DIR=instance/test/backups`. La base real nunca se toca. Detalle en `docs/VALIDACION.md`.
 
@@ -709,11 +729,28 @@ npm run start:standalone
 
 Para copiar a otra PC: llevar la carpeta del proyecto con `node_modules`, `.next`, `public`, `scripts` y `.env`, instalar Node.js LTS y ejecutar `npm run start:standalone`.
 
+### 14.3 Produccion en el laboratorio (Fase 12)
+
+Procedimiento completo para el personal: `docs/INSTALACION.md`. Comandos:
+
+| Comando | Que hace |
+| --- | --- |
+| `npm run configurar` | Crea o completa `.env` (permisos 600): `JWT_SECRET` fuerte si falta o es debil; `SECRET_KEY` solo si no existe (nunca la cambia; si la instancia ya sella con `auditoria.key` o tiene una base sin llave, no genera una); pregunta HOST, PORT, dominios, instancia y SMTP; registra la **huella** de la llave en `<instancia>/llave-bitacora.huella`. Idempotente; no imprime secretos. |
+| `npm run instancia-nueva -- --confirmar` | Sin `--confirmar` no hace nada. Mueve (no borra) la instancia actual y su llave a `backups/pre-produccion-<fecha>/` (con `LEEME.txt`), crea la base vacia con las migraciones y el catalogo de roles y da de alta un Administrador tecnico y un Responsable General con contrasena temporal (se muestra una vez; `debe_cambiar_password=1`). Sin datos de demostracion ni autorizaciones de ejemplo; todo en la bitacora como «sistema». Solo SQLite, con el servidor detenido. |
+| `npm run instalar-servicio` / `quitar-servicio` | Windows: tarea programada `FICOTOX` al iniciar el sistema (SYSTEM, `RestartOnFailure` cada minuto, definicion XML en `<instancia>/servicio/`) y regla de firewall `FICOTOX` (TCP PORT, perfiles privado y dominio). macOS/Linux: genera el LaunchDaemon (`KeepAlive`) o la unidad systemd (`Restart=on-failure`) e imprime los comandos con `sudo`. `--simular` solo muestra. |
+| `npm run actualizar [-- --git]` | Respaldo `pre-actualizacion` → detener → apartar `.next` → `npm ci` + build (si falla: devuelve el build anterior y arranca como estaba) → migrar → arrancar → `/api/health/db` → verificar-instalacion. |
+| `npm run detener` / `npm run reiniciar` | Detiene al **lanzador** y al servidor sin que se relance: crea `<instancia>/detener` y termina al lanzador (pid en `<instancia>/lanzador.lock`) con su arbol (Windows: `schtasks /End` si es servicio + `taskkill /T /F`; macOS/Linux: SIGTERM). Reiniciar vuelve a arrancar como estaba y espera `/api/health/db`. Lo usan `actualizar` y `quitar-servicio`. |
+| `npm run verificar-instalacion` | ✅/⚠️/❌ de Node, disco, hora, JWT, llave (huella registrada), migraciones, bitacora, tarea y ultimo respaldo, prueba de restauracion, modos obligatorios, CORS, HTTPS, cuentas `@ficotox.local`, `usuarios:G` y `usuarios:A`, arranque automatico y paquete limpio. Reporte en `<instancia>/verificaciones/<fecha>.md`; codigo 1 si hay ❌. |
+| `npm run migrar [-- --estado \| --simular]` | Migraciones (§10.2). |
+| `npm run sqlite-a-mysql` | Pasa una base SQLite a MySQL (ver `docs/DECISION_BASE_DE_DATOS.md`). |
+
+**Lanzador** (`scripts/start-ficotox.mjs`): abre primero el registro (`<instancia>/logs/ficotox-AAAA-MM-DD.log`, `scripts/lib/registro.mjs`: rotacion por tamano, retencion por dias, enmascarado de correos, contrasenas, credenciales en URL, tokens y llaves), asi que todo error de arranque queda escrito. Comprueba `JWT_SECRET`, el build, que no haya otro servidor vivo sobre la instancia (`servidor.lock`; el servidor tambien se niega en `instrumentation-node.ts`) y que el puerto este libre; valida `TLS_CERT`/`TLS_KEY` y con ellos precarga `scripts/https-lanzador.mjs` (el servidor de Next escucha en HTTPS; la IP real del socket se conserva igual que con `ip-real.mjs`). Escribe «FICOTOX escuchando…» cuando `/api/health/db` ya responde (despues de la verificacion de arranque y las migraciones, no con el «Ready» de Next). Toma `<instancia>/lanzador.lock` de forma atomica antes de copiar los estaticos (un solo lanzador por instancia). Los bloqueos (`servidor.lock`, `lanzador.lock`) cuentan como vivos solo si su proceso existe y se crearon despues del ultimo arranque del sistema (`src/lib/shared/bloqueo.mjs`): tras un apagado brusco o `taskkill /F`, un bloqueo huerfano con el pid reutilizado por otro programa no impide arrancar; `npm run detener` retira los huerfanos y nunca termina un proceso que no sea Node. **Supervision**: si el servidor termina con error o por una senal distinta de SIGTERM/SIGINT (p. ej. SIGKILL por memoria), lo relanza con espera creciente (5 s, 10 s… hasta 60 s; la cuenta se reinicia tras 10 minutos estable). El codigo **78** es un error de arranque que no se arregla solo (configuracion, migracion, instancia ocupada, puerto): no se relanza, y los servicios tampoco (systemd `RestartPreventExitStatus=78`; launchd solo relanza si el lanzador se cae; la tarea de Windows reintenta solo si no logra iniciar). SIGINT/SIGTERM (Ctrl+C, detener el servicio en macOS/Linux) detienen sin relanzar. En **Windows** terminar un proceso no es una senal (TerminateProcess: codigo 1), por eso `npm run detener` deja la senal `<instancia>/detener` (con ella ninguna salida se toma como caida) y termina al lanzador con su arbol. `servidor.lock` se crea de forma atomica (`wx`): dos servidores que arrancan a la vez sobre la misma instancia no pueden quedar los dos (el segundo sale con 78). Los ids de respaldo tambien se reservan de forma atomica (carpeta temporal sin `recursive`, sufijos `-2`, `-3`…), asi dos respaldos en el mismo segundo no chocan. `limpiar-standalone.mjs` escribe `.next/standalone/ficotox-build.json` con el commit compilado; `verificar-instalacion` avisa si el codigo es de otro commit.
+
 Recomendaciones:
 
-- Secretos robustos, HTTPS y `CORS_ORIGINS` restringido.
-- MySQL/MariaDB administrado para entornos con varios usuarios concurrentes.
-- Respaldar la base de datos y `instance/maintenance_reports/`.
+- Secretos robustos, HTTPS y `CORS_ORIGINS` vacio (mismo origen).
+- SQLite para el laboratorio (ver `docs/DECISION_BASE_DE_DATOS.md` y sus umbrales para pasar a MySQL).
+- Respaldo diario y prueba de restauracion cada 90 dias (`verificar-instalacion` lo revisa).
 
 ## 15. Respaldo y recuperacion
 
@@ -752,7 +789,7 @@ Procedimiento aplicado el 2026-09-24 (rama `fase-0-reinicio`); repetible en otra
 2. **Respaldar** en `instance/backups/pre-reinicio-<AAAAMMDD-HHMM>/`: la base con `sqlite3 instance/ficotox.sqlite3 ".backup '<dir>/ficotox.sqlite3'"`, `instance/auditoria.key` si existe, `instance/informes/`, `instance/maintenance_reports/` e `instance/documentos_sgc/`. Si la llave del sello es `SECRET_KEY` (no hay `auditoria.key`), **no cambiarla**: la bitacora anterior solo se puede verificar con ella.
 3. **Verificar** la copia: `PRAGMA integrity_check` = `ok`, mismo `COUNT(*)` de `auditoria` (y del resto de tablas) y mismo ultimo `hash` que el original; PDFs identicos (`diff -r`). Dejar la evidencia en `LEEME.txt` dentro del respaldo.
 4. **Mover** (no borrar) los originales fuera de `instance/`, a `backups/pre-reinicio-<AAAAMMDD-HHMM>/instance-original/` (carpeta ignorada por git). La bitacora anterior se conserva solo en el respaldo; la nueva inicia su propia cadena.
-5. **Crear el esquema**: arrancar FICOTOX (`npm run dev`), abrir `http://localhost:3000/api/health/db` y detenerlo. El arranque ya no crea ningun rol.
+5. **Crear el esquema**: `npm run migrar` (Fase 12; antes: arrancar el servidor una vez). El arranque no crea ningun rol. En produccion, los pasos 4 a 6 los hace `npm run instancia-nueva -- --confirmar` (§14.3).
 6. **Alta de roles y usuarios**: copiar `scripts/seed-usuarios.example.json` a `scripts/seed-usuarios.local.json` (ignorado por git), escribir las contrasenas (minimo 8 caracteres) y correr, con el servidor detenido:
 
    ```bash
@@ -762,7 +799,7 @@ Procedimiento aplicado el 2026-09-24 (rama `fase-0-reinicio`); repetible en otra
    Crea los 10 roles de `scripts/roles-catalogo.json` con su matriz de la Fase 1 (y `roles.clave`), un usuario local por rol y su asignacion en `usuario_roles`, con `hashPassword()` de `src/lib/server/password.ts` (requiere Node 22.18+ o 24). Es idempotente: un rol (por clave o nombre) o usuario (por correo) existente no se duplica; a un rol existente sin permisos del modelo nuevo (p. ej. de la Fase 0) se le carga la matriz; si ya tiene otros permisos se respeta (aviso) salvo con `--actualizar-permisos`; si una persona no tiene vigente su rol del catalogo, se le asigna. Cada cambio queda en la bitacora (actor `sistema`, motivo `--motivo`, por omision "Catálogo de roles Fase 1") sellado con `src/lib/shared/audit-chain.mjs`, **la misma implementacion que usa el servidor**, y al final recalcula la cadena completa. Requiere el esquema de la Fase 1 (arrancar el servidor una vez). Solo SQLite (en MySQL, ver abajo).
 7. **Comprobar**: iniciar sesion con cada usuario, revisar el menu y pulsar **Verificar integridad** en Auditoria.
 
-**MySQL/MariaDB.** El script solo aplica a SQLite y el arranque ya no crea ningun rol, asi que en una instalacion MySQL nueva nadie puede entrar a Administracion hasta crear a mano el primer administrador (despues de que el arranque cree el esquema):
+**MySQL/MariaDB.** El script solo aplica a SQLite y el arranque ya no crea ningun rol, asi que en una instalacion MySQL nueva nadie puede entrar a Administracion hasta crear a mano el primer administrador (despues de `npm run migrar -- --respaldo-hecho`, que crea el esquema):
 
 ```sql
 INSERT INTO roles (nombre, descripcion, clave, es_sistemico, activo)
@@ -786,14 +823,14 @@ Las cuentas del catalogo son locales (`@ficotox.local`). Para dar de alta person
 
 - Proteger endpoints con `requireUser` y `requirePermission`.
 - Mantener los permisos sincronizados con `DEFAULT_PERMISSIONS`.
-- Usar `addColumnIfMissing` para cambios ligeros de tablas.
+- Todo cambio de esquema es una migracion nueva (§10.2), con SQL para SQLite y MySQL; nunca DDL dentro de un handler.
 - No construir SQL con datos de usuario; usar parametros `:nombre`.
 - Usar los componentes de `src/components/ui/` y los tokens de `globals.css` en lugar de estilos sueltos; no usar `window.confirm` ni `alert` (existen `useConfirm` y `toast`).
 - Al tocar inventario, verificar movimientos y dashboard; al tocar muestras, revisar recepcion, procesamiento y extraccion.
 
 ## 17. Agregar un nuevo modulo
 
-1. Crear `src/lib/server/modules/<modulo>.ts` con sus handlers y `ensure<Modulo>Schema()`.
+1. Crear `src/lib/server/modules/<modulo>.ts` con sus handlers y una migracion nueva con sus tablas (§10.2).
 2. Crear las rutas en `src/app/api/<modulo>/**/route.ts` con `apiRoute(handler)`.
 3. Agregar el permiso en `DEFAULT_PERMISSIONS` (`src/lib/server/rbac.ts`).
 4. Crear la ruta en `src/app/(app)/<modulo>/page.tsx` envuelta en `RequireModule`, con `useResource` para cargar datos y una hoja lateral en `src/components/features/<modulo>/` para el alta y la edicion.
@@ -832,8 +869,18 @@ npm run lint
 npm test                 # regenera la base de prueba si falta (--rebuild-fixture para forzarlo)
 npm run test:fixture     # rehace instance/fixtures/ficotox-base.sqlite3
 npm run seed:roles       # alta idempotente de roles y usuarios (scripts/seed-usuarios.local.json)
+node scripts/set-password.mjs <correo> "<temporal>" --motivo "..."   # emergencia: contraseña temporal auditada (servidor detenido)
 npm run respaldar        # Fase 10: respaldo local (base, archivos, manifest y llave aparte)
 npm run restaurar -- --respaldo <id> --responsable "..."   # Fase 10: prueba de restauracion con acta
+npm run migrar -- --estado   # Fase 12: version de la base y migraciones pendientes (--simular, o sin opciones para aplicar)
+npm run configurar           # Fase 12: .env seguro (idempotente)
+npm run instancia-nueva -- --confirmar   # Fase 12: instancia de produccion vacia (mueve la anterior)
+npm run instalar-servicio    # Fase 12: arranque automatico + firewall (quitar-servicio para retirarlo)
+npm run actualizar -- --git  # Fase 12: actualizar con respaldo, build seguro, migracion y verificacion
+npm run verificar-instalacion   # Fase 12: ✅/⚠️/❌ y reporte en <instancia>/verificaciones/
+npm run prueba-carga -- --segundos 180 --usuarios 10   # Fase 12: prueba de carga (requiere build)
+npm run test:mysql           # Fase 12: pruebas contra MySQL/MariaDB (Docker o MYSQL_TEST_URL)
+npm run sqlite-a-mysql -- --simular   # Fase 12: paso de SQLite a MySQL
 ```
 
 Buscar rutas:
@@ -844,8 +891,8 @@ rg -n "export const (GET|POST|PUT|DELETE)" src/app/api
 
 ## 20. Riesgos tecnicos conocidos
 
-- Las migraciones son ligeras y no versionadas.
-- SQLite es adecuado para uso local; produccion multiusuario deberia usar MySQL/MariaDB.
+- Fase 12: el soporte MySQL (migraciones, arranque, `sqlite-a-mysql`) no se probo contra un servidor MySQL en esta fase (no habia Docker); `npm run test:mysql` queda listo. El DDL MySQL de la migracion base se tradujo del de SQLite: no declara las llaves foraneas ni algunos indices secundarios que creaba el codigo anterior en MySQL (una base MySQL anterior con ellos no pasa la linea base por nombres de tablas/columnas/triggers, pero si la integridad referencial depende de ellas, anadirlas en una migracion).
+- SQLite es la opcion para el laboratorio (un servidor, ~10 usuarios; medidas en `docs/DECISION_BASE_DE_DATOS.md`); pasar a MySQL/MariaDB si se rebasan los umbrales de ese documento.
 - Los secretos por defecto solo deben usarse en desarrollo.
 - `better-sqlite3` requiere Node.js LTS con binarios precompilados.
 - Fase 3 (limites aceptados de la separacion de funciones):

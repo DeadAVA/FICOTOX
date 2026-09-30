@@ -1,9 +1,7 @@
-import fs from "node:fs";
-import path from "node:path";
 import { requireUser, userIdFromClaims } from "../../auth";
 import { registrarAuditoria, snapshotRow } from "../../audit";
-import { getConfig } from "../../config";
-import { isSqlite, type Row, type Session } from "../../db";
+
+import { type Row, type Session } from "../../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../../http";
 import { restoreInventoryUsage } from "../../inventory-usage";
 import { cargoActuante, requirePermission } from "../../rbac";
@@ -12,19 +10,17 @@ import { evaluarSupervisionCaptura } from "../../../shared/segregacion";
 import { respuestaSolicitud } from "../../solicitudes";
 import { aplicarSupervision, filtroSupervision, marcaSupervision } from "../../supervision";
 import { recordBitacoraFolios } from "../inventory";
-import { addColumnIfMissing, getTableColumns, markSchemaReady, schemaReady } from "../../schema";
-import { advanceState, anularOSolicitar, applyStageInventory, recepcionDe, assertEditableAsync, assertOrigin, avanzarRecepcion, conSolicitudes, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
+
+import { advanceState, anularOSolicitar, applyStageInventory, recepcionDe, assertEditableAsync, assertOrigin, avanzarRecepcion, conSolicitudes, deletionNotAllowed, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
 import { EXTRACTION_TYPES, claveForType, normalizeExtractionType, parseExtractionFolioSearch, type ExtractionType } from "../../../shared/extraction";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
-import { ensureEquiposSchema } from "../inventory";
-import { ensureSupervisionColumns } from "../../supervision";
+
 import { exigirAutorizaciones, requisitosEquipos } from "../../autorizaciones";
 import { metodoDeExtraccion, requisitosExtraccion } from "../../../shared/autorizaciones";
 import { exigirSinSuspension, idsDeEquipos } from "../calidad/bloqueos";
 import { incidenciasPorEquiposNoAptos } from "../calidad/automaticas";
 import { exigirAsignacion, filtroAsignadas } from "../../asignaciones";
-import { ensureColumnasFirma, guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
-
+import { guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
 
 /* Fase 11: equipos de la extraccion para suspensiones e incidencias (con id, o solo por nombre si no se eligio del catalogo). */
 function usoDeEquipos(equiposJson: unknown): { equipoIds: unknown[]; equipoNombres: string[] } {
@@ -45,123 +41,6 @@ function usoDeEquipos(equiposJson: unknown): { equipoIds: unknown[]; equipoNombr
  */
 
 const TABLE = "muestras_extraccion";
-const REBUILD_TABLE = "muestras_extraccion__nuevo";
-const UNIQUE_PER_TYPE = "uq_muestras_extraccion_tipo_folio";
-
-/* Columnas finales, en orden. Se usan para crear la tabla y para copiarla al reconstruirla. */
-const COLUMN_NAMES = [
-  "id",
-  "folio_num",
-  "tipo_registro",
-  "clave_revision",
-  "fecha_emision",
-  "fecha_extraccion",
-  "hora_extraccion",
-  "procesamiento_id",
-  "folio_procesamiento_num",
-  "muestra_tipo",
-  "id_interno",
-  "tipo_molienda",
-  "pasos_json",
-  "registro_pesos_json",
-  "equipos_json",
-  "uso_inventario_json",
-  "observaciones_generales",
-  "nombre_quien_extrajo",
-  "nombre_quien_limpieza",
-  "nombre_quien_superviso",
-  "firma_quien_extrajo",
-  "firma_quien_limpieza",
-  "firma_quien_superviso",
-  "estado",
-  "creado_por",
-  "actualizado_por",
-  "creado_en",
-  "actualizado_en",
-  "anulado_en",
-  "anulado_por",
-  "motivo_anulacion",
-  "estado_previo",
-] as const;
-
-const SQLITE_COLUMNS = `
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  folio_num INTEGER NOT NULL,
-  tipo_registro VARCHAR(4) NOT NULL DEFAULT 'E-A',
-  clave_revision VARCHAR(50) DEFAULT 'FX-TCF-GME-A',
-  fecha_emision DATE DEFAULT NULL,
-  fecha_extraccion DATE DEFAULT NULL,
-  hora_extraccion VARCHAR(20) DEFAULT NULL,
-  procesamiento_id INTEGER DEFAULT NULL,
-  folio_procesamiento_num INTEGER DEFAULT NULL,
-  muestra_tipo VARCHAR(20) DEFAULT NULL,
-  id_interno VARCHAR(100) DEFAULT NULL,
-  tipo_molienda VARCHAR(20) DEFAULT NULL,
-  pasos_json TEXT,
-  registro_pesos_json TEXT,
-  equipos_json TEXT,
-  uso_inventario_json TEXT DEFAULT NULL,
-  observaciones_generales TEXT,
-  nombre_quien_extrajo VARCHAR(180) DEFAULT NULL,
-  nombre_quien_limpieza VARCHAR(180) DEFAULT NULL,
-  nombre_quien_superviso VARCHAR(180) DEFAULT NULL,
-  firma_quien_extrajo TEXT,
-  firma_quien_limpieza TEXT,
-  firma_quien_superviso TEXT,
-  estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
-  creado_por INTEGER DEFAULT NULL,
-  actualizado_por INTEGER DEFAULT NULL,
-  creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  anulado_en VARCHAR(40) DEFAULT NULL,
-  anulado_por INTEGER DEFAULT NULL,
-  motivo_anulacion TEXT,
-  estado_previo VARCHAR(30) DEFAULT NULL,
-  UNIQUE (tipo_registro, folio_num)
-`;
-
-const MYSQL_CREATE = `
-  CREATE TABLE IF NOT EXISTS ${TABLE} (
-      id INT NOT NULL AUTO_INCREMENT,
-      folio_num INT NOT NULL,
-      tipo_registro VARCHAR(4) NOT NULL DEFAULT 'E-A',
-      clave_revision VARCHAR(50) DEFAULT 'FX-TCF-GME-A',
-      fecha_emision DATE DEFAULT NULL,
-      fecha_extraccion DATE DEFAULT NULL,
-      hora_extraccion VARCHAR(20) DEFAULT NULL,
-      procesamiento_id INT DEFAULT NULL,
-      folio_procesamiento_num INT DEFAULT NULL,
-      muestra_tipo VARCHAR(20) DEFAULT NULL,
-      id_interno VARCHAR(100) DEFAULT NULL,
-      tipo_molienda VARCHAR(20) DEFAULT NULL,
-      pasos_json LONGTEXT,
-      registro_pesos_json LONGTEXT,
-      equipos_json LONGTEXT,
-      uso_inventario_json TEXT DEFAULT NULL,
-      observaciones_generales TEXT,
-      nombre_quien_extrajo VARCHAR(180) DEFAULT NULL,
-      nombre_quien_limpieza VARCHAR(180) DEFAULT NULL,
-      nombre_quien_superviso VARCHAR(180) DEFAULT NULL,
-      firma_quien_extrajo LONGTEXT,
-      firma_quien_limpieza LONGTEXT,
-      firma_quien_superviso LONGTEXT,
-      estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
-      creado_por INT DEFAULT NULL,
-      actualizado_por INT DEFAULT NULL,
-      creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-      actualizado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      PRIMARY KEY (id),
-      UNIQUE KEY ${UNIQUE_PER_TYPE} (tipo_registro, folio_num),
-      KEY idx_muestras_extraccion_procesamiento_id (procesamiento_id),
-      KEY idx_muestras_extraccion_creado_por (creado_por),
-      KEY idx_muestras_extraccion_actualizado_por (actualizado_por),
-      CONSTRAINT fk_muestras_extraccion_procesamiento FOREIGN KEY (procesamiento_id) REFERENCES muestras_procesamiento(id) ON DELETE SET NULL,
-      CONSTRAINT fk_muestras_extraccion_creado_por FOREIGN KEY (creado_por) REFERENCES usuarios(id) ON DELETE SET NULL,
-      CONSTRAINT fk_muestras_extraccion_actualizado_por FOREIGN KEY (actualizado_por) REFERENCES usuarios(id) ON DELETE SET NULL
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-`;
-
-let folioPerTypeVerified = false;
 
 const ORIGEN_REQUERIDO = "La extracción debe partir de un procesamiento de muestra";
 
@@ -181,107 +60,6 @@ function exigirSupervisorDistinto(data: { nombre_quien_extrajo: string | null; n
   ], data.superviso_usuario_id);
   if (violacion) throw new HttpError(409, { message: violacion.mensaje, codigo: "segregacion", regla: violacion.regla, clave: violacion.clave });
 }
-
-export async function ensureSamplesExtraccionSchema(s: Session): Promise<void> {
-  if (schemaReady("muestras_extraccion")) return;
-  await s.execute(isSqlite() ? `CREATE TABLE IF NOT EXISTS ${TABLE} (${SQLITE_COLUMNS})` : MYSQL_CREATE);
-  await addColumnIfMissing(s, TABLE, "nombre_quien_limpieza", "VARCHAR(180) DEFAULT NULL AFTER `nombre_quien_extrajo`");
-  await addColumnIfMissing(s, TABLE, "firma_quien_extrajo", "LONGTEXT AFTER `nombre_quien_superviso`");
-  await addColumnIfMissing(s, TABLE, "firma_quien_limpieza", "LONGTEXT AFTER `firma_quien_extrajo`");
-  await addColumnIfMissing(s, TABLE, "firma_quien_superviso", "LONGTEXT AFTER `firma_quien_limpieza`");
-  await addColumnIfMissing(s, TABLE, "uso_inventario_json", "TEXT DEFAULT NULL");
-  await addColumnIfMissing(s, TABLE, "equipos_json", "LONGTEXT AFTER `registro_pesos_json`");
-  await ensureAnulacionColumns(s, TABLE);
-  await ensureActuoColumns(s, TABLE);
-  if (!folioPerTypeVerified) {
-    await ensureFolioPerType(s);
-  }
-  await ensureSupervisionColumns(s, "muestras_extraccion");
-  await ensureColumnasFirma(s, TABLE, firmasExtraccion("E-A"));
-  markSchemaReady("muestras_extraccion");
-  // Solo se marca como verificada cuando la migracion ya quedo confirmada.
-  folioPerTypeVerified = true;
-}
-
-/*
- * Migracion de la unicidad del folio: de UNIQUE(folio_num) a
- * UNIQUE(tipo_registro, folio_num). Idempotente: si la tabla ya esta
- * en la forma nueva no hace nada.
- */
-async function ensureFolioPerType(s: Session): Promise<void> {
-  if (isSqlite()) {
-    if (await sqliteHasOldFolioIndex(s)) {
-      backupSqliteFile("pre-folio-por-tipo");
-      await rebuildSqliteTable(s);
-    }
-    return;
-  }
-
-  const rows = await s.query<{ INDEX_NAME: string; COLUMN_NAME: string }>(
-    `
-    SELECT INDEX_NAME, COLUMN_NAME
-    FROM INFORMATION_SCHEMA.STATISTICS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = :table_name
-      AND NON_UNIQUE = 0
-      AND INDEX_NAME <> 'PRIMARY'
-    ORDER BY INDEX_NAME, SEQ_IN_INDEX
-    `,
-    { table_name: TABLE },
-  );
-  const byIndex = new Map<string, string[]>();
-  for (const row of rows) {
-    const list = byIndex.get(row.INDEX_NAME) || [];
-    list.push(row.COLUMN_NAME);
-    byIndex.set(row.INDEX_NAME, list);
-  }
-  const hasNew = byIndex.has(UNIQUE_PER_TYPE);
-  for (const [name, columns] of byIndex) {
-    if (columns.length === 1 && columns[0] === "folio_num") {
-      await s.execute(`ALTER TABLE ${TABLE} DROP INDEX \`${name}\``);
-    }
-  }
-  if (!hasNew) {
-    await s.execute(`ALTER TABLE ${TABLE} ADD UNIQUE KEY ${UNIQUE_PER_TYPE} (tipo_registro, folio_num)`);
-  }
-}
-
-async function sqliteHasOldFolioIndex(s: Session): Promise<boolean> {
-  const indexes = await s.query<{ name: string; unique: number }>(`PRAGMA index_list("${TABLE}")`);
-  for (const index of indexes) {
-    if (!index.unique) continue;
-    const columns = await s.query<{ name: string }>(`PRAGMA index_info("${index.name}")`);
-    const names = columns.map((column) => column.name);
-    if (names.length === 1 && names[0] === "folio_num") return true;
-  }
-  return false;
-}
-
-/* Copia del archivo SQLite antes de reconstruir la tabla (instance/backups/). */
-function backupSqliteFile(reason: string): void {
-  const config = getConfig();
-  const source = config.SQLITE_PATH;
-  if (!source || !fs.existsSync(source)) return;
-  const folder = path.join(config.INSTANCE_DIR, "backups");
-  fs.mkdirSync(folder, { recursive: true });
-  // Marca de tiempo local (misma convencion que scripts/backup_ficotox.py).
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  fs.copyFileSync(source, path.join(folder, `ficotox-${stamp}-${reason}.sqlite3`));
-}
-
-async function rebuildSqliteTable(s: Session): Promise<void> {
-  const existing = await getTableColumns(s, TABLE);
-  const columns = COLUMN_NAMES.filter((name) => existing.has(name)).map((name) => `"${name}"`);
-  const list = columns.join(", ");
-  await s.execute(`DROP TABLE IF EXISTS ${REBUILD_TABLE}`);
-  await s.execute(`CREATE TABLE ${REBUILD_TABLE} (${SQLITE_COLUMNS})`);
-  await s.execute(`INSERT INTO ${REBUILD_TABLE} (${list}) SELECT ${list} FROM ${TABLE}`);
-  await s.execute(`DROP TABLE ${TABLE}`);
-  await s.execute(`ALTER TABLE ${REBUILD_TABLE} RENAME TO ${TABLE}`);
-}
-
 
 export interface EquipoUtilizado {
   equipo_id: number | null;
@@ -314,7 +92,6 @@ function normalizeEquipos(value: unknown): EquipoUtilizado[] {
 /* Guarda el nombre vigente del equipo junto al id, para que el registro sea legible aunque el catalogo cambie. */
 async function snapshotEquipos(s: Session, equipos: EquipoUtilizado[]): Promise<EquipoUtilizado[]> {
   if (!equipos.some((item) => item.equipo_id)) return equipos;
-  await ensureEquiposSchema(s);
   const result: EquipoUtilizado[] = [];
   for (const item of equipos) {
     if (!item.equipo_id) {
@@ -376,7 +153,6 @@ async function resolveType(s: Session, payload: Record<string, unknown>, extract
   return normalizeExtractionType(stored) || "E-A";
 }
 
-
 async function replaceInventoryUsage(s: Session, extractionId: number, data: ExtractionData, userId: number | null, declaradosAntes: Map<string, number>): Promise<void> {
   await restoreInventoryUsage(s, `EXT-${extractionId}-INS-`);
   await applyStageInventory(s, "EXT", extractionId, data.uso_inventario_json, `Extraccion ${data.tipo_registro} folio ${data.folio_num}`, userId, declaradosAntes);
@@ -395,11 +171,9 @@ function serializeRow(row: Row): Row {
   return item;
 }
 
-
 export async function getNextFolio({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "ensayos", "V");
-  await ensureSamplesExtraccionSchema(s);
   const tipoParam = searchParam(request, "tipo");
   const tipo = tipoParam ? normalizeExtractionType(tipoParam) : "E-A";
   if (!tipo) {
@@ -414,7 +188,6 @@ export async function listExtractionSamples({ request, s }: RouteContext): Promi
   const supFiltro = filtroSupervision(request, "e", permiso.auth.userId);
   // Fase 5: filtro "Mis muestras".
   const asignadas = await filtroAsignadas(s, permiso.auth.userId, "(SELECT p2.recepcion_id FROM muestras_procesamiento p2 WHERE p2.id = e.procesamiento_id)", searchParam(request, "mias") === "1");
-  await ensureSamplesExtraccionSchema(s);
 
   const search = searchParam(request, "search");
   const tipoParam = searchParam(request, "tipo");
@@ -467,7 +240,6 @@ export async function getExtractionSample({ request, s, params }: RouteContext):
   const extractionId = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "ensayos", "V");
-  await ensureSamplesExtraccionSchema(s);
 
   const row = await s.queryOne(
     `
@@ -497,7 +269,6 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "ensayos", "C", { objeto: "extraccion", borrador: true });
   const actuo = cargoActuante(request, permiso);
-  await ensureSamplesExtraccionSchema(s);
 
   const payload = await readJson(request);
   const tipo = await resolveType(s, payload, null);
@@ -566,7 +337,8 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
     return json({ message: "Extraccion creada", id, tipo_registro: tipo, folio_num: data.folio_num }, 201);
   } catch (error) {
     await s.rollback();
-    if (isFolioConflict(error)) {
+    // Fase 12: si el folio lo asigno el servidor, el choque es de concurrencia: se relanza y apiRoute reintenta.
+    if (isFolioConflict(error) && toIntOrNull(payload.folio_num)) {
       return json({ message: `El folio ${tipo} ${String(data.folio_num).padStart(7, "0")} ya existe` }, 409);
     }
     throw error;
@@ -576,7 +348,6 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
 export async function updateExtractionSample({ request, s, params }: RouteContext): Promise<Response> {
   const extractionId = intParam(params.id);
   const user = await requireUser(request);
-  await ensureSamplesExtraccionSchema(s);
 
   const antes = await snapshotRow(s, TABLE, extractionId);
   const permiso = await requirePermission(s, user, "ensayos", "E", { objeto: "extraccion", borrador: String(antes?.estado || "registrada") === "registrada" });
@@ -673,7 +444,6 @@ export async function anularExtractionSample({ request, s, params }: RouteContex
   const extractionId = intParam(params.id);
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "AN"));
-  await ensureSamplesExtraccionSchema(s);
   const motivo = await readMotivo(request);
   await exigirReauth(s, request, user, "ensayos:AN");
   const { row, solicitud } = await anularOSolicitar(s, user, TABLE, extractionId, motivo, actuo);
@@ -686,7 +456,6 @@ export async function restaurarExtractionSample({ request, s, params }: RouteCon
   const extractionId = intParam(params.id);
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "ensayos", "AN"));
-  await ensureSamplesExtraccionSchema(s);
   await exigirReauth(s, request, user, "ensayos:AN");
   const { row, solicitud } = await restaurarOSolicitar(s, user, TABLE, extractionId, await readMotivo(request), actuo);
   await s.commit();

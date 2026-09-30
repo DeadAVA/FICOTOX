@@ -76,7 +76,7 @@ export function CambioPasswordObligatorio() {
           <h1 id="cambio-titulo" className="mt-5 text-[22px] font-semibold text-ink">
             Cambia tu contraseña
           </h1>
-          <p className="mt-1.5 text-[14px] text-ink-2">La administración restableció tu contraseña. Antes de continuar, {user?.nombre || user?.email}, elige una nueva.</p>
+          <p className="mt-1.5 text-[14px] text-ink-2">Entraste con una contraseña temporal (asignada al crear o restablecer tu cuenta). Antes de continuar, {user?.nombre || user?.email}, elige una nueva.</p>
         </div>
         <div className="mt-7">
           <FormCambiarPassword submitLabel="Guardar y continuar" />

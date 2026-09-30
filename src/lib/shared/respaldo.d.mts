@@ -25,7 +25,8 @@ export interface Manifest {
   creado_en: string;
   host: string;
   app: { version: string | null; commit: string | null };
-  esquema_version: number;
+  esquema_version: number | null;
+  esquema_app?: number;
   motor: string;
   etiqueta: string | null;
   base: { ruta: string; tamano: number; sha256: string; integrity_check: string };
@@ -42,7 +43,8 @@ export interface RespaldoListado {
   creado_en: string;
   host: string;
   app: { version: string | null; commit: string | null };
-  esquema_version: number;
+  esquema_version: number | null;
+  esquema_app?: number;
   etiqueta: string | null;
   tamano: number;
   archivos: number;
@@ -67,7 +69,7 @@ export function sha256Archivo(ruta: string): Promise<string>;
 export function huellaLlave(clave: string): string;
 export function versionApp(baseDir: string): { version: string | null; commit: string | null };
 export function inspeccionarBase(db: unknown): { conteos: Record<string, number>; bitacora: Manifest["bitacora"] };
-export function crearRespaldo(opciones: {
+export interface OpcionesRespaldo {
   Sqlite: unknown;
   sqlitePath: string | null;
   instanceDir: string;
@@ -77,8 +79,14 @@ export function crearRespaldo(opciones: {
   incluirLlave?: boolean;
   etiqueta?: string | null;
   ahora?: Date;
-}): Promise<{ id: string; carpeta: string; manifest: Manifest }>;
+}
+/* Foto de la base tomada; falta copiar archivos y escribir el manifest (opaco para quien llama). */
+export type RespaldoIniciado = { readonly id: string } & Record<string, unknown>;
+export function crearRespaldo(opciones: OpcionesRespaldo): Promise<{ id: string; carpeta: string; manifest: Manifest }>;
+export function iniciarRespaldo(opciones: OpcionesRespaldo): Promise<RespaldoIniciado>;
+export function completarRespaldo(iniciado: RespaldoIniciado): Promise<{ id: string; carpeta: string; manifest: Manifest }>;
 export function leerManifest(carpeta: string): Manifest;
+export function hacerPrivado(ruta: string): void;
 export function listarActas(respaldosDir: string): Acta[];
 export function listarRespaldos(respaldosDir: string): RespaldoListado[];
 export function aplicarRetencion(respaldosDir: string, retencion: number): string[];

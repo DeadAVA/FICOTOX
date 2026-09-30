@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { markSchemaReady, schemaReady } from "../schema";
+
 import fs from "node:fs";
 import path from "node:path";
 import { requireUser } from "../auth";
 import { registrarAuditoria } from "../audit";
 import { getConfig } from "../config";
-import { isSqlite, type Session } from "../db";
+import { type Session } from "../db";
 import { json, type RouteContext } from "../http";
 import { requirePermission } from "../rbac";
 
@@ -15,44 +15,6 @@ function reportsUploadDir(): string {
   const folder = path.join(getConfig().INSTANCE_DIR, "maintenance_reports");
   fs.mkdirSync(folder, { recursive: true });
   return folder;
-}
-
-export async function ensureReportesMantenimientoSchema(s: Session): Promise<void> {
-  if (schemaReady("reportes_mantenimiento")) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS reportes_mantenimiento (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          codigo VARCHAR(50) NOT NULL UNIQUE,
-          id_mantenimiento INTEGER NOT NULL,
-          version VARCHAR(20) NOT NULL,
-          estado VARCHAR(40) DEFAULT 'borrador',
-          id_responsable INTEGER DEFAULT NULL,
-          fecha_reporte DATE NOT NULL,
-          archivo_url TEXT,
-          creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS reportes_mantenimiento (
-          id INT NOT NULL AUTO_INCREMENT,
-          codigo VARCHAR(50) NOT NULL,
-          id_mantenimiento INT NOT NULL,
-          version VARCHAR(20) NOT NULL,
-          estado ENUM('borrador','en_revision','aprobado','publicado') DEFAULT 'borrador',
-          id_responsable INT DEFAULT NULL,
-          fecha_reporte DATE NOT NULL,
-          archivo_url TEXT,
-          creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (id),
-          UNIQUE KEY codigo (codigo),
-          KEY id_mantenimiento (id_mantenimiento),
-          KEY id_responsable (id_responsable)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-      `,
-  );
-  markSchemaReady("reportes_mantenimiento");
 }
 
 async function nextReportCode(s: Session, mantenimientoId: number): Promise<string> {
@@ -78,7 +40,6 @@ export function secureFilename(filename: string): string {
 export async function documentsSummary({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "equipos", "V");
-  await ensureReportesMantenimientoSchema(s);
 
   const summary = await s.queryOne(
     `
@@ -96,7 +57,6 @@ export async function documentsSummary({ request, s }: RouteContext): Promise<Re
 export async function listDocuments({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "equipos", "V");
-  await ensureReportesMantenimientoSchema(s);
 
   const rows = await s.query(
     `
@@ -114,7 +74,6 @@ export async function listDocuments({ request, s }: RouteContext): Promise<Respo
 export async function createMaintenanceReport({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "equipos", "C", { objeto: "mantenimiento" });
-  await ensureReportesMantenimientoSchema(s);
 
   let form: FormData;
   try {

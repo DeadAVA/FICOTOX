@@ -18,54 +18,12 @@ import path from "node:path";
 import { getConfig } from "./config";
 import { isSqlite, type Row, type Session } from "./db";
 import { HttpError } from "./http";
-import { markSchemaReady, schemaReady } from "./schema";
+
 import { DESCRIPCION_MIN, EXTENSIONES_EVIDENCIA, TIPOS_EVIDENCIA, extensionDe, problemaDeContenido, sanearNombre, type EntidadAdjunto } from "../shared/adjuntos";
 
 const TABLE = "adjuntos";
 const TIPOS = new Set<string>(TIPOS_EVIDENCIA.map((t) => t.value));
 const EXTENSIONES = new Set<string>(EXTENSIONES_EVIDENCIA);
-
-export async function ensureAdjuntosSchema(s: Session): Promise<void> {
-  if (schemaReady(TABLE)) return;
-  const id = isSqlite() ? "id INTEGER PRIMARY KEY AUTOINCREMENT" : "id INT AUTO_INCREMENT PRIMARY KEY";
-  const texto = isSqlite() ? "TEXT" : "LONGTEXT";
-  const entero = isSqlite() ? "INTEGER" : "INT";
-  const grande = isSqlite() ? "INTEGER" : "BIGINT";
-  const fin = isSqlite() ? "" : " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
-  await s.execute(
-    `CREATE TABLE IF NOT EXISTS ${TABLE} (
-      ${id},
-      entidad VARCHAR(40) NOT NULL,
-      entidad_id ${entero} NOT NULL,
-      tipo_evidencia VARCHAR(40) NOT NULL,
-      descripcion ${texto} NOT NULL,
-      nombre_original VARCHAR(255) NOT NULL,
-      nombre_almacenado VARCHAR(255) NOT NULL,
-      mime VARCHAR(120) NOT NULL,
-      extension VARCHAR(10) NOT NULL,
-      tamano_bytes ${grande} NOT NULL,
-      sha256 VARCHAR(64) NOT NULL,
-      subido_por ${entero} DEFAULT NULL,
-      subido_rol VARCHAR(120) DEFAULT NULL,
-      subido_en VARCHAR(40) NOT NULL,
-      heredado_de ${entero} DEFAULT NULL,
-      anulado_en VARCHAR(40) DEFAULT NULL,
-      anulado_por ${entero} DEFAULT NULL,
-      anulado_rol VARCHAR(120) DEFAULT NULL,
-      motivo_anulacion ${texto}
-    )${fin}`,
-  );
-  if (isSqlite()) {
-    await s.execute(`CREATE INDEX IF NOT EXISTS idx_adjuntos_entidad ON ${TABLE} (entidad, entidad_id)`);
-    await s.execute(`CREATE INDEX IF NOT EXISTS idx_adjuntos_sha256 ON ${TABLE} (sha256)`);
-  } else {
-    for (const [nombre, columnas] of [["idx_adjuntos_entidad", "entidad, entidad_id"], ["idx_adjuntos_sha256", "sha256"]]) {
-      const existe = await s.scalar("SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i", { t: TABLE, i: nombre });
-      if (!Number(existe || 0)) await s.execute(`CREATE INDEX ${nombre} ON ${TABLE} (${columnas})`);
-    }
-  }
-  markSchemaReady(TABLE);
-}
 
 /* Carpeta raiz de las evidencias (dentro de la instancia). */
 export function evidenciasDir(): string {
@@ -102,7 +60,6 @@ export async function integridadAdjunto(row: Row): Promise<{ estado: "ok" | "alt
 }
 
 export async function listarAdjuntos(s: Session, entidad: EntidadAdjunto, entidadId: number): Promise<Row[]> {
-  await ensureAdjuntosSchema(s);
   return s.query<Row>(
     `SELECT a.*, u.nombre AS subido_por_nombre, n.nombre AS anulado_por_nombre
      FROM ${TABLE} a LEFT JOIN usuarios u ON u.id = a.subido_por LEFT JOIN usuarios n ON n.id = a.anulado_por
@@ -112,7 +69,6 @@ export async function listarAdjuntos(s: Session, entidad: EntidadAdjunto, entida
 }
 
 export async function adjuntoPorId(s: Session, id: number, bloquear = false): Promise<Row | null> {
-  await ensureAdjuntosSchema(s);
   return s.queryOne<Row>(`SELECT * FROM ${TABLE} WHERE id = :id${bloquear ? conBloqueo() : ""}`, { id });
 }
 
@@ -125,13 +81,11 @@ export async function adjuntoPorId(s: Session, id: number, bloquear = false): Pr
 const conBloqueo = () => (isSqlite() ? "" : " FOR UPDATE");
 
 export async function contarVigentes(s: Session, entidad: EntidadAdjunto, entidadId: number): Promise<number> {
-  await ensureAdjuntosSchema(s);
   return Number((await s.scalar(`SELECT COUNT(*) FROM ${TABLE} WHERE entidad = :entidad AND entidad_id = :id AND anulado_en IS NULL${conBloqueo()}`, { entidad, id: entidadId })) || 0);
 }
 
 /* Resumen para la ficha del registro: vigentes y anulados. */
 export async function resumenAdjuntos(s: Session, entidad: EntidadAdjunto, entidadId: number): Promise<{ vigentes: number; anulados: number }> {
-  await ensureAdjuntosSchema(s);
   const fila = await s.queryOne<{ vigentes: number; total: number }>(
     `SELECT SUM(CASE WHEN anulado_en IS NULL THEN 1 ELSE 0 END) AS vigentes, COUNT(*) AS total FROM ${TABLE} WHERE entidad = :entidad AND entidad_id = :id`,
     { entidad, id: entidadId },
@@ -234,7 +188,6 @@ export async function descartarArchivo(guardado: ArchivoGuardado | null): Promis
 
 /* ¿El mismo archivo (SHA-256) ya esta adjunto y vigente en este registro? */
 export async function duplicadoVigente(s: Session, entidad: EntidadAdjunto, entidadId: number, sha256: string): Promise<Row | null> {
-  await ensureAdjuntosSchema(s);
   return s.queryOne<Row>(`SELECT id, descripcion FROM ${TABLE} WHERE entidad = :entidad AND entidad_id = :id AND sha256 = :sha AND anulado_en IS NULL LIMIT 1${conBloqueo()}`, { entidad, id: entidadId, sha: sha256 });
 }
 
@@ -242,7 +195,6 @@ export async function insertarAdjunto(
   s: Session,
   datos: { entidad: EntidadAdjunto; entidad_id: number; tipo_evidencia: string; descripcion: string; nombre_original: string; nombre_almacenado: string; mime: string; extension: string; tamano_bytes: number; sha256: string; subido_por: number | null; subido_rol: string | null; subido_en?: string; heredado_de?: number | null },
 ): Promise<number> {
-  await ensureAdjuntosSchema(s);
   const result = await s.execute(
     `INSERT INTO ${TABLE} (entidad, entidad_id, tipo_evidencia, descripcion, nombre_original, nombre_almacenado, mime, extension, tamano_bytes, sha256, subido_por, subido_rol, subido_en, heredado_de)
      VALUES (:entidad, :entidad_id, :tipo_evidencia, :descripcion, :nombre_original, :nombre_almacenado, :mime, :extension, :tamano_bytes, :sha256, :subido_por, :subido_rol, :subido_en, :heredado_de)`,
@@ -264,7 +216,6 @@ export async function anularAdjuntoFila(s: Session, id: number, datos: { por: nu
  * Los de la version anterior quedan intactos. Devuelve cuantos se heredaron.
  */
 export async function heredarAdjuntos(s: Session, entidad: EntidadAdjunto, deId: number, aId: number): Promise<number> {
-  await ensureAdjuntosSchema(s);
   const vigentes = await s.query<Row>(`SELECT * FROM ${TABLE} WHERE entidad = :entidad AND entidad_id = :id AND anulado_en IS NULL ORDER BY id`, { entidad, id: deId });
   for (const row of vigentes) {
     await insertarAdjunto(s, {

@@ -8,8 +8,6 @@ import { type Row, type Session } from "../../db";
 import { HttpError } from "../../http";
 import { accesoCalidad, incidenciaVisible, ncVisible, T, veNc } from "./comun";
 
-/* Entidades de calidad cuyo historial y solicitudes se filtran por registro. */
-export const ENTIDADES_REGISTRO_CALIDAD = new Set<string>([T.incidencias, T.nc, T.acciones, T.suspensiones]);
 
 export async function exigirVerRegistroCalidad(s: Session, user: CurrentUser, entidad: string, id: number): Promise<void> {
   if (entidad === T.incidencias) {

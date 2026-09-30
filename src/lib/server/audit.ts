@@ -5,7 +5,6 @@ import { advertenciasLlaveBitacora, SECRET_KEY_DESARROLLO } from "../shared/secr
 import type { CurrentUser } from "./auth";
 import { getConfig } from "./config";
 import { isSqlite, type Row, type Session } from "./db";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "./schema";
 
 /*
  * Bitacora de auditoria (ISO/IEC 17025 7.5.2 y 7.11): cada alta, cambio,
@@ -117,69 +116,15 @@ export interface AuditEntry {
   detalle?: Record<string, unknown> | null;
 }
 
-export async function ensureAuditSchema(s: Session): Promise<void> {
-  if (schemaReady("auditoria")) {
-    // La tabla ya existe; los triggers se comprueban en cada llamada (son baratos)
-    // para que no puedan quedar retirados sin que el sistema los vuelva a poner.
-    await ensureAuditTriggers(s);
-    return;
-  }
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS auditoria (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fecha_hora TEXT NOT NULL,
-        usuario_id INTEGER DEFAULT NULL,
-        usuario_nombre VARCHAR(150) DEFAULT NULL,
-        usuario_email VARCHAR(150) DEFAULT NULL,
-        accion VARCHAR(30) NOT NULL,
-        entidad VARCHAR(60) NOT NULL,
-        entidad_id VARCHAR(60) DEFAULT NULL,
-        referencia VARCHAR(160) DEFAULT NULL,
-        motivo TEXT,
-        cambios_json TEXT,
-        datos_anteriores_json TEXT,
-        datos_nuevos_json TEXT,
-        hash_anterior VARCHAR(64) DEFAULT NULL,
-        hash VARCHAR(64) NOT NULL
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS auditoria (
-        id INT NOT NULL AUTO_INCREMENT,
-        fecha_hora VARCHAR(40) NOT NULL,
-        usuario_id INT DEFAULT NULL,
-        usuario_nombre VARCHAR(150) DEFAULT NULL,
-        usuario_email VARCHAR(150) DEFAULT NULL,
-        accion VARCHAR(30) NOT NULL,
-        entidad VARCHAR(60) NOT NULL,
-        entidad_id VARCHAR(60) DEFAULT NULL,
-        referencia VARCHAR(160) DEFAULT NULL,
-        motivo TEXT,
-        cambios_json LONGTEXT,
-        datos_anteriores_json LONGTEXT,
-        datos_nuevos_json LONGTEXT,
-        hash_anterior VARCHAR(64) DEFAULT NULL,
-        hash VARCHAR(64) NOT NULL,
-        PRIMARY KEY (id),
-        KEY idx_auditoria_entidad (entidad, entidad_id),
-        KEY idx_auditoria_fecha (fecha_hora),
-        KEY idx_auditoria_usuario (usuario_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      `,
-  );
-  await addColumnIfMissing(s, "auditoria", "hash_anterior", "VARCHAR(64) DEFAULT NULL");
-  if (isSqlite()) {
-    await s.execute(`CREATE INDEX IF NOT EXISTS idx_auditoria_entidad ON auditoria (entidad, entidad_id)`);
-    await s.execute(`CREATE INDEX IF NOT EXISTS idx_auditoria_fecha ON auditoria (fecha_hora)`);
-  }
-  await ensureAuditTriggers(s);
-  markSchemaReady("auditoria");
-}
-
-/* La bitacora es de solo insercion: triggers que abortan UPDATE y DELETE. */
-async function ensureAuditTriggers(s: Session): Promise<void> {
+/*
+ * La bitacora es de solo insercion: triggers que abortan UPDATE y DELETE (los
+ * crea la migracion 9). Fase 12: es lo unico que se sigue asegurando en tiempo
+ * de ejecucion (defensa existente): si alguien los retiro, la siguiente
+ * escritura o verificacion los repone. Primero se cuentan (lectura); solo se
+ * crean si faltan.
+ */
+export async function asegurarTriggersBitacora(s: Session): Promise<void> {
+  if ((await countAuditTriggers(s)) === 2) return;
   if (isSqlite()) {
     await s.execute(`CREATE TRIGGER IF NOT EXISTS auditoria_sin_update BEFORE UPDATE ON auditoria BEGIN SELECT RAISE(ABORT, 'La bitacora de auditoria no se modifica'); END`);
     await s.execute(`CREATE TRIGGER IF NOT EXISTS auditoria_sin_delete BEFORE DELETE ON auditoria BEGIN SELECT RAISE(ABORT, 'La bitacora de auditoria no se elimina'); END`);
@@ -220,7 +165,7 @@ async function ensureMysqlTrigger(s: Session, name: string, timing: string): Pro
 export { auditDiff, auditSnapshot, stableJson } from "../shared/audit-chain.mjs";
 
 export async function registrarAuditoria(s: Session, user: CurrentUser | null | undefined, entry: AuditEntry): Promise<void> {
-  await ensureAuditSchema(s);
+  await asegurarTriggersBitacora(s);
   // En MySQL se bloquea la ultima fila para que dos escrituras concurrentes no
   // encadenen al mismo hash anterior (en SQLite la sesion ya es exclusiva).
   const previous = await s.queryOne<{ hash: string }>(`SELECT hash FROM auditoria ORDER BY id DESC LIMIT 1${isSqlite() ? "" : " FOR UPDATE"}`);
@@ -288,7 +233,7 @@ export interface AuditVerification {
  * falten filas (ni al final ni en medio) y que los triggers sigan presentes.
  */
 export async function verifyAuditChain(s: Session): Promise<AuditVerification> {
-  await ensureAuditSchema(s);
+  await asegurarTriggersBitacora(s);
   const rows = await s.query<Row>("SELECT * FROM auditoria ORDER BY id ASC");
   // Una sola implementacion (audit-chain.mjs), compartida con el script de restauracion.
   return evaluarCadena(rows, claveSello(), await lastAssignedId(s), await countAuditTriggers(s));

@@ -15,54 +15,13 @@
 import { requireUser, userIdFromClaims, type CurrentUser } from "./auth";
 import { registrarAuditoria, snapshotRow } from "./audit";
 import { vigentesDe } from "./autorizaciones";
-import { isSqlite, type Row, type Session } from "./db";
+import { type Row, type Session } from "./db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "./http";
 import { cargarAutorizacion, cargoActuante, permisoDe, requirePermission, type Autorizacion, type Permiso } from "./rbac";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "./schema";
+
 import { faltantes, mensajeFaltante, metodoDeTipoAnalisis, type Requisito } from "../shared/autorizaciones";
 
 const TABLE = "asignaciones_muestra";
-
-export async function ensureAsignacionesSchema(s: Session): Promise<void> {
-  if (schemaReady(TABLE)) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS ${TABLE} (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        recepcion_id INTEGER NOT NULL,
-        usuario_id INTEGER NOT NULL,
-        asignado_por INTEGER DEFAULT NULL,
-        asignado_en VARCHAR(40) NOT NULL,
-        motivo TEXT,
-        revocado_en VARCHAR(40) DEFAULT NULL,
-        revocado_por INTEGER DEFAULT NULL,
-        motivo_revocacion TEXT
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS ${TABLE} (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        recepcion_id INT NOT NULL,
-        usuario_id INT NOT NULL,
-        asignado_por INT DEFAULT NULL,
-        asignado_en VARCHAR(40) NOT NULL,
-        motivo LONGTEXT,
-        revocado_en VARCHAR(40) DEFAULT NULL,
-        revocado_por INT DEFAULT NULL,
-        motivo_revocacion LONGTEXT,
-        KEY idx_asignaciones_recepcion (recepcion_id),
-        KEY idx_asignaciones_usuario (usuario_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      `,
-  );
-  await addColumnIfMissing(s, TABLE, "motivo_revocacion", "LONGTEXT");
-  if (isSqlite()) {
-    await s.execute(`CREATE INDEX IF NOT EXISTS idx_asignaciones_recepcion ON ${TABLE} (recepcion_id)`);
-    await s.execute(`CREATE INDEX IF NOT EXISTS idx_asignaciones_usuario ON ${TABLE} (usuario_id)`);
-  }
-  markSchemaReady(TABLE);
-}
 
 /* Coordinacion: muestras:A o ensayos:A no necesitan asignacion. */
 export const esCoordinacion = (auth: Autorizacion): boolean => !!(permisoDe(auth, "muestras", "A") || permisoDe(auth, "ensayos", "A"));
@@ -71,13 +30,11 @@ export const esCoordinacion = (auth: Autorizacion): boolean => !!(permisoDe(auth
 export const soloAsignado = (permiso: Permiso | null | undefined): boolean => !!permiso && permiso.alcances.length > 0 && permiso.alcances.every((a) => a === "asignado");
 
 export async function estaAsignado(s: Session, usuarioId: number, recepcionId: number): Promise<boolean> {
-  await ensureAsignacionesSchema(s);
   return !!(await s.scalar(`SELECT id FROM ${TABLE} WHERE recepcion_id = :r AND usuario_id = :u AND revocado_en IS NULL LIMIT 1`, { r: recepcionId, u: usuarioId }));
 }
 
 /* Recepciones asignadas (vigentes) a una persona. */
 export async function recepcionesAsignadas(s: Session, usuarioId: number): Promise<number[]> {
-  await ensureAsignacionesSchema(s);
   const filas = await s.query<{ recepcion_id: number }>(`SELECT DISTINCT recepcion_id FROM ${TABLE} WHERE usuario_id = :u AND revocado_en IS NULL`, { u: usuarioId });
   return filas.map((f) => Number(f.recepcion_id));
 }
@@ -123,7 +80,6 @@ async function recepcionAsignable(s: Session, recepcionId: number): Promise<Row>
 const folioR = (row: Row) => `R ${String(row.folio_num || 0).padStart(7, "0")}`;
 
 async function listar(s: Session, recepcionId: number): Promise<Row[]> {
-  await ensureAsignacionesSchema(s);
   return s.query<Row>(
     `SELECT a.*, u.nombre, u.email, p.nombre AS asignado_por_nombre FROM ${TABLE} a
      LEFT JOIN usuarios u ON u.id = a.usuario_id LEFT JOIN usuarios p ON p.id = a.asignado_por
@@ -162,7 +118,6 @@ export async function listarAsignaciones({ request, s, params }: RouteContext): 
 export async function asignarMuestra({ request, s, params }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "A"));
-  await ensureAsignacionesSchema(s);
   const recepcion = await recepcionAsignable(s, intParam(params.id));
   if (!["aceptada", "aceptada_con_desviacion"].includes(String(recepcion.decision_aceptacion || "")) || ["anulada", "rechazada", "cerrada"].includes(String(recepcion.estado))) {
     throw new HttpError(409, { message: `La recepción ${folioR(recepcion)} no está aceptada o ya terminó; no se asigna` });
@@ -191,7 +146,6 @@ export async function asignarMuestra({ request, s, params }: RouteContext): Prom
 export async function revocarAsignacion({ request, s, params }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "A"));
-  await ensureAsignacionesSchema(s);
   const recepcion = await recepcionAsignable(s, intParam(params.id));
   const fila = await s.queryOne<Row>(`SELECT a.*, u.nombre, u.email FROM ${TABLE} a LEFT JOIN usuarios u ON u.id = a.usuario_id WHERE a.id = :id AND a.recepcion_id = :r`, { id: intParam(params.asignacion), r: recepcion.id });
   if (!fila) throw new HttpError(404, { message: "Asignación no encontrada" });

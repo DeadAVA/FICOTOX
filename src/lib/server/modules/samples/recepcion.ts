@@ -2,21 +2,21 @@ import { requireUser, userIdFromClaims, type CurrentUser } from "../../auth";
 import { incidenciaPorDecisionRecepcion } from "../calidad/automaticas";
 import { actorDe } from "../calidad/comun";
 import { registrarAuditoria, snapshotRow } from "../../audit";
-import { isSqlite, type Row, type Session } from "../../db";
+import { type Row, type Session } from "../../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../../http";
 import { cargoActuante, permisoDe, requirePermission, soloEstado, type Permiso } from "../../rbac";
 import { exigirReauth } from "../../seguridad";
 import { crearSolicitud, detalleSolicitud, exigirSinSolicitudPendiente, respuestaSolicitud, serializarSolicitud, type ContextoEjecucion } from "../../solicitudes";
 import { aplicarSupervision, exigirSinSupervisionPendiente, filtroSupervision, marcaSupervision } from "../../supervision";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "../../schema";
-import { anularOSolicitar, assertEditableAsync, conSolicitudes, deletionNotAllowed, ensureActuoColumns, ensureAnulacionColumns, folioLabel, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
-import { ACCEPTANCE_DECISIONS, DISPOSAL_TYPES, RECEPTION_LEGACY_STATES, RECEPTION_STATE_RANK } from "../../../shared/sgc";
+
+import { anularOSolicitar, assertEditableAsync, conSolicitudes, deletionNotAllowed, folioLabel, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
+import { ACCEPTANCE_DECISIONS, DISPOSAL_TYPES, RECEPTION_STATE_RANK } from "../../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
-import { ensureSupervisionColumns } from "../../supervision";
+
 import { exigirAutorizaciones } from "../../autorizaciones";
 import { requisitosRecepcion } from "../../../shared/autorizaciones";
 import { exigirVistaAsignada, filtroAsignadas, soloAsignado } from "../../asignaciones";
-import { ensureColumnasFirma, guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
+import { guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
 
 /*
  * Portado de modules/samples/recepcion.py del backend Flask original.
@@ -30,96 +30,6 @@ const TABLE = "muestras_recepcion";
 
 /* Fase 5: quien recibio se elige de las cuentas activas. */
 const FIRMAS_RECEPCION: RolFirma[] = [{ rol: "recibio", columnaNombre: "recibido_por", etiqueta: "Recibió" }];
-
-export async function ensureSamplesRecepcionSchema(s: Session): Promise<void> {
-  if (schemaReady("muestras_recepcion")) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS muestras_recepcion (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        folio_num INTEGER NOT NULL UNIQUE,
-        tipo_registro VARCHAR(2) NOT NULL DEFAULT 'R',
-        clave_revision VARCHAR(50) DEFAULT 'FX-TCF-GMR',
-        fecha_emision DATE DEFAULT NULL,
-        fecha_recepcion DATE DEFAULT NULL,
-        hora_recepcion VARCHAR(20) DEFAULT NULL,
-        recibido_por VARCHAR(150) DEFAULT NULL,
-        medio_recepcion VARCHAR(50) DEFAULT NULL,
-        solicitante VARCHAR(180) DEFAULT NULL,
-        muestra_unica INTEGER DEFAULT 0,
-        fecha_muestra DATE DEFAULT NULL,
-        id_interno VARCHAR(100) DEFAULT NULL,
-        especificaciones TEXT,
-        lote_muestras_json TEXT,
-        analisis_json TEXT,
-        inspeccion_json TEXT,
-        datos_solicitante_json TEXT,
-        datos_custodio_json TEXT,
-        decision_aceptacion VARCHAR(30) DEFAULT NULL,
-        aceptacion_json TEXT,
-        disposicion_json TEXT,
-        estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
-        creado_por INTEGER DEFAULT NULL,
-        actualizado_por INTEGER DEFAULT NULL,
-        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS muestras_recepcion (
-        id INT NOT NULL AUTO_INCREMENT,
-        folio_num INT NOT NULL,
-        tipo_registro VARCHAR(2) NOT NULL DEFAULT 'R',
-        clave_revision VARCHAR(50) DEFAULT 'FX-TCF-GMR',
-        fecha_emision DATE DEFAULT NULL,
-        fecha_recepcion DATE DEFAULT NULL,
-        hora_recepcion VARCHAR(20) DEFAULT NULL,
-        recibido_por VARCHAR(150) DEFAULT NULL,
-        medio_recepcion VARCHAR(50) DEFAULT NULL,
-        solicitante VARCHAR(180) DEFAULT NULL,
-        muestra_unica TINYINT(1) DEFAULT 0,
-        fecha_muestra DATE DEFAULT NULL,
-        id_interno VARCHAR(100) DEFAULT NULL,
-        especificaciones TEXT,
-        lote_muestras_json LONGTEXT,
-        analisis_json LONGTEXT,
-        inspeccion_json LONGTEXT,
-        datos_solicitante_json LONGTEXT,
-        datos_custodio_json LONGTEXT,
-        decision_aceptacion VARCHAR(30) DEFAULT NULL,
-        aceptacion_json LONGTEXT,
-        disposicion_json LONGTEXT,
-        estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
-        creado_por INT DEFAULT NULL,
-        actualizado_por INT DEFAULT NULL,
-        creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-        actualizado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        UNIQUE KEY uq_muestras_recepcion_folio_num (folio_num),
-        KEY idx_muestras_recepcion_creado_por (creado_por),
-        KEY idx_muestras_recepcion_actualizado_por (actualizado_por),
-        CONSTRAINT fk_muestras_recepcion_creado_por FOREIGN KEY (creado_por) REFERENCES usuarios(id) ON DELETE SET NULL,
-        CONSTRAINT fk_muestras_recepcion_actualizado_por FOREIGN KEY (actualizado_por) REFERENCES usuarios(id) ON DELETE SET NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-      `,
-  );
-  await addColumnIfMissing(s, TABLE, "recibido_por", "VARCHAR(150) DEFAULT NULL");
-  await addColumnIfMissing(s, TABLE, "medio_recepcion", "VARCHAR(50) DEFAULT NULL");
-  await addColumnIfMissing(s, TABLE, "decision_aceptacion", "VARCHAR(30) DEFAULT NULL");
-  await addColumnIfMissing(s, TABLE, "aceptacion_json", "LONGTEXT");
-  await addColumnIfMissing(s, TABLE, "disposicion_json", "LONGTEXT");
-  await ensureAnulacionColumns(s, TABLE);
-  await ensureActuoColumns(s, TABLE);
-  await ensureSupervisionColumns(s, "muestras_recepcion");
-  await addColumnIfMissing(s, TABLE, "estado_antes_cierre", "VARCHAR(30) DEFAULT NULL");
-  // Fase 5: estados de la especificacion. Los anteriores se mapean (en_proceso, analizada, informada) y la aceptacion con desviacion se distingue.
-  for (const [anterior, nuevo] of Object.entries(RECEPTION_LEGACY_STATES)) await s.execute(`UPDATE ${TABLE} SET estado = :nuevo WHERE estado = :anterior`, { nuevo, anterior });
-  await s.execute(`UPDATE ${TABLE} SET estado = 'aceptada_con_desviacion' WHERE estado = 'aceptada' AND decision_aceptacion = 'aceptada_con_desviacion'`);
-  await ensureColumnasFirma(s, TABLE, FIRMAS_RECEPCION);
-  markSchemaReady("muestras_recepcion");
-}
-
 
 /*
  * Alcance "estado" (muestras:V): solo folio, solicitante, fechas y estado; sin
@@ -242,18 +152,15 @@ function resolveState(stored: Row | null, data: ReceptionData): string {
   return "registrada";
 }
 
-
 export async function getNextFolio({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "muestras", "V");
-  await ensureSamplesRecepcionSchema(s);
   return json({ next_folio: await nextFolioNum(s, TABLE) });
 }
 
 export async function listReceptionSamples({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "muestras", "V");
-  await ensureSamplesRecepcionSchema(s);
 
   const search = searchParam(request, "search");
   const includeAnuladas = searchParam(request, "anuladas") === "1";
@@ -295,7 +202,6 @@ export async function getReceptionSample({ request, s, params }: RouteContext): 
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "muestras", "V");
-  await ensureSamplesRecepcionSchema(s);
 
   const row = await s.queryOne(`SELECT * FROM ${TABLE} WHERE id = :id`, { id: sampleId });
   if (!row) {
@@ -313,7 +219,6 @@ export async function createReceptionSample({ request, s }: RouteContext): Promi
   const permiso = await requirePermission(s, user, "muestras", "C", { objeto: "recepcion", borrador: true });
   const actuo = cargoActuante(request, permiso);
   const supervision = marcaSupervision(permiso);
-  await ensureSamplesRecepcionSchema(s);
 
   const payload = await readJson(request);
   const data = normalizePayload(payload);
@@ -372,7 +277,8 @@ export async function createReceptionSample({ request, s }: RouteContext): Promi
     return json({ message: "Recepcion de muestra creada", id, estado: data.estado }, 201);
   } catch (error) {
     await s.rollback();
-    if (isFolioConflict(error)) {
+    // Fase 12: si el folio lo asigno el servidor, el choque es de concurrencia: se relanza y apiRoute reintenta.
+    if (isFolioConflict(error) && toIntOrNull(payload.folio_num)) {
       return json({ message: "El folio ya existe" }, 409);
     }
     throw error;
@@ -382,7 +288,6 @@ export async function createReceptionSample({ request, s }: RouteContext): Promi
 export async function updateReceptionSample({ request, s, params }: RouteContext): Promise<Response> {
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
-  await ensureSamplesRecepcionSchema(s);
 
   const antes = await snapshotRow(s, TABLE, sampleId);
   const permiso = await requirePermission(s, user, "muestras", "E", { objeto: "recepcion", borrador: String(antes?.estado || "registrada") === "registrada" });
@@ -473,7 +378,6 @@ export async function anularReceptionSample({ request, s, params }: RouteContext
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "AN"));
-  await ensureSamplesRecepcionSchema(s);
   const motivo = await readMotivo(request);
   await exigirReauth(s, request, user, "muestras:AN");
   const { row, solicitud } = await anularOSolicitar(s, user, TABLE, sampleId, motivo, actuo);
@@ -486,7 +390,6 @@ export async function restaurarReceptionSample({ request, s, params }: RouteCont
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "AN"));
-  await ensureSamplesRecepcionSchema(s);
   await exigirReauth(s, request, user, "muestras:AN");
   const { row, solicitud } = await restaurarOSolicitar(s, user, TABLE, sampleId, await readMotivo(request), actuo);
   await s.commit();
@@ -501,7 +404,6 @@ export async function registrarDisposicion({ request, s, params }: RouteContext)
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
   const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "A"));
-  await ensureSamplesRecepcionSchema(s);
 
   const antes = await snapshotRow(s, TABLE, sampleId);
   if (!antes) return json({ message: "Recepcion no encontrada" }, 404);
@@ -535,8 +437,6 @@ export async function registrarDisposicion({ request, s, params }: RouteContext)
   await s.commit();
   return json({ message: "Disposicion final registrada; la muestra queda cerrada", item: serializeRow(despues || antes!) });
 }
-
-
 
 /* ---------- Fase 5: decisiones que autoriza la Coord. Tecnica ---------- */
 
@@ -616,7 +516,6 @@ export async function cambiarFolioRecepcion({ request, s, params }: RouteContext
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "muestras", "E", { objeto: "recepcion" });
   const actuo = cargoActuante(request, permiso);
-  await ensureSamplesRecepcionSchema(s);
   const antes = await recepcionOError(s, intParam(params.id));
   await exigirVistaAsignada(s, permiso, antes);
   await exigirSinSolicitudPendiente(s, TABLE, Number(antes.id), `La recepción ${folioLabel(TABLE, antes)}`, "cambiar el folio");
@@ -643,7 +542,6 @@ export async function reabrirRecepcion({ request, s, params }: RouteContext): Pr
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "muestras", "E", { objeto: "recepcion" });
   const actuo = cargoActuante(request, permiso);
-  await ensureSamplesRecepcionSchema(s);
   const antes = await recepcionOError(s, intParam(params.id));
   await exigirVistaAsignada(s, permiso, antes);
   if (!["cerrada", "rechazada"].includes(String(antes.estado))) return json({ message: "Solo se reabre una recepción cerrada o rechazada" }, 409);

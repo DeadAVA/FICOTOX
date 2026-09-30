@@ -14,7 +14,7 @@ import { requireUser, type CurrentUser } from "../../auth";
 import { type Row, type Session } from "../../db";
 import { HttpError, intParam, json, type RouteContext } from "../../http";
 import { cargoActuante, permisoDe } from "../../rbac";
-import { ensureAdjuntosSchema, integridadAdjunto, listarAdjuntos, serializarAdjunto } from "../../adjuntos";
+import { integridadAdjunto, listarAdjuntos, serializarAdjunto } from "../../adjuntos";
 import { subirAdjunto, type ContextoAdjunto } from "../../adjuntos-operaciones";
 import { getConfig } from "../../config";
 import { accesoCalidad, filaBloqueada, incidenciaVisible, T, veNc, type AccesoCalidad } from "./comun";
@@ -66,7 +66,6 @@ export async function contextoAdjuntoCalidad(s: Session, user: CurrentUser, adju
 }
 
 async function listar(s: Session, entidad: "incidencia" | "accion_correctiva", id: number, puede: boolean, motivo: string | null): Promise<Response> {
-  await ensureAdjuntosSchema(s);
   const filas = await listarAdjuntos(s, entidad, id);
   const items = [];
   for (const f of filas) items.push(serializarAdjunto(f, { integridad: (await integridadAdjunto(f)).estado }));

@@ -106,7 +106,7 @@ Cada modulo esta en `src/lib/server/modules/` y sus rutas en `src/app/api/<modul
 
 - `src/lib/server/auth.ts`: emision y validacion de JWT (`requireUser`).
 - `src/lib/server/rbac.ts`: permisos por modulo/accion y validacion (`requirePermission`).
-- `src/lib/server/schema.ts`: helpers de migracion ligera.
+- `src/lib/server/migraciones/`: migraciones versionadas del esquema (Fase 12).
 - `src/lib/server/inventory-usage.ts`: descuento de inventario y registro de movimientos.
 - `src/lib/server/inventory-baja.ts`: baja logica y reactivacion de items de inventario.
 - `src/lib/server/samples-flow.ts`: reglas de estado, anulacion y restauracion de los registros de muestras.
@@ -151,11 +151,7 @@ Opcional MySQL/MariaDB:
 
 ### 6.2 Inicializacion de esquema
 
-No usa migraciones versionadas como flujo principal.
-Se usan funciones `ensure*Schema()` en cada request para:
-- Crear tablas faltantes.
-- Agregar columnas/indices cuando aplica.
-- Mantener compatibilidad en instalaciones existentes.
+Desde la Fase 12 el esquema tiene version: migraciones numeradas en `src/lib/server/migraciones/` (tabla `schema_migraciones` con checksum). El servidor aplica las pendientes al arrancar, con un respaldo previo y una entrada en la bitacora; `npm run migrar` hace lo mismo a mano. Las bases anteriores se reconocen por su esquema (linea base) y cualquier diferencia desconocida detiene el arranque sin tocar la base. Ya no se crea ni altera ninguna tabla durante las peticiones. Detalle en `MANUAL_TECNICO.md` §10.2.
 
 ## 7. Seguridad y control de acceso
 

@@ -3,7 +3,7 @@ import { snapshotRow } from "./audit";
 import { HttpError, readJson, type RouteContext } from "./http";
 import { cargarAutorizacion } from "./rbac";
 import { anularRegistro, folioLabel, opcionesAnulacion, restaurarRegistro, type SampleTable } from "./samples-flow";
-import { ensureExcepcionesColumn, excepcionesDe, registrarExcepcion, TABLAS_CON_EXCEPCION, type TablaConExcepcion } from "./segregacion";
+import { excepcionesDe, registrarExcepcion, TABLAS_CON_EXCEPCION, type TablaConExcepcion } from "./segregacion";
 import { excepcionPara, type Violacion } from "../shared/segregacion";
 import type { CurrentUser } from "./auth";
 import type { Row, Session } from "./db";
@@ -97,7 +97,6 @@ export async function solicitarExcepcion({ request, s }: RouteContext): Promise<
   if (!ACCIONES_EXCEPCION.has(accion)) throw new HttpError(400, { message: "Indica la acción: revisar, aprobar, autorizar, evaluar, verificar, cerrar o reanudar" });
   const id = Number.parseInt(String(payload.entidad_id || ""), 10);
   if (!Number.isFinite(id)) throw new HttpError(404, { message: "Registro no encontrado" });
-  await ensureExcepcionesColumn(s, entidad as TablaConExcepcion);
   /*
    * Solo la pide quien podria hacer la accion (permiso del modulo y estado del
    * registro) y a quien la segregacion se la impide de verdad.

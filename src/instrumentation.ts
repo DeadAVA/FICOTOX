@@ -6,6 +6,6 @@
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { verificarArranque } = await import("./instrumentation-node");
-    verificarArranque();
+    await verificarArranque();
   }
 }

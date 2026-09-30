@@ -20,14 +20,19 @@
  * MySQL/MariaDB: se respalda con mysqldump (scripts/backup_ficotox.py y
  * docs/RESPALDO_Y_RECUPERACION.md); esta implementacion es solo para SQLite.
  */
+import { VERSION_ACTUAL } from "../server/migraciones/motor.mjs";
 import { createHash, createHmac } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { leerClaveSello, stableJson } from "./audit-chain.mjs";
 
-/* Version del esquema de datos. Subirla cuando una fase cambie tablas o columnas de forma que un respaldo nuevo no sirva en una app anterior. */
-export const ESQUEMA_VERSION = 11;
+/*
+ * Fase 12: version del esquema = la de la ultima migracion (src/lib/server/migraciones).
+ * Las versiones de las migraciones empiezan en 9 para coincidir con los respaldos
+ * anteriores (ESQUEMA_VERSION 10 = Fase 10, 11 = Fase 11), que se siguen restaurando.
+ */
+export const ESQUEMA_VERSION = VERSION_ACTUAL;
 export const FORMATO = "ficotox-respaldo";
 export const VERSION_FORMATO = 1;
 
@@ -218,12 +223,48 @@ export function inspeccionarBase(db) {
   return { conteos, bitacora };
 }
 
-function idNuevo(respaldosDir, ahora) {
+/*
+ * Reserva el id del respaldo de forma atomica (Fase 12): crea la carpeta temporal
+ * `.<id>.tmp` SIN `recursive` (falla con EEXIST si otro proceso la creo en el mismo
+ * segundo) y comprueba despues que no exista ya el respaldo final; si choca, prueba
+ * `<id>-2`, `<id>-3`... Asi dos respaldos simultaneos (el diario, "Crear respaldo
+ * ahora" o dos arranques que migran) nunca comparten carpeta.
+ */
+function reservarId(respaldosDir, ahora) {
   const p = (n) => String(n).padStart(2, "0");
   const base = `${ahora.getFullYear()}${p(ahora.getMonth() + 1)}${p(ahora.getDate())}-${p(ahora.getHours())}${p(ahora.getMinutes())}${p(ahora.getSeconds())}`;
-  let id = base;
-  for (let n = 2; fs.existsSync(path.join(/*turbopackIgnore: true*/ respaldosDir, id)) || fs.existsSync(path.join(/*turbopackIgnore: true*/ respaldosDir, `.${id}.tmp`)); n += 1) id = `${base}-${n}`;
-  return id;
+  for (let n = 1; n < 1000; n += 1) {
+    const id = n === 1 ? base : `${base}-${n}`;
+    const tmp = path.join(/*turbopackIgnore: true*/ respaldosDir, `.${id}.tmp`);
+    const final = path.join(/*turbopackIgnore: true*/ respaldosDir, id);
+    if (fs.existsSync(final)) continue;
+    try {
+      fs.mkdirSync(tmp);
+    } catch (error) {
+      if (error.code === "EEXIST") continue;
+      throw error;
+    }
+    // Otro proceso pudo terminar ese mismo id entre la comprobacion y la reserva.
+    if (fs.existsSync(final)) {
+      fs.rmdirSync(tmp);
+      continue;
+    }
+    return { id, tmp, final };
+  }
+  throw new Error(`No se pudo reservar un id de respaldo en ${respaldosDir}`);
+}
+
+/*
+ * Fase 12: un respaldo o una copia restaurada contiene todos los datos del laboratorio: solo los
+ * lee el usuario de FICOTOX (archivos 600, carpetas 700). En Windows los permisos POSIX no aplican.
+ */
+export function hacerPrivado(ruta) {
+  if (process.platform === "win32" || !fs.existsSync(ruta)) return;
+  const st = fs.statSync(ruta);
+  if (st.isDirectory()) {
+    fs.chmodSync(ruta, 0o700);
+    for (const n of fs.readdirSync(ruta)) hacerPrivado(path.join(/*turbopackIgnore: true*/ ruta, n));
+  } else fs.chmodSync(ruta, 0o600);
 }
 
 /* ---------- Crear ---------- */
@@ -234,15 +275,23 @@ function idNuevo(respaldosDir, ahora) {
  * externas la excluyen). Se escribe en una carpeta temporal y se renombra al
  * final: un respaldo a medias nunca aparece en la lista. `Sqlite` es el
  * constructor de better-sqlite3 (lo pasa quien llama: el servidor o el script).
+ *
+ * Fase 12: en dos pasos. `iniciarRespaldo` toma solo la foto de la base (el
+ * servidor lo hace con su sesion tomada, para que la copia en linea no se
+ * reinicie con sus propias escrituras) y `completarRespaldo` copia y huellea los
+ * archivos, escribe la llave y el manifest (el servidor lo hace ya sin la sesion:
+ * los archivos de la instancia son de solo insercion). `crearRespaldo` hace los dos.
  */
-export async function crearRespaldo({ Sqlite, sqlitePath, instanceDir, respaldosDir, secretKey, baseDir, incluirLlave = true, etiqueta = null, ahora = new Date() }) {
+export async function crearRespaldo(opciones) {
+  return completarRespaldo(await iniciarRespaldo(opciones));
+}
+
+export async function iniciarRespaldo({ Sqlite, sqlitePath, instanceDir, respaldosDir, secretKey, baseDir, incluirLlave = true, etiqueta = null, ahora = new Date() }) {
   if (!sqlitePath) throw new Error("Esta instalación usa MySQL/MariaDB: respalda la base con mysqldump (ver docs/RESPALDO_Y_RECUPERACION.md)");
   if (!fs.existsSync(sqlitePath)) throw new Error(`No existe la base SQLite: ${sqlitePath}`);
   fs.mkdirSync(respaldosDir, { recursive: true });
-  const id = idNuevo(respaldosDir, ahora);
-  const tmp = path.join(/*turbopackIgnore: true*/ respaldosDir, `.${id}.tmp`);
-  const final = path.join(/*turbopackIgnore: true*/ respaldosDir, id);
-  fs.mkdirSync(path.join(/*turbopackIgnore: true*/ tmp, "datos"), { recursive: true });
+  const { id, tmp, final } = reservarId(respaldosDir, ahora);
+  fs.mkdirSync(path.join(/*turbopackIgnore: true*/ tmp, "datos"));
   try {
     // 1. Base: API de respaldo en linea (lee paginas de forma consistente aunque haya escrituras).
     const destinoBase = path.join(/*turbopackIgnore: true*/ tmp, "datos", "ficotox.sqlite3");
@@ -256,14 +305,25 @@ export async function crearRespaldo({ Sqlite, sqlitePath, instanceDir, respaldos
     const snapshot = new Sqlite(destinoBase, { readonly: true });
     let integridad;
     let inspeccion;
+    let versionBase = null;
     try {
       integridad = String(snapshot.pragma("integrity_check", { simple: true }));
       inspeccion = inspeccionarBase(snapshot);
+      // Version real de la base respaldada (un respaldo previo a una migracion guarda la anterior).
+      if (snapshot.prepare("SELECT 1 AS x FROM sqlite_master WHERE type = 'table' AND name = 'schema_migraciones'").get()) versionBase = Number(snapshot.prepare("SELECT MAX(version) AS v FROM schema_migraciones").get().v) || null;
     } finally {
       snapshot.close();
     }
     if (integridad !== "ok") throw new Error(`El snapshot de la base no pasó integrity_check: ${integridad}`);
+    return { id, tmp, final, destinoBase, integridad, inspeccion, versionBase, instanceDir, secretKey, baseDir, incluirLlave, etiqueta, ahora };
+  } catch (error) {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    throw error;
+  }
+}
 
+export async function completarRespaldo({ id, tmp, final, destinoBase, integridad, inspeccion, versionBase, instanceDir, secretKey, baseDir, incluirLlave, etiqueta, ahora }) {
+  try {
     // 2. Archivos de la instancia.
     const archivos = [];
     for (const carpeta of CARPETAS_ARCHIVOS) {
@@ -271,7 +331,7 @@ export async function crearRespaldo({ Sqlite, sqlitePath, instanceDir, respaldos
       for (const relativo of listarArchivos(raiz)) {
         const destino = path.join(/*turbopackIgnore: true*/ tmp, "archivos", carpeta, ...relativo.split("/"));
         fs.mkdirSync(path.dirname(destino), { recursive: true });
-        fs.copyFileSync(path.join(/*turbopackIgnore: true*/ raiz, ...relativo.split("/")), destino);
+        await fs.promises.copyFile(path.join(/*turbopackIgnore: true*/ raiz, ...relativo.split("/")), destino);
         archivos.push({ ruta: `archivos/${carpeta}/${relativo}`, tamano: fs.statSync(destino).size, sha256: await sha256Archivo(destino) });
       }
     }
@@ -292,7 +352,9 @@ export async function crearRespaldo({ Sqlite, sqlitePath, instanceDir, respaldos
       creado_en: ahora.toISOString(),
       host: os.hostname(),
       app: versionApp(baseDir || process.cwd()),
-      esquema_version: ESQUEMA_VERSION,
+      // null: base anterior a las migraciones (sin schema_migraciones); se reconoce al restaurar.
+      esquema_version: versionBase,
+      esquema_app: ESQUEMA_VERSION,
       motor: "sqlite",
       etiqueta: etiqueta || null,
       base: { ruta: "datos/ficotox.sqlite3", tamano: fs.statSync(destinoBase).size, sha256: await sha256Archivo(destinoBase), integrity_check: integridad },
@@ -304,6 +366,7 @@ export async function crearRespaldo({ Sqlite, sqlitePath, instanceDir, respaldos
     // Sellado con la llave de la bitacora (aunque la llave no se incluya en el respaldo).
     if (llave) manifest.sello = sellarManifest(manifest, llave.clave);
     fs.writeFileSync(path.join(/*turbopackIgnore: true*/ tmp, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+    hacerPrivado(tmp);
     fs.renameSync(tmp, final);
     return { id, carpeta: final, manifest };
   } catch (error) {
