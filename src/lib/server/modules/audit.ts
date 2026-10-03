@@ -74,6 +74,8 @@ const ENTITY_MODULE: Record<string, Modulo> = {
   muestras_analisis: "ensayos",
   informes: "informes",
   documentos_sgc: "documentos",
+  biblioteca_documentos: "documentos",
+  biblioteca_categorias: "documentos",
   reportes_mantenimiento: "equipos",
   reactivos: "inventario",
   consumibles: "inventario",

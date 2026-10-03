@@ -210,7 +210,7 @@ const cadena = async (prefijo, token = QA) => {
   check("regla 4: el supervisor que edito lo capturado no le da visto bueno (409)", vbPropio.status === 409 && vbPropio.data?.regla === 4, `${vbPropio.status} ${vbPropio.data?.message}`);
   check("regla 4: da visto bueno a lo capturado por su supervisado", vbOk.status === 200, `${vbOk.status} ${vbOk.data?.message}`);
 
-  // Regla 5 (documentos): cubierta en api-sgc.mjs (elaborador no revisa; revisor no aprueba; tercera persona aprueba).
+  // Regla 5 (documentos): retirada con la Biblioteca (no hay revision ni aprobacion de documentos).
   // Regla 6: quien solicita no aprueba.
   const c6 = await cadena("SEG6");
   // Fase 6: el analisis se revisa solo despues de enviarlo a revision.

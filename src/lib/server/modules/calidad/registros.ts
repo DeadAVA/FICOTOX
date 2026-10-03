@@ -19,6 +19,7 @@ export const MODULO_REGISTRO: Record<string, Modulo> = {
   reactivos: "inventario",
   consumibles: "inventario",
   documentos_sgc: "documentos",
+  biblioteca_documentos: "documentos",
 };
 
 const pad = (n: unknown) => String(Number(n) || 0).padStart(7, "0");
@@ -39,5 +40,6 @@ export function referenciaDeFila(entidad: string, row: Row): string {
   if (entidad === "reactivos") return String(row.producto || row.nombre || `Reactivo #${row.id}`);
   if (entidad === "consumibles") return String(row.producto || `Consumible #${row.id}`);
   if (entidad === "documentos_sgc") return `${row.clave || "Documento"} rev. ${row.revision ?? ""}`.trim();
+  if (entidad === "biblioteca_documentos") return String(row.clave || row.titulo || `Documento #${row.id}`);
   return `${entidad} #${row.id}`;
 }

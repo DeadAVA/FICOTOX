@@ -76,7 +76,7 @@ const GROUP_TITLES: Record<SearchKind, string> = {
   consumible: "Consumibles",
   equipo: "Equipos",
   mantenimiento: "Mantenimientos",
-  documento: "Documentos",
+  documento: "Biblioteca",
   accion: "Crear",
   vista: "Ver",
   destino: "Ir a",
@@ -199,7 +199,7 @@ async function buildIndex(token: string, can: SessionValue["can"]): Promise<Sear
     safe(`${API_BASE_URL}/samples/extraction`, can("ensayos")),
     safe(`${API_BASE_URL}/samples/analysis`, can("ensayos")),
     safe(`${API_BASE_URL}/informes`, can("informes")),
-    safe(`${API_BASE_URL}/documentos-sgc`, FEATURES.documentos && can("documentos")),
+    safe(`${API_BASE_URL}/biblioteca`, FEATURES.documentos && can("documentos")),
     safe(`${API_BASE_URL}/inventory/mantenimientos`, can("equipos")),
   ]);
 
@@ -242,8 +242,10 @@ async function buildIndex(token: string, can: SessionValue["can"]): Promise<Sear
     hits.push({ id: `eq-${e.id}`, kind: "equipo", label: name, sub: join(e.marca, e.modelo, e.clave_bitacora, e.ubicacion), href: `/inventario/equipos?buscar=${encodeURIComponent(name)}`, tag: "Equipo", keywords: norm(join(name, e.marca, e.modelo, e.numero_serie, e.clave_bitacora, e.ubicacion)) });
   }
   for (const d of documentos) {
+    // Biblioteca de documentos: titulo, clave, categoria y etiquetas; abre el visor.
     const clave = String(d.clave || "");
-    hits.push({ id: `d-${d.id}`, kind: "documento", label: `${clave}${d.revision != null ? ` · rev. ${d.revision}` : ""}`, sub: String(d.titulo || ""), href: `/documentos?buscar=${encodeURIComponent(clave)}`, tag: "Documento", keywords: norm(join(clave, d.titulo, d.tipo, d.area)) });
+    const etiquetas = Array.isArray(d.etiquetas) ? (d.etiquetas as unknown[]).map(String) : [];
+    hits.push({ id: `d-${d.id}`, kind: "documento", label: String(d.titulo || clave || "Documento"), sub: join(clave, d.categoria, d.version ? `v${String(d.version)}` : null), href: `/calidad/biblioteca/${d.id}`, tag: "Biblioteca", keywords: norm(join(clave, d.titulo, d.categoria, d.descripcion, ...etiquetas)) });
   }
   for (const m of mantenimientos) {
     const equipo = String(m.equipo || "Equipo");
@@ -314,7 +316,7 @@ export function useGlobalSearch() {
         { label: "Equipos", href: "/inventario/equipos", allowed: can("equipos"), kw: "inventario equipos" },
         { label: "Mantenimiento", href: "/inventario/mantenimiento", allowed: can("equipos"), kw: "inventario mantenimiento" },
         { label: "Movimientos de inventario", href: "/movimientos", allowed: can("inventario"), kw: "movimientos entradas salidas" },
-        { label: "Documentos del SGC", href: "/documentos", allowed: FEATURES.documentos && can("documentos"), kw: "documentos sgc calidad lista maestra" },
+        { label: "Biblioteca", href: "/calidad/biblioteca", allowed: FEATURES.documentos && can("documentos"), kw: "biblioteca documentos manual procedimientos instructivos formatos normas calidad" },
         { label: "Bitácora de auditoría", href: "/auditoria", allowed: can("calidad"), kw: "auditoria bitacora" },
         { label: "Incidencias y no conformidades", href: "/calidad/incidencias", allowed: can("calidad", "V", { objeto: "incidencia" }) && alcance("calidad") !== "bitacora", kw: "calidad incidencias no conformidades nc acciones correctivas" },
         { label: "Usuarios", href: "/administracion/usuarios", allowed: can("usuarios"), kw: "administracion usuarios cuentas" },
@@ -371,7 +373,7 @@ export function useGlobalSearch() {
         { label: "Nuevo consumible", sub: "Alta en el inventario", href: "/inventario/consumibles?nuevo=1", allowed: can("inventario", "C", { objeto: "catalogo_inventario" }), kw: "inventario alta" },
         { label: "Nuevo equipo", sub: "Alta con clave de bitácora", href: "/inventario/equipos?nuevo=1", allowed: can("equipos", "C", { objeto: "equipo" }), kw: "inventario alta bitacora" },
         { label: "Programar mantenimiento", sub: "Preventivo, correctivo, calibración o verificación", href: "/inventario/mantenimiento?nuevo=1", allowed: can("equipos", "C", { objeto: "mantenimiento" }), kw: "calibracion verificacion" },
-        { label: "Nuevo documento del SGC", sub: "Documento controlado", href: "/documentos?nuevo=1", allowed: FEATURES.documentos && can("documentos", "C", { objeto: "documento", borrador: true }), kw: "calidad" },
+        { label: "Subir documento", sub: "A la biblioteca", href: "/calidad/biblioteca", allowed: FEATURES.documentos && can("documentos", "C", { objeto: "documento", borrador: true }), kw: "calidad" },
         { label: "Reportar incidencia", sub: "Falla, desviación o queja; con foto", href: "?reportar=1", allowed: can("calidad", "C", { objeto: "incidencia" }), kw: "incidencia problema falla desviacion queja reportar calidad" },
         { label: "Nueva extracción ASP", sub: "Ácido domoico · metanol:agua 50:50", href: "/muestras/extraccion/nueva?tipo=E-A", allowed: can("ensayos", "C", { objeto: "extraccion", borrador: true }), kw: "acido domoico asp e-a", specific: true },
         { label: "Nueva extracción DSP", sub: "Toxinas lipofílicas · metanol 100 % e hidrólisis", href: "/muestras/extraccion/nueva?tipo=E-D", allowed: can("ensayos", "C", { objeto: "extraccion", borrador: true }), kw: "toxinas lipofilicas dsp e-d okadaico", specific: true },

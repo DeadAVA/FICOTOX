@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { ArrowRight, CheckCircle, FilePdf, FileText, FloppyDisk, LinkSimple, Lock, Paperclip, Pause, Play, Plus, Prohibit, SealCheck, Warning } from "@phosphor-icons/react";
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
 import { Callout, ChoiceCard, ChoiceGrid, FlowSteps, FormCard, FormPage, Panel, ReadValue, SignoffCard, type FormSectionDef } from "@/components/features/samples/FormLayout";
@@ -427,7 +427,8 @@ export function NcForm({ item }: { item: ApiRecord }) {
             {editar ? <Textarea id="nc-nota-riesgos" rows={2} value={d.nota_riesgos} onChange={(event) => set("nota_riesgos")(event.target.value)} /> : <ReadValue value={item.nota_riesgos} />}
           </Field>
         ) : null}
-        <PropuestaDocumental item={item} editar={editar && !cerrada} />
+        <Switch checked={d.requiere_cambio_documental === "1"} onCheckedChange={(v) => set("requiere_cambio_documental")(v ? "1" : "0")} disabled={!editar} label="Requiere cambio documental" description="Se registra la bandera. Los documentos se actualizan en Calidad › Biblioteca (subir versión nueva); ya no hay propuestas ni flujo de aprobación." />
+        <PropuestaAnterior item={item} />
       </FormCard>
 
       {/* 8. Cierre */}
@@ -930,90 +931,25 @@ function Verificar({ item, bloqueo, onExcepcion }: { item: ApiRecord; bloqueo: s
   );
 }
 
-/* ---------- 7. Propuesta documental ---------- */
+/* ---------- 7. Propuesta documental anterior (solo lectura) ---------- */
 
-function PropuestaDocumental({ item, editar }: { item: ApiRecord; editar: boolean }) {
-  const { token, enviar } = useAccionCalidad();
+/*
+ * Con la Biblioteca (decision confirmada del laboratorio) ya no se crean
+ * propuestas de cambio documental: "requiere cambio documental" es solo una
+ * bandera. Si la NC ya apuntaba a una propuesta del flujo anterior, se muestra
+ * en solo lectura (titulo y estado), sin enlace a la pantalla retirada.
+ */
+function PropuestaAnterior({ item }: { item: ApiRecord }) {
   const propuesta = item.propuesta as ApiRecord | null;
-  const [abierto, setAbierto] = useState(false);
-  const [tipo, setTipo] = useState<"cambio" | "nuevo">("cambio");
-  const [documento, setDocumento] = useState("");
-  const [titulo, setTitulo] = useState("");
-  const [motivo, setMotivo] = useState("");
-  const docs = useResource<ApiRecord>("documentos", () => getJsonAuth(`${API_BASE_URL}/documentos-sgc?estado=vigente`, token), { enabled: !!token && abierto && tipo === "cambio", deps: [abierto, tipo] });
-  const vProp = useValidacion({
-    titulo: "No se pudo crear la propuesta",
-    reglas: () => {
-      const out: Problema[] = [];
-      if (tipo === "cambio" && !documento) out.push({ campo: "prop-doc", mensaje: msg.elige("el documento vigente que se cambia"), grupo: "Propuesta" });
-      if (tipo === "nuevo" && !titulo.trim()) out.push({ campo: "prop-titulo", mensaje: msg.indica("el título del documento nuevo"), grupo: "Propuesta" });
-      if (motivo.trim().length < 5) out.push({ campo: "prop-motivo", mensaje: motivo.trim() ? msg.minimo("La descripción del cambio", 5) : msg.escribe("qué se debe cambiar"), grupo: "Propuesta" });
-      return out;
-    },
-  });
-  const crear = async () => {
-    if (!vProp.validar()) return;
-    if (await enviar("POST", `/calidad/nc/${item.id}/propuesta-documental`, { tipo, documento_id: documento ? Number(documento) : null, titulo, motivo }, undefined, (err) => vProp.errorServidor(err, { motivo: "prop-motivo" }))) setAbierto(false);
-  };
-  let contenido: ReactNode;
-  if (propuesta) {
-    contenido = (
-      <Link href="/documentos?propuestas=1" className="press flex items-center gap-2 rounded-[10px] bg-surface px-3 py-2 text-[13.5px] ring-1 ring-line hover:bg-surface-2">
-        <FileText size={16} className="text-ink-3" /> Propuesta #{String(propuesta.id)}: {String(propuesta.titulo)} <Badge className="ml-auto">{String(propuesta.estado)}</Badge>
-      </Link>
-    );
-  } else if (editar) {
-    contenido = (
-      <Button variant="secondary" icon={<FileText size={16} />} onClick={() => setAbierto(true)} className="self-start">
-        Proponer cambio documental…
-      </Button>
-    );
-  } else contenido = <p className="text-[13px] text-ink-3">{item.requiere_cambio_documental ? "Requiere cambio documental (sin propuesta registrada)." : "Sin cambio documental."}</p>;
+  if (!propuesta) return null;
   return (
-    <Panel title="Cambio documental" description="Crea en un clic una propuesta (Fase 7) ligada a esta NC; el flujo de documentos la revisa y aprueba.">
-      {contenido}
-      <Sheet
-        open={abierto}
-        onOpenChange={setAbierto}
-        title="Proponer cambio documental"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setAbierto(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={crear}>Crear propuesta</Button>
-          </>
-        }
-      >
-        <ValidacionAmbito v={vProp}>
-        <div className="flex flex-col gap-5">
-          <ChoiceGrid cols={2}>
-            <ChoiceCard type="radio" name="prop-tipo" checked={tipo === "cambio"} onChange={() => setTipo("cambio")} label="Cambiar un documento vigente" />
-            <ChoiceCard type="radio" name="prop-tipo" checked={tipo === "nuevo"} onChange={() => setTipo("nuevo")} label="Documento nuevo" />
-          </ChoiceGrid>
-          {tipo === "cambio" ? (
-            <Field label="Documento" htmlFor="prop-doc" required>
-              <Select id="prop-doc" value={documento} onChange={(event) => setDocumento(event.target.value)}>
-                <option value="">Elegir…</option>
-                {((docs.data?.items || []) as ApiRecord[]).map((doc) => (
-                  <option key={String(doc.id)} value={String(doc.id)}>
-                    {String(doc.clave)} · {String(doc.titulo)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          ) : (
-            <Field label="Título" htmlFor="prop-titulo" required>
-              <Input id="prop-titulo" value={titulo} onChange={(event) => setTitulo(event.target.value)} />
-            </Field>
-          )}
-          <Field label="Qué se debe cambiar" htmlFor="prop-motivo" required>
-            <Textarea id="prop-motivo" rows={3} value={motivo} onChange={(event) => setMotivo(event.target.value)} />
-          </Field>
-        </div>
-        </ValidacionAmbito>
-      </Sheet>
-    </Panel>
+    <p className="flex items-center gap-2 rounded-[10px] bg-surface-2 px-3 py-2 text-[13px] text-ink-2 ring-1 ring-line" data-propuesta-anterior>
+      <FileText size={16} className="shrink-0 text-ink-3" />
+      <span className="min-w-0 flex-1">
+        Propuesta documental anterior #{String(propuesta.id)}: {String(propuesta.titulo)} <span className="text-ink-3">(flujo retirado; solo consulta)</span>
+      </span>
+      <Badge>{String(propuesta.estado)}</Badge>
+    </p>
   );
 }
 

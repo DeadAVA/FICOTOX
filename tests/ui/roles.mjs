@@ -3,7 +3,7 @@
  * navegador; la barra lateral muestra solo los destinos de los modulos que puede
  * ver (V) y los botones de alta aparecen segun su accion y alcance. La tabla se
  * repite aqui a proposito (independiente de scripts/roles-catalogo.json).
- * Fase 7: Documentos encendido: aparece para quien ve documentos.
+ * Biblioteca: Calidad › Biblioteca (modulo documentos) aparece para quien ve documentos.
  *
  * Nota (Fase 2): los alcances diferidos se comportan como "total" salvo en
  * calidad (sin acceso: una C "incidencias" ya no abre la bitacora) y en usuarios
@@ -94,8 +94,8 @@ function enlacesEsperados(modulos) {
   if (set.has("equipos")) ["/inventario/equipos", "/inventario/mantenimiento"].forEach((h) => out.add(h));
   if (set.has("calidad") && calidad !== "incidencias") out.add("/auditoria");
   if (set.has("calidad") && calidad !== "bitacora") out.add("/calidad/incidencias");
-  // Fase 7: Documentos encendido (Calidad › Documentos) para quien ve documentos.
-  if (set.has("documentos")) out.add("/documentos");
+  // Calidad › Biblioteca (modulo documentos; reemplaza a Documentos SGC) para quien ve documentos.
+  if (set.has("documentos")) out.add("/calidad/biblioteca");
   if (set.has("usuarios")) {
     out.add("/administracion/usuarios");
     out.add("/administracion/accesos");
@@ -127,12 +127,12 @@ try {
       await aside.locator("nav a").first().waitFor();
       await page.waitForLoadState("networkidle");
       const hrefs = new Set(await aside.locator("a").evaluateAll((links) => links.map((a) => new URL(a.href).pathname)));
-      // Fase 7: todos los roles del catalogo ven documentos (documentos:V con su alcance).
+      // Todos los roles del catalogo ven documentos (documentos:V con su alcance): Calidad › Biblioteca.
       const esperados = enlacesEsperados([...modulos, "documentos"]);
       const sobran = [...hrefs].filter((h) => !esperados.has(h));
       const faltan = [...esperados].filter((h) => !hrefs.has(h));
       check(`${rol}: menu con solo sus modulos`, !sobran.length && !faltan.length, `sobran=[${sobran.join(", ")}] faltan=[${faltan.join(", ")}]`);
-      check(`${rol}: Documentos aparece (modulo encendido; todos los roles ven documentos)`, [...hrefs].includes("/documentos"));
+      check(`${rol}: «Biblioteca» aparece en Calidad (todos los roles ven documentos)`, [...hrefs].includes("/calidad/biblioteca") && (await aside.locator("nav a", { hasText: /^Biblioteca$/ }).count()) > 0 && !hrefs.has("/documentos"));
 
       for (const [ruta, texto, visible] of BOTONES[rol] || []) {
         await page.goto(`${BASE}${ruta}`);

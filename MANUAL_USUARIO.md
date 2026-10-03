@@ -38,7 +38,7 @@ La **barra lateral** (a la izquierda) tiene seis entradas, visibles segun los pe
 - **Muestras** ▸ Recepcion, Procesamiento, Extraccion y Analisis.
 - **Informes**.
 - **Inventario** ▸ Reactivos, Consumibles, Equipos, Mantenimiento y Movimientos.
-- **Calidad** ▸ Auditoria. (El modulo **Documentos** del SGC esta apagado por ahora: no aparece en el menu ni en los avisos; se reactiva desde la configuracion tecnica sin perder datos.)
+- **Calidad** ▸ Biblioteca, Incidencias y NC, y Auditoria.
 - **Administracion** ▸ Usuarios y Roles.
 
 Las entradas con ▸ se despliegan: al hacer clic en el nombre se abre la seccion y su primera pantalla; la flecha de la derecha solo abre o cierra la lista. La seccion en la que esta siempre queda abierta.
@@ -49,7 +49,7 @@ En la cabecera de la barra hay un icono de **busqueda** y el boton para contraer
 
 Atajos y ayudas:
 
-- El icono de busqueda (o `Ctrl+K` / `Cmd+K` en cualquier pantalla) abre la busqueda: escriba un folio (`R 12`, `E-D 3`, `IR 5`), el nombre de un reactivo, consumible, equipo, mantenimiento o documento, lo que quiere hacer (`nueva recepcion`, `programar mantenimiento`), una vista por estado (`stock bajo`, `por revisar`, `calibracion`, `mantenimientos vencidos`) o un tema de la ayuda (`como anular`), y presione Enter para ir directamente. Sin escribir nada ofrece lo ultimo que abrio, lo que puede crear y a donde ir. Las fichas **Todo / Muestras / Informes / Inventario / Acciones** (o la tecla `Tab`) acotan los resultados.
+- El icono de busqueda (o `Ctrl+K` / `Cmd+K` en cualquier pantalla) abre la busqueda: escriba un folio (`R 12`, `E-D 3`, `IR 5`), el nombre de un reactivo, consumible, equipo, mantenimiento o un documento de la **Biblioteca** (titulo, clave, categoria o etiqueta), lo que quiere hacer (`nueva recepcion`, `programar mantenimiento`), una vista por estado (`stock bajo`, `por revisar`, `calibracion`, `mantenimientos vencidos`) o un tema de la ayuda (`como anular`), y presione Enter para ir directamente. Sin escribir nada ofrece lo ultimo que abrio, lo que puede crear y a donde ir. Las fichas **Todo / Muestras / Informes / Inventario / Acciones** (o la tecla `Tab`) acotan los resultados.
 - **Ayuda**: al pie de la barra lateral hay un enlace **Ayuda** con el manual resumido dentro de la plataforma (como buscar, el flujo de una muestra, extracciones, analisis, informes, inventario, auditoria, como corregir un registro y atajos). Sus temas tambien aparecen en el buscador.
 - Los formularios de catalogo (reactivos, consumibles, equipos, mantenimiento, usuarios, roles) se abren en un panel lateral sin salir de la tabla.
 - Los formatos de muestra e informe se abren en pantalla completa con una **guia de secciones** a la izquierda (arriba en el celular) que indica cuales estan completas (verde), cuales tienen faltantes (ambar) y en cual se encuentra; haga clic en una seccion para ir a ella.
@@ -335,21 +335,18 @@ La seccion **Mantenimiento** permite programar y controlar mantenimientos de equ
 - El **estado del equipo sigue a sus mantenimientos**: mientras tenga uno pendiente aparece en **Equipos** como "En mantenimiento" (o "Calibracion pendiente" si es una calibracion). Al marcar el mantenimiento **Completado** (con su fecha realizada) desaparece de la pestana y el equipo vuelve a **Operativo**; si fue una calibracion, puede anotar ahi mismo la **proxima calibracion** y se actualiza en la ficha del equipo. Cancelar un mantenimiento tambien libera al equipo. Un equipo marcado a mano como "Fuera de servicio" no cambia solo.
 - Los avisos del **Inicio** ("Mantenimientos vencidos", "en los proximos 30 dias", "Equipos con alerta de calibracion", "Reactivos con stock bajo", "Consumibles con 5 piezas o menos") usan exactamente las mismas reglas que los filtros de cada lista, asi que al abrirlos ve los mismos registros que cuenta el aviso. "Stock bajo" en reactivos significa: vacio, por debajo del **stock minimo** si se capturo, o 20 % o menos del maximo si no hay minimo.
 
-## 11. Documentos SGC y reportes
+## 11. Biblioteca de documentos (Calidad › Biblioteca)
 
-La seccion **Documentos** es el control de documentos del sistema de gestion de calidad (ISO/IEC 17025 8.3) y tambien lista los reportes de mantenimiento en PDF (pestana **Reportes de mantenimiento**, boton **Abrir PDF**).
+**Decision confirmada por el laboratorio**: Calidad › Documentos funciona como **biblioteca de consulta** y reemplaza el flujo de control documental (revision, aprobacion, lista maestra, distribucion y acuse de lectura). Los documentos que habia (con su archivo) se copiaron a la Biblioteca. Los reportes de mantenimiento en PDF no forman parte de la Biblioteca: se consultan en Inventario › Mantenimiento, sección «Reportes de mantenimiento (PDF)».
 
-- **Lista maestra**: solo las revisiones **vigentes**, con clave, titulo, tipo, area, revision, fecha de vigencia, proxima revision (por defecto 3 anos) y quien aprobo. Los documentos con revision periodica vencida se marcan.
-- **Todas las revisiones**: borradores, en revision, vigentes, obsoletos y cancelados.
-
-Ciclo de un documento:
-
-1. **Nuevo documento**: clave con el formato del laboratorio (`FX-<area><tipo>-<siglas>`, por ejemplo `FX-GCP-CD`); el tipo (manual, procedimiento, instructivo, formato, registro, lista, bitacora, externo) y el area (gestion de calidad, tecnica, direccion...) se derivan de la clave. Adjunte el archivo (PDF, Word, Excel...). Queda en **Borrador**.
-2. **Enviar a revision** (requiere archivo, salvo documentos externos).
-3. **Aprobar** (Documentos: A; solo documentos en revision y con archivo): pide cargo de quien aprueba y fecha de vigencia. La revision queda **Vigente** y la anterior pasa a **Obsoleta** automaticamente (se conserva identificada, no se borra).
-4. **Nueva revision**: crea el borrador de la revision siguiente indicando que cambio; **Declarar obsoleto** retira un documento vigente con motivo; **Cancelar borrador** descarta un borrador con motivo.
-
-Cada documento tiene **Ver detalle e historial** con sus revisiones, la huella SHA-256 del archivo y la bitacora.
+- **Buscar**: escriba en **Buscar** por titulo, clave, etiqueta o texto del PDF (tambien busca dentro de los PDF). Filtre por **Categoria** y **Tipo de archivo**, ordene (**Recientes** o **Por categoria**) y cambie entre **lista** y **cuadricula**. El buscador general (`Ctrl+K`) tambien encuentra los documentos de la Biblioteca.
+- **Subir documento** (Documentos: C): elija uno o varios archivos (PDF, Word `.docx`, Excel, CSV, PowerPoint, imagenes, texto, Markdown o ZIP; el tamaño maximo lo fija el laboratorio, 50 MB por omision) y capture **Titulo**, **Clave** (opcional, p. ej. `FX-TCI-CE1`), **Categoria**, **Etiquetas** (separadas por coma), **Fecha del documento**, **Descripcion** y **Visibilidad**: *Todos los que ven la biblioteca* o solo ciertos **roles**. El archivo se valida por su contenido y se guarda con su huella SHA-256.
+- **Leer en el visor**: **Abrir** (o clic en el documento) lo muestra dentro de la plataforma, sin descargarlo: PDF con miniaturas, indice, busqueda en el texto (`Ctrl+F`), zoom y "pagina N de M" (recuerda la ultima pagina que leyo); Word, hojas de calculo, imagenes (con zoom), texto y Markdown. Los formatos que el navegador no puede mostrar (PowerPoint, ZIP, TIFF) presentan su ficha con **Descargar**. **Informacion y versiones** abre el panel con los datos del documento, sus versiones y su huella; hay **Pantalla completa** e **Imprimir**. Leer no queda en la bitacora; **Descargar** si.
+- **Versiones**: **Subir nueva version** reemplaza el archivo vigente, con una **nota de la version** (que cambio, opcional); la anterior **se conserva** y se puede abrir desde el panel de versiones. **Editar datos** cambia titulo, clave, categoria, etiquetas y visibilidad sin tocar el archivo (Documentos: E en los documentos que usted subio; Documentos: G en cualquiera).
+- **Archivar** (Documentos: AN o G): con motivo y su contraseña; el documento deja de aparecer, pero **no se borra**. Con **Mostrar archivados** se ven y se pueden **Restaurar** (tambien con motivo).
+- **Categorias** (Documentos: G): crear, renombrar o desactivar las categorias de la Biblioteca.
+- **Integridad**: al abrir o descargar se comprueba la huella del archivo; si falta o fue alterado, se avisa, queda una alerta en la bitacora y una incidencia automatica.
+- El Estudiante (alcance "autorizados") solo ve los documentos visibles para todos o para su rol.
 
 ## 11.1 Bitacora de auditoria
 
@@ -439,7 +436,6 @@ El sistema no deja que una persona valide su propio trabajo (ISO/IEC 17025):
 - Quien elaboro un informe, o cualquiera de los analisis que incluye, no lo revisa ni lo autoriza.
 - En procesamiento y extraccion, quien firma como supervisor no puede ser quien proceso, extrajo o hizo la limpieza.
 - El supervisor no da visto bueno a lo que el mismo capturo.
-- En documentos, quien elaboro no revisa ni aprueba, y quien reviso no aprueba.
 
 Tener varios roles o cambiar de cargo no cambia la regla. Cuando no puede hacer una accion por esta razon, el boton aparece deshabilitado con la explicacion. Si de verdad no hay otra persona disponible, use **Solicitar excepción…**: escriba el motivo y su contrasena; la excepcion la aprueba la Responsable General o Mejora Continua, y queda registrada en la ficha, en la bitacora y, en un informe, en el PDF ("Revisión autorizada por excepción, solicitud #N"). Mientras espera, el registro no se bloquea: si otra persona lo revisa o aprueba antes, puede cancelar su solicitud en **Por autorizar**.
 
@@ -521,14 +517,9 @@ En recepcion, procesamiento, extraccion y analisis, las personas que firman (rec
 
 En la recepcion (o en el menu de su fila) use **Imprimir etiqueta**. Elija el **tamaño** (Pequeña 50 × 25 mm; Mediana 66.7 × 25.4 mm, tipo Avery 5160; Grande 101.6 × 50.8 mm, tipo Avery 5163; Media hoja), las **copias por muestra** (2 para etiqueta interna y externa) y, si la hoja de etiquetas ya se uso, **Empezar en la posicion**. Todo se imprime en hoja carta, en la menor cantidad de hojas; la vista previa es igual a lo impreso. La pequeña lleva folio R, ID interno y fecha de recepcion; las demas, ademas organismo, muestreo y resguardo. El sistema recuerda el ultimo tamaño elegido. Al imprimir queda en la bitacora "imprimió etiquetas".
 
-### 13.17 Documentos del SGC (Calidad › Documentos)
+### 13.17 Documentos del SGC (retirado)
 
-- **Proponer**: cualquiera que vea documentos usa **Proponer documento** o, en un documento vigente, **Solicitar cambio** (titulo y motivo). Mejora Continua la **acepta** (elige quien elabora; se crea el borrador o la nueva revision) o la **rechaza** con motivo.
-- **Flujo**: borrador → revision de calidad (Mejora Continua) → revision tecnica (solo si el documento la requiere; quien tiene documentos:R) → por aprobar → aprobado (Responsable General, con contrasena) → vigente (Mejora Continua **publica**, con contrasena; la revision vigente anterior queda obsoleta). Cada revisor puede **devolver con observaciones** a borrador.
-- Quien elaboro no revisa ni aprueba; quien hizo la revision de calidad no aprueba ese documento.
-- **Distribucion**: al publicar se eligen personas o roles. Cada destinatario ve **Documentos por leer** en el Inicio y confirma **Lei y comprendi**; en la ficha se ve quien ya confirmo.
-- **Obsoleto sin reemplazo**: Mejora Continua lo pide con motivo y lo aprueba la Responsable General (solicitud).
-- **Lista maestra**: revisiones vigentes con clave, revision, vigencia, responsable y ubicacion; **Exportar CSV**. Las versiones anteriores se consultan en la ficha (solo lectura). El Estudiante solo ve los documentos vigentes que le fueron distribuidos.
+Esta seccion describia el flujo de control documental (propuestas, revision de calidad y tecnica, aprobacion, publicacion con distribucion y "Lei y comprendi", obsolescencia por solicitud y lista maestra). **Por decision confirmada del laboratorio se retiro**: Calidad › Documentos es ahora la **Biblioteca** (seccion 11). Los registros anteriores se conservan y siguen en la bitacora; una solicitud pendiente de "declarar obsoleto" aparece como **Accion retirada** y ya no se puede aprobar (quien la pidio puede cancelarla).
 
 ### 13.18 ¿Que puede hacer cada rol?
 
@@ -537,19 +528,19 @@ Resumen del estado final (Fases 9 y 10). El detalle por modulo, accion y alcance
 | Rol | Tareas principales |
 | --- | --- |
 | Administrador técnico del sistema | Administra cuentas y roles (alta, baja, vigencias, bloqueos); no aprueba cambios de acceso ni otorga autorizaciones FX-THF-AP; consulta la bitacora y el estado de las muestras; crea los respaldos y ejecuta las pruebas de restauracion (13.20). |
-| Responsable General | Aprueba asignaciones de rol, reactivaciones y ampliaciones de vigencia; revisa y autoriza informes y los libera; aprueba documentos; anula con justificacion y aprueba solicitudes; otorga autorizaciones FX-THF-AP. |
-| Coordinador/a de Mejora Continua | Gestiona el SGC: acepta propuestas, hace la revision de calidad, publica y distribuye documentos; excepciones de segregacion; bitacora completa; otorga autorizaciones FX-THF-AP. |
+| Responsable General | Aprueba asignaciones de rol, reactivaciones y ampliaciones de vigencia; revisa y autoriza informes y los libera; archiva y restaura documentos de la Biblioteca; anula con justificacion y aprueba solicitudes; otorga autorizaciones FX-THF-AP. |
+| Coordinador/a de Mejora Continua | Gestiona el SGC: administra la Biblioteca (sube, edita y archiva cualquier documento, categorias); excepciones de segregacion; bitacora completa; otorga autorizaciones FX-THF-AP. |
 | Coordinador/a del Área Técnica | Asigna muestras; recibe, procesa, extrae, analiza, revisa y aprueba resultados; revisa, autoriza y libera informes; decide rechazos, desviaciones, cambios de folio y reaperturas; administra equipos e inventario; otorga autorizaciones FX-THF-AP. |
-| Coordinador/a de Investigación y Desarrollo | Captura y revisa ensayos e informes de sus proyectos; hace la revision tecnica de documentos; equipos e inventario. |
+| Coordinador/a de Investigación y Desarrollo | Captura y revisa ensayos e informes de sus proyectos; sube documentos a la Biblioteca; equipos e inventario. |
 | Técnico Analista | Trabaja las muestras asignadas: procesa, extrae, analiza, adjunta la evidencia instrumental y envia a revision; crea informes en borrador; registra uso de equipos y movimientos de inventario. |
 | Técnico Auxiliar | Registra recepciones y procesamientos; uso de equipos y movimientos de inventario. |
 | Administrador/a Auxiliar | Mantenimientos de equipos, inventario y compras; ve el estado de las muestras. |
 | Auditor Interno | Consulta todo (solo lectura), incluida la bitacora y su exportacion. |
-| Estudiante / personal en formación | Trabaja las muestras asignadas con supervision (todo queda pendiente del visto bueno de su supervisor); solo ve los documentos que le fueron distribuidos. |
+| Estudiante / personal en formación | Trabaja las muestras asignadas con supervision (todo queda pendiente del visto bueno de su supervisor); en la Biblioteca solo ve los documentos visibles para todos o para su rol. |
 
 ### 13.19 Notificaciones y exportacion
 
-- **Campana** (barra lateral): contador y panel con lo que te toca, calculado al momento: muestras asignadas a ti en los ultimos 7 dias; analisis e informes que puedes revisar, aprobar, autorizar o liberar; solicitudes **Por autorizar** y registros **Por supervisar**; documentos por leer y por revisar, aprobar o publicar; mantenimientos vencidos o proximos (si ves equipos); cuentas, roles y autorizaciones que vencen pronto (las tuyas, y las de otros si administras); y, para el Administrador tecnico y quien revisa en Calidad, **respaldos** sin hacer en las ultimas 24 h o sin prueba de restauracion en 90 dias (13.20); y los avisos de **calidad** (13.21). Cada elemento abre su registro.
+- **Campana** (barra lateral): contador y panel con lo que te toca, calculado al momento: muestras asignadas a ti en los ultimos 7 dias; analisis e informes que puedes revisar, aprobar, autorizar o liberar; solicitudes **Por autorizar** y registros **Por supervisar**; mantenimientos vencidos o proximos (si ves equipos); cuentas, roles y autorizaciones que vencen pronto (las tuyas, y las de otros si administras); y, para el Administrador tecnico y quien revisa en Calidad, **respaldos** sin hacer en las ultimas 24 h o sin prueba de restauracion en 90 dias (13.20); y los avisos de **calidad** (13.21). Cada elemento abre su registro.
 - **Exportar la bitacora**: en **Auditoria**, **Exportar CSV** descarga lo que muestran los filtros aplicados (fecha, usuario, accion, modulo, referencia, motivo y los cambios en texto legible).
 - **Exportar el historial de un registro**: en **Calidad › Auditoria**, escriba el folio del registro (por ejemplo `R 0000012`) en la busqueda y use **Exportar CSV**.
 - Las exportaciones respetan tus permisos y alcances (lo que no puedes ver sale como "datos restringidos") y quedan en la bitacora.
@@ -591,7 +582,7 @@ Para registrar cualquier problema del trabajo (ISO/IEC 17025 7.10 y 8.7): una **
 4. **Analisis de causa**: 5 porques, Ishikawa u otro; causa raiz; ¿requiere accion correctiva? (si es "no", con justificacion: se evalua si puede repetirse).
 5. **Acciones correctivas**: responsable, fecha compromiso, estado y evidencia. La marca como implementada su responsable (con evidencia). Una accion con fecha pasada aparece **vencida** (no se bloquea). Si su responsable ya no tiene cuenta vigente, se avisa y se **reasigna con motivo**.
 6. **Verificacion de eficacia** (Calidad: R; nunca el responsable de una accion, regla 8): **eficaz**, o **no eficaz**, que **reabre** la NC a analisis sin borrar nada y cuenta la reapertura (para continuar hay que revisar la causa y agregar al menos una accion nueva).
-7. **Efectos en el SGC**: actualizar riesgos (bandera y nota) y **Proponer cambio documental** (crea la propuesta de documentos ligada a la NC).
+7. **Efectos en el SGC**: actualizar riesgos (bandera y nota) y **Requiere cambio documental** (bandera; el documento se actualiza subiendo una version nueva en la **Biblioteca**). Ya no se crean propuestas documentales; si la NC tenia una del flujo anterior, se muestra en solo lectura (titulo y estado).
 8. **Cierre** (Calidad: A con tu contraseña; nunca el responsable de la NC, regla 9): exige evaluacion de impacto completa, acciones implementadas o canceladas y la ultima verificacion eficaz (o la justificacion si no requiere acciones), ninguna suspension ni retencion activa y la comunicacion al cliente si se decidio notificarlo. Genera el PDF **"Registro de no conformidad"** con firmas, cargos y huella SHA-256.
 9. **Historial**.
 

@@ -1,4 +1,4 @@
-import { apiRoute } from "@/lib/server/http";
-import { enviarRevision } from "@/lib/server/modules/documentos-sgc";
+import { funcionalidadRetirada } from "@/lib/server/retirado";
 
-export const POST = apiRoute(enviarRevision);
+/* Flujo de control documental retirado por decision del laboratorio (ahora es la Biblioteca). */
+export const POST = funcionalidadRetirada;

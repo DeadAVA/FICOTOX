@@ -16,7 +16,7 @@ import { API_BASE_URL, armarCargo, armarReauth, getJsonAuth, sendJsonAuth } from
 import { msg, type Problema } from "@/lib/client/mensajes";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
-import { permisoParaAprobar, type TipoSolicitud } from "@/lib/shared/acciones-criticas";
+import { esTipoActivo, permisoParaAprobar, type TipoSolicitud } from "@/lib/shared/acciones-criticas";
 import { formatearFecha, formatearFechaHora } from "@/lib/shared/fechas";
 
 /*
@@ -69,7 +69,9 @@ export function hrefDeSolicitud(item: ApiRecord): string | null {
     case "usuarios":
       return "/administracion/usuarios";
     case "documentos_sgc":
-      return "/documentos";
+      return "/calidad/biblioteca";
+    case "biblioteca_documentos":
+      return `/calidad/biblioteca/${id}`;
     default:
       return null;
   }
@@ -114,6 +116,8 @@ export function usePuedeResolver(): (sol: ApiRecord | null | undefined) => boole
   const { can, user } = useSession();
   return (sol) => {
     if (!sol || String(sol.estado || "pendiente") !== "pendiente") return false;
+    // Accion retirada del catalogo (p. ej. obsoletar_documento): sin botones de aprobar ni rechazar.
+    if (sol.retirada || !esTipoActivo(sol.tipo)) return false;
     if (typeof sol.puedo_aprobar === "boolean") return sol.puedo_aprobar;
     if (Number(sol.solicitado_por) === Number(user?.id)) return false;
     const { modulo, accion } = permisoParaAprobar(String(sol.tipo) as TipoSolicitud, String(sol.entidad || ""));

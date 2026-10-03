@@ -1,12 +1,13 @@
 /*
  * Prueba de extremo a extremo del flujo completo (recepcion -> procesamiento ->
- * extraccion -> analisis -> informe -> disposicion), anulaciones, documentos
- * SGC, bajas de inventario y bitacora de auditoria. Corre contra el dev
+ * extraccion -> analisis -> informe -> disposicion), anulaciones, Biblioteca
+ * (y el retiro de Documentos SGC), bajas de inventario y bitacora de auditoria. Corre contra el dev
  * server apuntando a la COPIA de prueba de la base.
  */
 import "./lib/reauth-auto.mjs";
 import { readFileSync } from "node:fs";
 import { autorizarTodo } from "./lib/autorizar.mjs";
+import { pdfConTexto } from "./lib/archivos.mjs";
 import { liberar, registrarEnvio } from "./lib/envio.mjs";
 const BASE = process.env.BASE || "http://localhost:3100/api";
 let token = "";
@@ -62,7 +63,7 @@ for (let i = 0; i < 60; i += 1) {
   const r2 = await api("POST", "/auth/login", { email: "revisora@cicese.mx", password: "RevisoraQA2026!" });
   token2 = r2.data?.token || "";
   check("login revisora", r2.status === 200 && !!token2, `status ${r2.status}`);
-  // Tercera persona (Mejora Continua, documentos:G): aprueba documentos que no elaboro ni reviso.
+  // Tercera persona (Mejora Continua).
   const cred = JSON.parse(readFileSync(process.env.CREDENCIALES_ROLES, "utf8"));
   const r3 = await api("POST", "/auth/login", { email: "ana.torres@ficotox.local", password: cred["ana.torres@ficotox.local"] });
   token3 = r3.data?.token || "";
@@ -353,67 +354,21 @@ let informeId = null;
   check("anular procesamiento con extraccion vigente -> 409", anProc.status === 409, `status ${anProc.status}`);
 }
 
-// ---------- Documentos SGC ----------
-let docId = null;
+// ---------- Biblioteca (reemplaza el flujo de Documentos SGC; el detalle esta en api-biblioteca.mjs) ----------
 {
-  const badKey = await api("POST", "/documentos-sgc", { clave: "PROC-1", titulo: "x", tipo: "P", area: "GC" });
-  check("clave invalida -> 400", badKey.status === 400, `status ${badKey.status} ${badKey.data?.message}`);
   const form = new FormData();
-  form.set("clave", "FX-GCP-CD");
   form.set("titulo", "Procedimiento de gestión de calidad para control de documentos");
-  form.set("fecha_emision", "2026-09-01");
-  form.set("elaboro", JSON.stringify({ nombre: "Marcela O.", cargo: "Coordinadora de Mejora Continua" }));
-  form.set("archivo", new File([Buffer.from("%PDF-1.4\n%prueba\n")], "FX-GCP-CD.pdf", { type: "application/pdf" }));
-  const cr = await api("POST", "/documentos-sgc", form, { form: true });
-  docId = cr.data?.id;
-  check("documento creado (multipart) con tipo y area derivados", cr.status === 201 && cr.data?.revision === 1, JSON.stringify(cr.data));
-  const item = (await api("GET", `/documentos-sgc/${docId}`)).data?.item;
-  check("tipo P y area GC derivados de la clave; proxima revision +3 anos", item?.tipo === "P" && item?.area === "GC" && item?.fecha_proxima_revision === "2029-09-01" && !!item?.archivo_sha256, JSON.stringify({ tipo: item?.tipo, area: item?.area, prox: item?.fecha_proxima_revision }));
-  const aprBorrador = await api("POST", `/documentos-sgc/${docId}/aprobar`, {}, { token: token2 });
-  check("aprobar un borrador (sin enviar a revision) -> 409", aprBorrador.status === 409, `status ${aprBorrador.status} ${aprBorrador.data?.message}`);
-  const claveTipo = await api("POST", "/documentos-sgc", { clave: "FX-GCX-CD", titulo: "Clave con tipo desconocido", tipo: "P", area: "GC" });
-  check("clave con tipo invalido no se salva con el tipo del cuerpo -> 400", claveTipo.status === 400, `status ${claveTipo.status} ${claveTipo.data?.message}`);
-  const revArbitraria = await api("POST", "/documentos-sgc", { clave: "FX-GCP-CD", titulo: "Otra revision a mano", revision: 7 });
-  check("segunda alta de una clave con revision en curso -> 409", revArbitraria.status === 409, `status ${revArbitraria.status} ${revArbitraria.data?.message}`);
-  // Fase 7 (regla 5): quien elaboro envia a revision pero no la hace; quien reviso calidad no aprueba.
-  const rev = await api("POST", `/documentos-sgc/${docId}/enviar-revision`, {});
-  check("enviar a revision (revision de calidad)", rev.status === 200 && rev.data?.item?.estado === "revision_calidad", `status ${rev.status} ${rev.data?.message}`);
-  const revPropia = await api("POST", `/documentos-sgc/${docId}/revisar-calidad`, {});
-  check("revisar documento propio -> 409 segregacion", revPropia.status === 409 && revPropia.data?.codigo === "segregacion", `status ${revPropia.status} ${revPropia.data?.message}`);
-  await api("POST", `/documentos-sgc/${docId}/revisar-calidad`, {}, { token: token3 });
-  const aprRevisor = await api("POST", `/documentos-sgc/${docId}/aprobar`, {}, { token: token3 });
-  check("aprobar el documento que revisaste -> 409 segregacion", aprRevisor.status === 409 && aprRevisor.data?.codigo === "segregacion", `status ${aprRevisor.status} ${aprRevisor.data?.message}`);
-  const apr = await api("POST", `/documentos-sgc/${docId}/aprobar`, {}, { token: token2 });
-  const pub = await api("POST", `/documentos-sgc/${docId}/publicar`, { fecha_vigencia: "2026-09-15" }, { token: token3 });
-  check("aprobar -> aprobado y publicar -> vigente", apr.status === 200 && apr.data?.item?.estado === "aprobado" && pub.status === 200 && pub.data?.item?.estado === "vigente", `status ${apr.status} ${pub.status} ${pub.data?.message}`);
-  const editVig = await api("PUT", `/documentos-sgc/${docId}`, { titulo: "otro" });
-  check("editar vigente -> 409", editVig.status === 409, `status ${editVig.status}`);
-  const cancelado = await api("POST", "/documentos-sgc", { clave: "FX-ADP-QA1", titulo: "Borrador que se cancela" });
-  await api("POST", `/documentos-sgc/${cancelado.data?.id}/cancelar`, { motivo: "Prueba: borrador descartado" });
-  const revCancelada = await api("POST", `/documentos-sgc/${cancelado.data?.id}/nueva-revision`, { cambios: "Intento sobre un cancelado" });
-  check("nueva revision de un documento cancelado -> 409", revCancelada.status === 409, `status ${revCancelada.status} ${revCancelada.data?.message}`);
-  const nueva = await api("POST", `/documentos-sgc/${docId}/nueva-revision`, { cambios: "Se agrega el control de registros electrónicos" });
-  const nuevaId = nueva.data?.id;
-  check("nueva revision 2 en borrador", nueva.status === 201 && nueva.data?.revision === 2, JSON.stringify(nueva.data));
-  const dup = await api("POST", `/documentos-sgc/${docId}/nueva-revision`, { cambios: "otra" });
-  check("segunda revision en curso -> 409", dup.status === 409, `status ${dup.status}`);
-  const form2 = new FormData();
-  form2.set("titulo", "Procedimiento de gestión de calidad para control de documentos");
-  form2.set("archivo", new File([Buffer.from("%PDF-1.4\n%rev2\n")], "FX-GCP-CD-2.pdf", { type: "application/pdf" }));
-  const upd = await api("PUT", `/documentos-sgc/${nuevaId}`, form2, { form: true });
-  check("adjuntar archivo a la revision 2", upd.status === 200, `status ${upd.status} ${upd.data?.message}`);
-  await api("POST", `/documentos-sgc/${nuevaId}/enviar-revision`, {});
-  await api("POST", `/documentos-sgc/${nuevaId}/revisar-calidad`, {}, { token: token3 });
-  await api("POST", `/documentos-sgc/${nuevaId}/aprobar`, {}, { token: token2 });
-  const apr2 = await api("POST", `/documentos-sgc/${nuevaId}/publicar`, {}, { token: token3 });
-  const v1 = (await api("GET", `/documentos-sgc/${docId}`)).data?.item;
-  check("publicar revision 2 deja obsoleta la revision 1", apr2.status === 200 && v1?.estado === "obsoleto", `status ${apr2.status} v1=${v1?.estado}`);
-  const maestra = (await api("GET", "/documentos-sgc/lista-maestra")).data?.items || [];
-  check("lista maestra muestra solo la revision vigente (2)", maestra.filter((d) => d.clave === "FX-GCP-CD").length === 1 && maestra.find((d) => d.clave === "FX-GCP-CD")?.revision === 2, JSON.stringify(maestra.map((d) => `${d.clave}-${d.revision}`)));
-  const archivo = await api("GET", `/documentos-sgc/${docId}/archivo`);
-  check("descarga de archivo obsoleto marcada", archivo.status === 200 && archivo.type.includes("pdf"), `status ${archivo.status} ${archivo.type}`);
-  const del = await api("DELETE", `/documentos-sgc/${docId}`);
-  check("DELETE documento -> 405", del.status === 405, `status ${del.status}`);
+  form.set("clave", "FX-GCP-CD");
+  form.set("archivo", new File([await pdfConTexto(1, "Control de documentos")], "FX-GCP-CD.pdf", { type: "application/pdf" }));
+  const cr = await api("POST", "/biblioteca", form, { form: true });
+  const docBib = cr.data?.item?.id;
+  const ficha = (await api("GET", `/biblioteca/${docBib}`)).data;
+  const v = ficha?.versiones?.[0];
+  check("biblioteca: subir un PDF (201) con su versión y SHA-256", cr.status === 201 && !!v?.sha256 && ficha?.item?.integridad === "ok", `status ${cr.status} ${cr.data?.message || ""}`);
+  const descarga = await api("GET", `/biblioteca/versiones/${v?.id}/archivo?modo=descargar`);
+  check("biblioteca: descargar el archivo (queda en la bitácora)", descarga.status === 200 && descarga.type.includes("pdf"), `status ${descarga.status} ${descarga.type}`);
+  const viejo = await api("POST", "/documentos-sgc", { clave: "FX-GCP-QA9", titulo: "Flujo retirado" });
+  check("Documentos SGC retirado: crear responde 410", viejo.status === 410 && viejo.data?.codigo === "retirado", `status ${viejo.status}`);
 }
 
 // ---------- Bajas logicas de inventario y usuarios ----------
@@ -442,7 +397,7 @@ let docId = null;
   const acciones = new Set(all.map((a) => a.accion));
   const entidades = new Set(all.map((a) => a.entidad));
   check("bitacora registra login, login_fallido, crear, editar, aceptar, revisar, aprobar, autorizar, liberar, enviar, cerrar, anular, restaurar, baja, reactivar, descargar", ["login", "login_fallido", "crear", "editar", "aceptar", "revisar", "aprobar", "autorizar", "liberar", "enviar", "cerrar", "anular", "restaurar", "baja", "reactivar", "descargar"].every((a) => acciones.has(a)), `faltan: ${["login", "login_fallido", "crear", "editar", "aceptar", "revisar", "aprobar", "autorizar", "liberar", "enviar", "cerrar", "anular", "restaurar", "baja", "reactivar", "descargar"].filter((a) => !acciones.has(a)).join(",")}`);
-  check("bitacora cubre recepcion, procesamiento, extraccion, analisis, informes, documentos, equipos, usuarios, sesion", ["muestras_recepcion", "muestras_procesamiento", "muestras_extraccion", "muestras_analisis", "informes", "documentos_sgc", "equipos", "usuarios", "sesion"].every((e) => entidades.has(e)), `faltan: ${["muestras_recepcion", "muestras_procesamiento", "muestras_extraccion", "muestras_analisis", "informes", "documentos_sgc", "equipos", "usuarios", "sesion"].filter((e) => !entidades.has(e)).join(",")}`);
+  check("bitacora cubre recepcion, procesamiento, extraccion, analisis, informes, documentos, equipos, usuarios, sesion", ["muestras_recepcion", "muestras_procesamiento", "muestras_extraccion", "muestras_analisis", "informes", "biblioteca_documentos", "equipos", "usuarios", "sesion"].every((e) => entidades.has(e)), `faltan: ${["muestras_recepcion", "muestras_procesamiento", "muestras_extraccion", "muestras_analisis", "informes", "biblioteca_documentos", "equipos", "usuarios", "sesion"].filter((e) => !entidades.has(e)).join(",")}`);
   const edit = all.find((a) => a.accion === "editar" && a.entidad === "muestras_recepcion");
   check("entrada de edicion guarda antes/despues por campo", !!edit && Object.keys(edit.cambios || {}).length > 0 && "decision_aceptacion" in (edit.cambios || {}), JSON.stringify(edit?.cambios ? Object.keys(edit.cambios) : null));
   const detalle = (await api("GET", `/audit/${edit?.id}`)).data?.item;

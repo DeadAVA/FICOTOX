@@ -63,7 +63,9 @@ export const ENTIDADES_RELACIONABLES: Record<string, { label: string; ruta: (id:
   equipos: { label: "Equipo", ruta: () => "/inventario/equipos" },
   reactivos: { label: "Reactivo", ruta: () => "/inventario/reactivos" },
   consumibles: { label: "Consumible", ruta: () => "/inventario/consumibles" },
-  documentos_sgc: { label: "Documento", ruta: (id) => `/documentos?documento=${id}` },
+  // Documentos del flujo anterior (retirado): se consultan en la Biblioteca, que tiene su copia.
+  documentos_sgc: { label: "Documento (anterior)", ruta: () => "/calidad/biblioteca" },
+  biblioteca_documentos: { label: "Documento de la biblioteca", ruta: (id) => `/calidad/biblioteca/${id}` },
 };
 
 /* ---------- No conformidades ---------- */

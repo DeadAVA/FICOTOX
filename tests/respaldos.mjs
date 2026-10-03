@@ -157,6 +157,8 @@ let destinoPrueba = null;
   const acta = actaDe(BACKUPS, r.out);
   check("restauracion en modo prueba: exit 0, 8 verificaciones ✅ y acta .md/.json", r.code === 0 && acta?.resultado === "aprobada" && acta.verificaciones.length === 8 && acta.verificaciones.every((v) => v.ok) && acta.modo === "prueba", `${r.code} ${acta?.resultado} ${r.out.split("\n").filter((l) => l.startsWith("❌")).join(" | ")}`);
   check("el modo prueba no toca la instancia real de prueba y deja la copia en el destino", fs.existsSync(path.join(destinoPrueba, "ficotox.sqlite3")) && fs.existsSync(path.join(destinoPrueba, "evidencias")), destinoPrueba);
+  // Biblioteca: el respaldo incluye instance/biblioteca/ con huellas y la restauracion la copia y verifica (paso 7).
+  check("biblioteca: el respaldo incluye sus archivos (con SHA-256) y la restauración los copia y verifica", manifest.archivos.some((a) => a.ruta.startsWith("archivos/biblioteca/")) && fs.existsSync(path.join(destinoPrueba, "biblioteca")) && verif(acta, 7)?.ok === true && /biblioteca/i.test(verif(acta, 7)?.detalle || ""), `${verif(acta, 7)?.detalle}`);
   const lista = (await api("GET", "/respaldos", undefined, tJ)).data;
   check("la pantalla muestra la prueba (resultado, responsable) y el respaldo como verificado", lista?.ultima_prueba?.resultado === "aprobada" && lista.ultima_prueba.responsable === "Administrador técnico (pruebas)" && lista.respaldos.find((x) => x.id === respaldoId)?.verificacion?.resultado === "aprobada" && !lista.avisos.some((x) => x.tipo === "sin_prueba"), JSON.stringify(lista?.ultima_prueba));
   const md = await api("GET", `/respaldos/actas/${lista?.ultima_prueba?.archivo}`, undefined, tP);

@@ -27,6 +27,7 @@ export const MODULO_DE_REGISTRO: Record<string, Modulo> = {
   muestras_analisis: "ensayos",
   informes: "informes",
   documentos_sgc: "documentos",
+  biblioteca_documentos: "documentos",
   reportes_mantenimiento: "equipos",
   reactivos: "inventario",
   consumibles: "inventario",
@@ -55,6 +56,12 @@ export async function exigirVerRegistro(s: Session, user: CurrentUser, auth: Aut
   if (!fila) throw noEncontrado;
   const yo = auth.userId;
   if (entidad === "muestras_recepcion" && soloAsignado(permiso) && Number(fila.creado_por) !== yo && !(await estaAsignado(s, yo, id))) throw noEncontrado;
+  // Biblioteca: con "autorizados", solo documentos para todos o para alguno de sus roles.
+  if (entidad === "biblioteca_documentos" && soloAutorizados(auth) && String(fila.visibilidad) !== "todos") {
+    const roles = auth.roles.map((r) => Number(r.id));
+    const permitidos = (await s.query<Row>("SELECT rol_id FROM biblioteca_visibilidad_roles WHERE documento_id = :id", { id })).map((r) => Number(r.rol_id));
+    if (!permitidos.some((r) => roles.includes(r))) throw noEncontrado;
+  }
   if (entidad === "documentos_sgc" && soloAutorizados(auth) && (String(fila.estado) !== "vigente" || !(await documentosDistribuidosA(s, yo)).includes(id))) throw noEncontrado;
   const soloPropio = permiso.alcances.length > 0 && permiso.alcances.every((a) => a === "propio");
   if (entidad === "usuarios" && soloPropio && id !== yo) throw noEncontrado;

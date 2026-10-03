@@ -12,6 +12,7 @@ import { FilterChips, FilterMenu, type FilterGroup } from "@/components/ui/Filte
 import { ActionMenu, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
+import { ReportesMantenimiento } from "@/components/features/inventory/ReportesMantenimiento";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
 import { fmt, fmtDate, todayIso } from "@/lib/client/format";
@@ -218,6 +219,8 @@ function MantenimientoContent() {
           </Table>
         )}
       </TableShell>
+
+      <ReportesMantenimiento />
 
       {modal.key ? <MantenimientoSheet key={`modal-${modal.key}`} open={modal.isOpen} item={modal.payload} onClose={modal.close} /> : null}
     </>

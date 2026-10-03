@@ -14,10 +14,8 @@ import { porAutorizarDe } from "../solicitudes";
 import { autorizacionesPorVencer } from "../autorizaciones";
 
 import { ACCIONES_CRITICAS } from "../../shared/acciones-criticas";
-import { FEATURES } from "../../shared/features";
 import { formatearFecha, hoyLocal, sumarDias } from "../../shared/fechas";
 import { vencimientosProximos } from "./admin";
-import { documentosPorLeer } from "./documentos-flujo";
 
 import { avisosRespaldo, recibeAvisosRespaldo } from "./respaldos";
 
@@ -65,16 +63,7 @@ export async function notificacionesDe(s: Session, auth: Autorizacion): Promise<
   for (const sol of await porAutorizarDe(s, auth)) out.push({ tipo: "solicitud", titulo: `Por autorizar: ${ACCIONES_CRITICAS[sol.tipo]?.etiqueta || sol.tipo}`, detalle: `${sol.referencia || ""} · solicitud #${sol.id}`.replace(/^ · /, ""), href: "/solicitudes", tono: "warning" });
   for (const r of await contarPorSupervisar(s, yo)) out.push({ tipo: "supervision", titulo: `Por supervisar: ${r.tipo} ${r.referencia}`, detalle: "Pendiente de tu visto bueno", href: String(r.href), tono: "warning" });
 
-  // Documentos por leer y por revisar, aprobar o publicar.
-  if (FEATURES.documentos && puede("documentos", "V")) {
-    for (const d of await documentosPorLeer(s, yo)) out.push({ tipo: "documento_leer", titulo: `Por leer: ${d.clave} rev. ${d.revision}`, detalle: String(d.titulo || ""), href: `/documentos?documento=${d.id}`, tono: "info" });
-    const estadosDoc = [...(puede("documentos", "G") ? ["revision_calidad", "aprobado"] : []), puede("documentos", "R") ? "revision_tecnica" : null, puede("documentos", "A") ? "por_aprobar" : null].filter(Boolean) as string[];
-    if (estadosDoc.length) {
-      const filas = await s.query<Row>(`SELECT id, clave, revision, estado FROM documentos_sgc WHERE estado IN (${estadosDoc.map((e) => `'${e}'`).join(", ")}) AND COALESCE(creado_por, 0) <> :yo AND COALESCE(asignado_a, 0) <> :yo ORDER BY id LIMIT ${LIMITE}`, { yo });
-      const que: Record<string, string> = { revision_calidad: "Revisión de calidad", revision_tecnica: "Revisión técnica", por_aprobar: "Aprobar", aprobado: "Publicar" };
-      for (const f of filas) out.push({ tipo: "documento", titulo: `${que[String(f.estado)]}: ${f.clave} rev. ${f.revision}`, detalle: "Documento del SGC", href: `/documentos?documento=${f.id}`, tono: "warning" });
-    }
-  }
+  // Biblioteca: ya no hay documentos por leer, revisar, aprobar ni publicar (flujo de control documental retirado).
 
   // Mantenimientos vencidos o proximos (si ve equipos).
   if (puede("equipos", "V")) {

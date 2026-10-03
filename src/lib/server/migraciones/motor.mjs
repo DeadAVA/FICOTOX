@@ -31,8 +31,9 @@ import * as m0009 from "./0009_base_fase9.mjs";
 import * as m0010 from "./0010_adjuntos.mjs";
 import * as m0011 from "./0011_calidad.mjs";
 import * as m0012 from "./0012_firmas_tokens.mjs";
+import * as m0013 from "./0013_biblioteca.mjs";
 
-export const MIGRACIONES = [m0009, m0010, m0011, m0012].sort((a, b) => a.version - b.version);
+export const MIGRACIONES = [m0009, m0010, m0011, m0012, m0013].sort((a, b) => a.version - b.version);
 export const VERSION_ACTUAL = MIGRACIONES[MIGRACIONES.length - 1].version;
 /* Versiones que pueden quedar como linea base de una base anterior (las del sistema sin migraciones). */
 export const VERSIONES_BASELINE = [11, 10, 9];
@@ -364,7 +365,8 @@ export async function aplicarMigraciones(db, opciones) {
       avisar(`Aplicando la migración ${m.version} (${m.nombre})…`);
       if (db.motor === "sqlite") await db.begin();
       try {
-        await m.up(db, db.motor);
+        // Migracion 13: la copia de documentos necesita la carpeta de la instancia (archivos).
+        await m.up(db, db.motor, { instanceDir: opciones.instanceDir || null });
         // Prueba de fallo a la mitad (solo con FICOTOX_PRUEBAS=1): el DDL ya se ejecuto dentro de la transaccion.
         if (process.env.FICOTOX_PRUEBAS === "1" && Number(process.env.FICOTOX_PRUEBA_FALLAR_MIGRACION) === m.version) throw new Error(`Fallo simulado en la migración ${m.version}`);
         if (db.motor === "mysql") await db.begin();

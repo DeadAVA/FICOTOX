@@ -107,10 +107,14 @@ mantenimientos y movimientos de entrada/salida. Importación desde Excel.
 - **Disposición final** de remanentes (7.4.4): cierra la muestra. También se
   registra en muestras rechazadas (p. ej. devuelta al cliente).
 
-### Documentos del SGC (8.3)
-Clave `FX-<área><tipo>-<siglas>` (de la clave se derivan tipo y área), revisiones,
-envío a revisión, aprobación (la revisión vigente anterior pasa a obsoleta),
-lista maestra, obsolescencia, archivos con SHA-256.
+### Biblioteca de documentos (Calidad › Biblioteca)
+**Decisión confirmada por el laboratorio**: Calidad › Documentos funciona como
+biblioteca de consulta y reemplaza el flujo de control documental de la sección 6
+de la especificación (ver 8 quattuordecies). Subir documentos y versiones nuevas,
+buscar (también dentro del texto de los PDF), leer en el visor (PDF con pdf.js,
+Word, hojas, imágenes, texto y Markdown), archivar/restaurar con motivo. El flujo
+de la Fase 7 (revisión, aprobación, lista maestra, distribución, acuse de lectura,
+propuestas) se retiró: sus tablas quedan en solo lectura.
 
 ### Bitácora de auditoría (7.5.2, 7.11)
 Tabla `auditoria` de solo inserción (triggers abortan `UPDATE`/`DELETE` en SQLite
@@ -440,9 +444,9 @@ npm run test:reset-db # solo regenerar la base de prueba
   `analisisVigentes` sustituye análisis enmendados en la enmienda del informe.
 - Revisar un análisis exige `en_revision` (el analista lo envía).
 
-## 8 nonies. Fase 7 — Documentos SGC (rama `fase-7-documentos`)
+## 8 nonies. Fase 7 — Documentos SGC (rama `fase-7-documentos`; **retirado** con la Biblioteca)
 
-Módulo encendido (`FEATURES.documentos`); flujo borrador → revision_calidad → revision_tecnica → por_aprobar → aprobado → vigente → obsoleto en `src/lib/server/modules/documentos-sgc.ts` (registro, aprobar, lista maestra con `?formato=csv`, obsoletar por solicitud `obsoletar_documento`) y `documentos-flujo.ts` (revisiones, devolver, publicar con `distribucion_documento`, acuse de lectura, `propuestas_documento`, alcance "autorizados"); prueba en `tests/api-documentos.mjs`.
+Módulo encendido (`FEATURES.documentos`); flujo borrador → revision_calidad → revision_tecnica → por_aprobar → aprobado → vigente → obsoleto en `src/lib/server/modules/documentos-sgc.ts` (registro, aprobar, lista maestra con `?formato=csv`, obsoletar por solicitud `obsoletar_documento`) y `documentos-flujo.ts` (revisiones, devolver, publicar con `distribucion_documento`, acuse de lectura, `propuestas_documento`, alcance "autorizados"). **Retirado** con la Biblioteca (8 quattuordecies): de esos módulos solo queda la lectura de un documento anterior y su archivo; `tests/api-documentos.mjs` se eliminó.
 
 ## 8 decies. Fase 9 — cierre (rama `fase-9-cierre`)
 
@@ -471,6 +475,17 @@ Campana de notificaciones calculada al vuelo en `GET /api/notificaciones` (`src/
 - **Operación**: `npm run configurar`, `instancia-nueva -- --confirmar`, `instalar-servicio`/`quitar-servicio`, `actualizar`, `verificar-instalacion` (reporte en `<instancia>/verificaciones/`). HTTPS con `TLS_CERT`/`TLS_KEY` (`scripts/https-lanzador.mjs`); registros en `<instancia>/logs` (`scripts/lib/registro.mjs`). Guía del personal: `docs/INSTALACION.md`.
 - **Deuda**: historial con alcances (`acceso-registro.ts`; 404 si no visible, también CSV y solicitudes); CSV de la bitácora con aviso de truncado y por periodo; lint 0.
 - **Pruebas**: `tests/api-produccion.mjs` (en la lista de API), `tests/migraciones.mjs`, `tests/operacion.mjs`, `tests/concurrencia.mjs`, `tests/carga.mjs`, `tests/mysql.mjs`.
+
+## 8 quattuordecies. Biblioteca de documentos (rama `biblioteca`)
+
+- **Decisión confirmada por el laboratorio**: Calidad › Documentos funciona como biblioteca de consulta y reemplaza el flujo de control documental de la sección 6 de la especificación.
+- **Servidor**: `src/lib/server/modules/biblioteca.ts`, rutas `/api/biblioteca/**`; tablas `biblioteca_documentos`, `biblioteca_versiones` (`nombre_almacenado` relativo a `<instancia>/biblioteca`, `sha256`), `biblioteca_categorias`, `biblioteca_visibilidad_roles` (migración 13, que también copió los documentos con archivo de `documentos_sgc`). Archivos con la infraestructura de adjuntos de la Fase 10. Tamaño máximo `BIBLIOTECA_MAX_MB` (50 por omisión).
+- **Interfaz**: `/calidad/biblioteca` y el visor `/calidad/biblioteca/[id]` (`src/components/features/biblioteca/**`); pdf.js servido desde `public/vendor/pdfjs` (`npm run vendor:pdfjs`), `mammoth` (Word), `marked` + `dompurify` (Markdown). `/documentos` redirige a la Biblioteca.
+- **Permisos** (módulo `documentos`, sin cambiar la matriz): V ver/leer (`autorizados` = visibles para todos o para su rol); C subir documento o versión (`borrador` cuenta como subir); E datos del propio; G cualquiera y categorías; AN o G archivar/restaurar con motivo y reautenticación; R y A sin efecto. Ver `docs/CATALOGO_PERMISOS.md` 6 octies.
+- **Retirado**: regla de segregación 5 (`VERSION_SEGREGACION` `2026-10-03.1`), acción crítica `obsoletar_documento` (`VERSION_ACCIONES_CRITICAS` `2026-10-03.1`; las solicitudes viejas se ven como «Acción retirada», sin aprobar, y su solicitante puede cancelarlas), avisos de documentos en Inicio y campana, propuesta documental desde la NC (410; la bandera «requiere cambio documental» queda), escrituras, lista maestra, por-leer y resumen de `/api/documentos-sgc` (410 `codigo: "retirado"`, `src/lib/server/retirado.ts`). Siguen `GET /api/documentos-sgc/:id` y `/archivo`. `/api/documents` (reportes de mantenimiento) no cambia.
+- **Búsqueda global**: indexa la Biblioteca (`GET /api/biblioteca`, abre `/calidad/biblioteca/:id`); acciones «Biblioteca» y «Subir documento».
+- **Respaldos**: carpeta `biblioteca` en `CARPETAS_ARCHIVOS` (SHA-256 en el manifest) y verificación de `biblioteca_versiones` en el paso 7 de `restaurar-ficotox.mjs`.
+- **Pruebas**: `tests/api-biblioteca.mjs`; se quitaron los casos del flujo anterior de las demás suites.
 
 ## 9. Pendientes conocidos
 

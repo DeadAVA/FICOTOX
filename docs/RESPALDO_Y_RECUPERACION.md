@@ -13,7 +13,8 @@ Cada respaldo es una carpeta `backups/<AAAAMMDD-HHMMSS>/` (o `FICOTOX_BACKUP_DIR
 | `datos/ficotox.sqlite3` | La base completa. Se toma con la **API de respaldo en línea de SQLite**, no copiando el archivo en crudo. | La copia es consistente aunque el servidor esté encendido y escribiendo, también con WAL. |
 | `archivos/informes/` | PDF de los informes y evidencias de envío (`informes/envios/`). | Son registros del laboratorio. Su SHA-256 está en la base (`pdf_sha256`, `evidencia_sha256`). |
 | `archivos/evidencias/` | Evidencia instrumental de los análisis (Fase 10). | Respalda los resultados. Su SHA-256 está en `adjuntos.sha256`. |
-| `archivos/documentos_sgc/` | Archivos de los documentos del SGC. | Control documental (8.3). Su SHA-256 está en `archivo_sha256`. |
+| `archivos/documentos_sgc/` | Archivos de los documentos del SGC (flujo anterior, retirado; se conservan en solo lectura). | Control documental (8.3). Su SHA-256 está en `archivo_sha256`. |
+| `archivos/biblioteca/` | Versiones de los documentos de la Biblioteca (Calidad › Biblioteca). | Documentos del SGC (8.3). Su SHA-256 está en `biblioteca_versiones.sha256`. |
 | `archivos/maintenance_reports/` | Reportes de mantenimiento en PDF. | Historial de equipos. |
 | `manifest.json` | Fecha y hora, equipo (host), versión de la app (commit), versión de esquema (la real de la base respaldada, de `schema_migraciones`; `null` si es anterior a las migraciones) y la de la app (`esquema_app`), motor, conteo de filas por tabla, número de entradas de la bitácora con el id y el sello de la última, lista de archivos con tamaño y SHA-256, si incluye la llave con su **huella** (SHA-256 de la llave, nunca la llave) y el **sello del manifest** (HMAC-SHA256 con la llave de la bitácora). | Permite verificar el respaldo completo antes de confiar en él. |
 | `llave/llave-bitacora.txt` | La llave del sello de la bitácora: `SECRET_KEY`, o `instance/auditoria.key` si es la que se usa. | Sin ella no se puede verificar la bitácora restaurada. |
@@ -84,7 +85,7 @@ El **modo prueba** (por omisión) restaura en `instance-restaurada/<fecha>/` y *
    - **Alcance del sello:** protege de verdad los respaldos que **no** llevan la llave (copias externas). Si la llave viaja dentro del respaldo, quien pueda escribir ese respaldo puede resellarlo; por eso la llave se guarda **aparte** y, ante la duda, la prueba se repite con `--llave <la guardada aparte>` o en la instalación del laboratorio (donde el acta confirma que es la misma llave).
 5. Cadena de la bitácora íntegra con esa llave: sellos, huecos de id, filas faltantes al final y triggers. Usa la misma verificación que **Verificar integridad**.
 6. Conteos por tabla iguales al manifest, y el sello de la última entrada de la bitácora.
-7. Archivos contra la base: los PDF de informes, las evidencias de envío, los adjuntos y los documentos SGC tienen el SHA-256 registrado en la base. Reporta los faltantes y los alterados.
+7. Archivos contra la base: los PDF de informes, las evidencias de envío, los adjuntos, los documentos SGC anteriores, las versiones de la Biblioteca y los PDF de no conformidades tienen el SHA-256 registrado en la base. Reporta los faltantes y los alterados.
 8. Tiempo total.
 
 El resultado se guarda en `backups/pruebas-restauracion/<fecha>.md` (y `.json`). La salida del comando es distinta de 0 si algo falla.

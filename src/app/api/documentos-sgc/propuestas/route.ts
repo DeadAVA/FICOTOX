@@ -1,5 +1,5 @@
-import { apiRoute } from "@/lib/server/http";
-import { listarPropuestas, proponerDocumento } from "@/lib/server/modules/documentos-flujo";
+import { funcionalidadRetirada } from "@/lib/server/retirado";
 
-export const GET = apiRoute(listarPropuestas);
-export const POST = apiRoute(proponerDocumento);
+/* Flujo de control documental retirado por decision del laboratorio (ahora es la Biblioteca). */
+export const GET = funcionalidadRetirada;
+export const POST = funcionalidadRetirada;

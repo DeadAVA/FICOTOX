@@ -129,7 +129,7 @@ export function marcadoActivo(bytes: Uint8Array): boolean {
 export function problemaDeContenido(ext: string, bytes: Uint8Array): string | null {
   if (!bytes.length) return "El archivo está vacío";
   const peligro = contenidoPeligroso(bytes);
-  if (peligro) return `El contenido del archivo es ${peligro}; no se admite como evidencia`;
+  if (peligro) return `El contenido del archivo es ${peligro}; no se admite`;
   const zip = empiezaCon(bytes, [0x50, 0x4b, 0x03, 0x04]) || empiezaCon(bytes, [0x50, 0x4b, 0x05, 0x06]);
   const ok: Record<string, boolean> = {
     pdf: ascii(bytes, 5) === "%PDF-",
@@ -140,14 +140,19 @@ export function problemaDeContenido(ext: string, bytes: Uint8Array): string | nu
     tiff: empiezaCon(bytes, [0x49, 0x49, 0x2a, 0x00]) || empiezaCon(bytes, [0x4d, 0x4d, 0x00, 0x2a]),
     zip,
     xlsx: zip,
+    // Biblioteca: Office abierto (zip) e imagen WebP (RIFF....WEBP).
+    docx: zip,
+    pptx: zip,
+    webp: ascii(bytes, 4) === "RIFF" && ascii(bytes.slice(8, 12), 4) === "WEBP",
     xls: empiezaCon(bytes, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]),
     cdf: ascii(bytes, 3) === "CDF" || empiezaCon(bytes, [0x89, 0x48, 0x44, 0x46]),
     csv: !bytes.slice(0, 8192).includes(0),
     txt: !bytes.slice(0, 8192).includes(0),
+    md: !bytes.slice(0, 8192).includes(0),
   };
   if (!(ext in ok)) return "Formato no permitido";
-  // Texto (csv, txt): se revisa TODO el contenido, no solo el inicio, por si trae HTML, SVG o script en medio.
-  if ((ext === "csv" || ext === "txt") && marcadoActivo(bytes)) return "El archivo de texto contiene HTML, SVG o script; no se admite como evidencia";
+  // Texto (csv, txt, md): se revisa TODO el contenido, no solo el inicio, por si trae HTML, SVG o script en medio.
+  if ((ext === "csv" || ext === "txt" || ext === "md") && marcadoActivo(bytes)) return "El archivo de texto contiene HTML, SVG o script; no se admite";
   return ok[ext] ? null : `El contenido no corresponde a un archivo .${ext}`;
 }
 

@@ -1,6 +1,6 @@
 /*
  * Fase 9 (cierre), contra el servidor de prueba:
- * - el Estudiante recibe 403 al descargar el archivo de un documento no distribuido;
+ * - Documentos SGC retirado (la Biblioteca lo reemplaza): sus escrituras y listas responden 410;
  * - la campana muestra a Luis su muestra asignada y a Patricia un informe por autorizar;
  *   a Mariana no le muestra el informe;
  * - exportar la bitacora devuelve CSV con los filtros aplicados (y queda en la bitacora).
@@ -31,18 +31,21 @@ const usuarios = (await api("GET", "/admin/usuarios", undefined, QA)).data?.item
 const idDe = (email) => usuarios.find((u) => u.email === email)?.id;
 const sufijo = Date.now().toString(36).toUpperCase().slice(-5);
 
-/* ---------- Documento no distribuido: el Estudiante no descarga su archivo ---------- */
+/* ---------- Documentos SGC retirado: la Biblioteca lo reemplaza (escrituras y listas responden 410) ---------- */
 {
   const form = new FormData();
   form.set("clave", `FX-GCP-Z${sufijo}`);
-  form.set("titulo", "Documento no distribuido");
-  form.set("archivo", new Blob(["%PDF-1.4\n% no distribuido\n"], { type: "application/pdf" }), "no-distribuido.pdf");
-  const doc = await api("POST", "/documentos-sgc", form, QA);
-  const qa = await api("GET", `/documentos-sgc/${doc.data?.id}/archivo`, undefined, QA);
-  const est = await api("GET", `/documentos-sgc/${doc.data?.id}/archivo`, undefined, tD);
-  check("el Estudiante recibe 403 al descargar un documento no distribuido (QA si lo descarga)", doc.status === 201 && qa.status === 200 && est.status === 403, `${doc.status} ${qa.status} ${est.status}`);
+  form.set("titulo", "Documento del flujo retirado");
+  form.set("archivo", new Blob(["%PDF-1.4\n% retirado\n"], { type: "application/pdf" }), "retirado.pdf");
+  const crear = await api("POST", "/documentos-sgc", form, QA);
+  const lista = await api("GET", "/documentos-sgc", undefined, QA);
   const propuestas = await api("GET", "/documentos-sgc/propuestas", undefined, tD);
-  check("el Estudiante no ve la lista de propuestas (403)", propuestas.status === 403, `${propuestas.status}`);
+  const maestra = await api("GET", "/documentos-sgc/lista-maestra", undefined, QA);
+  check(
+    "Documentos SGC: crear, listar, propuestas y lista maestra responden 410 «retirado»",
+    [crear, lista, propuestas, maestra].every((r) => r.status === 410 && r.data?.codigo === "retirado"),
+    [crear, lista, propuestas, maestra].map((r) => r.status).join(" "),
+  );
 }
 
 /* ---------- Campana de notificaciones ---------- */

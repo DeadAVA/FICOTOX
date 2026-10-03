@@ -1,4 +1,4 @@
-/* Ronda SGC (navegador): recepcion con aceptacion, anular/restaurar, analisis revisar/aprobar, informe autorizar+PDF+entrega, documentos SGC, auditoria, baja de inventario. */
+/* Ronda SGC (navegador): recepcion con aceptacion, anular/restaurar, analisis revisar/aprobar, informe autorizar+PDF+entrega, Biblioteca (reemplaza Documentos SGC), auditoria, baja de inventario. */
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -345,11 +345,12 @@ try {
   await page.getByText("Enviado").first().waitFor();
   check("envío registrado con evidencia: el informe queda enviado", (await page.locator("[data-envio]").count()) === 1);
 
-  /* ---------- Documentos SGC (Fase 7: encendido, aparece en Calidad) ---------- */
+  /* ---------- Biblioteca (reemplaza Documentos SGC; el detalle esta en ui/biblioteca.mjs) ---------- */
   await page.goto(`${BASE}/documentos`);
-  await page.getByRole("button", { name: /Proponer documento/ }).first().waitFor();
-  check("documentos encendido: la página abre con 'Proponer documento'", true);
-  check("documentos encendido: aparece en el menú Calidad", (await page.locator("nav a", { hasText: /^Documentos$/ }).count()) > 0);
+  await page.waitForURL((url) => url.pathname.startsWith("/calidad/biblioteca"));
+  await page.getByTestId("biblioteca-subir").waitFor();
+  check("/documentos lleva a Calidad › Biblioteca, con «Subir documento»", true);
+  check("Biblioteca aparece en el menú Calidad (y ya no «Documentos»)", (await page.locator("nav a", { hasText: /^Biblioteca$/ }).count()) > 0 && (await page.locator("nav a", { hasText: /^Documentos$/ }).count()) === 0);
 
   /* ---------- Auditoria (lista resumida + detalle; la integridad se verifica sola) ---------- */
   await page.goto(`${BASE}/auditoria`);

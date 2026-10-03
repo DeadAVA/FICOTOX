@@ -152,6 +152,8 @@ export function explicarError(err: unknown, fallback = "No se pudo completar la 
   if (rol && ["firma_invalida", "firma_sin_confirmar", "firma_bloqueada", "no_autorizado"].includes(err.codigo)) return { que, hacer, clave: `firma:${rol}`, mensajeCampo: que.replace(/^[^:]+:\s*/, "") };
   // Contraseña rechazada (confirmar identidad o cambio de contraseña): al campo de contraseña.
   if (err.status === 401 && (["reauth_invalido", "reauth_fallida", "password_incorrecta"].includes(err.codigo) || /contraseña/i.test(err.message))) return { que, hacer: HACER.reauth_invalido, clave: "password", mensajeCampo: que };
+  // El servidor indica el campo (p. ej. biblioteca: titulo, categoria, roles, archivo, motivo).
+  if (typeof err.data?.campo === "string" && err.data.campo) return { que, hacer, clave: err.data.campo, mensajeCampo: que };
   if (err.status === 400 || err.status === 422) {
     const encontrado = CAMPOS_POR_MENSAJE.find(([re]) => re.test(err.message));
     if (encontrado) return { que, hacer, clave: encontrado[1], mensajeCampo: que };

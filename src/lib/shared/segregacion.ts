@@ -11,7 +11,7 @@
  * un registro concreto; queda registrada en el registro y en la bitacora.
  */
 
-export const VERSION_SEGREGACION = "2026-09-29.1";
+export const VERSION_SEGREGACION = "2026-10-03.1";
 
 export type AccionSegregada = "revisar" | "aprobar" | "autorizar" | "supervisar" | "aprobar_solicitud" | "evaluar" | "verificar" | "cerrar" | "reanudar";
 
@@ -21,6 +21,8 @@ export interface Regla {
   titulo: string;
   /* Que se evalua, en palabras, para la documentacion y la interfaz. */
   descripcion: string;
+  /* Regla retirada: se conserva su numero (las bitacoras viejas la citan) pero ya no se evalua. */
+  retirada?: string;
 }
 
 export const REGLAS_SEGREGACION: Regla[] = [
@@ -28,7 +30,8 @@ export const REGLAS_SEGREGACION: Regla[] = [
   { numero: 2, clave: "informe", titulo: "Informe: quien lo elaboro, o elaboro un analisis incluido, no lo revisa ni lo autoriza", descripcion: "El Analista no valida ni libera su propio resultado." },
   { numero: 3, clave: "supervision_captura", titulo: "Procesamiento y extraccion: quien firma como supervisor no proceso, extrajo ni hizo la limpieza", descripcion: "Se comparan los nombres firmados en el formato." },
   { numero: 4, clave: "visto_bueno", titulo: "Supervision: el supervisor no da visto bueno a lo que el mismo capturo", descripcion: "Aplica al alcance supervisado y a las cuentas temporales." },
-  { numero: 5, clave: "documentos", titulo: "Documentos SGC: quien elaboro no revisa ni aprueba; revisor y aprobador no son la misma persona", descripcion: "Revisor de calidad, revisor tecnico y aprobador no pueden ser todos la misma persona." },
+  // Regla 5 retirada (2026-10-03) por decision del laboratorio: Calidad › Documentos es una biblioteca de consulta, sin revision ni aprobacion.
+  { numero: 5, clave: "documentos", titulo: "Documentos SGC: quien elaboro no revisa ni aprueba (retirada)", descripcion: "Ya no se evalua: la Biblioteca no tiene revision ni aprobacion de documentos.", retirada: "2026-10-03" },
   { numero: 6, clave: "segundo_usuario", titulo: "Segundo usuario: quien solicita una accion critica no la aprueba", descripcion: "La aprobacion de una solicitud la da otra persona con el permiso que exige la accion." },
   // Fase 11: incidencias, no conformidades y acciones correctivas (ISO/IEC 17025 7.10 y 8.7).
   { numero: 7, clave: "evaluar_incidencia", titulo: "Incidencias: quien reporto una incidencia no la evalua", descripcion: "Cerrarla sin NC o escalarla la decide otra persona con calidad:R." },
@@ -105,13 +108,7 @@ export function evaluarVistoBueno(usuarioId: number, capturadoPor: number | null
   return { regla: 4, clave: "visto_bueno", mensaje: "Capturaste o editaste este registro; el visto bueno lo debe dar otra persona" };
 }
 
-/* Regla 5: documentos SGC. */
-export function evaluarDocumento(usuarioId: number, elaboradores: Iterable<number>, revisorId: number | null | undefined, accion: "revisar" | "aprobar"): Violacion | null {
-  const yo = Number(usuarioId);
-  if ([...elaboradores].some((id) => Number(id) === yo)) return { regla: 5, clave: "documentos", mensaje: `Elaboraste este documento; lo debe ${lo(accion)} otra persona` };
-  if (accion === "aprobar" && revisorId !== null && revisorId !== undefined && Number(revisorId) === yo) return { regla: 5, clave: "documentos", mensaje: "Revisaste este documento; lo debe aprobar otra persona" };
-  return null;
-}
+/* Regla 5 (documentos SGC): retirada; ver REGLAS_SEGREGACION. */
 
 /* Regla 6: segundo usuario. */
 export function evaluarSegundoUsuario(usuarioId: number, solicitadoPor: number | null | undefined): Violacion | null {

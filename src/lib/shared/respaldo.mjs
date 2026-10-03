@@ -11,7 +11,8 @@
  *   datos/ficotox.sqlite3   snapshot consistente con la API de respaldo en linea
  *                           de SQLite (funciona con el servidor encendido y con WAL)
  *   archivos/<carpeta>/...  informes (PDF y evidencias de envio), evidencias,
- *                           documentos_sgc y maintenance_reports
+ *                           documentos_sgc (flujo anterior, solo lectura),
+ *                           biblioteca, maintenance_reports y calidad
  *   manifest.json           fecha, host, version (commit), motor, conteos por
  *                           tabla, bitacora (entradas, ultimo id y sello),
  *                           archivos con tamano y SHA-256, huella de la llave
@@ -58,6 +59,8 @@ export const TABLAS_PRINCIPALES = [
   "informes",
   "envios_informe",
   "documentos_sgc",
+  "biblioteca_documentos",
+  "biblioteca_versiones",
   "reactivos",
   "consumibles",
   "equipos",
@@ -67,8 +70,8 @@ export const TABLAS_PRINCIPALES = [
 ];
 
 /* Carpetas de la instancia con archivos que se respaldan. */
-// Fase 11: "calidad" (PDF "Registro de no conformidad").
-export const CARPETAS_ARCHIVOS = ["informes", "evidencias", "documentos_sgc", "maintenance_reports", "calidad"];
+// Fase 11: "calidad" (PDF "Registro de no conformidad"). Biblioteca: "biblioteca" (versiones de los documentos).
+export const CARPETAS_ARCHIVOS = ["informes", "evidencias", "documentos_sgc", "biblioteca", "maintenance_reports", "calidad"];
 
 export const ARCHIVO_LLAVE = path.join(/*turbopackIgnore: true*/ "llave", "llave-bitacora.txt");
 export const CARPETA_ACTAS = "pruebas-restauracion";

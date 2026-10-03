@@ -6,9 +6,7 @@ Ya resuelto, así que no se repite abajo:
 - La A de informes de la Coord. Técnica exige la autorización FX-THF-AP (Fase 4).
 - En usuarios, `usuarios:G` ya no implica A (Fase 3.1).
 - La regla 3 compara cuentas (Fase 5).
-- Documentos SGC está encendido, con revisión de calidad y revisión técnica (Fase 7).
 - En el .env local: ALLOWED_EMAIL_DOMAINS definido, JWT_EXPIRES_HOURS=8 y CORS vacío (Fase 9).
-- En la Fase 9, el alcance "autorizados" ya se aplica también a la descarga del archivo, al resumen y a las propuestas de documentos.
 - Fase 10: adjuntar evidencia instrumental a los análisis (sección 7, "Resultados") y la prueba documentada de restauración de respaldos con acta (sección 9 y PVVC).
 - Fase 11: incidencias, no conformidades y acciones correctivas (7.10 y 8.7), con el alcance `incidencias` aplicado, las reglas de segregación 7–10, suspensiones de método o equipo y retención de informes; la tabla `adjuntos` ya sirve también a incidencias y acciones correctivas.
 - Fase 12: migraciones versionadas (`schema_migraciones`, checksum, línea base, bloqueo, respaldo previo) en lugar de `ensure*Schema()`; el servidor no arranca con deriva, checksum alterado o base más nueva.
@@ -19,6 +17,10 @@ Ya resuelto, así que no se repite abajo:
 - Fase 12: la evidencia grande se recibe antes de abrir la sesión de base (ya no retiene a los demás mientras llega).
 - Fase 12: instalación y operación en producción: configurar, instancia-nueva, servicio con arranque automático y firewall, HTTPS opcional, registros con rotación, actualizar y verificar-instalacion (`docs/INSTALACION.md`).
 - Fase 11: el paquete standalone ya no lleva `instance/`, respaldos, pruebas, `.env` ni llaves (`scripts/limpiar-standalone.mjs` y `tests/standalone.mjs`).
+
+## Decisiones confirmadas por el laboratorio
+
+- **Decisión confirmada por el laboratorio: Calidad › Documentos funciona como biblioteca de consulta y reemplaza el flujo de control documental de la sección 6 de la especificación.** Con ella se retiraron (sin borrar datos) la revisión de calidad y técnica, la aprobación y publicación, la lista maestra, la distribución con acuse de lectura («Leí y comprendí»), las propuestas de documento (también desde una NC), la obsolescencia por solicitud (`obsoletar_documento`), la regla de segregación 5 y los avisos de documentos del Inicio y la campana; por eso ya no figuran aquí sus pendientes de la Fase 7. Ver docs/CATALOGO_PERMISOS.md §6 octies.
 
 ## Validar con Mejora Continua
 
@@ -37,7 +39,6 @@ Ya resuelto, así que no se repite abajo:
 - Revisar un análisis "registrado" ya no se da por enviado: el analista debe enviarlo (Fase 6). Confirmar que así trabaja el laboratorio (Fase 5/6, resúmenes).
 - "Autorizar = firmar" y "liberar = PDF final": puede liberar la misma persona que autorizó (Fase 6, resumen).
 - Registrar un envío de informe (manual o SMTP) no pide reautenticación; la antigua "entregar" sí la pedía (Fase 6, resumen).
-- Al aceptar una propuesta, el borrador queda a nombre de quien elabora y la bitácora registra "aceptar" a nombre de Mejora Continua (Fase 7, resumen).
 - Antes de operar con la base real, correr el seed o registrar las autorizaciones FX-THF-AP del personal: con AUTORIZACIONES_OBLIGATORIAS=true nadie guarda formatos sin ellas (Fase 4, resumen).
 
 - Fase 10 · respaldos: frecuencia (diaria local, semanal externa), retención (30 locales), ubicación de las copias externas y de la llave, RTO (1 h) y RPO (24 h) son propuestas en `docs/RESPALDO_Y_RECUPERACION.md`; la tarea programada por omisión sigue siendo cada 15 días (`install-ficotox-backup-tasks.cmd daily` para la diaria).
@@ -72,9 +73,6 @@ Ya resuelto, así que no se repite abajo:
 - Orden de validación distinto: en extracción la autorización va antes de exigirUsoDeRecursos y en análisis después (sin efecto funcional) (Fase 4, resumen).
 - La entrada "enviar" de la bitácora no guarda el cambio de estado liberado → enviado como antes/después; solo el detalle del envío (Fase 6, resumen).
 - Un `enviado_en` sin zona horaria recibido por la API se interpreta en la hora local del servidor (la interfaz manda la zona) (Fase 6, resumen).
-- Documentos: "Devolver con observaciones" no revisa la segregación (Fase 7, resumen).
-- Documentos: al aceptar una propuesta de "cambio" no se confirma que el original siga vigente (Fase 7, resumen).
-- Documentos: queda en `src/app/(app)/documentos/page.tsx` un mapa local con `en_revision`, sin efecto (Fase 7, resumen).
 
 - La columna "Módulo" del CSV de la bitácora muestra la clave interna (ensayos, equipos) en lugar de una etiqueta. (Fase 9, revisión)
 - Notificaciones: cuentas y roles avisan con 7 días de anticipación y las autorizaciones con 30; decidir si se unifican o documentarlo. (Fase 9, revisión)
@@ -92,4 +90,4 @@ Ya resuelto, así que no se repite abajo:
 - Auditorías internas: el alcance `auditoria` del Auditor Interno (C E en calidad) está diferido (CATALOGO_PERMISOS §3).
 - Compras: el módulo `compras` y sus permisos (G del Administrador/a Auxiliar; V y A de otros roles) existen en la matriz sin pantallas ni flujo (CATALOGO_PERMISOS §4).
 - Proyectos: el alcance `proyecto` de la Coord. de Investigación y Desarrollo (muestras, ensayos, informes) está diferido y hoy se comporta como `total` (CATALOGO_PERMISOS §3).
-- Otros alcances diferidos que hoy se comportan como `total`: `tecnico`, `investigacion`, `administrativo` (documentos e inventario) y `limitado` (usuarios del Administrador/a Auxiliar, que en usuarios se comporta como "propio") (CATALOGO_PERMISOS §3).
+- Otros alcances diferidos que hoy se comportan como `total`: `tecnico`, `investigacion`, `administrativo` (inventario; en documentos ya no aplican: la Biblioteca los trata como `total` por diseño) y `limitado` (usuarios del Administrador/a Auxiliar, que en usuarios se comporta como "propio") (CATALOGO_PERMISOS §3).

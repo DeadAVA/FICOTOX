@@ -46,6 +46,7 @@ try {
       codigo = 2;
     } else {
       const r = await aplicarMigraciones(db, {
+        instanceDir: entorno.instanceDir,
         Sqlite,
         clave: claveBitacora(entorno, true),
         appCommit: versionApp(root).commit,

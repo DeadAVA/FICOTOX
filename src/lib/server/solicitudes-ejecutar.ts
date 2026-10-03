@@ -13,7 +13,6 @@ import { ejecutarAmpliacionVigencia, ejecutarAsignacionRol, ejecutarReactivacion
 import { ejecutarAnulacionInforme, informeFolio, violacionParaExcepcionInforme } from "./modules/informes";
 import { violacionParaExcepcionAnalisis } from "./modules/samples/analisis";
 import { ejecutarCambioFolio, ejecutarDecisionRecepcion, ejecutarReapertura } from "./modules/samples/recepcion";
-import { ejecutarObsoletarDocumento, violacionParaExcepcionDocumento } from "./modules/documentos-sgc";
 import { ejecutarAnulacionCalidad, violacionParaExcepcionNc, violacionParaExcepcionSuspension } from "./modules/calidad/nc";
 import { violacionParaExcepcionIncidencia } from "./modules/calidad/incidencias";
 
@@ -64,7 +63,6 @@ export const EJECUTORES: Ejecutores = {
   decision_recepcion: ejecutarDecisionRecepcion,
   cambiar_folio: ejecutarCambioFolio,
   reabrir_recepcion: ejecutarReapertura,
-  obsoletar_documento: ejecutarObsoletarDocumento,
   // Fase 11: anular una incidencia o una NC.
   anular_calidad: (ctx) => ejecutarAnulacionCalidad({ s: ctx.s, user: ctx.user, actuo: ctx.actuo, solicitud: ctx.solicitud, motivo: ctx.motivo }),
 };
@@ -92,7 +90,7 @@ export async function solicitarExcepcion({ request, s }: RouteContext): Promise<
   const payload = await readJson(request);
   if (String(payload.tipo || "excepcion_segregacion") !== "excepcion_segregacion") throw new HttpError(400, { message: "Solo se solicita de forma explícita la excepción de segregación; las demás acciones críticas crean su solicitud al pedirse" });
   const entidad = String(payload.entidad || "");
-  if (!TABLAS_CON_EXCEPCION.includes(entidad as TablaConExcepcion)) throw new HttpError(400, { message: "La excepción de segregación aplica a análisis, informes, documentos, incidencias, no conformidades y suspensiones" });
+  if (!TABLAS_CON_EXCEPCION.includes(entidad as TablaConExcepcion)) throw new HttpError(400, { message: "La excepción de segregación aplica a análisis, informes, incidencias, no conformidades y suspensiones" });
   const accion = String(payload.accion || "");
   if (!ACCIONES_EXCEPCION.has(accion)) throw new HttpError(400, { message: "Indica la acción: revisar, aprobar, autorizar, evaluar, verificar, cerrar o reanudar" });
   const id = Number.parseInt(String(payload.entidad_id || ""), 10);
@@ -102,11 +100,11 @@ export async function solicitarExcepcion({ request, s }: RouteContext): Promise<
    * registro) y a quien la segregacion se la impide de verdad.
    */
   const calidad = EVALUADORES_CALIDAD[entidad];
-  const evaluar = entidad === "muestras_analisis" ? violacionParaExcepcionAnalisis : entidad === "informes" ? violacionParaExcepcionInforme : violacionParaExcepcionDocumento;
+  const evaluar = entidad === "muestras_analisis" ? violacionParaExcepcionAnalisis : violacionParaExcepcionInforme;
   const { violacion, row, referencia: referenciaCalidad } = calidad ? await calidad(s, user, id, accion) : { ...(await evaluar(s, user, id, accion)), referencia: null as string | null };
   if (!violacion) throw new HttpError(409, { message: `La separación de funciones no te impide ${accion} este registro; no necesitas una excepción`, codigo: "excepcion_innecesaria" });
   if (excepcionPara(excepcionesDe(row), userIdFromClaims(user) as number, accion)) throw new HttpError(409, { message: `Ya tienes una excepción aprobada para ${accion} este registro`, codigo: "excepcion_innecesaria" });
-  const referencia = referenciaCalidad || (entidad === "informes" ? informeFolio(row) : TABLAS_MUESTRAS.has(entidad) ? folioLabel(entidad as SampleTable, row) : `${row.clave || "Documento"} rev. ${row.revision || ""}`.trim());
+  const referencia = referenciaCalidad || (entidad === "informes" ? informeFolio(row) : folioLabel(entidad as SampleTable, row));
   await exigirReauth(s, request, user, "solicitudes:excepcion");
   const solicitud = await crearSolicitud(s, user, { tipo: "excepcion_segregacion", entidad, entidadId: id, referencia, accion: "excepcion", datos: { accion }, motivo: String(payload.motivo || "") });
   await s.commit();

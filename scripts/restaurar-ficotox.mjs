@@ -22,7 +22,8 @@
  *   4. llave: su huella coincide con la del manifest
  *   5. cadena de la bitacora integra con esa llave (alteraciones, huecos, triggers)
  *   6. conteos por tabla iguales al manifest
- *   7. archivos contra la base: PDF de informes, evidencias de envio, adjuntos y documentos SGC
+ *   7. archivos contra la base: PDF de informes, evidencias de envio, adjuntos,
+ *      documentos SGC (flujo anterior), versiones de la biblioteca y PDF de NC
  *   8. tiempo total
  * Resultado: backups/pruebas-restauracion/<fecha>.md y .json. Codigo de salida
  * distinto de 0 si algo falla (1 verificacion fallida; 2 uso incorrecto o modo real rechazado).
@@ -279,6 +280,8 @@ if (restauradaDb) {
     { etiqueta: "evidencias de envío", tabla: "envios_informe", archivo: "evidencia_archivo", sha: "evidencia_sha256", carpeta: path.join("informes", "envios") },
     { etiqueta: "adjuntos (evidencia instrumental)", tabla: "adjuntos", archivo: "nombre_almacenado", sha: "sha256", carpeta: "evidencias" },
     { etiqueta: "documentos SGC", tabla: "documentos_sgc", archivo: "archivo_nombre", sha: "archivo_sha256", carpeta: "documentos_sgc" },
+    // Biblioteca: nombre_almacenado es relativo a <instancia>/biblioteca ("<documento>/<uuid>.<ext>").
+    { etiqueta: "versiones de la biblioteca", tabla: "biblioteca_versiones", archivo: "nombre_almacenado", sha: "sha256", carpeta: "biblioteca" },
     { etiqueta: "PDF de no conformidades", tabla: "no_conformidades", archivo: "archivo_pdf", sha: "pdf_sha256", carpeta: path.join("calidad", "nc") },
   ];
   const resumen = [];

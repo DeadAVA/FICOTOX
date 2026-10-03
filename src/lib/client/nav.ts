@@ -64,12 +64,13 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/auditoria",
     label: "Calidad",
     modules: (["documentos", "calidad"] as Modulo[]).filter((m) => !HIDDEN_MODULES.has(m)),
-    description: HIDDEN_MODULES.has("documentos") ? "Incidencias, no conformidades y bitácora de auditoría" : "Incidencias y no conformidades, documentos controlados y bitácora de auditoría",
+    description: HIDDEN_MODULES.has("documentos") ? "Incidencias, no conformidades y bitácora de auditoría" : "Incidencias y no conformidades, biblioteca de documentos y bitácora de auditoría",
     icon: "seal",
     children: ([
       // Fase 11: incidencias, NC y acciones (con el alcance "incidencias", solo lo propio). El admin tecnico (V bitacora) no las ve.
       { href: "/calidad/incidencias", label: "Incidencias y NC", visible: (p) => !!p.calidad?.V && p.calidad.V !== "bitacora" },
-      { href: "/documentos", label: "Documentos", module: "documentos" },
+      // Biblioteca de documentos de consulta (reemplaza el flujo de control documental de Documentos SGC).
+      { href: "/calidad/biblioteca", label: "Biblioteca", module: "documentos" },
       // Con el alcance "incidencias" no se ve la bitacora.
       { href: "/auditoria", label: "Auditoría", module: "calidad", hideForScopes: ["incidencias"] },
     ] as NavChild[]).filter((child) => !HIDDEN_MODULES.has(String(child.module))),

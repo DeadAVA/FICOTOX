@@ -55,6 +55,8 @@ const ENTITY_NOUN: Record<string, { art: string; noun: string; plural: string }>
   muestras_analisis: { art: "el", noun: "análisis", plural: "análisis" },
   informes: { art: "el", noun: "informe", plural: "informes" },
   documentos_sgc: { art: "el", noun: "documento", plural: "documentos" },
+  biblioteca_documentos: { art: "el", noun: "documento", plural: "documentos" },
+  biblioteca_categorias: { art: "la", noun: "categoría", plural: "categorías" },
   reactivos: { art: "el", noun: "reactivo", plural: "reactivos" },
   consumibles: { art: "el", noun: "consumible", plural: "consumibles" },
   equipos: { art: "el", noun: "equipo", plural: "equipos" },
@@ -687,7 +689,9 @@ const ENTITY_ROUTE: Partial<Record<string, (id: string, referencia: string) => s
   muestras_extraccion: (id) => `/muestras/extraccion/${id}`,
   muestras_analisis: (id) => `/muestras/analisis/${id}`,
   informes: (id) => `/informes/${id}`,
-  documentos_sgc: (_id, ref) => `/documentos?buscar=${encodeURIComponent(ref)}`,
+  // Documentos del flujo anterior (retirado): su copia vive en la Biblioteca.
+  documentos_sgc: () => "/calidad/biblioteca",
+  biblioteca_documentos: (id) => `/calidad/biblioteca/${id}`,
   reactivos: (_id, ref) => `/inventario/reactivos?buscar=${encodeURIComponent(ref)}`,
   consumibles: (_id, ref) => `/inventario/consumibles?buscar=${encodeURIComponent(ref)}`,
   equipos: (_id, ref) => `/inventario/equipos?buscar=${encodeURIComponent(ref)}`,
@@ -932,8 +936,30 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
     case "requiere_enmienda":
       action = `marcó ${obj} como "requiere enmienda"`;
       break;
+    case "subir":
+      action = `subió a la biblioteca ${obj}`;
+      if (detalle.nombre) facts.push(`Archivo: ${String(detalle.nombre)}${detalle.tamano_bytes ? ` · ${fmtBytes(Number(detalle.tamano_bytes))}` : ""}`);
+      if (detalle.sha256) facts.push(`SHA-256 ${huellaCorta(detalle.sha256)}`);
+      if (detalle.visibilidad === "roles") facts.push("Visible solo para algunos roles");
+      break;
+    case "subir_version":
+      action = `subió la versión ${String(detalle.version || "")} ${de(obj)}`.replace(/\s+/g, " ");
+      if (detalle.nombre) facts.push(`Archivo: ${String(detalle.nombre)}${detalle.tamano_bytes ? ` · ${fmtBytes(Number(detalle.tamano_bytes))}` : ""}`);
+      if (detalle.sha256) facts.push(`SHA-256 ${huellaCorta(detalle.sha256)}`);
+      if (detalle.nota_version) facts.push(`Nota: ${String(detalle.nota_version)}`);
+      break;
+    case "archivar":
+      action = `archivó ${obj}`;
+      break;
+    case "categoria":
+      action = entry.antes ? `modificó la categoría "${String(referencia || "")}" de la biblioteca` : `creó la categoría "${String(referencia || "")}" de la biblioteca`;
+      break;
     case "alerta_integridad":
-      if (detalle.adjunto_id) {
+      if (entidad === "biblioteca_documentos") {
+        action = detalle.integridad === "faltante" ? `detectó que falta el archivo de la versión ${String(detalle.version || "")} ${de(obj)} (alerta de integridad)` : `detectó una alerta de integridad en la versión ${String(detalle.version || "")} ${de(obj)}: el archivo no coincide con su huella SHA-256`;
+        if (detalle.nombre) facts.push(`Archivo: ${String(detalle.nombre)}`);
+        if (detalle.esperado) facts.push(`Huella esperada ${huellaCorta(detalle.esperado)}${detalle.obtenido ? ` · obtenida ${huellaCorta(detalle.obtenido)}` : ""}`);
+      } else if (detalle.adjunto_id) {
         const que = `${TIPO_EVIDENCIA_ART[String(detalle.tipo_evidencia)] || "la evidencia"} "${String(detalle.descripcion || detalle.nombre || "")}"`;
         action = detalle.integridad === "faltante" ? `detectó que falta el archivo de ${que} ${de(obj)} (alerta de integridad)` : `detectó una alerta de integridad en ${que} ${de(obj)}: el archivo no coincide con su huella SHA-256`;
         facts.push(`Archivo: ${String(detalle.nombre || "")}`);
@@ -990,7 +1016,8 @@ export function humanizeAuditEntry(entry: ApiRecord): HumanEntry {
       action = `eliminó ${obj}`;
       break;
     case "descargar":
-      if (detalle.adjunto_id) {
+      if (entidad === "biblioteca_documentos") action = `descargó ${obj}${detalle.version ? ` (versión ${String(detalle.version)})` : ""}`;
+      else if (detalle.adjunto_id) {
         const que = `${TIPO_EVIDENCIA_ART[String(detalle.tipo_evidencia)] || "la evidencia"} "${String(detalle.nombre || "")}"`;
         // "de el cromatograma" -> "del cromatograma".
         action = detalle.vista_previa ? `abrió la vista previa ${de(que)} ${de(obj)}` : `descargó ${que} ${de(obj)}`;

@@ -1,4 +1,4 @@
-import { apiRoute } from "@/lib/server/http";
-import { obsoletarDocumento } from "@/lib/server/modules/documentos-sgc";
+import { funcionalidadRetirada } from "@/lib/server/retirado";
 
-export const POST = apiRoute(obsoletarDocumento);
+/* Flujo de control documental retirado por decision del laboratorio (ahora es la Biblioteca). */
+export const POST = funcionalidadRetirada;

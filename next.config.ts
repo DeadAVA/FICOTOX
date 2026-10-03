@@ -8,10 +8,12 @@ import type { NextConfig } from "next";
  * por encima de 25 exige volver a correr `npm run build`.
  */
 const evidenciaMaxMb = Math.max(25, Number.parseInt(process.env.EVIDENCIA_MAX_MB || "", 10) || 25);
+/* Biblioteca de documentos: BIBLIOTECA_MAX_MB (50 por omision); el proxy admite el mayor de los dos limites. */
+const bibliotecaMaxMb = Math.max(50, Number.parseInt(process.env.BIBLIOTECA_MAX_MB || "", 10) || 50);
 
 const nextConfig: NextConfig = {
   experimental: {
-    proxyClientMaxBodySize: (evidenciaMaxMb + 2) * 1024 * 1024,
+    proxyClientMaxBodySize: (Math.max(evidenciaMaxMb, bibliotecaMaxMb) + 2) * 1024 * 1024,
   },
   // Salida autocontenida (.next/standalone) para desplegar solo con Node.js.
   output: "standalone",

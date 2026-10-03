@@ -241,8 +241,9 @@ if (!TRAS_REINICIO) {
     // Con alcance "propio" la lista se permite pero solo trae la propia cuenta (se prueba aparte).
     { modulo: "usuarios", accion: "V", ctx: { propio: true }, m: "GET", p: () => "/admin/usuarios" },
     { modulo: "usuarios", accion: "G", m: "POST", p: () => "/admin/roles", b: () => ({ nombre: `Rol sonda ${unico()}`, motivo: "Prueba de permisos", permisos: [] }) },
-    { modulo: "documentos", accion: "V", m: "GET", p: () => "/documentos-sgc" },
-    { modulo: "documentos", accion: "A", m: "POST", p: () => "/documentos-sgc/999999/aprobar", b: () => ({}) },
+    // Biblioteca (reemplaza el flujo de Documentos SGC): V ver; G administrar categorias (R y A ya no tienen efecto).
+    { modulo: "documentos", accion: "V", m: "GET", p: () => "/biblioteca" },
+    { modulo: "documentos", accion: "G", m: "PUT", p: () => "/biblioteca/categorias/999999", b: () => ({ nombre: "Sonda" }) },
     { modulo: "muestras", accion: "V", m: "GET", p: () => "/samples/reception?search=" },
     { modulo: "muestras", accion: "C", ctx: { objeto: "recepcion", borrador: true }, m: "POST", p: () => "/samples/reception", b: () => recepcionBase(`SONDA-${unico()}`) },
     { modulo: "muestras", accion: "E", ctx: { objeto: "recepcion", borrador: true }, m: "PUT", p: () => "/samples/reception/999999", b: () => ({ ...recepcionBase("X"), folio_num: 999999 }) },
@@ -416,12 +417,12 @@ if (!TRAS_REINICIO) {
       db.prepare("UPDATE usuario_roles SET vigente_desde = '2020-01-01', vigente_hasta = '2020-12-31' WHERE id = ?").run(vencido.data?.id);
       db.close();
     }
-    // El Responsable General daria muestras:AN y Mejora Continua documentos:A; ninguno de los otros dos roles los tiene.
+    // El Responsable General daria muestras:AN y Mejora Continua documentos:G (administrar la biblioteca); ninguno de los otros dos roles los tiene.
     const anular = await api("POST", "/samples/reception/999999/anular", { motivo: "Sonda de vigencia" }, multi.token);
     const futuro = await asignar(multi.id, "Coordinador/a de Mejora Continua", { vigente_desde: "2099-01-01" });
-    const aprobarDoc = await api("POST", "/documentos-sgc/999999/aprobar", {}, multi.token);
+    const aprobarDoc = await api("PUT", "/biblioteca/categorias/999999", { nombre: "Sonda" }, multi.token);
     const me2 = (await api("GET", "/auth/me", undefined, multi.token)).data;
-    check("un rol vencido o que aun no empieza no cuenta", vencido.status === 201 && futuro.status === 201 && anular.status === 403 && aprobarDoc.status === 403 && (me2?.roles || []).length === 2 && !me2?.permissions?.muestras?.AN && !me2?.permissions?.documentos?.A, `vencido ${vencido.status} futuro ${futuro.status} anular ${anular.status} aprobar ${aprobarDoc.status} roles=${(me2?.roles || []).length}`);
+    check("un rol vencido o que aun no empieza no cuenta", vencido.status === 201 && futuro.status === 201 && anular.status === 403 && aprobarDoc.status === 403 && (me2?.roles || []).length === 2 && !me2?.permissions?.muestras?.AN && !me2?.permissions?.documentos?.G, `vencido ${vencido.status} futuro ${futuro.status} anular ${anular.status} aprobar ${aprobarDoc.status} roles=${(me2?.roles || []).length}`);
 
     const asig = await asignacionDe(multi.id, "Coordinador/a de Investigación y Desarrollo");
     const sinMotivo = await api("POST", `/admin/usuarios/${multi.id}/roles/${asig?.id}/revocar`, { motivo: "no" }, J);

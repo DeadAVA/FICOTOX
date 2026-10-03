@@ -223,34 +223,34 @@ const C = {
   puntas: findConsumible(/^Punta para micropipeta 1000/i),
 };
 
-/* ---------- 6. Documentos del SGC ---------- */
+/* ---------- 6. Biblioteca de documentos (reemplaza el flujo de Documentos SGC) ---------- */
 const DOCS = [
-  { clave: "FX-MC", titulo: "Manual de calidad del LN-FICOTOX", descripcion: "Política y objetivos de calidad, estructura, procesos técnicos y de gestión conforme a ISO/IEC 17025:2017.", estado: "vigente" },
-  { clave: "FX-GCP-CD", titulo: "Procedimiento para el control de documentos", descripcion: "Elaboración, revisión, aprobación, distribución y obsolescencia de los documentos del SGC.", estado: "vigente" },
-  { clave: "FX-GCP-CR", titulo: "Procedimiento para el control de registros", descripcion: "Identificación, almacenamiento, protección, retención y disposición de los registros.", estado: "vigente" },
-  { clave: "FX-TCF-GMR", titulo: "Formato de recepción de muestras", descripcion: "Registro de ingreso, inspección visual y decisión de aceptación de la muestra.", estado: "vigente" },
-  { clave: "FX-TCF-GMP", titulo: "Formato de procesamiento de muestras", descripcion: "Preparación de moluscos bivalvos y peces: lavado, desconche, molienda y resguardo.", estado: "vigente" },
-  { clave: "FX-TCF-GME-A", titulo: "Formato de extracción de muestra · ASP", descripcion: "Extracción de ácido domoico con metanol:agua 50:50 y limpieza opcional en cartucho SAX.", estado: "vigente" },
-  { clave: "FX-TCF-GME-D", titulo: "Formato de extracción de muestra · DSP", descripcion: "Doble extracción con metanol 100 %, aforo a 20 mL e hidrólisis alcalina.", estado: "vigente" },
-  { clave: "FX-TCI-DSP", titulo: "Instructivo de análisis de toxinas lipofílicas por UPLC-MS/MS", descripcion: "Condiciones cromatográficas, calibración, controles de calidad y criterios de aceptación.", estado: "en_revision" },
-  { clave: "FX-TCI-PSP", titulo: "Instructivo de análisis de toxinas paralizantes", descripcion: "Borrador en elaboración para el método de PSP por HPLC-FLD.", estado: "borrador" },
+  { clave: "FX-MC", categoria: "Manual de Calidad", titulo: "Manual de calidad del LN-FICOTOX", descripcion: "Política y objetivos de calidad, estructura, procesos técnicos y de gestión conforme a ISO/IEC 17025:2017." },
+  { clave: "FX-GCP-CD", categoria: "Procedimientos", titulo: "Procedimiento para el control de documentos", descripcion: "Elaboración, consulta, versiones y archivo de los documentos del SGC." },
+  { clave: "FX-GCP-CR", categoria: "Procedimientos", titulo: "Procedimiento para el control de registros", descripcion: "Identificación, almacenamiento, protección, retención y disposición de los registros." },
+  { clave: "FX-TCF-GMR", categoria: "Formatos", titulo: "Formato de recepción de muestras", descripcion: "Registro de ingreso, inspección visual y decisión de aceptación de la muestra." },
+  { clave: "FX-TCF-GMP", categoria: "Formatos", titulo: "Formato de procesamiento de muestras", descripcion: "Preparación de moluscos bivalvos y peces: lavado, desconche, molienda y resguardo." },
+  { clave: "FX-TCF-GME-A", categoria: "Formatos", titulo: "Formato de extracción de muestra · ASP", descripcion: "Extracción de ácido domoico con metanol:agua 50:50 y limpieza opcional en cartucho SAX." },
+  { clave: "FX-TCF-GME-D", categoria: "Formatos", titulo: "Formato de extracción de muestra · DSP", descripcion: "Doble extracción con metanol 100 %, aforo a 20 mL e hidrólisis alcalina." },
+  { clave: "FX-TCI-DSP", categoria: "Instructivos", titulo: "Instructivo de análisis de toxinas lipofílicas por UPLC-MS/MS", descripcion: "Condiciones cromatográficas, calibración, controles de calidad y criterios de aceptación." },
+  { clave: "FX-TCI-PSP", categoria: "Instructivos", titulo: "Instructivo de análisis de toxinas paralizantes", descripcion: "Método de PSP por HPLC-FLD (en elaboración)." },
 ];
-const docsExistentes = must(await api("GET", "/documentos-sgc", null, { token: DANI }), "documentos").items;
+const categoriasBib = must(await api("GET", "/biblioteca/categorias", null, { token: DANI }), "categorías de la biblioteca").items || [];
+const docsExistentes = must(await api("GET", "/biblioteca", null, { token: DANI }), "biblioteca").items || [];
 for (const d of DOCS) {
   if (docsExistentes.find((x) => x.clave === d.clave)) continue;
   const form = new FormData();
   form.append("clave", d.clave);
   form.append("titulo", d.titulo);
   form.append("descripcion", d.descripcion);
-  form.append("fecha_emision", daysAgo(90));
-  form.append("elaboro", JSON.stringify({ nombre: dani.nombre, cargo: dani.cargo }));
+  form.append("fecha_documento", daysAgo(90));
+  form.append("visibilidad", "todos");
+  const categoria = categoriasBib.find((c) => c.nombre === d.categoria);
+  if (categoria) form.append("categoria_id", String(categoria.id));
   form.append("archivo", new Blob([`${d.clave}\n${d.titulo}\n\n${d.descripcion}\n\nDocumento de demostración.`], { type: "text/plain" }), `${d.clave}.txt`);
-  const created = must(await api("POST", "/documentos-sgc", form, { token: DANI, form: true }), `documento ${d.clave}`);
-  const id = created.id;
-  if (d.estado === "en_revision" || d.estado === "vigente") must(await api("POST", `/documentos-sgc/${id}/enviar-revision`, { reviso: { nombre: dani.nombre, cargo: dani.cargo } }, { token: DANI }), `revisión ${d.clave}`);
-  if (d.estado === "vigente") must(await api("POST", `/documentos-sgc/${id}/aprobar`, { aprobo: { nombre: ern.nombre, cargo: ern.cargo }, fecha_vigencia: daysAhead(365 * 3) }, { token: ERN }), `aprobar ${d.clave}`);
+  must(await api("POST", "/biblioteca", form, { token: DANI, form: true }), `documento ${d.clave}`);
 }
-log("Documentos del SGC listos");
+log("Biblioteca de documentos lista");
 
 /* ---------- 7. Flujo de muestras ---------- */
 const REQ = [

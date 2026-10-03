@@ -47,6 +47,7 @@ export async function migrarAlArrancar(): Promise<void> {
     }
     const resultado = await aplicarMigraciones(db, {
       Sqlite,
+      instanceDir: cfg.INSTANCE_DIR,
       clave: resolverClaveSello(cfg.SECRET_KEY, cfg.INSTANCE_DIR),
       appCommit: versionApp(cfg.BASE_DIR).commit,
       respaldo: async () => {

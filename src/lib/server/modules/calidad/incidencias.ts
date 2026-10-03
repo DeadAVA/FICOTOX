@@ -132,6 +132,13 @@ export async function crearIncidencia({ request, s }: RouteContext): Promise<Res
       const doc = await s.queryOne<Row>("SELECT estado FROM documentos_sgc WHERE id = :id", { id: eid });
       if (!doc || String(doc.estado) !== "vigente" || !(await documentosDistribuidosA(s, permiso.auth.userId)).includes(eid)) throw noExiste;
     }
+    // Biblioteca: con "autorizados", solo documentos para todos o para alguno de sus roles.
+    if (entidad === "biblioteca_documentos" && soloAutorizados(permiso.auth)) {
+      const doc = await s.queryOne<Row>("SELECT visibilidad FROM biblioteca_documentos WHERE id = :id", { id: eid });
+      const roles = permiso.auth.roles.map((r) => Number(r.id));
+      const permitidos = doc && String(doc.visibilidad) !== "todos" ? (await s.query<Row>("SELECT rol_id FROM biblioteca_visibilidad_roles WHERE documento_id = :id", { id: eid })).map((r) => Number(r.rol_id)) : [];
+      if (!doc || (String(doc.visibilidad) !== "todos" && !permitidos.some((r) => roles.includes(r)))) throw noExiste;
+    }
     // Con alcance "asignado" (muestras), solo recepciones asignadas o registradas por la persona.
     if (entidad === "muestras_recepcion" && soloAsignado(vista)) {
       const recepcion = await s.queryOne<Row>("SELECT id, creado_por FROM muestras_recepcion WHERE id = :id", { id: eid });
