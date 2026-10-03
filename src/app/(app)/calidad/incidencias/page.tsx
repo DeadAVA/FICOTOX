@@ -11,11 +11,12 @@ import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
-import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { Field, Select, Textarea } from "@/components/ui/Field";
 import { FilterChips, FilterMenu, type FilterGroup, type FilterToggle } from "@/components/ui/FilterMenu";
 import { Sheet } from "@/components/ui/Overlay";
 import { PageHeader, SearchInput, SegmentedTabs, Toolbar } from "@/components/ui/PageHeader";
-import { Badge, Card, CardHeader, EmptyState, ErrorState, Skeleton, Stat, TableSkeleton } from "@/components/ui/Primitives";
+import { Card, CardHeader, EmptyState, ErrorState, Skeleton, Stat, TableSkeleton } from "@/components/ui/Primitives";
+import { StatusCell, StatusFlag } from "@/components/ui/StatusFlag";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { descargarCsv } from "@/lib/client/files";
@@ -188,8 +189,10 @@ function ListaIncidencias() {
                     <CellPrimary title={item.reportada_nombre || "—"} subtitle={item.origen_automatico ? ORIGEN_AUTOMATICO_LABEL[String(item.origen_automatico)] : undefined} />
                   </Td>
                   <Td>
-                    <EstadoIncidencia estado={item.estado} />
-                    {item.origen_automatico ? <Badge className="ml-1">Automática</Badge> : null}
+                    <StatusCell>
+                      <EstadoIncidencia estado={item.estado} />
+                      {item.origen_automatico ? <StatusFlag kind="info" label="Generada automáticamente" detail={ORIGEN_AUTOMATICO_LABEL[String(item.origen_automatico)]} data-automatica /> : null}
+                    </StatusCell>
                   </Td>
                   <Td>{item.nc_folio ? <FolioChip type="NC" num={item.nc_folio} /> : <span className="text-ink-4">—</span>}</Td>
                 </Tr>
@@ -295,8 +298,10 @@ function ListaNc() {
                     {Number(item.acciones_abiertas) ? <span className="text-ink-3"> · {fmt(item.acciones_abiertas)} abiertas</span> : null}
                   </Td>
                   <Td>
-                    <EstadoNc estado={item.estado} />
-                    {Number(item.reaperturas) ? <Badge tone="warning" className="ml-1">{`${item.reaperturas} reapertura${Number(item.reaperturas) > 1 ? "s" : ""}`}</Badge> : null}
+                    <StatusCell>
+                      <EstadoNc estado={item.estado} />
+                      {Number(item.reaperturas) ? <StatusFlag kind="aviso" label={`${item.reaperturas} reapertura${Number(item.reaperturas) > 1 ? "s" : ""}`} detail="La verificación de eficacia resultó no eficaz y la NC volvió a análisis." data-reaperturas={String(item.reaperturas)} /> : null}
+                    </StatusCell>
                   </Td>
                 </Tr>
               ))}
@@ -368,7 +373,7 @@ function NuevaNcSheet({ onClose }: { onClose: () => void }) {
           <Textarea id="nc-desc" rows={4} value={descripcion} onChange={(event) => setDescripcion(event.target.value)} />
         </Field>
         <Field label="Requisito incumplido" htmlFor="nc-req" hint="Cláusula ISO, procedimiento o formato.">
-          <Input id="nc-req" value={requisito} onChange={(event) => setRequisito(event.target.value)} />
+          <Textarea id="nc-req" rows={2} value={requisito} onChange={(event) => setRequisito(event.target.value)} />
         </Field>
         <Field label="Clasificación" htmlFor="nc-clasif">
           <Select id="nc-clasif" value={clasificacion} onChange={(event) => setClasificacion(event.target.value)}>
@@ -475,12 +480,10 @@ function ListaAcciones() {
                   <Td muted>{item.responsable_nombre || "—"}</Td>
                   <Td className={item.vencida ? "font-medium text-danger" : "text-ink-3"}>{fmtDate(item.fecha_compromiso)}</Td>
                   <Td>
-                    <EstadoAccion estado={item.estado} />
-                    {item.vencida ? (
-                      <Badge tone="danger" className="ml-1">
-                        Vencida
-                      </Badge>
-                    ) : null}
+                    <StatusCell>
+                      <EstadoAccion estado={item.estado} />
+                      {item.vencida ? <StatusFlag kind="error" label="Vencida" detail={`Fecha compromiso: ${fmtDate(item.fecha_compromiso)}`} data-vencida /> : null}
+                    </StatusCell>
                   </Td>
                 </Tr>
               ))}

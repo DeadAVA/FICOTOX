@@ -155,7 +155,7 @@ export function DateInput({ id, value, onChange, disabled, readOnly, required, i
             setAbierto(true);
           }
         }}
-        className={cn(controlBase, small ? "h-8 text-[13px]" : "h-10 text-[14px]", "tnum pr-9", (invalid || mal) && "border-danger focus:border-danger focus:shadow-[0_0_0_4px_rgba(200,67,59,0.18)]")}
+        className={cn(controlBase, small ? "h-8 text-[13px]" : "h-10 text-[14px]", "tnum pr-9", (invalid || mal) && "border-danger focus:border-danger")}
       />
       <RadixPopover.Root open={abierto} onOpenChange={setAbierto}>
         <RadixPopover.Trigger asChild>

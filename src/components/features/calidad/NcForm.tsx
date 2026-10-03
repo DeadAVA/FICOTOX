@@ -243,7 +243,7 @@ export function NcForm({ item }: { item: ApiRecord }) {
           {editar ? <Textarea id="nc-descripcion" rows={4} value={d.descripcion} onChange={(event) => set("descripcion")(event.target.value)} /> : <ReadValue value={item.descripcion} />}
         </Field>
         <Field label="Requisito incumplido" htmlFor="nc-requisito" hint="Cláusula ISO, procedimiento o formato.">
-          {editar ? <Input id="nc-requisito" value={d.requisito_incumplido} onChange={(event) => set("requisito_incumplido")(event.target.value)} /> : <ReadValue value={item.requisito_incumplido} />}
+          {editar ? <Textarea id="nc-requisito" rows={2} value={d.requisito_incumplido} onChange={(event) => set("requisito_incumplido")(event.target.value)} /> : <ReadValue value={item.requisito_incumplido} />}
         </Field>
       </FormCard>
 
@@ -587,7 +587,7 @@ function Comunicaciones({ item, comunicaciones, afectados, editar, requerida }: 
               <p className="font-medium text-ink">
                 {fmtDate(c.fecha)} · {MEDIO_COMUNICACION_LABEL[String(c.medio)] || String(c.medio)} · {String(c.contacto)}
               </p>
-              <p className="text-ink-2">{String(c.resumen)}</p>
+              <p className="whitespace-pre-line text-ink-2">{String(c.resumen)}</p>
               <p className="text-[12px] text-ink-3">Registró {String(c.registrado_nombre || "—")}</p>
             </li>
           ))}
@@ -689,15 +689,15 @@ function AccionesTabla({ item, acciones, editar, editorNc }: { item: ApiRecord; 
               <li key={String(a.id)} className="on-panel flex flex-col gap-2 rounded-[12px] bg-surface-2 p-3 ring-1 ring-line" data-accion-fila={String(a.id)}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <p className="text-[14px] font-medium text-ink">{String(a.descripcion)}</p>
+                    <p className="whitespace-pre-line text-[14px] font-medium text-ink">{String(a.descripcion)}</p>
                     <p className="text-[12.5px] text-ink-3">
                       {String(a.responsable_nombre || "—")}
                       {!a.responsable_vigente && abierta ? " (sin cuenta vigente: reasígnala)" : ""} · compromiso{" "}
                       <span className={a.vencida ? "font-medium text-danger" : undefined}>{fmtDate(a.fecha_compromiso)}</span>
                     </p>
-                    {a.descripcion_implementacion ? <p className="text-[12.5px] text-ink-2">Implementación: {String(a.descripcion_implementacion)}</p> : null}
-                    {a.motivo_cancelacion ? <p className="text-[12.5px] text-danger">Cancelada: {String(a.motivo_cancelacion)}</p> : null}
-                    {a.motivo_reasignacion ? <p className="text-[12px] text-ink-3">Reasignada: {String(a.motivo_reasignacion)}</p> : null}
+                    {a.descripcion_implementacion ? <p className="whitespace-pre-line text-[12.5px] text-ink-2">Implementación: {String(a.descripcion_implementacion)}</p> : null}
+                    {a.motivo_cancelacion ? <p className="whitespace-pre-line text-[12.5px] text-danger">Cancelada: {String(a.motivo_cancelacion)}</p> : null}
+                    {a.motivo_reasignacion ? <p className="whitespace-pre-line text-[12px] text-ink-3">Reasignada: {String(a.motivo_reasignacion)}</p> : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <EstadoAccion estado={a.estado} />

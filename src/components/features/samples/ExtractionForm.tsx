@@ -8,11 +8,11 @@ import { AvisoSuspension } from "@/components/features/calidad/AvisoSuspension";
 import { IncidenciasFormCard } from "@/components/features/calidad/IncidenciasDelRegistro";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
-import { Field, FormGrid, Input, Select } from "@/components/ui/Field";
+import { Field, FormGrid, Input, Select, Textarea } from "@/components/ui/Field";
 import { DateInput } from "@/components/ui/DateInput";
 import { useConfirm } from "@/components/ui/Overlay";
 import { cn } from "@/components/ui/cn";
-import { controlClass, controlClassSm } from "@/components/ui/Field";
+import { controlClassSm } from "@/components/ui/Field";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { isoDate, parseFloatOrNull, parseIntOrNull, todayIso } from "@/lib/client/format";
 import { equipoAlert, filterManualInventario, findInsumoByAutoQuery, findInsumoOption, findReactivoByRef, findUniqueOperativeEquipo, formatInventoryAmount, loadInsumoOptions, nextBitacoraFolio, resolveFixedInventoryAmount } from "@/lib/client/insumos";
@@ -836,7 +836,7 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
           </FieldGroup>
         </div>
         <Field label="Observaciones generales" htmlFor="e-obs" className="mt-5">
-          <textarea id="e-obs" rows={3} className={cn(controlClass, "py-2")} value={form.observaciones} onChange={(event) => patch({ observaciones: event.target.value })} />
+          <Textarea id="e-obs" rows={3} value={form.observaciones} onChange={(event) => patch({ observaciones: event.target.value })} />
         </Field>
       </FormCard>
 

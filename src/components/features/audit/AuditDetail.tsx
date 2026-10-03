@@ -136,7 +136,7 @@ export function AuditEntryDetail({ entry, record }: { entry: HumanEntry; record:
           <Quotes size={16} weight="fill" className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
           <div>
             <p className="eyebrow mb-0.5 text-warning-text">Motivo</p>
-            <p>{entry.motivo}</p>
+            <p className="whitespace-pre-line">{entry.motivo}</p>
           </div>
         </div>
       ) : null}

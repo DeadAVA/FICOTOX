@@ -5,6 +5,7 @@ import { Dialog as RadixDialog, DropdownMenu as RadixDropdown, HoverCard as Radi
 import { DotsThreeCircle, X } from "@phosphor-icons/react";
 import { Button, IconButton } from "./Button";
 import { cn } from "./cn";
+import { Textarea } from "./Field";
 import { CampoIdentidad, useConfirmaConPassword } from "@/components/session/Reautenticar";
 import { armarCargo, armarReauth } from "@/lib/client/api";
 
@@ -266,11 +267,11 @@ export function PromptProvider({ children }: { children: ReactNode }) {
             *
           </span>
         </label>
-        <textarea
+        <Textarea
           id={fieldId}
           rows={3}
           autoFocus
-          className={cn("w-full rounded-[10px] border bg-surface-2/80 px-3 py-2.5 text-[14px] text-ink placeholder:text-ink-4 focus:border-brand focus:bg-surface focus:outline-none focus:shadow-[var(--shadow-focus)]", touched && !valid ? "border-danger" : "border-line")}
+          invalid={touched && !valid}
           placeholder={state?.placeholder || "Describe el motivo; quedará registrado en la bitácora de auditoría"}
           value={value}
           onChange={(event) => setValue(event.target.value)}

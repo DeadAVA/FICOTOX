@@ -14,6 +14,7 @@ import { FilterChips, FilterMenu, type FilterGroup, type FilterToggle } from "@/
 import { ActionMenu, type MenuItem } from "@/components/ui/Overlay";
 import { SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
+import { StatusCell } from "@/components/ui/StatusFlag";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { fmt, fmtDate } from "@/lib/client/format";
@@ -40,6 +41,8 @@ const ANALYSIS_SHORT: Record<string, string> = { acido_domoico: "ASP", toxinas_l
 type EtapaFilter = "" | (typeof RECEPTION_STATE_ORDER)[number];
 type DecisionFilter = "" | "aceptada" | "aceptada_con_desviacion" | "rechazada" | "pendiente";
 
+const tiposDe = (item: ApiRecord): string[] => (Array.isArray(item.analisis?.tipos) ? item.analisis.tipos : Array.isArray(item.tipos_analisis) ? item.tipos_analisis : []);
+
 function RecepcionList() {
   const { token, can } = useSession();
   const router = useRouter();
@@ -47,6 +50,7 @@ function RecepcionList() {
   const [showAnuladas, setShowAnuladas] = useState(false);
   const [etapa, setEtapa] = useState<EtapaFilter>("");
   const [decision, setDecision] = useState<DecisionFilter>("");
+  const [analisis, setAnalisis] = useState("");
   const [mias, setMias] = useState(false);
   const debounced = useDebouncedValue(search);
   const { anular, restaurar } = useAnulacion("reception", formatSampleFolio);
@@ -77,14 +81,15 @@ function RecepcionList() {
       const dec = String(item.decision_aceptacion || "");
       if (decision === "pendiente" && dec) return false;
       if (decision && decision !== "pendiente" && dec !== decision) return false;
+      if (analisis && !tiposDe(item).includes(analisis)) return false;
       return true;
     });
-  }, [items, etapa, decision]);
+  }, [items, etapa, decision, analisis]);
 
   const groups: FilterGroup[] = [
     {
       key: "etapa",
-      label: "Etapa",
+      label: "Estado",
       value: etapa,
       defaultValue: "",
       onChange: (v) => setEtapa(v as EtapaFilter),
@@ -104,6 +109,14 @@ function RecepcionList() {
         { value: "pendiente", label: "Sin decisión", count: count((i) => !i.decision_aceptacion), tone: "warning" },
         ...ACCEPTANCE_DECISIONS.map((d) => ({ value: d.value, label: DECISION_SHORT[d.value] || d.label, count: count((i) => i.decision_aceptacion === d.value) })),
       ],
+    },
+    {
+      key: "analisis",
+      label: "Análisis",
+      value: analisis,
+      defaultValue: "",
+      onChange: setAnalisis,
+      options: [{ value: "", label: "Cualquiera" }, ...RECEPTION_ANALYSIS_TYPES.map((t) => ({ value: t.value, label: ANALYSIS_SHORT[t.value] || t.label, count: count((i) => tiposDe(i).includes(t.value)) }))],
     },
   ];
   const toggles: FilterToggle[] = [
@@ -155,7 +168,7 @@ function RecepcionList() {
         ) : !items ? (
           <TableSkeleton cols={6} />
         ) : !visible.length ? (
-          <EmptyState icon={<TestTube size={20} />} title={search || etapa || decision ? "Sin coincidencias" : "Sin recepciones"} description={search || etapa || decision ? "Prueba con otro término o cambia los filtros." : "La recepción es el primer paso del flujo de muestras."} action={canCreate && !search && !etapa && !decision ? <Button onClick={() => router.push("/muestras/recepcion/nueva")}>Nueva recepción</Button> : undefined} />
+          <EmptyState icon={<TestTube size={20} />} title={search || etapa || decision || analisis ? "Sin coincidencias" : "Sin recepciones"} description={search || etapa || decision || analisis ? "Prueba con otro término o cambia los filtros." : "La recepción es el primer paso del flujo de muestras."} action={canCreate && !search && !etapa && !decision ? <Button onClick={() => router.push("/muestras/recepcion/nueva")}>Nueva recepción</Button> : undefined} />
         ) : (
           <Table>
             <THead>
@@ -172,7 +185,7 @@ function RecepcionList() {
             <TBody>
               {visible.map((item) => {
                 const anulada = item.estado === "anulada";
-                const tipos: string[] = Array.isArray(item.analisis?.tipos) ? item.analisis.tipos : Array.isArray(item.tipos_analisis) ? item.tipos_analisis : [];
+                const tipos = tiposDe(item);
                 const dec = String(item.decision_aceptacion || "");
                 return (
                   <Tr key={item.id} interactive onClick={() => router.push(`/muestras/recepcion/${item.id}`)} className={anulada ? "opacity-60" : undefined}>
@@ -200,9 +213,11 @@ function RecepcionList() {
                     </Td>
                     <Td>{dec ? <Badge tone={DECISION_TONE[dec]}>{DECISION_SHORT[dec] || dec}</Badge> : <span className="text-[12.5px] text-ink-3">Sin decisión</span>}</Td>
                     <Td>
-                      <SampleStatus status={item.estado} />
-                      <SupervisionBadge estado={item.supervision_estado} />
-                      <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} />
+                      <StatusCell>
+                        <SampleStatus status={item.estado} />
+                        <SupervisionBadge estado={item.supervision_estado} />
+                        <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} />
+                      </StatusCell>
                     </Td>
                     <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
                       <ActionMenu items={menuFor(item)} header={`${formatSampleFolio(item)} · ${item.id_interno || "lote"}`} />

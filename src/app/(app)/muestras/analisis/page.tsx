@@ -14,6 +14,7 @@ import { FilterChips, FilterMenu, type FilterGroup, type FilterToggle } from "@/
 import { ActionMenu, type MenuItem } from "@/components/ui/Overlay";
 import { SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, Skeleton, TableSkeleton } from "@/components/ui/Primitives";
+import { StatusCell } from "@/components/ui/StatusFlag";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { fmt, fmtDate } from "@/lib/client/format";
@@ -184,9 +185,11 @@ function AnalisisList() {
                     </Td>
                     <Td muted>{item.analista_nombre || "-"}</Td>
                     <Td>
-                      <StateBadge kind="analisis" status={item.estado} />
-                      <SupervisionBadge estado={item.supervision_estado} />
-                      <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} />
+                      <StatusCell>
+                        <StateBadge kind="analisis" status={item.estado} />
+                        <SupervisionBadge estado={item.supervision_estado} />
+                        <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} />
+                      </StatusCell>
                     </Td>
                     <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
                       <ActionMenu items={menuFor(item)} header={`${folioA(item)} · ${tipo?.short || ""}`} />

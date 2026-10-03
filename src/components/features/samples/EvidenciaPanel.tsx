@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Certificate, ChartLine, ChartLineUp, DownloadSimple, Eye, File, FileText, Image as ImageIcon, Paperclip, Prohibit, Table, UploadSimple, Warning } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
-import { Field, FormGrid, Input, Select, Switch } from "@/components/ui/Field";
+import { Field, FormGrid, Select, Switch, Textarea } from "@/components/ui/Field";
 import { Sheet, Tooltip, usePrompt } from "@/components/ui/Overlay";
 import { Badge, EmptyState } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth, sendFormAuthProgress, sendJsonAuth } from "@/lib/client/api";
@@ -252,7 +252,7 @@ export function AdjuntosPanel({ registroId, base, token, onResumen, clave = "mue
               </Select>
             </Field>
             <Field label="Descripción" htmlFor={`evidencia-desc-${analisisId}`} required className="sm:col-span-2" hint="Qué muestra el archivo (p. ej. “Cromatograma lote D45, corrida 2”).">
-              <Input id={`evidencia-desc-${analisisId}`} maxLength={300} value={descripcion} onChange={(event) => setDescripcion(event.target.value)} />
+              <Textarea id={`evidencia-desc-${analisisId}`} rows={2} maxLength={300} value={descripcion} onChange={(event) => setDescripcion(event.target.value)} />
             </Field>
           </FormGrid>
           <div className="flex items-center justify-end gap-3">
@@ -270,7 +270,7 @@ export function AdjuntosPanel({ registroId, base, token, onResumen, clave = "mue
           </div>
         </div>
       ) : edicion.motivo && !cargando ? (
-        <p className="text-[13px] text-ink-3">{edicion.motivo}</p>
+        <p className="whitespace-pre-line text-[13px] text-ink-3">{edicion.motivo}</p>
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -295,7 +295,7 @@ export function AdjuntosPanel({ registroId, base, token, onResumen, clave = "mue
                 </span>
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="truncate text-[14px] font-medium text-ink">{String(a.descripcion)}</span>
+                    <span className="min-w-0 whitespace-pre-line break-words text-[14px] font-medium text-ink">{String(a.descripcion)}</span>
                     <Badge tone="neutral">{TIPO_EVIDENCIA_LABEL[String(a.tipo_evidencia)] || String(a.tipo_evidencia)}</Badge>
                     {a.heredado_de ? <Badge tone="brand">Heredado de v{String(a.heredado_de_version || 1)}</Badge> : null}
                     {a.vigente ? null : <Badge tone="danger">Anulado</Badge>}
@@ -313,7 +313,7 @@ export function AdjuntosPanel({ registroId, base, token, onResumen, clave = "mue
                       </span>
                     </Tooltip>
                   </span>
-                  {!a.vigente && a.motivo_anulacion ? <span className="text-[12.5px] text-danger">Anulado por {String(a.anulado_por_nombre || "—")}: {String(a.motivo_anulacion)}</span> : null}
+                  {!a.vigente && a.motivo_anulacion ? <span className="whitespace-pre-line text-[12.5px] text-danger">Anulado por {String(a.anulado_por_nombre || "—")}: {String(a.motivo_anulacion)}</span> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {VISTA_PREVIA.has(String(a.extension)) ? (

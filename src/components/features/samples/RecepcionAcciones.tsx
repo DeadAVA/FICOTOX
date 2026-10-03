@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
-import { Field, Input, Select } from "@/components/ui/Field";
+import { Field, Select, Textarea } from "@/components/ui/Field";
 import { Dialog, usePrompt } from "@/components/ui/Overlay";
 import { Badge } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
@@ -208,7 +208,7 @@ function AsignarDialog({ recepcion, onClose, onChange }: { recepcion: ApiRecord;
         </Select>
       </Field>
       <Field label="Motivo (opcional)" htmlFor="asignar-motivo" className="mt-3">
-        <Input id="asignar-motivo" value={motivo} maxLength={300} onChange={(event) => setMotivo(event.target.value)} />
+        <Textarea id="asignar-motivo" rows={2} value={motivo} maxLength={300} onChange={(event) => setMotivo(event.target.value)} />
       </Field>
       {aviso ? (
         <p role="alert" data-aviso-asignacion className="mt-3 rounded-[10px] border border-warning/40 bg-warning-soft px-3 py-2 text-[12.5px] text-ink-2">

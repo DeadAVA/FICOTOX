@@ -289,7 +289,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
   const needsComunicacion = form.decision === "aceptada_con_desviacion" || form.decision === "rechazada";
   /* Completitud por seccion para el riel del formato: que falta antes de guardar. */
   const completeness: Record<string, boolean | undefined> = {
-    "sec-recepcion": !!(form.folio && form.fechaRecepcion && form.horaRecepcion && form.medioRecepcion && form.recibidoPor.trim()),
+    "sec-recepcion": !!(form.folio && form.fechaRecepcion && form.horaRecepcion && form.medioRecepcion && form.recibidoPor.trim() && form.solicitante.trim()),
     "sec-muestra": isUnique ? !!form.idInterno.trim() : form.loteRows.some((row) => row.id_interno.trim()),
     "sec-analisis": form.tipos.length > 0,
     "sec-inspeccion": inspectionComplete,
@@ -504,9 +504,9 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
                 </p>
                 <p className="text-[13.5px]">
                   <span className="text-ink-3">Remanentes: </span>
-                  <span className="text-ink">{savedDisposicion.remanentes || "—"}</span>
+                  <span className="whitespace-pre-wrap text-ink">{savedDisposicion.remanentes || "—"}</span>
                 </p>
-                {savedDisposicion.observaciones ? <p className="text-[13.5px] sm:col-span-2">{savedDisposicion.observaciones}</p> : null}
+                {savedDisposicion.observaciones ? <p className="whitespace-pre-wrap text-[13.5px] sm:col-span-2">{savedDisposicion.observaciones}</p> : null}
               </div>
             ) : puedeDisponer ? (
               <div className="flex flex-col gap-4">
@@ -524,7 +524,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
                     <PersonSelect id="r-disp-resp" value={disposicion.responsable} onChange={(name) => setDisposicion({ ...disposicion, responsable: name })} requires="muestras" />
                   </Field>
                   <Field label="Remanentes" htmlFor="r-disp-rem" hint="Qué sobró y cuánto.">
-                    <Input id="r-disp-rem" maxLength={240} value={disposicion.remanentes} onChange={(event) => setDisposicion({ ...disposicion, remanentes: event.target.value })} />
+                    <Textarea id="r-disp-rem" rows={1} maxLength={240} value={disposicion.remanentes} onChange={(event) => setDisposicion({ ...disposicion, remanentes: event.target.value })} />
                   </Field>
                 </FormGrid>
                 <FormGrid>
@@ -631,8 +631,8 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
               }}
             />
           </Field>
-          <Field label="Solicitante" htmlFor="r-solicitante" className="sm:col-span-2">
-            <Input id="r-solicitante" maxLength={180} placeholder="Cliente o institución que entrega" value={form.solicitante} onChange={(event) => patch({ solicitante: event.target.value })} />
+          <Field label="Solicitante" htmlFor="r-solicitante" required className="sm:col-span-2">
+            <Input id="r-solicitante" maxLength={180} placeholder="Cliente o institución que entrega" value={form.solicitante} onChange={(event) => patch({ solicitante: event.target.value })} invalid={!!error && !form.solicitante.trim()} />
           </Field>
         </FormGrid>
       </FormCard>
@@ -643,15 +643,15 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
           <ChoiceCard type="radio" name="r-tipo" checked={!isUnique} onChange={() => patch({ muestraUnica: false })} label="Lote" description="Varias muestras asociadas a la misma recepción." />
         </ChoiceGrid>
         {isUnique ? (
-          <FormGrid cols={3}>
-            <Field label="ID interno" htmlFor="r-id" required>
-              <Input id="r-id" maxLength={100} placeholder="Ejemplo: D26-100" value={form.idInterno} onChange={(event) => patch({ idInterno: event.target.value })} mono invalid={!!error && isUnique && !form.idInterno.trim()} />
-            </Field>
+          <FormGrid>
             <Field label="Fecha de la muestra" htmlFor="r-fecha-muestra">
               <DateInput id="r-fecha-muestra" value={form.fechaMuestra} onChange={(value) => patch({ fechaMuestra: value })} />
             </Field>
-            <Field label="Especificaciones" htmlFor="r-esp">
-              <Input id="r-esp" maxLength={220} value={form.especificaciones} onChange={(event) => patch({ especificaciones: event.target.value })} />
+            <Field label="ID interno" htmlFor="r-id" required>
+              <Input id="r-id" maxLength={100} placeholder="Ejemplo: D26-100" value={form.idInterno} onChange={(event) => patch({ idInterno: event.target.value })} mono invalid={!!error && isUnique && !form.idInterno.trim()} />
+            </Field>
+            <Field label="Especificaciones" htmlFor="r-esp" hint="Organismo, cantidad, condiciones de la muestra o lo que indique el solicitante." className="sm:col-span-2">
+              <Textarea id="r-esp" rows={3} maxLength={220} value={form.especificaciones} onChange={(event) => patch({ especificaciones: event.target.value })} />
             </Field>
           </FormGrid>
         ) : (
@@ -686,9 +686,9 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
                         Fecha de la muestra
                         <DateInput small value={row.fecha_muestra} onChange={(value) => updateLote(row.key, { fecha_muestra: value })} aria-label={`Fecha de la muestra ${index + 1}`} />
                       </label>
-                      <label className={cell}>
+                      <label className={`${cell} sm:col-span-2 lg:col-span-3`}>
                         Información adicional
-                        <input className={`${controlClassSm}`} value={row.informacion_adicional} onChange={(event) => updateLote(row.key, { informacion_adicional: event.target.value })} aria-label={`Información adicional de la muestra ${index + 1}`} />
+                        <Textarea small rows={1} value={row.informacion_adicional} onChange={(event) => updateLote(row.key, { informacion_adicional: event.target.value })} aria-label={`Información adicional de la muestra ${index + 1}`} />
                       </label>
                     </div>
                     <div className="flex items-start justify-end md:pt-4">
@@ -766,7 +766,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
                   );
                 })}
               </div>
-              <Input placeholder="Observación" value={row.observacion} onChange={(event) => patch({ inspeccion: form.inspeccion.map((entry) => (entry.requisito === row.requisito ? { ...entry, observacion: event.target.value } : entry)) })} aria-label={`Observación: ${row.requisito}`} small />
+              <Textarea small rows={1} placeholder="Observación" value={row.observacion} onChange={(event) => patch({ inspeccion: form.inspeccion.map((entry) => (entry.requisito === row.requisito ? { ...entry, observacion: event.target.value } : entry)) })} aria-label={`Observación: ${row.requisito}`} />
             </div>
           ))}
         </div>
@@ -818,8 +818,8 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
                   <Field label="Persona contactada" htmlFor="r-com-persona">
                     <Input id="r-com-persona" maxLength={180} value={form.comunicacion.persona} onChange={(event) => patch({ comunicacion: { ...form.comunicacion, persona: event.target.value } })} />
                   </Field>
-                  <Field label="Respuesta del cliente" htmlFor="r-com-resp">
-                    <Input id="r-com-resp" maxLength={240} placeholder="Ej. Solicita continuar con el análisis" value={form.comunicacion.respuesta} onChange={(event) => patch({ comunicacion: { ...form.comunicacion, respuesta: event.target.value } })} />
+                  <Field label="Respuesta del cliente" htmlFor="r-com-resp" className="sm:col-span-2 lg:col-span-4">
+                    <Textarea id="r-com-resp" rows={2} maxLength={240} placeholder="Ej. Solicita continuar con el análisis" value={form.comunicacion.respuesta} onChange={(event) => patch({ comunicacion: { ...form.comunicacion, respuesta: event.target.value } })} />
                   </Field>
                 </FormGrid>
               </Panel>

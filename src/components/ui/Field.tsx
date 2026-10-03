@@ -1,18 +1,18 @@
 "use client";
 
-import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { forwardRef, useCallback, useEffect, useId, useLayoutEffect, useRef, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { CaretDown } from "@phosphor-icons/react";
 import { cn } from "./cn";
 
 /*
  * Controles de formulario. Etiqueta arriba, ayuda opcional, error abajo.
  * Superficie ligeramente rellena (como los campos de iOS/macOS), 40 px de
- * alto, y un anillo de foco del color de acento.
+ * alto. Al enfocar solo cambia el color del borde (sin anillo ni sombra).
  */
 
 /* Sin alto ni tamaño de letra: los fija la variante (clsx no fusiona clases de Tailwind, así que no se pueden sobrescribir después). */
 export const controlBase =
-  "w-full rounded-[10px] border border-line bg-surface-2/80 px-3 text-ink placeholder:text-ink-4 transition-[border-color,box-shadow,background-color] duration-150 ease-[var(--ease-spring)] hover:border-line-strong focus:border-brand focus:bg-surface focus:outline-none focus:shadow-[var(--shadow-focus)] disabled:cursor-not-allowed disabled:bg-surface-3/60 disabled:text-ink-3 read-only:bg-surface-3/50";
+  "w-full rounded-[10px] border border-line bg-surface-2/80 px-3 text-ink placeholder:text-ink-4 transition-[border-color,background-color] duration-150 ease-[var(--ease-spring)] hover:border-line-strong focus:border-brand/55 focus:outline-none disabled:cursor-not-allowed disabled:bg-surface-3/60 disabled:text-ink-3 read-only:bg-surface-3/50";
 export const controlClass = `${controlBase} text-[14px]`;
 /* Control compacto para tablas y tarjetas por fila. */
 export const controlClassSm = `${controlBase} h-8 text-[13px]`;
@@ -66,7 +66,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ c
     <input
       ref={ref}
       aria-invalid={invalid || undefined}
-      className={cn(controlBase, small ? "h-8 text-[13px]" : "h-10", !small && (mono ? "text-[13px]" : "text-[14px]"), leading && "pl-9", trailing && "pr-9", mono && "font-mono", invalid && "border-danger focus:border-danger focus:shadow-[0_0_0_4px_rgba(200,67,59,0.18)]", className)}
+      className={cn(controlBase, small ? "h-8 text-[13px]" : "h-10", !small && (mono ? "text-[13px]" : "text-[14px]"), leading && "pl-9", trailing && "pr-9", mono && "font-mono", invalid && "border-danger focus:border-danger", className)}
       {...rest}
     />
   );
@@ -82,10 +82,59 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ c
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   invalid?: boolean;
+  /* Variante compacta para filas y tarjetas por elemento (13 px, menos relleno). */
+  small?: boolean;
 }
 
-export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea({ className, invalid, rows = 3, ...rest }, ref) {
-  return <textarea ref={ref} rows={rows} aria-invalid={invalid || undefined} className={cn(controlClass, "min-h-10 resize-y py-2.5 leading-relaxed", invalid && "border-danger", className)} {...rest} />;
+/*
+ * Area de texto que crece con el contenido: `rows` es el minimo visible y el
+ * alto se ajusta al escribir, al cargar un registro y en solo lectura, asi el
+ * texto largo nunca queda oculto. Respeta los saltos de linea.
+ */
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea({ className, invalid, small, rows = 3, onInput, ...rest }, ref) {
+  const inner = useRef<HTMLTextAreaElement | null>(null);
+  const setRefs = useCallback(
+    (node: HTMLTextAreaElement | null) => {
+      inner.current = node;
+      if (typeof ref === "function") ref(node);
+      else if (ref) ref.current = node;
+    },
+    [ref],
+  );
+  const ajustar = useCallback(() => {
+    const node = inner.current;
+    if (!node) return;
+    node.style.height = "auto";
+    node.style.height = `${node.scrollHeight + (node.offsetHeight - node.clientHeight)}px`;
+  }, []);
+  useLayoutEffect(ajustar, [ajustar, rest.value, rest.defaultValue, rest.disabled]);
+  useEffect(() => {
+    const node = inner.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    // El ancho cambia (hoja lateral que se abre, ventana angosta): recalcula el alto.
+    let ancho = node.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (node.clientWidth !== ancho) {
+        ancho = node.clientWidth;
+        ajustar();
+      }
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [ajustar]);
+  return (
+    <textarea
+      ref={setRefs}
+      rows={rows}
+      aria-invalid={invalid || undefined}
+      onInput={(event) => {
+        ajustar();
+        onInput?.(event);
+      }}
+      className={cn(controlBase, small ? "min-h-8 py-1.5 text-[13px] leading-snug" : "min-h-10 py-2.5 text-[14px] leading-relaxed", "resize-none overflow-hidden whitespace-pre-wrap break-words", invalid && "border-danger focus:border-danger", className)}
+      {...rest}
+    />
+  );
 });
 
 export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {

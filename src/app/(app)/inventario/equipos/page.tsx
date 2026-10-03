@@ -12,11 +12,11 @@ import { EQUIPO_ESTADOS, MANTENIMIENTO_TIPOS, metaFor } from "@/components/featu
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
-import { cn } from "@/components/ui/cn";
 import { FilterChips, FilterMenu, type FilterGroup, type FilterToggle } from "@/components/ui/FilterMenu";
 import { ActionMenu, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, TableSkeleton, type Tone } from "@/components/ui/Primitives";
+import { StatusCell, StatusFlag } from "@/components/ui/StatusFlag";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
 import { deadlineTone, fmt, fmtDate, fmtDateTime } from "@/lib/client/format";
@@ -238,12 +238,12 @@ function EquiposContent() {
                       {item.fecha_prox_calibracion ? <span className={calTone === "danger" ? "font-medium text-danger" : calTone === "warning" ? "font-medium text-warning-text" : "text-ink-2"}>{fmtDate(item.fecha_prox_calibracion)}</span> : <span className="text-ink-4">—</span>}
                     </Td>
                     <Td>
-                      <div className="flex flex-col items-start gap-1">
+                      <StatusCell>
                         <Badge tone={state.tone} dot>
                           {state.label}
                         </Badge>
-                        {state.detail ? <span className={cn("text-[12px]", state.detailTone === "danger" ? "text-danger" : "text-ink-3")}>{state.detail}</span> : null}
-                      </div>
+                        {state.detail ? <StatusFlag kind={state.detailTone === "danger" ? "error" : "aviso"} label={state.detail} /> : null}
+                      </StatusCell>
                     </Td>
                     <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
                       <ActionMenu items={menuFor(item)} header={String(item.nombre || "")} />

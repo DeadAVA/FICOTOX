@@ -102,7 +102,7 @@ export function AuditEntryRow({ entry, showEntity = false, compact = false, onOp
             {entry.reference ? <span className="code text-ink-2">{entry.reference}</span> : null}
           </span>
         ) : null}
-        {entry.motivo && !compact ? <span className="mt-1.5 block border-l-2 border-line-strong pl-2.5 text-[13px] italic text-ink-2">“{entry.motivo}”</span> : null}
+        {entry.motivo && !compact ? <span className="mt-1.5 block border-l-2 border-line-strong pl-2.5 whitespace-pre-line text-[13px] italic text-ink-2">“{entry.motivo}”</span> : null}
         {!compact && (entry.facts.length || hasDetails) ? (
           <span className="mt-2 flex flex-wrap items-center gap-1.5">
             {entry.facts.slice(0, 3).map((fact) => (

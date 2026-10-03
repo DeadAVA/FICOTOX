@@ -22,6 +22,7 @@ import { ActionMenu, Dialog, Sheet, usePrompt, type MenuItem } from "@/component
 import { FilterChips, FilterMenu, type FilterGroup, type FilterToggle } from "@/components/ui/FilterMenu";
 import { PageHeader, SearchInput, SegmentedTabs, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, TableSkeleton, type Tone } from "@/components/ui/Primitives";
+import { StatusCell, StatusFlag } from "@/components/ui/StatusFlag";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { openProtectedFile } from "@/lib/client/files";
@@ -471,13 +472,17 @@ function DocumentosContent() {
                         {tipoMeta?.label || item.tipo} · {areaMeta?.label || item.area}
                       </Td>
                       <Td className="tnum">
-                        {String(item.revision)}
-                        {Number(item.revisiones_en_curso) > 0 ? <Badge tone="warning" className="ml-1.5">rev. en curso</Badge> : null}
+                        <StatusCell>
+                          {String(item.revision)}
+                          {Number(item.revisiones_en_curso) > 0 ? <StatusFlag kind="info" label="Revisión nueva en curso" detail="Hay un borrador o una revisión de este documento en trámite." /> : null}
+                        </StatusCell>
                       </Td>
                       <Td muted>{fmtDate(item.fecha_vigencia)}</Td>
                       <Td muted>
-                        {fmtDate(item.fecha_proxima_revision)}
-                        {item.revision_vencida ? <Badge tone="danger" className="ml-1.5">vencida</Badge> : null}
+                        <StatusCell>
+                          {fmtDate(item.fecha_proxima_revision)}
+                          {item.revision_vencida ? <StatusFlag kind="error" label="Revisión periódica vencida" /> : null}
+                        </StatusCell>
                       </Td>
                       <Td>
                         <StateBadge kind="documento" status={item.estado} />
@@ -510,9 +515,9 @@ function DocumentosContent() {
               <p><span className="text-ink-3">Publicó: </span>{String((detailItem.publico as ApiRecord)?.nombre || "—")}</p>
               <p><span className="text-ink-3">Aprobó: </span>{String((detailItem.aprobo as ApiRecord)?.nombre || "—")} {(detailItem.aprobo as ApiRecord)?.fecha ? `· ${fmtDate((detailItem.aprobo as ApiRecord).fecha)}` : ""}</p>
               <p><span className="text-ink-3">SHA-256: </span><span className="code text-[12px]">{String(detailItem.archivo_sha256 || "—").slice(0, 16)}</span></p>
-              {detailItem.motivo_estado ? <p className="sm:col-span-2"><span className="text-ink-3">Motivo del estado: </span>{String(detailItem.motivo_estado)}</p> : null}
+              {detailItem.motivo_estado ? <p className="whitespace-pre-line sm:col-span-2"><span className="text-ink-3">Motivo del estado: </span>{String(detailItem.motivo_estado)}</p> : null}
               {detailItem.cambios ? <p className="sm:col-span-2"><span className="text-ink-3">Cambios de esta revisión: </span>{String(detailItem.cambios)}</p> : null}
-              {detailItem.devolucion_observaciones ? <p className="sm:col-span-2 text-warning"><span className="text-ink-3">Devuelto con observaciones: </span>{String(detailItem.devolucion_observaciones)}</p> : null}
+              {detailItem.devolucion_observaciones ? <p className="whitespace-pre-line sm:col-span-2 text-warning"><span className="text-ink-3">Devuelto con observaciones: </span>{String(detailItem.devolucion_observaciones)}</p> : null}
             </div>
             {detailItem.mi_distribucion && !(detailItem.mi_distribucion as ApiRecord).leido_en ? (
               <div className="flex items-center justify-between gap-3 rounded-card border border-line px-3 py-2">

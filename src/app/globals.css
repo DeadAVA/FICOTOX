@@ -195,6 +195,18 @@
     outline-offset: 2px;
   }
 
+  /* Campos de texto: al enfocar solo cambia el color del borde (lo pone cada
+     control); sin contorno, anillo ni resplandor. El indicador de foco con
+     contorno queda para botones y controles que no son de texto, y solo con
+     teclado (:focus-visible). */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):is(:focus, :focus-visible),
+  textarea:is(:focus, :focus-visible),
+  select:is(:focus, :focus-visible),
+  [contenteditable]:is(:focus, :focus-visible) {
+    outline: none;
+    box-shadow: none;
+  }
+
   ::selection {
     background: var(--color-brand-soft);
     color: var(--color-ink);

@@ -107,7 +107,7 @@ try {
       await campo.fill(QA_PWD);
       await dialogo.getByRole("button", { name: "Anular", exact: true }).click();
       // Fase 3: la recepcion esta aceptada, asi que la anulacion queda solicitada (segundo usuario).
-      await page.getByText(/pendiente de autorización/i).first().waitFor();
+      await page.getByRole("img", { name: /pendiente de autorización/i }).first().waitFor();
       const ficha = (await api("GET", `/samples/reception/${R1}`, undefined, QA)).data?.item;
       check("con la contrasena en el mismo dialogo la solicitud se crea (sin otro dialogo)", ficha?.estado === "aceptada" && !!ficha?.solicitud_pendiente && (await page.getByText("Confirma tu identidad").count()) === 0, ficha?.estado);
 

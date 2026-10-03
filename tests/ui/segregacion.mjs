@@ -100,11 +100,11 @@ try {
       await page.locator("#prompt-motivo").fill("Resultado capturado en la muestra equivocada");
       await page.locator("#prompt-password").fill(QA_PWD);
       await page.getByRole("dialog").getByRole("button", { name: "Anular", exact: true }).click();
-      await page.getByText(/pendiente de autorización/i).first().waitFor();
+      await page.getByRole("img", { name: /pendiente de autorización/i }).first().waitFor();
       const estado = (await api("GET", `/samples/analysis/${A2}`, undefined, QA)).data?.item;
       solicitudId = estado?.solicitud_pendiente?.id || null;
       check("la anulacion queda solicitada y NO se ejecuta", estado?.estado === "aprobado" && !!solicitudId, `${estado?.estado} ${solicitudId}`);
-      check("la lista muestra la insignia 'Anulación solicitada · pendiente de autorización'", (await page.getByText("Anulación solicitada · pendiente de autorización").count()) > 0);
+      check("la lista muestra el indicador compacto 'Anulación solicitada · pendiente de autorización' (tooltip)", (await page.getByRole("img", { name: "Anulación solicitada · pendiente de autorización" }).count()) > 0);
     } catch (error) {
       check("recorrido QA", false, error.message);
       await captura(page);
@@ -132,9 +132,8 @@ try {
       const despues = (await api("GET", `/samples/analysis/${A2}`, undefined, QA)).data?.item;
       check("al aprobarla otra persona, el analisis queda anulado", despues?.estado === "anulado", despues?.estado);
       await page.goto(`${BASE}/muestras/analisis/${A2}`);
-      await page.getByRole("radio", { name: "Solicitudes" }).click();
       await page.getByLabel("Solicitudes de autorización").getByText(/Aprobada/).first().waitFor();
-      check("el historial del registro muestra la solicitud aprobada (pestaña Solicitudes)", true);
+      check("el historial del registro muestra la solicitud aprobada (apartado Solicitudes, arriba de la bitácora)", true);
     } catch (error) {
       check("recorrido Responsable General", false, error.message);
       await captura(page);

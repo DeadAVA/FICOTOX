@@ -13,7 +13,7 @@ import { useSession } from "@/components/session/SessionProvider";
 import { CampoIdentidad } from "@/components/session/Reautenticar";
 import { Button } from "@/components/ui/Button";
 import { DateInput } from "@/components/ui/DateInput";
-import { Field, FormGrid, Input, Select } from "@/components/ui/Field";
+import { Field, FormGrid, Input, Select, Textarea } from "@/components/ui/Field";
 import { usePrompt } from "@/components/ui/Overlay";
 import { Badge, Skeleton, type Tone } from "@/components/ui/Primitives";
 import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
@@ -47,7 +47,7 @@ export function ListaAutorizaciones({ items, onRevocar }: { items: AutorizacionP
                 {a.vigente_hasta ? ` hasta ${formatearFecha(a.vigente_hasta)}` : " · sin fecha de fin"}
                 {a.folio_fx_thf_ap ? ` · folio ${a.folio_fx_thf_ap}` : ""}
               </span>
-              {a.motivo ? <span className="text-[12.5px] text-ink-2">Motivo: {a.motivo}</span> : null}
+              {a.motivo ? <span className="whitespace-pre-line text-[12.5px] text-ink-2">Motivo: {a.motivo}</span> : null}
               {a.revocada_en ? (
                 <span className="text-[12.5px] text-danger">
                   Revocada el {formatearFechaHora(a.revocada_en)}
@@ -184,7 +184,7 @@ export function AutorizacionesUsuario({ usuarioId }: { usuarioId: number }) {
               <Input id="aut-folio" maxLength={80} value={nueva.folio} onChange={(event) => setNueva((prev) => ({ ...prev, folio: event.target.value }))} />
             </Field>
             <Field label="Motivo" htmlFor="aut-motivo" required>
-              <Input id="aut-motivo" maxLength={300} value={nueva.motivo} onChange={(event) => setNueva((prev) => ({ ...prev, motivo: event.target.value }))} placeholder="Ej. Evaluación de competencia aprobada" />
+              <Textarea id="aut-motivo" rows={2} maxLength={300} value={nueva.motivo} onChange={(event) => setNueva((prev) => ({ ...prev, motivo: event.target.value }))} placeholder="Ej. Evaluación de competencia aprobada" />
             </Field>
           </FormGrid>
           <CampoIdentidad value={clave} onChange={setClave} id="aut-clave-admin" />

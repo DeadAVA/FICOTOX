@@ -43,7 +43,8 @@ Clases utilitarias: `.display` (700, tracking −0.03em, leading 1.05), `.title-
 
 - Radios: 8–10 px controles, 14 px tarjetas, 18 px paneles y bloques de formato, 20 px paleta, 26 px tarjeta de acceso. Píldoras para búsqueda, chips y riel de secciones.
 - Contenedor de página: máximo 1280 px con márgenes de 32 px (16 px en móvil). Formatos: columna única de 880 px.
-- Campos: 40 px de alto, relleno `surface-2`, sin borde marcado; al enfocar pasan a blanco con anillo del acento.
+- Campos: 40 px de alto, relleno `surface-2`, borde `line`; al enfocar **solo cambia el color del borde** (acento al 55 %), sin anillo, sombra ni resplandor (búsquedas, inputs, áreas de texto, selects, DateInput, buscador del Inicio, paleta ⌘K, acceso, hojas y diálogos). Los botones y controles que no son de texto muestran el contorno de foco solo al navegar con teclado (`:focus-visible`); `globals.css` quita el contorno a los campos de texto.
+- Áreas de texto (`Textarea`): crecen con el contenido (`rows` es el mínimo) y respetan los saltos de línea, también en solo lectura. Todo campo de texto libre (observaciones, especificaciones, descripciones, motivos, requisitos) usa `Textarea`; los campos cortos (folios, nombres, cantidades, fechas) siguen siendo `Input`.
 
 ### Materiales
 
@@ -100,7 +101,9 @@ Manual resumido dentro de la app (`src/app/(app)/ayuda/page.tsx`): índice a la 
 
 ### Listas
 
-Cabecera con título y descripción y una barra con **búsqueda + menú Filtros** (`FilterMenu`, `src/components/ui/FilterMenu.tsx`): un botón con el número de filtros activos que abre un panel con grupos de una sola opción (con conteos) y conmutadores ("Mostrar anuladas/bajas"); las opciones previstas pero no disponibles (PSP, pigmentos, sedimentos) van en gris con la nota "Próximamente". Los filtros activos se muestran como chips junto al botón (`FilterChips`). Auditoría añade dentro del mismo panel los campos de usuario y fechas.
+Cabecera con título y descripción y una barra con **búsqueda + menú Filtros** (`FilterMenu`, `src/components/ui/FilterMenu.tsx`): un botón con el número de filtros activos que abre un panel con encabezado ("Filtros · n activos" y **Limpiar filtros**) y secciones tituladas en las que **cada opción es un interruptor**: arriba siempre **Vista** (Mis muestras, Mostrar anuladas/bajas, Solo las mías…), después un grupo por filtro de la lista (Estado, Aceptación, Análisis, Tipo…, con conteos). Los grupos siguen siendo de una sola opción: encender un interruptor apaga los demás del grupo y apagarlo vuelve a "todas", así cada lista filtra igual que antes. Las opciones previstas pero no disponibles (PSP, pigmentos, sedimentos) van en gris con la nota "Próximamente". Los filtros activos se muestran como chips junto al botón (`FilterChips`). Auditoría conserva su barra propia (periodo segmentado, desplegables y chips).
+
+**Avisos secundarios en las filas** (`StatusFlag` y `StatusCell`, `src/components/ui/StatusFlag.tsx`): junto a la insignia de estado, un indicador redondo de 22 px con icono y color (reloj ámbar = espera a otra persona, alerta ámbar = requiere atención, candado rojo = retenido/bloqueado, alerta roja = vencida/fuera de vigencia, flecha roja = regresado, i gris = informativo) y el texto completo en tooltip (también con teclado) y `aria-label`. Así la fila conserva su altura y sus columnas: solicitudes pendientes, visto bueno, requiere enmienda, retenido, reaperturas, vencidas, automática, cuentas sin contraseña o bloqueadas, mantenimiento pendiente de un equipo, "Falta disposición final". En la ficha del registro el aviso completo sigue como banner (`Callout`).
 
 Cada fila tiene **un solo botón de acciones** (`ActionMenu`, "⋯") que agrupa todo: abrir, editar, avanzar de etapa (Procesar, Extraer, Analizar), rellenar, dar de baja / anular / restaurar. Cada opción lleva su icono duotono en una cajita del color de su tono (océano = abrir, verde = avanzar, rojo = anular) y una línea que explica qué hace. El clic en la fila abre el registro. En inventario, "Ver ficha" abre la `DetailSheet`.
 
@@ -128,7 +131,7 @@ Catálogo de 18 ilustraciones (`src/components/ui/AvatarArt.tsx`; claves en `src
 
 Cada lista tiene: cargando (esqueleto), vacío (con acción sugerida), error (con reintentar) y sin permiso. Cada formulario valida en línea y confirma con toast (abajo al centro); las acciones destructivas usan diálogo propio, nunca `window.confirm`.
 
-No hay "eliminar": anular, dar de baja, cancelar, obsoletar y las excepciones de firma piden un **motivo** (`usePrompt`, mínimo 5 caracteres) que queda en la bitácora. Anulados y bajas se ocultan por defecto y se muestran con la casilla **Mostrar anuladas / bajas**. Los formatos terminales se abren en solo lectura y terminan con **Historial** (`RecordHistory`).
+No hay "eliminar": anular, dar de baja, cancelar, obsoletar y las excepciones de firma piden un **motivo** (`usePrompt`, mínimo 5 caracteres) que queda en la bitácora. Anulados y bajas se ocultan por defecto y se muestran con la casilla **Mostrar anuladas / bajas**. Los formatos terminales se abren en solo lectura y terminan con **Historial** (`RecordHistory`): arriba, si existen, las **Solicitudes de autorización** (las pendientes destacadas con qué se pidió, quién, motivo y cuándo); abajo, la **Bitácora · N eventos**, recogida por omisión, que se despliega y recoge con un clic (altura animada, sin animación con `prefers-reduced-motion`). No hay botones de exportar ni actualizar: el historial se exporta desde Calidad › Auditoría buscando el folio.
 
 ### Historial y auditoría
 

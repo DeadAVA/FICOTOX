@@ -14,6 +14,7 @@ import { FilterChips, FilterMenu, type FilterGroup, type FilterToggle } from "@/
 import { ActionMenu, type MenuItem } from "@/components/ui/Overlay";
 import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, Skeleton, TableSkeleton } from "@/components/ui/Primitives";
+import { StatusCell, StatusFlag } from "@/components/ui/StatusFlag";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { openProtectedFile } from "@/lib/client/files";
@@ -150,19 +151,13 @@ function InformesContent() {
                   <Td muted>{fmtDate(item.fecha_emision)}</Td>
                   <Td muted>{item.autorizado_nombre || "-"}</Td>
                   <Td>
-                    <StateBadge kind="informe" status={item.estado} />
-                    <SupervisionBadge estado={item.supervision_estado} />
-                    <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} />
-                    {Number(item.retenido || 0) ? (
-                      <span className="ml-1" data-retenido>
-                        <Badge tone="danger">Retenido</Badge>
-                      </span>
-                    ) : null}
-                    {Number(item.requiere_enmienda || 0) ? (
-                      <span className="ml-1" title={String(item.requiere_enmienda_motivo || "")} data-requiere-enmienda>
-                        <Badge tone="danger">Requiere enmienda</Badge>
-                      </span>
-                    ) : null}
+                    <StatusCell>
+                      <StateBadge kind="informe" status={item.estado} />
+                      <SupervisionBadge estado={item.supervision_estado} />
+                      <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} />
+                      {Number(item.retenido || 0) ? <StatusFlag kind="bloqueo" label="Retenido por una no conformidad" detail="No se libera ni se envía hasta liberar la retención." data-retenido /> : null}
+                      {Number(item.requiere_enmienda || 0) ? <StatusFlag kind="aviso" label="Requiere enmienda" detail={item.requiere_enmienda_motivo ? String(item.requiere_enmienda_motivo) : undefined} data-requiere-enmienda /> : null}
+                    </StatusCell>
                     {item.liberado_en ? <p className="mt-0.5 text-[11.5px] text-ink-3">Liberado {fmtDate(item.liberado_en)}</p> : null}
                   </Td>
                   <Td align="right" sticky onClick={(event) => event.stopPropagation()}>

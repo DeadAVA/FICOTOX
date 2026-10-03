@@ -224,6 +224,7 @@ export async function createReceptionSample({ request, s }: RouteContext): Promi
   const data = normalizePayload(payload);
   // Fase 4: autorizacion FX-THF-AP de quien captura.
   await exigirAutorizaciones(s, user, requisitosRecepcion());
+  if (!data.solicitante) return json({ message: "Indica el solicitante" }, 400);
   if (!data.folio_num) {
     data.folio_num = await nextFolioNum(s, TABLE);
   }
@@ -303,6 +304,8 @@ export async function updateReceptionSample({ request, s, params }: RouteContext
   if (!data.folio_num) {
     return json({ message: "El folio es obligatorio" }, 400);
   }
+  // Campo 3 del formato FX-TCF-GMR: obligatorio al guardar (las recepciones anteriores sin él se abren igual).
+  if (!data.solicitante) return json({ message: "Indica el solicitante" }, 400);
   // Fase 5: el folio ya no se edita; cambiarlo requiere solicitud (POST /folio).
   if (antes && Number(data.folio_num) !== Number(antes.folio_num)) return json({ message: "El folio de la recepción ya no se edita; usa \"Cambiar folio\" (requiere motivo y autorización de la Coord. Técnica)", codigo: "folio_bloqueado" }, 409);
   const invalid = validateAcceptance(data);

@@ -11,7 +11,7 @@ import { FolioChip, SegregacionCallout, SolicitudCallout } from "@/components/fe
 import { PageBody } from "@/components/shell/AppShell";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
-import { Field, FormGrid, Input, Select, Textarea } from "@/components/ui/Field";
+import { Field, FormGrid, Select, Textarea } from "@/components/ui/Field";
 import { Sheet } from "@/components/ui/Overlay";
 import { Card, CardHeader, DetailRow } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
@@ -239,7 +239,7 @@ function EvaluarSheet({ item, onClose }: { item: ApiRecord; onClose: () => void 
             ) : (
               <FormGrid cols={1}>
                 <Field label="Requisito incumplido" htmlFor="eval-req" hint="Cláusula ISO, procedimiento o formato.">
-                  <Input id="eval-req" value={requisito} onChange={(event) => setRequisito(event.target.value)} />
+                  <Textarea id="eval-req" rows={2} value={requisito} onChange={(event) => setRequisito(event.target.value)} />
                 </Field>
                 <Field label="Clasificación" htmlFor="eval-clasif" hint="Por validar con Mejora Continua.">
                   <Select id="eval-clasif" value={clasificacion} onChange={(event) => setClasificacion(event.target.value)}>

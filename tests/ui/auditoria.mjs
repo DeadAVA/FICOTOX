@@ -69,6 +69,8 @@ try {
     await page.getByText("Historial del registro").first().waitFor();
     const todo = page.getByRole("radio", { name: "Todo", exact: true }).first();
     if (await todo.count()) await todo.click();
+    // La bitácora del historial aparece recogida.
+    await page.getByRole("button", { name: /^Bitácora · \d+ eventos?/ }).click();
     const evento = page.locator('ol[aria-label="Movimientos"] button').first();
     await evento.scrollIntoViewIfNeeded();
     await evento.click();

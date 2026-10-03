@@ -750,7 +750,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
             <Input id="a-hum" maxLength={20} placeholder="% HR" value={form.humedad} onChange={(event) => patch({ humedad: event.target.value })} />
           </Field>
           <Field label="Observaciones de condiciones" htmlFor="a-cond" className="sm:col-span-3">
-            <Input id="a-cond" maxLength={240} value={form.condicionesObs} onChange={(event) => patch({ condicionesObs: event.target.value })} />
+            <Textarea id="a-cond" rows={2} maxLength={240} value={form.condicionesObs} onChange={(event) => patch({ condicionesObs: event.target.value })} />
           </Field>
         </FormGrid>
       </FormCard>
@@ -830,7 +830,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
                     </label>
                     <label className={cell}>
                       Observación
-                      <input className={`${controlClassSm}`} value={row.observacion} onChange={(event) => updateRow(row.key, { observacion: event.target.value })} aria-label={`Observación de ${row.id_muestra}`} readOnly={readOnly} />
+                      <Textarea small rows={1} value={row.observacion} onChange={(event) => updateRow(row.key, { observacion: event.target.value })} aria-label={`Observación de ${row.id_muestra}`} readOnly={readOnly} />
                     </label>
                   </div>
                 </div>

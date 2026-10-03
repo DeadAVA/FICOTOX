@@ -58,7 +58,14 @@ let flujo = null;
 {
   const id = nuevaId("F5");
   const estados = [];
+  // Ajustes de interfaz: el solicitante (campo 3 del FX-TCF-GMR) es obligatorio al crear y al editar.
+  const sinSolicitante = await api("POST", "/samples/reception", recepcion(`${id}-SS`, { solicitante: "  " }), tM);
+  check("crear una recepción sin solicitante: 400 'Indica el solicitante'", sinSolicitante.status === 400 && sinSolicitante.data?.message === "Indica el solicitante", `${sinSolicitante.status} ${sinSolicitante.data?.message}`);
   const R = (await api("POST", "/samples/reception", recepcion(id), tM)).data?.id;
+  check("con solicitante se crea (201)", !!R);
+  const folioR = (await api("GET", `/samples/reception/${R}`, undefined, QA)).data?.item?.folio_num;
+  const editarSin = await api("PUT", `/samples/reception/${R}`, { ...recepcion(id), folio_num: folioR, solicitante: "" }, tM);
+  check("editar quitando el solicitante: 400 'Indica el solicitante'", editarSin.status === 400 && editarSin.data?.message === "Indica el solicitante", `${editarSin.status} ${editarSin.data?.message}`);
   estados.push(await estadoR(R));
   const sinAsignar = await api("POST", "/samples/processing", procesamiento(R, id), tL);
   check("el Analista sin asignacion no crea el procesamiento: 403 no_asignado", sinAsignar.status === 403 && sinAsignar.data?.codigo === "no_asignado", `${sinAsignar.status} ${sinAsignar.data?.message}`);

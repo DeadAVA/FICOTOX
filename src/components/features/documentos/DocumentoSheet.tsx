@@ -165,7 +165,7 @@ export function DocumentoSheet({ open, item, onClose }: { open: boolean; item: A
           <Textarea id="d-cambios" rows={2} value={form.cambios} onChange={set("cambios")} />
         </Field>
         <Field label="Distribución" htmlFor="d-dist" hint="Puntos de uso donde debe estar disponible.">
-          <Input id="d-dist" maxLength={240} value={form.distribucion} onChange={set("distribucion")} />
+          <Textarea id="d-dist" rows={2} maxLength={240} value={form.distribucion} onChange={set("distribucion")} />
         </Field>
         <div className="rounded-card border border-line bg-surface-2/50 p-4">
           <Checkbox checked={form.esExterno} onChange={(event) => setForm((prev) => ({ ...prev, esExterno: event.target.checked }))} label="Documento externo" description="Norma, manual de fabricante u otro documento que no emite el laboratorio." />

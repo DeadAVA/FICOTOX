@@ -303,6 +303,8 @@ export async function createInforme({ request, s }: RouteContext): Promise<Respo
   const recepcion = await loadRecepcion(s, data.recepcion_id);
   const analyses = await loadAnalyses(s, data.analisis_ids);
   if (analyses.some((a) => Number(a.recepcion_id) !== Number(recepcion.id))) return json({ message: "Todos los analisis deben pertenecer a la recepcion del informe" }, 400);
+  // El cliente es dato obligatorio del informe (si no se manda, se toma el solicitante de la recepción).
+  if (!normalizeCliente(data.cliente, recepcion).nombre) return json({ message: "Indica el nombre del cliente" }, 400);
   await exigirAnalisisSinSolicitud(s, data.analisis_ids, "incluir en un informe");
   const folio = data.folio_num || (await nextFolioNum(s, TABLE));
   const userId = userIdFromClaims(user);
@@ -361,6 +363,8 @@ export async function updateInforme({ request, s, params }: RouteContext): Promi
   const recepcion = await loadRecepcion(s, data.recepcion_id || Number(antes.recepcion_id));
   const analyses = await loadAnalyses(s, data.analisis_ids);
   if (analyses.some((a) => Number(a.recepcion_id) !== Number(recepcion.id))) return json({ message: "Todos los analisis deben pertenecer a la recepcion del informe" }, 400);
+  // El cliente es dato obligatorio del informe (si no se manda, se toma el solicitante de la recepción).
+  if (!normalizeCliente(data.cliente, recepcion).nombre) return json({ message: "Indica el nombre del cliente" }, 400);
   await exigirAnalisisSinSolicitud(s, data.analisis_ids, "incluir en un informe");
   await s.execute(
     `

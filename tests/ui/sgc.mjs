@@ -163,7 +163,7 @@ try {
   await row.getByRole("button", { name: "Acciones" }).click();
   await page.getByRole("menuitem", { name: /Anular recepción/ }).click();
   await fillPrompt("Prueba UI: registro duplicado", "Anular");
-  await page.getByText(/pendiente de autorización/i).first().waitFor();
+  await page.getByRole("img", { name: /pendiente de autorización/i }).first().waitFor();
   check("anular una recepción aceptada queda pendiente de autorización", true);
   check("la Responsable General aprueba la anulación", (await aprobarComoRG(`R ${String(folio).padStart(7, "0")}`)) === 200);
   await page.reload();
@@ -175,7 +175,7 @@ try {
   await anulada.getByRole("button", { name: "Acciones" }).click();
   await page.getByRole("menuitem", { name: /Restaurar recepción/ }).click();
   await fillPrompt("Prueba UI: se anuló por error", "Restaurar");
-  await page.getByText(/pendiente de autorización/i).first().waitFor();
+  await page.getByRole("img", { name: /pendiente de autorización/i }).first().waitFor();
   check("la Responsable General aprueba la restauración", (await aprobarComoRG(`R ${String(folio).padStart(7, "0")}`)) === 200);
   await page.reload();
   await setFilterToggle("Mostrar anuladas", false);
@@ -185,8 +185,15 @@ try {
   await restaurada.getByRole("button", { name: "Acciones" }).click();
   await page.getByRole("menuitem", { name: "Editar" }).click();
   await page.getByText("Historial del registro").waitFor();
+  // La bitácora del historial aparece recogida: "Bitácora · N eventos" la despliega.
+  const bitacora = page.getByRole("button", { name: /^Bitácora · \d+ eventos?/ });
+  check("la bitácora del historial aparece recogida", (await bitacora.getAttribute("aria-expanded")) === "false");
+  check("el historial ya no tiene 'Exportar' ni 'Actualizar'", (await page.locator("#sec-historial").getByRole("button", { name: /^(Exportar|Actualizar)$/ }).count()) === 0);
+  await bitacora.click();
   await page.getByText(/restauró la recepción/).first().waitFor();
-  check("historial de auditoría en el formulario de recepción", true);
+  check("historial de auditoría en el formulario de recepción (se despliega con un clic)", (await bitacora.getAttribute("aria-expanded")) === "true");
+  await bitacora.click();
+  check("  … y se vuelve a recoger", (await bitacora.getAttribute("aria-expanded")) === "false");
 
   /* ---------- Analisis: crear, revisar, aprobar ---------- */
   // Cadena propia (recepcion aceptada -> procesamiento -> extraccion E-A) para no depender de ids previos.
@@ -236,7 +243,7 @@ try {
   // Fase 10: evidencia instrumental obligatoria; se adjunta desde la sección del formato.
   await showAll();
   await page.locator('input[aria-label="Archivo de evidencia"]').setInputFiles({ name: "cromatograma-sgc.pdf", mimeType: "application/pdf", buffer: pdfDePrueba(`Cromatograma UI SGC ${Date.now()}`) });
-  await page.locator('input[id^="evidencia-desc-"]').fill("Cromatograma de la corrida");
+  await page.locator('textarea[id^="evidencia-desc-"]').fill("Cromatograma de la corrida");
   await page.getByRole("button", { name: "Adjuntar evidencia" }).click();
   await page.locator("[data-adjunto]").first().waitFor();
   check("el analista adjunta la evidencia instrumental antes de enviar", true);

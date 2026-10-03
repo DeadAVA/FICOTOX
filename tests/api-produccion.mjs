@@ -27,6 +27,13 @@ const solicitudes = (entidad, entidadId, token) => api("GET", `/solicitudes?enti
   check("  … una vez asignada: 200 (bitácora y CSV)", h2.status === 200 && (h2.data?.items || []).length > 0 && csv2.status === 200 && String(csv2.data).includes("Recepción"), `${h2.status} ${csv2.status}`);
   const h3 = await historial("muestras_recepcion", c.R, t.ana);
   check("  … quien tiene muestras:V total la ve sin asignación", h3.status === 200, String(h3.status));
+  // Ajustes de interfaz: el historial ya no tiene "Exportar"; se exporta desde Calidad › Auditoría buscando el folio.
+  const folioR = `R ${String((await api("GET", `/samples/reception/${c.R}`, undefined, t.ana)).data?.item?.folio_num || 0).padStart(7, "0")}`;
+  const porFolio = await api("GET", `/audit?formato=csv&search=${encodeURIComponent(folioR)}`, undefined, t.ana);
+  const filasFolio = String(porFolio.data || "").split("\n").filter((l) => l.includes(folioR));
+  // Las exportaciones previas del historial quedan como "exportar" con referencia "Historial …": no son eventos del registro.
+  const eventos = (h3.data?.items || []).filter((e) => e.accion !== "exportar").length;
+  check("  … Auditoría › Exportar CSV filtrando por el folio trae los eventos del registro", porFolio.status === 200 && eventos > 0 && filasFolio.length >= eventos, `${porFolio.status} ${filasFolio.length} filas vs ${eventos} eventos`);
 }
 
 // Autorizados: Diego (Estudiante, documentos:V autorizados) solo ve documentos vigentes distribuidos a el.

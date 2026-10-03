@@ -13,6 +13,7 @@ import { FilterChips, FilterMenu, type FilterGroup, type FilterToggle } from "@/
 import { ActionMenu, Dropdown, type MenuItem } from "@/components/ui/Overlay";
 import { SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { EmptyState, ErrorState, Skeleton, TableSkeleton } from "@/components/ui/Primitives";
+import { StatusCell } from "@/components/ui/StatusFlag";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { fmt, fmtDate } from "@/lib/client/format";
@@ -90,7 +91,7 @@ function ExtraccionList() {
     },
     {
       key: "etapa",
-      label: "Etapa",
+      label: "Estado",
       value: etapa,
       defaultValue: "",
       onChange: (v) => setEtapa(v as EtapaFilter),
@@ -198,9 +199,11 @@ function ExtraccionList() {
                       {fmtDate(item.fecha_extraccion)}
                     </Td>
                     <Td>
-                      <SampleStatus status={item.estado} />
-                      <SupervisionBadge estado={item.supervision_estado} />
-                      <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} />
+                      <StatusCell>
+                        <SampleStatus status={item.estado} />
+                        <SupervisionBadge estado={item.supervision_estado} />
+                        <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} />
+                      </StatusCell>
                     </Td>
                     <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
                       <ActionMenu items={menuFor(item)} header={`${formatExtractionFolio(item)} · ${meta.short}`} />

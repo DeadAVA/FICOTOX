@@ -11,6 +11,7 @@ import { Field, Select } from "@/components/ui/Field";
 import { DateInput } from "@/components/ui/DateInput";
 import { PageHeader, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, Stat, TableSkeleton } from "@/components/ui/Primitives";
+import { StatusCell, StatusFlag } from "@/components/ui/StatusFlag";
 import { Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { fmt, fmtDate } from "@/lib/client/format";
@@ -185,13 +186,13 @@ function AccesosContent() {
                       </div>
                     </Td>
                     <Td>
-                      <div className="flex flex-wrap gap-1">
+                      <StatusCell>
                         <Badge tone={c.activo ? "success" : "neutral"} dot>
                           {c.activo ? "Activa" : "Inactiva"}
                         </Badge>
-                        {c.activo && c.cuenta_vigente === false ? <Badge tone="danger">Fuera de vigencia</Badge> : null}
-                        {c.bloqueado_hasta ? <Badge tone="danger">Bloqueada</Badge> : null}
-                      </div>
+                        {c.activo && c.cuenta_vigente === false ? <StatusFlag kind="error" label="Fuera de vigencia" detail="La cuenta aún no inicia o ya terminó su vigencia." /> : null}
+                        {c.bloqueado_hasta ? <StatusFlag kind="bloqueo" label="Bloqueada" detail="Por intentos fallidos de acceso." /> : null}
+                      </StatusCell>
                     </Td>
                   </Tr>
                 ))}

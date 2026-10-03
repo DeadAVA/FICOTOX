@@ -70,7 +70,7 @@ export function HomeSearch({ className, handle }: { className?: string; handle?:
       }}
     >
       <Command label="Buscar" shouldFilter={false} loop className="w-full">
-        <div className={cn("flex items-center gap-3 rounded-[20px] bg-surface pr-3 pl-5 shadow-raised transition-[box-shadow,transform] duration-300 ease-[var(--ease-spring)]", focused && "shadow-[var(--shadow-panel),var(--shadow-focus)]")}>
+        <div className={cn("flex items-center gap-3 rounded-[20px] bg-surface pr-3 pl-5 shadow-raised transition-[box-shadow,transform] duration-300 ease-[var(--ease-spring)]", focused && "shadow-[var(--shadow-panel)]")}>
           <MagnifyingGlass size={22} className={cn("shrink-0 transition-colors", focused ? "text-brand" : "text-ink-3")} />
           <Command.Input
             ref={input}

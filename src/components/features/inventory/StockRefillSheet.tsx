@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
-import { Field, Input } from "@/components/ui/Field";
+import { Field, Input, Textarea } from "@/components/ui/Field";
 import { Sheet } from "@/components/ui/Overlay";
 import { API_BASE_URL, sendJsonAuth } from "@/lib/client/api";
 import { parseNumberOrNull } from "@/lib/client/format";
@@ -82,7 +82,7 @@ export function StockRefillSheet({ open, target, onClose }: { open: boolean; tar
           />
         </Field>
         <Field label="Motivo" htmlFor="refill-reason" hint="Queda registrado en el historial de movimientos.">
-          <Input id="refill-reason" maxLength={180} value={reason} onChange={(event) => setReason(event.target.value)} />
+          <Textarea id="refill-reason" rows={2} maxLength={180} value={reason} onChange={(event) => setReason(event.target.value)} />
         </Field>
       </form>
     </Sheet>

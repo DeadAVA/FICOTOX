@@ -476,7 +476,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
                   </Select>
                 </Field>
                 <Field label="Motivo de la asignación" htmlFor="u-motivo-rol" required hint="Queda en la bitácora.">
-                  <Input id="u-motivo-rol" maxLength={200} value={motivoAlta} onChange={(event) => setMotivoAlta(event.target.value)} />
+                  <Textarea id="u-motivo-rol" rows={2} maxLength={200} value={motivoAlta} onChange={(event) => setMotivoAlta(event.target.value)} />
                 </Field>
               </>
             ) : null}
@@ -538,7 +538,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
               </Field>
               {cambiaCuenta ? (
                 <Field label="Motivo del cambio de vigencia o supervisor" htmlFor="u-motivo-cuenta" required hint="Queda en la bitácora." className="sm:col-span-2">
-                  <Input id="u-motivo-cuenta" maxLength={300} value={motivoCuenta} onChange={(event) => setMotivoCuenta(event.target.value)} />
+                  <Textarea id="u-motivo-cuenta" rows={2} maxLength={300} value={motivoCuenta} onChange={(event) => setMotivoCuenta(event.target.value)} />
                 </Field>
               ) : null}
             </FormGrid>
@@ -592,7 +592,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
                         {a.vigente_hasta ? ` hasta ${fmtDate(a.vigente_hasta)}` : " · sin fecha de fin"}
                         {a.asignado_por_nombre ? ` · asignó ${a.asignado_por_nombre}` : ""}
                       </span>
-                      {a.motivo ? <span className="text-[12.5px] text-ink-2">Motivo: {a.motivo}</span> : null}
+                      {a.motivo ? <span className="whitespace-pre-line text-[12.5px] text-ink-2">Motivo: {a.motivo}</span> : null}
                       {a.revocado_en ? (
                         <span className="text-[12.5px] text-danger">
                           Revocado el {fmtDateTime(a.revocado_en)}
@@ -630,7 +630,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
                   </Select>
                 </Field>
                 <Field label="Motivo" htmlFor="u-asignar-motivo" required>
-                  <Input id="u-asignar-motivo" maxLength={300} value={nueva.motivo} onChange={(event) => setNueva((prev) => ({ ...prev, motivo: event.target.value }))} placeholder="Ej. Cambio de funciones" />
+                  <Textarea id="u-asignar-motivo" rows={2} maxLength={300} value={nueva.motivo} onChange={(event) => setNueva((prev) => ({ ...prev, motivo: event.target.value }))} placeholder="Ej. Cambio de funciones" />
                 </Field>
                 <Field label="Vigente desde" htmlFor="u-asignar-desde">
                   <DateInput id="u-asignar-desde" value={nueva.desde} onChange={(value) => setNueva((prev) => ({ ...prev, desde: value }))} />

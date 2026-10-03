@@ -12,6 +12,7 @@ import { FilterChips, FilterMenu, type FilterGroup } from "@/components/ui/Filte
 import { ActionMenu, Dialog, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Avatar, Badge, EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
+import { StatusCell, StatusFlag } from "@/components/ui/StatusFlag";
 import { Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
 import { fmt, fmtDate, fmtDateTime, normalizeText } from "@/lib/client/format";
@@ -222,15 +223,15 @@ function UsuariosContent() {
                   </Td>
                   <Td muted>{fmtDateTime(item.ultimo_acceso || item.creado_en)}</Td>
                   <Td>
-                    <div className="flex flex-wrap items-center gap-1.5">
+                    <StatusCell>
                       <Badge tone={item.activo ? "success" : "neutral"} dot>
                         {item.activo ? "Activo" : "Inactivo"}
                       </Badge>
-                      {!item.tiene_password ? <Badge tone="warning">Sin contraseña</Badge> : null}
-                      {item.cuenta_vigente === false && item.activo ? <Badge tone="danger">Fuera de vigencia</Badge> : null}
-                      {item.bloqueado_hasta ? <Badge tone="danger">Bloqueada hasta {horaBloqueo(item.bloqueado_hasta)}</Badge> : null}
-                      {Number(item.debe_cambiar_password) ? <Badge tone="warning">Debe cambiar contraseña</Badge> : null}
-                    </div>
+                      {!item.tiene_password ? <StatusFlag kind="aviso" label="Sin contraseña" detail="Asígnale una contraseña para que pueda entrar." /> : null}
+                      {item.cuenta_vigente === false && item.activo ? <StatusFlag kind="error" label="Fuera de vigencia" detail="La cuenta aún no inicia o ya terminó su vigencia." /> : null}
+                      {item.bloqueado_hasta ? <StatusFlag kind="bloqueo" label={`Bloqueada hasta ${horaBloqueo(item.bloqueado_hasta)}`} detail="Por intentos fallidos; se puede desbloquear antes." /> : null}
+                      {Number(item.debe_cambiar_password) ? <StatusFlag kind="pendiente" label="Debe cambiar contraseña" detail="Al entrar elegirá una nueva." /> : null}
+                    </StatusCell>
                   </Td>
                   <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
                     <ActionMenu items={menuFor(item)} header={String(item.email || "")} />

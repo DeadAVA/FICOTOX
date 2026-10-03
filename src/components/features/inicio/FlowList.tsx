@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight, CaretRight, Check, PencilSimple, SealCheck, Eye, FlagCheckered } from "@phosphor-icons/react";
 import { cn } from "@/components/ui/cn";
+import { StatusFlag } from "@/components/ui/StatusFlag";
 import { Tooltip } from "@/components/ui/Overlay";
 import { fmtDate } from "@/lib/client/format";
 import { sampleStatusLabel } from "@/lib/client/samples";
@@ -109,11 +110,7 @@ export function FlowCard({ item }: { item: FlowItem }) {
               {item.folio}
             </Link>
             <span className="min-w-0 truncate text-[13.5px] text-ink">{item.cliente || "Sin solicitante"}</span>
-            {item.nota ? (
-              <span className="rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-medium text-warning-text" data-nota-flujo>
-                {item.nota}
-              </span>
-            ) : null}
+            {item.nota ? <StatusFlag kind="pendiente" label={item.nota} className="self-center" data-nota-flujo /> : null}
           </div>
           <p className="text-[12px] text-ink-3">
             {[item.estado ? sampleStatusLabel(item.estado) : null, tipos.join(" + ") || null, `${muestras} ${muestras === 1 ? "muestra" : "muestras"}`, item.dias === 0 ? "hoy" : item.dias === 1 ? "1 día" : `${item.dias} días`].filter(Boolean).join(" · ")}

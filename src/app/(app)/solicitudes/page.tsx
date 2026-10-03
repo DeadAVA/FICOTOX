@@ -185,7 +185,7 @@ export default function SolicitudesPage() {
         </Td>
         <Td>
           <p className="text-[13px] text-ink-2">{String(item.motivo || "—")}</p>
-          {item.motivo_resolucion && item.estado !== "pendiente" ? <p className="mt-0.5 text-[12px] text-ink-3">Resolución: {String(item.motivo_resolucion)}</p> : null}
+          {item.motivo_resolucion && item.estado !== "pendiente" ? <p className="mt-0.5 whitespace-pre-line text-[12px] text-ink-3">Resolución: {String(item.motivo_resolucion)}</p> : null}
         </Td>
         <Td muted>
           <p>

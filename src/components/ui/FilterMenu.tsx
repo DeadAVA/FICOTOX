@@ -2,15 +2,20 @@
 
 import type { ReactNode } from "react";
 import { Popover as RadixPopover } from "radix-ui";
-import { Check, SlidersHorizontal } from "@phosphor-icons/react";
+import { SlidersHorizontal } from "@phosphor-icons/react";
 import { cn } from "./cn";
-import { Switch } from "./Field";
 
 /*
  * Menu de filtros compacto: un boton "Filtros" con el numero de filtros
- * activos y un panel con grupos de opciones (una sola por grupo) y
- * conmutadores. Las opciones `disabled` se muestran en gris con su nota
- * ("Proximamente"): existen en el plan pero aun no se pueden usar.
+ * activos y un panel con secciones tituladas en las que cada opcion es un
+ * interruptor. Arriba va siempre "Vista" (Mis muestras, Mostrar anuladas…);
+ * despues, un grupo por filtro de la lista (Estado, Aceptación, Análisis…).
+ *
+ * Los grupos siguen siendo de una sola opcion: encender un interruptor apaga
+ * los demas del grupo y apagarlo vuelve al valor por omision ("Todas"), asi
+ * cada lista filtra exactamente igual que antes. La opcion por omision no se
+ * dibuja (todo apagado = sin filtro). Las opciones `disabled` se muestran en
+ * gris con su nota ("Proximamente").
  */
 
 export interface FilterOption<T extends string = string> {
@@ -38,6 +43,43 @@ export interface FilterToggle {
   description?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  /* Seccion donde se muestra; por omision "Vista". Si coincide con el titulo de un grupo, se agrega al final de ese grupo. */
+  group?: string;
+}
+
+const VISTA = "Vista";
+
+function FilterSwitchRow({ label, description, count, hint, tone, checked, disabled, onChange }: { label: ReactNode; description?: ReactNode; count?: number | null; hint?: ReactNode; tone?: FilterOption["tone"]; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={typeof label === "string" ? `${label}${typeof count === "number" ? ` (${count})` : ""}` : undefined}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn("press flex min-h-9 w-full items-center gap-2.5 rounded-[9px] px-2 py-1.5 text-left text-[13.5px]", disabled ? "cursor-not-allowed text-ink-4" : checked ? "text-ink" : "text-ink-2 hover:bg-surface-3/80 hover:text-ink")}
+    >
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className={cn("truncate", checked && "font-medium")}>{label}</span>
+        {description ? <span className="text-[12px] leading-snug text-ink-3">{description}</span> : null}
+      </span>
+      {hint ? <span className="rounded-full bg-surface-3 px-1.5 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-ink-4">{hint}</span> : null}
+      {typeof count === "number" ? <span className={cn("tnum text-[12px]", tone === "danger" ? "text-danger" : tone === "warning" ? "text-warning-text" : "text-ink-3")}>{count}</span> : null}
+      <span aria-hidden="true" className={cn("relative h-[20px] w-[34px] shrink-0 rounded-full transition-colors duration-200 ease-[var(--ease-spring)]", checked ? "bg-success" : "bg-line-strong", disabled && "opacity-50")}>
+        <span className={cn("absolute top-[2px] left-[2px] h-[16px] w-[16px] rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.25)] transition-transform duration-200 ease-[var(--ease-spring)]", checked && "translate-x-[14px]")} />
+      </span>
+    </button>
+  );
+}
+
+function FilterSection({ title, children, first }: { title: string; children: ReactNode; first?: boolean }) {
+  return (
+    <section aria-label={title} className={cn("flex flex-col", !first && "border-t border-line pt-2.5")}>
+      <p className="eyebrow px-2 pb-1 text-ink-3">{title}</p>
+      {children}
+    </section>
+  );
 }
 
 export function FilterMenu({ groups = [], toggles = [], children, className, label = "Filtros" }: { groups?: FilterGroup[]; toggles?: FilterToggle[]; children?: ReactNode; className?: string; label?: string }) {
@@ -46,6 +88,14 @@ export function FilterMenu({ groups = [], toggles = [], children, className, lab
     groups.forEach((g) => g.onChange(g.defaultValue));
     toggles.forEach((t) => t.onChange(false));
   };
+  const groupLabels = new Set(groups.map((g) => g.label));
+  const togglesOf = (section: string) => toggles.filter((t) => (t.group || VISTA) === section);
+  /* Secciones de interruptores sueltos que no coinciden con ningun grupo ("Vista" siempre primero). */
+  const sueltas = [...new Set(toggles.map((t) => t.group || VISTA))].filter((s) => !groupLabels.has(s)).sort((a, b) => (a === VISTA ? -1 : b === VISTA ? 1 : 0));
+  const vista = sueltas.filter((s) => s === VISTA);
+  const otras = sueltas.filter((s) => s !== VISTA);
+  const toggleRow = (toggle: FilterToggle) => <FilterSwitchRow key={toggle.key} label={toggle.label} description={toggle.description} checked={toggle.checked} onChange={toggle.onChange} />;
+  let index = 0;
   return (
     <RadixPopover.Root>
       <RadixPopover.Trigger asChild>
@@ -56,50 +106,47 @@ export function FilterMenu({ groups = [], toggles = [], children, className, lab
         </button>
       </RadixPopover.Trigger>
       <RadixPopover.Portal>
-        <RadixPopover.Content align="start" sideOffset={8} className="material scroll-thin z-50 max-h-[min(72vh,640px)] w-[300px] origin-[var(--radix-popover-content-transform-origin)] overflow-y-auto rounded-[16px] p-2 shadow-pop outline-none data-[state=open]:animate-materialize">
-          <div className="flex flex-col gap-3">
-            {groups.map((group) => (
-              <div key={group.key} role="radiogroup" aria-label={group.label}>
-                <p className="eyebrow px-2 pt-1 pb-1.5 text-ink-3">{group.label}</p>
-                <ul className="flex flex-col">
-                  {group.options.map((option) => {
-                    const selected = option.value === group.value;
-                    return (
-                      <li key={option.value}>
-                        <button
-                          type="button"
-                          role="radio"
-                          aria-checked={selected}
-                          disabled={option.disabled}
-                          onClick={() => group.onChange(option.value)}
-                          className={cn("press flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2 text-left text-[13.5px]", option.disabled ? "cursor-not-allowed text-ink-4" : selected ? "bg-brand-faint text-ink" : "text-ink-2 hover:bg-surface-3/80 hover:text-ink")}
-                        >
-                          <span className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded-full", selected ? "bg-brand text-white" : "border border-line-strong", option.disabled && "border-line")}>{selected ? <Check size={10} weight="bold" /> : null}</span>
-                          <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                          {option.hint ? <span className="rounded-full bg-surface-3 px-1.5 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-ink-4">{option.hint}</span> : null}
-                          {typeof option.count === "number" ? <span className={cn("tnum text-[12px]", option.tone === "danger" ? "text-danger" : option.tone === "warning" ? "text-warning-text" : "text-ink-3")}>{option.count}</span> : null}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
+        <RadixPopover.Content align="start" sideOffset={8} collisionPadding={12} className="material scroll-thin z-50 max-h-[min(72vh,640px)] w-[min(320px,calc(100vw-24px))] origin-[var(--radix-popover-content-transform-origin)] overflow-y-auto rounded-[16px] p-2 shadow-pop outline-none data-[state=open]:animate-materialize">
+          <div className="flex items-center justify-between gap-2 px-2 pt-0.5 pb-2">
+            <p className="text-[13px] font-semibold text-ink">
+              {label}
+              {active > 0 ? <span className="tnum ml-1.5 font-normal text-ink-3">· {active} {active === 1 ? "activo" : "activos"}</span> : null}
+            </p>
+            <button type="button" onClick={reset} disabled={active === 0} className="press h-7 rounded-[8px] px-2 text-[12.5px] font-medium text-brand hover:bg-brand-faint disabled:cursor-default disabled:text-ink-4 disabled:hover:bg-transparent">
+              Limpiar filtros
+            </button>
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {vista.map((section) => (
+              <FilterSection key={section} title={section} first={index++ === 0}>
+                {togglesOf(section).map(toggleRow)}
+              </FilterSection>
             ))}
-            {toggles.length ? (
-              <div className={cn("flex flex-col gap-1 px-2", groups.length && "border-t border-line pt-3")}>
-                {toggles.map((toggle) => (
-                  <Switch key={toggle.key} label={toggle.label} description={toggle.description} checked={toggle.checked} onCheckedChange={toggle.onChange} />
-                ))}
-              </div>
-            ) : null}
-            {children ? <div className={cn("flex flex-col gap-3 px-2", (groups.length || toggles.length) && "border-t border-line pt-3")}>{children}</div> : null}
-            {active > 0 ? (
-              <div className="border-t border-line px-2 pt-2">
-                <button type="button" onClick={reset} className="press h-8 rounded-[8px] px-2 text-[13px] font-medium text-brand hover:bg-brand-faint">
-                  Quitar filtros
-                </button>
-              </div>
-            ) : null}
+            {groups.map((group) => (
+              <FilterSection key={group.key} title={group.label} first={index++ === 0}>
+                {group.options
+                  .filter((option) => option.value !== group.defaultValue)
+                  .map((option) => (
+                    <FilterSwitchRow
+                      key={option.value}
+                      label={option.label}
+                      count={option.count}
+                      hint={option.hint}
+                      tone={option.tone}
+                      disabled={option.disabled}
+                      checked={option.value === group.value}
+                      onChange={(checked) => group.onChange(checked ? option.value : group.defaultValue)}
+                    />
+                  ))}
+                {togglesOf(group.label).map(toggleRow)}
+              </FilterSection>
+            ))}
+            {otras.map((section) => (
+              <FilterSection key={section} title={section} first={index++ === 0}>
+                {togglesOf(section).map(toggleRow)}
+              </FilterSection>
+            ))}
+            {children ? <div className={cn("flex flex-col gap-3 px-2", index > 0 && "border-t border-line pt-3")}>{children}</div> : null}
           </div>
         </RadixPopover.Content>
       </RadixPopover.Portal>

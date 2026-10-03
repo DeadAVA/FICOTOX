@@ -84,7 +84,7 @@ const mostrarTodo = async (page) => {
 const adjuntar = async (page, nombre, mimeType, buffer, descripcion, tipo) => {
   await page.locator('input[aria-label="Archivo de evidencia"]').setInputFiles({ name: nombre, mimeType, buffer });
   if (tipo) await page.locator(`select[id^="evidencia-tipo-"]`).selectOption(tipo);
-  await page.locator(`input[id^="evidencia-desc-"]`).fill(descripcion);
+  await page.locator(`textarea[id^="evidencia-desc-"]`).fill(descripcion);
   await page.getByRole("button", { name: "Adjuntar evidencia" }).click();
   await page.locator("[data-adjunto]").filter({ hasText: descripcion }).first().waitFor();
 };

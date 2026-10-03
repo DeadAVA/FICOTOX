@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Badge, type Tone } from "@/components/ui/Primitives";
 import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Overlay";
+import { StatusFlag } from "@/components/ui/StatusFlag";
 import type { ApiRecord } from "@/lib/client/types";
 import { Callout } from "./FormLayout";
 import { normalizeSampleStatus, sampleStatusLabel } from "@/lib/client/samples";
@@ -57,8 +58,8 @@ export function FolioChip({ type, num }: { type: "R" | "P" | "E-A" | "E-D" | "A"
  */
 export function SupervisionBadge({ estado }: { estado: unknown }) {
   const key = String(estado || "");
-  if (key === "pendiente") return <Badge tone="warning" className="ml-1.5">Pendiente de visto bueno</Badge>;
-  if (key === "regresado") return <Badge tone="danger" className="ml-1.5">Regresado</Badge>;
+  if (key === "pendiente") return <StatusFlag kind="pendiente" label="Pendiente de visto bueno" detail="Lo capturó una persona bajo supervisión; no avanza hasta el visto bueno." data-supervision="pendiente" />;
+  if (key === "regresado") return <StatusFlag kind="regresado" label="Regresado por el supervisor" detail="Corrígelo y guárdalo para volver a pedir el visto bueno." data-supervision="regresado" />;
   return null;
 }
 
@@ -89,11 +90,9 @@ export function SupervisionCallout({ item }: { item: ApiRecord | null | undefine
  */
 export function SolicitudBadge({ solicitud }: { solicitud: ApiRecord | null | undefined }) {
   if (!solicitud || String(solicitud.estado || "pendiente") !== "pendiente") return null;
-  return (
-    <Badge tone="warning" className="ml-1.5">
-      {String(solicitud.pendiente_etiqueta || "Solicitud")} · pendiente de autorización
-    </Badge>
-  );
+  const etiqueta = `${String(solicitud.pendiente_etiqueta || "Solicitud")} · pendiente de autorización`;
+  const quien = solicitud.solicitado_nombre ? `Pidió ${String(solicitud.solicitado_nombre)}` : null;
+  return <StatusFlag kind="pendiente" label={etiqueta} detail={[quien, solicitud.motivo ? `Motivo: ${String(solicitud.motivo)}` : null].filter(Boolean).join(" · ") || undefined} data-solicitud-pendiente={String(solicitud.id || "")} />;
 }
 
 export function SolicitudCallout({ item }: { item: ApiRecord | null | undefined }) {
