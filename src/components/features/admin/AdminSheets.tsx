@@ -4,12 +4,15 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Eye, EyeSlash, Plus, Prohibit } from "@phosphor-icons/react";
 import { Callout, Panel } from "@/components/features/samples/FormLayout";
+import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
+import { msg, type Problema } from "@/lib/client/mensajes";
 import { useSession } from "@/components/session/SessionProvider";
 import { AvatarPicker } from "@/components/ui/AvatarPicker";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, Field, FormGrid, Input, Select, Switch, Textarea } from "@/components/ui/Field";
 import { DateInput } from "@/components/ui/DateInput";
 import { Sheet, usePrompt } from "@/components/ui/Overlay";
+import { SolicitudBannerDe } from "@/components/features/solicitudes/Solicitudes";
 import { Badge } from "@/components/ui/Primitives";
 import { HIDDEN_MODULES } from "@/lib/shared/features";
 import { ACCIONES, ACCION_KEYS, ALCANCES, MODULOS, alcanceLabel, firmaFilas, type Accion, type PermisoFila } from "@/lib/shared/permisos";
@@ -67,8 +70,11 @@ export function RoleSheet({ open, role, initialPermisos, usuarios = [], readOnly
   const [activo, setActivo] = useState(role ? !!role.activo : true);
   const [matriz, setMatriz] = useState<Matriz>(() => matrizDesdeFilas(initialPermisos));
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const editing = !!role?.id;
+  const v = useValidacion({
+    titulo: editing ? "No se pudo guardar el rol" : "No se pudo crear el rol",
+    reglas: () => (nombre.trim() ? [] : [{ campo: "role-nombre", mensaje: msg.indica("el nombre del rol") }]),
+  });
   // Fase 3.1: nadie edita los permisos de un rol que tiene vigente (el servidor responde 409 rol_propio).
   const rolPropio = editing && rolesSesion.some((rol) => Number(rol.id) === Number(role?.id));
   const puedeEditar = !readOnly && !rolPropio && can("usuarios", "G");
@@ -80,10 +86,7 @@ export function RoleSheet({ open, role, initialPermisos, usuarios = [], readOnly
     event.preventDefault();
     if (!puedeEditar) return;
     const permisos = filasDesdeMatriz(matriz);
-    if (!nombre.trim()) {
-      setError("El nombre del rol es obligatorio");
-      return;
-    }
+    if (!v.validar()) return;
     const cambiaPermisos = editing && (firmaFilas(initialPermisos) !== firmaFilas(permisos) || !!role?.activo !== activo);
     let motivo: string | null = null;
     if (cambiaPermisos) {
@@ -92,7 +95,6 @@ export function RoleSheet({ open, role, initialPermisos, usuarios = [], readOnly
     }
     const payload = { nombre: nombre.trim(), descripcion: descripcion.trim(), activo, permisos, ...(motivo ? { motivo } : {}) };
     setSubmitting(true);
-    setError(null);
     try {
       if (editing) {
         await sendJsonAuth("PUT", `${API_BASE_URL}/admin/roles/${role!.id}`, token, payload);
@@ -104,7 +106,7 @@ export function RoleSheet({ open, role, initialPermisos, usuarios = [], readOnly
       invalidate("roles", "usuarios");
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo guardar el rol");
+      v.errorServidor(err, { motivo: "role-nombre" });
     } finally {
       setSubmitting(false);
     }
@@ -132,21 +134,17 @@ export function RoleSheet({ open, role, initialPermisos, usuarios = [], readOnly
         </>
       }
     >
+      <ValidacionAmbito v={v}>
       <form id="role-form" onSubmit={handleSubmit} className="flex flex-col gap-6" noValidate>
         {rolPropio && !readOnly && can("usuarios", "G") ? (
           <Callout tone="warning" title="No puedes editar un rol que tienes asignado">
             Sus permisos los debe cambiar otra persona con permiso de administrar usuarios.
           </Callout>
         ) : null}
-        {error ? (
-          <Callout tone="danger" title={/combinaci/i.test(error) ? "Combinación de roles prohibida" : "No se pudo guardar"}>
-            {error}
-          </Callout>
-        ) : null}
         <fieldset disabled={!puedeEditar} className="contents">
           <FormGrid>
             <Field label="Nombre" htmlFor="role-nombre" required className="sm:col-span-2">
-              <Input id="role-nombre" maxLength={100} value={nombre} onChange={(event) => setNombre(event.target.value)} autoFocus={!editing} invalid={!!error && !nombre.trim()} />
+              <Input id="role-nombre" maxLength={100} value={nombre} onChange={(event) => setNombre(event.target.value)} autoFocus={!editing} />
             </Field>
             <Field label="Descripción" htmlFor="role-descripcion" className="sm:col-span-2">
               <Textarea id="role-descripcion" rows={2} value={descripcion} onChange={(event) => setDescripcion(event.target.value)} />
@@ -244,6 +242,7 @@ export function RoleSheet({ open, role, initialPermisos, usuarios = [], readOnly
           </Panel>
         ) : null}
       </form>
+      </ValidacionAmbito>
     </Sheet>
   );
 }
@@ -285,7 +284,6 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
   // Contrasena de quien administra: confirma la identidad en la misma hoja (reautenticacion).
   const [clave, setClave] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const editing = !!item?.id;
   const puedeAdministrar = !readOnly && can("usuarios", "G");
   const esPropia = editing && Number(me?.id) === Number(item?.id);
@@ -320,6 +318,37 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
   };
 
   const dominios = authConfig.dominios_permitidos || [];
+  /* Reglas de la cuenta, en el orden de la hoja. */
+  const v = useValidacion({
+    titulo: editing ? "No se pudo guardar el usuario" : "No se pudo crear el usuario",
+    reglas: () => {
+      const out: Problema[] = [];
+      const correo = email.trim();
+      const emailCambio = !editing || String(item?.email || "").toLowerCase() !== correo.toLowerCase();
+      if (!correo) out.push({ campo: "u-email", mensaje: msg.indica("el correo") });
+      else if (emailCambio && dominios.length && !dominios.some((d) => correo.toLowerCase().endsWith(`@${d}`))) out.push({ campo: "u-email", mensaje: `Usa un correo de ${dominios.map((d) => `@${d}`).join(", ")}` });
+      if (!editing) {
+        if (!roleId) out.push({ campo: "u-rol", mensaje: msg.elige("el rol inicial") });
+        if (motivoAlta.trim().length < 5) out.push({ campo: "u-motivo-rol", mensaje: msg.minimo("El motivo de la asignación", 5) });
+        if (!password && !esPropia) out.push({ campo: "u-password", mensaje: msg.indica("una contraseña inicial") });
+      }
+      if (password && password.length < 10) out.push({ campo: "u-password", mensaje: "La contraseña debe tener al menos 10 caracteres" });
+      if (tipoCuenta === "temporal" && !supervisorId) out.push({ campo: "u-supervisor", mensaje: "Una cuenta temporal necesita supervisor" });
+      if (tipoCuenta === "temporal" && !cuentaHasta) out.push({ campo: "u-cuenta-hasta", mensaje: "Una cuenta temporal necesita fecha de fin" });
+      if (cambiaCuenta && motivoCuenta.trim().length < 5) out.push({ campo: "u-motivo-cuenta", mensaje: msg.minimo("El motivo del cambio", 5) });
+      return out;
+    },
+  });
+  const vAsignar = useValidacion({
+    titulo: "No se pudo asignar el rol",
+    reglas: () => {
+      const out: Problema[] = [];
+      if (!nueva.rol_id) out.push({ campo: "u-asignar-rol", mensaje: msg.elige("el rol a asignar") });
+      if (nueva.motivo.trim().length < 5) out.push({ campo: "u-asignar-motivo", mensaje: msg.minimo("El motivo de la asignación", 5) });
+      return out;
+    },
+  });
+  const camposUsuario = { correo: "u-email", motivo: editing ? "u-motivo-cuenta" : "u-motivo-rol", password: guardadoCritico ? "u-clave-admin" : "u-password" };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -332,53 +361,18 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
       activo,
     };
     if (password) payload.password = password;
-    if (!payload.email) {
-      setError("El correo es obligatorio");
-      return;
-    }
-    const emailCambio = !editing || String(item?.email || "").toLowerCase() !== String(payload.email).toLowerCase();
-    if (emailCambio && dominios.length && !dominios.some((d) => String(payload.email).toLowerCase().endsWith(`@${d}`))) {
-      setError(`Solo se aceptan correos de ${dominios.map((d) => `@${d}`).join(", ")}`);
-      return;
-    }
+    if (!v.validar()) return;
     if (!editing) {
-      if (!roleId) {
-        setError("Selecciona el rol inicial");
-        return;
-      }
-      if (motivoAlta.trim().length < 5) {
-        setError("Indica el motivo de la asignación (al menos 5 caracteres)");
-        return;
-      }
       payload.rol_id = Number(roleId);
       payload.motivo = motivoAlta.trim();
-    }
-    if (!editing && !password) {
-      setError("Define una contraseña inicial");
-      return;
-    }
-    if (password && password.length < 10) {
-      setError("La contraseña debe tener al menos 10 caracteres");
-      return;
     }
     payload.tipo_cuenta = tipoCuenta;
     payload.vigente_desde = cuentaDesde || null;
     payload.vigente_hasta = cuentaHasta || null;
     payload.supervisor_id = supervisorId ? Number(supervisorId) : null;
-    if (tipoCuenta === "temporal" && (!cuentaHasta || !supervisorId)) {
-      setError("Una cuenta temporal necesita fecha de fin y supervisor");
-      return;
-    }
-    if (cambiaCuenta) {
-      if (motivoCuenta.trim().length < 5) {
-        setError("Indica el motivo del cambio de vigencia o supervisor (al menos 5 caracteres)");
-        return;
-      }
-      payload.motivo_cuenta = motivoCuenta.trim();
-    }
+    if (cambiaCuenta) payload.motivo_cuenta = motivoCuenta.trim();
     if (guardadoCritico) armarReauth(clave ? { password: clave } : null);
     setSubmitting(true);
-    setError(null);
     try {
       // Fase 3: el rol inicial, la reactivacion y la ampliacion de vigencia los aprueba un segundo usuario (respuesta con `solicitud`).
       const data = await sendJsonAuth(editing ? "PUT" : "POST", editing ? `${API_BASE_URL}/admin/usuarios/${item!.id}` : `${API_BASE_URL}/admin/usuarios`, token, payload);
@@ -387,15 +381,14 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
       invalidate("usuarios", "roles", "solicitudes");
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo guardar el usuario");
+      v.errorServidor(err, camposUsuario);
     } finally {
       setSubmitting(false);
     }
   };
 
   const asignar = async () => {
-    if (!nueva.rol_id) return toast.error("Elige el rol a asignar");
-    if (nueva.motivo.trim().length < 5) return toast.error("Indica el motivo de la asignación (al menos 5 caracteres)");
+    if (!vAsignar.validar()) return;
     armarReauth(clave ? { password: clave } : null);
     setAsignando(true);
     try {
@@ -409,7 +402,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
       await recargar();
       invalidate("usuarios", "roles", "solicitudes");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo asignar el rol");
+      vAsignar.errorServidor(err, { motivo: "u-asignar-motivo", password: "u-clave-asignar" });
     } finally {
       setAsignando(false);
     }
@@ -424,7 +417,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
       await recargar();
       invalidate("usuarios", "roles");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo revocar el rol");
+      vAsignar.errorServidor(err);
     }
   };
 
@@ -442,7 +435,6 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
       size="lg"
       footer={
         <>
-          {error ? <p className="mr-auto text-[13px] text-danger">{error}</p> : null}
           <Button variant="secondary" onClick={onClose}>
             {puedeAdministrar ? "Cancelar" : "Cerrar"}
           </Button>
@@ -454,6 +446,8 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
         </>
       }
     >
+      <ValidacionAmbito v={v}>
+      {editing ? <div className="mb-5"><SolicitudBannerDe entidad="usuarios" entidadId={item?.id as number} /></div> : null}
       <form id="user-form" onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
         <fieldset disabled={!puedeAdministrar} className="contents">
           <FormGrid>
@@ -461,12 +455,12 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
               <Input id="u-nombre" maxLength={100} value={nombre} onChange={(event) => setNombre(event.target.value)} autoFocus={!editing} />
             </Field>
             <Field label="Correo" htmlFor="u-email" required hint={editing || !dominios.length ? undefined : `Debe ser de ${dominios.map((d) => `@${d}`).join(", ")}`}>
-              <Input id="u-email" type="email" maxLength={100} value={email} onChange={(event) => setEmail(event.target.value)} invalid={!!error && !email.trim()} />
+              <Input id="u-email" type="email" maxLength={100} value={email} onChange={(event) => setEmail(event.target.value)} />
             </Field>
             {!editing ? (
               <>
                 <Field label="Rol inicial" htmlFor="u-rol" required>
-                  <Select id="u-rol" value={roles.some((role) => String(role.id) === roleId) ? roleId : ""} onChange={(event) => setRoleId(event.target.value)} invalid={!!error && !roleId}>
+                  <Select id="u-rol" value={roles.some((role) => String(role.id) === roleId) ? roleId : ""} onChange={(event) => setRoleId(event.target.value)}>
                     <option value="">Seleccionar rol</option>
                     {roles.map((role) => (
                       <option key={role.id} value={role.id}>
@@ -546,6 +540,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
           {puedeAdministrar && guardadoCritico ? <CampoIdentidad value={clave} onChange={setClave} id="u-clave-admin" /> : null}
         </fieldset>
       </form>
+      </ValidacionAmbito>
 
       {editing ? (
         <SegmentedTabs
@@ -568,6 +563,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
       ) : null}
 
       {editing && pestana === "roles" ? (
+        <ValidacionAmbito v={vAsignar}>
         <section className="mt-4 flex flex-col gap-3" aria-label="Roles del usuario">
           <div>
             <h3 className="text-[15px] font-semibold text-ink">Roles</h3>
@@ -649,6 +645,7 @@ export function UserSheet({ open, item, readOnly = false, onClose }: { open: boo
             </Panel>
           ) : null}
         </section>
+        </ValidacionAmbito>
       ) : null}
     </Sheet>
   );

@@ -519,7 +519,7 @@ En recepcion, procesamiento, extraccion y analisis, las personas que firman (rec
 
 ### 13.16 Etiquetas imprimibles
 
-En la recepcion (o en el menu de su fila) use **Imprimir etiqueta**. Se abre una vista con una etiqueta por muestra del lote (folio R, ID interno, organismo, fecha de muestreo, fecha de recepcion y lugar de resguardo), en tamaño pequeño (50 × 25 mm) o en **Hoja completa**. Al imprimir queda en la bitacora "imprimió etiquetas".
+En la recepcion (o en el menu de su fila) use **Imprimir etiqueta**. Elija el **tamaño** (Pequeña 50 × 25 mm; Mediana 66.7 × 25.4 mm, tipo Avery 5160; Grande 101.6 × 50.8 mm, tipo Avery 5163; Media hoja), las **copias por muestra** (2 para etiqueta interna y externa) y, si la hoja de etiquetas ya se uso, **Empezar en la posicion**. Todo se imprime en hoja carta, en la menor cantidad de hojas; la vista previa es igual a lo impreso. La pequeña lleva folio R, ID interno y fecha de recepcion; las demas, ademas organismo, muestreo y resguardo. El sistema recuerda el ultimo tamaño elegido. Al imprimir queda en la bitacora "imprimió etiquetas".
 
 ### 13.17 Documentos del SGC (Calidad › Documentos)
 
@@ -605,6 +605,14 @@ Editan la NC Mejora Continua (Calidad: G) y su responsable. Anular una incidenci
 - Suspender y retener: Calidad: R. **Reanudar** y **liberar la retencion**: Calidad: A con tu contraseña; nunca quien suspendio (regla 10). Si no hay otra persona disponible se puede pedir una **excepcion de separacion de funciones**.
 
 **Avisos** (Inicio y campana): incidencias por evaluar, mis acciones correctivas (proximas y vencidas), verificaciones pendientes, informes retenidos, metodos y equipos suspendidos, y acciones por reasignar.
+
+### 13.22 Al guardar un formato con datos faltantes
+
+Nada se registra hasta pulsar **Registrar** o **Guardar** (tampoco al elegir a otra persona como firmante: su contraseña se verifica al guardar). Si falta algo, el formato no se guarda: los campos con problema se marcan en rojo con un mensaje corto, la pantalla lleva al primero y aparece un aviso con la lista («Recepción: Indica el solicitante», «Inspección visual: Marca C, NC o NA en el requisito 5»…); cada renglón lleva a su campo. **Entendido** cierra el aviso. El rojo desaparece en cuanto se corrige. Si el servidor rechaza el guardado por permisos, autorización FX-THF-AP, estado del registro o una solicitud pendiente, el aviso dice qué pasó y qué hacer. Una opción no permitida por una regla (por ejemplo «Aceptada» con un requisito en NC) se ve con candado y, al pulsarla, explica por qué.
+
+### 13.23 Solicitudes pendientes
+
+Un registro con una solicitud pendiente muestra arriba un aviso con qué se pidió, quién, cuándo y el motivo. Quien puede autorizarla ve **Aprobar** y **Rechazar** ahí mismo; quien la pidió ve **Cancelar solicitud**. En las listas, el icono de reloj junto al estado abre el mismo panel, y arriba de la lista aparece «N solicitudes esperan tu autorización · Ver» si tienes alguna por resolver. El menú lateral muestra cuántas hay en **Por autorizar** y **Por supervisar**.
 
 ## 14. Buenas practicas de uso
 

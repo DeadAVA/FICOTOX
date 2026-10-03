@@ -5,7 +5,9 @@ import { Dialog as RadixDialog, DropdownMenu as RadixDropdown, HoverCard as Radi
 import { DotsThreeCircle, X } from "@phosphor-icons/react";
 import { Button, IconButton } from "./Button";
 import { cn } from "./cn";
-import { Textarea } from "./Field";
+import { Field, Textarea } from "./Field";
+import { useValidacion, ValidacionAmbito } from "./Validacion";
+import { msg, type Problema } from "@/lib/client/mensajes";
 import { CampoIdentidad, useConfirmaConPassword } from "@/components/session/Reautenticar";
 import { armarCargo, armarReauth } from "@/lib/client/api";
 
@@ -198,22 +200,15 @@ type PromptFn = (options: PromptOptions) => Promise<string | null>;
 const PromptContext = createContext<PromptFn | null>(null);
 
 export function PromptProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<(PromptOptions & { open: boolean }) | null>(null);
-  const [value, setValue] = useState("");
-  const [touched, setTouched] = useState(false);
-  const [password, setPassword] = useState("");
-  const [cargo, setCargo] = useState("");
-  const conPassword = useConfirmaConPassword();
+  const [state, setState] = useState<(PromptOptions & { open: boolean; seq: number }) | null>(null);
   const resolver = useRef<((value: string | null) => void) | null>(null);
+  const seq = useRef(0);
 
   const prompt = useCallback<PromptFn>((options) => {
     return new Promise<string | null>((resolve) => {
       resolver.current = resolve;
-      setValue(options.defaultValue || "");
-      setPassword("");
-      setCargo("");
-      setTouched(false);
-      setState({ ...options, open: true });
+      seq.current += 1;
+      setState({ ...options, open: true, seq: seq.current });
     });
   }, []);
 
@@ -223,73 +218,75 @@ export function PromptProvider({ children }: { children: ReactNode }) {
     setState((prev) => (prev ? { ...prev, open: false } : prev));
   }, []);
 
-  const minLength = state?.minLength ?? 5;
-  const pideClave = !!state?.critico && conPassword;
-  const valid = value.trim().length >= minLength && (!pideClave || password.length > 0);
-  const fieldId = "prompt-motivo";
-
   return (
     <PromptContext.Provider value={prompt}>
       {children}
-      <Dialog
-        open={!!state?.open}
-        onOpenChange={(open) => {
-          if (!open) settle(null);
-        }}
-        title={state?.title || ""}
-        description={state?.description}
-        size="sm"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => settle(null)}>
-              {state?.cancelLabel || "Cancelar"}
-            </Button>
-            <Button
-              variant={state?.tone === "danger" ? "danger" : "primary"}
-              onClick={() => {
-                setTouched(true);
-                if (!valid) return;
-                if (state?.critico) {
-                  armarReauth(pideClave ? { password } : null);
-                  armarCargo(cargo ? Number(cargo) : null);
-                }
-                settle(value.trim());
-              }}
-            >
-              {state?.confirmLabel || "Confirmar"}
-            </Button>
-          </>
-        }
-      >
-        <label htmlFor={fieldId} className="mb-1.5 block text-[13px] font-medium text-ink-2">
-          {state?.label || "Motivo"}
-          <span className="ml-0.5 text-brand" aria-hidden="true">
-            *
-          </span>
-        </label>
-        <Textarea
-          id={fieldId}
-          rows={3}
-          autoFocus
-          invalid={touched && !valid}
-          placeholder={state?.placeholder || "Describe el motivo; quedará registrado en la bitácora de auditoría"}
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-        />
-        {touched && !valid ? (
-          <p className="mt-1.5 text-[12.5px] text-danger" role="alert">
-            {value.trim().length < minLength ? `Escribe al menos ${minLength} caracteres.` : "Escribe tu contraseña para confirmar."}
-          </p>
-        ) : (
-          <p className="mt-1.5 text-[12.5px] text-ink-3">Queda registrado con tu usuario, fecha y hora.</p>
-        )}
-        {state?.critico ? (
+      {/* Cada captura monta su propio formulario (sin arrastrar lo escrito ni los errores de la anterior). */}
+      {state ? <PromptDialogo key={state.seq} state={state} onSettle={settle} /> : null}
+    </PromptContext.Provider>
+  );
+}
+
+function PromptDialogo({ state, onSettle }: { state: PromptOptions & { open: boolean }; onSettle: (result: string | null) => void }) {
+  const [value, setValue] = useState(state.defaultValue || "");
+  const [password, setPassword] = useState("");
+  const [cargo, setCargo] = useState("");
+  const conPassword = useConfirmaConPassword();
+  const minLength = state.minLength ?? 5;
+  const pideClave = !!state.critico && conPassword;
+  const fieldId = "prompt-motivo";
+  const etiqueta = typeof state.label === "string" ? state.label : "Motivo";
+  const v = useValidacion({
+    titulo: "Falta información para continuar",
+    reglas: () => {
+      const out: Problema[] = [];
+      const largo = value.trim().length;
+      if (minLength > 0 && largo === 0) out.push({ campo: fieldId, mensaje: `Escribe ${etiqueta.toLowerCase() === "motivo" ? "el motivo" : `«${etiqueta}»`}` });
+      else if (largo < minLength) out.push({ campo: fieldId, mensaje: msg.minimo(etiqueta, minLength) });
+      if (pideClave && !password) out.push({ campo: "prompt-password", mensaje: msg.password });
+      return out;
+    },
+  });
+  const confirmar = () => {
+    if (!v.validar()) return;
+    if (state.critico) {
+      armarReauth(pideClave ? { password } : null);
+      armarCargo(cargo ? Number(cargo) : null);
+    }
+    onSettle(value.trim());
+  };
+
+  return (
+    <Dialog
+      open={state.open}
+      onOpenChange={(open) => {
+        if (!open) onSettle(null);
+      }}
+      title={state.title || ""}
+      description={state.description}
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={() => onSettle(null)}>
+            {state.cancelLabel || "Cancelar"}
+          </Button>
+          <Button variant={state.tone === "danger" ? "danger" : "primary"} onClick={confirmar}>
+            {state.confirmLabel || "Confirmar"}
+          </Button>
+        </>
+      }
+    >
+      <ValidacionAmbito v={v}>
+        <Field label={state.label || "Motivo"} htmlFor={fieldId} required={minLength > 0} hint="Queda registrado con tu usuario, fecha y hora.">
+          <Textarea id={fieldId} rows={3} autoFocus placeholder={state.placeholder || "Describe el motivo; quedará registrado en la bitácora de auditoría"} value={value} onChange={(event) => setValue(event.target.value)} />
+        </Field>
+        {state.critico ? (
           <div className="mt-4">
             <CampoIdentidad value={password} onChange={setPassword} id="prompt-password" cargo={cargo} onCargo={setCargo} />
           </div>
         ) : null}
-      </Dialog>
-    </PromptContext.Provider>
+      </ValidacionAmbito>
+    </Dialog>
   );
 }
 

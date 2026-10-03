@@ -13,6 +13,8 @@ import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { DOCUMENT_AREAS, DOCUMENT_TYPES, parseDocumentKey } from "@/lib/shared/sgc";
+import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
+import { msg, type Problema } from "@/lib/client/mensajes";
 
 /*
  * Alta y edicion de un documento controlado (borrador o en revision).
@@ -42,7 +44,18 @@ export function DocumentoSheet({ open, item, onClose }: { open: boolean; item: A
   });
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  /* Reglas en el orden de la hoja: clave, tipo, área y título. */
+  const v = useValidacion({
+    titulo: editing ? "No se pudo guardar el documento" : "No se pudo registrar el documento",
+    reglas: () => {
+      const out: Problema[] = [];
+      if (!form.clave.trim()) out.push({ campo: "d-clave", mensaje: msg.indica("la clave del documento (FX-<área><tipo>-<siglas>)") });
+      if (!form.tipo) out.push({ campo: "d-tipo", mensaje: msg.elige("el tipo de documento") });
+      if (!form.area) out.push({ campo: "d-area", mensaje: msg.elige("el área") });
+      if (!form.titulo.trim()) out.push({ campo: "d-titulo", mensaje: msg.indica("el título") });
+      return out;
+    },
+  });
   const set = (key: keyof typeof form) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((prev) => ({ ...prev, [key]: event.target.value }));
 
   const onClave = (event: ChangeEvent<HTMLInputElement>) => {
@@ -53,11 +66,9 @@ export function DocumentoSheet({ open, item, onClose }: { open: boolean; item: A
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!form.clave.trim() || !form.titulo.trim()) return setError("Clave y título son obligatorios");
-    if (!form.tipo || !form.area) return setError("Tipo y área son obligatorios (se derivan de la clave)");
-    if (!can("documentos", editing ? "E" : "C", { objeto: "documento", borrador: true })) return setError("No tienes permiso para esta acción");
+    if (!v.validar()) return;
+    if (!can("documentos", editing ? "E" : "C", { objeto: "documento", borrador: true })) return v.avisar({ que: "No tienes permiso para registrar o editar documentos.", hacer: "Pide a Mejora Continua que revise tus permisos en documentos." });
     setSubmitting(true);
-    setError(null);
     const data = new FormData();
     data.set("clave", form.clave.trim());
     data.set("titulo", form.titulo.trim());
@@ -85,7 +96,7 @@ export function DocumentoSheet({ open, item, onClose }: { open: boolean; item: A
       invalidate("documentos");
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo guardar el documento");
+      v.errorServidor(err, { clave: "d-clave", archivo: "d-archivo" });
     } finally {
       setSubmitting(false);
     }
@@ -100,7 +111,6 @@ export function DocumentoSheet({ open, item, onClose }: { open: boolean; item: A
       size="lg"
       footer={
         <>
-          {error ? <p className="mr-auto text-[13px] text-danger">{error}</p> : null}
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
@@ -110,6 +120,7 @@ export function DocumentoSheet({ open, item, onClose }: { open: boolean; item: A
         </>
       }
     >
+      <ValidacionAmbito v={v}>
       <form id="documento-form" onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
         <FormGrid cols={3}>
           <Field label="Clave" htmlFor="d-clave" required hint="FX-<área><tipo>-<siglas>, ej. FX-GCP-CD">
@@ -178,6 +189,7 @@ export function DocumentoSheet({ open, item, onClose }: { open: boolean; item: A
           <input id="d-archivo" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.pptx,.txt" onChange={(event) => setFile(event.target.files?.[0] || null)} className="block w-full text-[13px] text-ink-2 file:mr-3 file:rounded-control file:border file:border-line-strong file:bg-surface file:px-3 file:py-1.5 file:text-[13px] file:font-medium file:text-ink" />
         </Field>
       </form>
+      </ValidacionAmbito>
     </Sheet>
   );
 }

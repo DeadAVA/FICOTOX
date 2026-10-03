@@ -20,7 +20,7 @@ import { metodoDeExtraccion, requisitosExtraccion } from "../../../shared/autori
 import { exigirSinSuspension, idsDeEquipos } from "../calidad/bloqueos";
 import { incidenciasPorEquiposNoAptos } from "../calidad/automaticas";
 import { exigirAsignacion, filtroAsignadas } from "../../asignaciones";
-import { guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
+import { guardarFirmantes, resolverFirmantes, verificarFirmasConPassword, type RolFirma } from "../../firmas";
 
 /* Fase 11: equipos de la extraccion para suspensiones e incidencias (con id, o solo por nombre si no se eligio del catalogo). */
 function usoDeEquipos(equiposJson: unknown): { equipoIds: unknown[]; equipoNombres: string[] } {
@@ -271,6 +271,8 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
   const actuo = cargoActuante(request, permiso);
 
   const payload = await readJson(request);
+  // Contraseñas de firmantes enviadas al guardar: se verifican antes de cualquier otra escritura.
+  await verificarFirmasConPassword(s, user, payload);
   const tipo = await resolveType(s, payload, null);
   if (!tipo) {
     return json({ message: "Tipo de extraccion no valido" }, 400);
@@ -354,6 +356,8 @@ export async function updateExtractionSample({ request, s, params }: RouteContex
   const actuo = cargoActuante(request, permiso);
   await assertEditableAsync(s, antes, TABLE);
   const payload = await readJson(request);
+  // Contraseñas de firmantes enviadas al guardar: se verifican antes de cualquier otra escritura.
+  await verificarFirmasConPassword(s, user, payload);
   const tipo = await resolveType(s, payload, extractionId);
   if (!tipo) {
     return json({ message: "Tipo de extraccion no valido" }, 400);

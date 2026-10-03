@@ -163,6 +163,16 @@ let flujo = null;
   check("con la contrasena del firmante: 201 y la firma queda ligada a su cuenta (usuario_id, nombre y cargo)", malo.status === 401 && conf.status === 200 && conToken.status === 201 && Number(item?.proceso_usuario_id) === idDe(LUIS) && /Luis/.test(item?.nombre_quien_proceso || "") && !!item?.proceso_cargo, `${malo.status} ${conf.status} ${conToken.status} ${item?.proceso_usuario_id} ${item?.proceso_cargo}`);
   const reuso = await api("POST", "/samples/processing", procesamiento(R, `${id}-b`, { firmantes: { proceso: { usuario_id: idDe(LUIS), token_firma: conf.data?.token_firma } } }), QA);
   check("el token de firma es de un solo uso (403 al reusarlo)", reuso.status === 403, `${reuso.status}`);
+  // Ajustes de interfaz: la contraseña del firmante viaja al GUARDAR (sin escribir nada antes) y se verifica en esa petición.
+  const totalAntes = ((await api("GET", "/samples/processing?search=", undefined, QA)).data?.items || []).length;
+  const conPasswordMala = await api("POST", "/samples/processing", procesamiento(R, `${id}-pm`, { firmantes: { proceso: { usuario_id: idDe(LUIS), password: "incorrecta-123" } } }), QA);
+  const totalTras = ((await api("GET", "/samples/processing?search=", undefined, QA)).data?.items || []).length;
+  check("contraseña del firmante incorrecta al guardar: 401 firma_invalida con el rol y nada se crea", conPasswordMala.status === 401 && conPasswordMala.data?.codigo === "firma_invalida" && conPasswordMala.data?.rol === "proceso" && totalTras === totalAntes, `${conPasswordMala.status} ${conPasswordMala.data?.codigo} ${totalAntes}→${totalTras}`);
+  const conPassword = await api("POST", "/samples/processing", procesamiento(R, `${id}-pw`, { firmantes: { proceso: { usuario_id: idDe(LUIS), password: credenciales[LUIS] } } }), QA);
+  const itemPw = (await api("GET", `/samples/processing/${conPassword.data?.id}`, undefined, QA)).data?.item;
+  check("contraseña del firmante correcta al guardar: 201 y la firma queda ligada a su cuenta", conPassword.status === 201 && Number(itemPw?.proceso_usuario_id) === idDe(LUIS), `${conPassword.status} ${conPassword.data?.message || ""}`);
+  const sinNada = await api("POST", "/samples/processing", procesamiento(R, `${id}-sn`, { firmantes: { proceso: { usuario_id: idDe(LUIS) } } }), QA);
+  check("otra persona como firmante sin contraseña ni token: 403 firma_sin_confirmar", sinNada.status === 403 && sinNada.data?.codigo === "firma_sin_confirmar", `${sinNada.status}`);
   // Firmante sin autorizacion FX-THF-AP: una cuenta nueva (sin roles ni autorizaciones).
   const email = `firmante.${Date.now()}@cicese.mx`;
   const alta = await api("POST", "/admin/usuarios", { nombre: "Firmante sin autorizacion", email, activo: true, rol_id: (await api("GET", "/admin/roles", undefined, QA)).data?.items?.find((r) => r.nombre === "Técnico Auxiliar")?.id, password: "Firmante-Prueba-2026", motivo: "Alta de prueba" }, QA, MANUAL);

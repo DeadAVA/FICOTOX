@@ -12,10 +12,13 @@ import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Field, Select, Textarea } from "@/components/ui/Field";
+import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
+import { msg } from "@/lib/client/mensajes";
 import { FilterChips, FilterMenu, type FilterGroup, type FilterToggle } from "@/components/ui/FilterMenu";
 import { Sheet } from "@/components/ui/Overlay";
 import { PageHeader, SearchInput, SegmentedTabs, Toolbar } from "@/components/ui/PageHeader";
 import { Card, CardHeader, EmptyState, ErrorState, Skeleton, Stat, TableSkeleton } from "@/components/ui/Primitives";
+import { FranjaPendientes } from "@/components/features/solicitudes/Solicitudes";
 import { StatusCell, StatusFlag } from "@/components/ui/StatusFlag";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
@@ -140,6 +143,7 @@ function ListaIncidencias() {
   ];
   return (
     <>
+      <FranjaPendientes entidades={["incidencias"]} grupo="calidad" />
       <Toolbar
         end={
           <>
@@ -245,6 +249,7 @@ function ListaNc() {
   ];
   return (
     <>
+      <FranjaPendientes entidades={["no_conformidades"]} grupo="calidad" />
       <Toolbar
         end={
           <>
@@ -329,7 +334,12 @@ function NuevaNcSheet({ onClose }: { onClose: () => void }) {
     setOpen(false);
     window.setTimeout(onClose, 250);
   };
+  const v = useValidacion({
+    titulo: "No se pudo abrir la NC",
+    reglas: () => (descripcion.trim().length < 20 ? [{ campo: "nc-desc", mensaje: descripcion.trim() ? msg.minimo("La descripción", 20) : msg.escribe("la descripción de la no conformidad"), grupo: "Descripción" }] : []),
+  });
   const crear = async () => {
+    if (!v.validar()) return;
     setEnviando(true);
     try {
       const data = await sendJsonAuth("POST", `${API_BASE_URL}/calidad/nc`, token, { origen, descripcion, clasificacion: clasificacion || null, requisito_incumplido: requisito, responsable_id: responsable ? Number(responsable) : null });
@@ -337,7 +347,7 @@ function NuevaNcSheet({ onClose }: { onClose: () => void }) {
       invalidate("calidad");
       router.push(`/calidad/nc/${data.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo abrir la NC");
+      v.errorServidor(err, { motivo: "nc-desc" });
     } finally {
       setEnviando(false);
     }
@@ -353,12 +363,13 @@ function NuevaNcSheet({ onClose }: { onClose: () => void }) {
           <Button variant="secondary" onClick={cerrar}>
             Cancelar
           </Button>
-          <Button onClick={crear} loading={enviando} disabled={descripcion.trim().length < 20}>
+          <Button onClick={crear} loading={enviando}>
             Abrir NC
           </Button>
         </>
       }
     >
+      <ValidacionAmbito v={v}>
       <div className="flex flex-col gap-5">
         <Field label="Origen" htmlFor="nc-origen" required>
           <Select id="nc-origen" value={origen} onChange={(event) => setOrigen(event.target.value)}>
@@ -399,6 +410,7 @@ function NuevaNcSheet({ onClose }: { onClose: () => void }) {
         </Field>
         ) : null}
       </div>
+      </ValidacionAmbito>
     </Sheet>
   );
 }

@@ -34,8 +34,35 @@ const KIND: Record<StatusFlagKind, { icon: ReactNode; className: string }> = {
 
 type DataAttributes = { [key: `data-${string}`]: string | number | boolean | undefined };
 
-export function StatusFlag({ kind = "pendiente", label, detail, className, ...rest }: { kind?: StatusFlagKind; label: string; detail?: ReactNode; className?: string } & DataAttributes) {
+export function StatusFlag({ kind = "pendiente", label, detail, className, onClick, ...rest }: { kind?: StatusFlagKind; label: string; detail?: ReactNode; className?: string; /* Si se da, el indicador es un botón (p. ej. abre el panel de la solicitud). */ onClick?: () => void } & DataAttributes) {
   const meta = KIND[kind];
+  if (onClick) {
+    return (
+      <Tooltip
+        content={
+          <span className="flex flex-col gap-0.5">
+            <span className="font-medium">{label}</span>
+            {detail ? <span className="text-white/80">{detail}</span> : null}
+            <span className="text-white/70">Clic para ver y atender</span>
+          </span>
+        }
+      >
+        <button
+          type="button"
+          aria-label={`${label}. Ver y atender`}
+          data-status-flag={kind}
+          onClick={(event) => {
+            event.stopPropagation();
+            onClick();
+          }}
+          className={cn("press inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full align-middle ring-1 ring-current/20 hover:ring-2", meta.className, className)}
+          {...rest}
+        >
+          {meta.icon}
+        </button>
+      </Tooltip>
+    );
+  }
   return (
     <Tooltip
       content={

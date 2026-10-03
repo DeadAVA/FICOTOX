@@ -22,6 +22,7 @@ import { ActionMenu, Dialog, Sheet, usePrompt, type MenuItem } from "@/component
 import { FilterChips, FilterMenu, type FilterGroup, type FilterToggle } from "@/components/ui/FilterMenu";
 import { PageHeader, SearchInput, SegmentedTabs, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, TableSkeleton, type Tone } from "@/components/ui/Primitives";
+import { FranjaPendientes, SolicitudBannerDe } from "@/components/features/solicitudes/Solicitudes";
 import { StatusCell, StatusFlag } from "@/components/ui/StatusFlag";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
@@ -33,6 +34,8 @@ import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { DOCUMENT_AREAS, DOCUMENT_TYPES } from "@/lib/shared/sgc";
 import { CampoIdentidad } from "@/components/session/Reautenticar";
+import { useValidacion, ValidacionAmbito, type Validacion } from "@/components/ui/Validacion";
+import { msg, type Problema } from "@/lib/client/mensajes";
 
 type Vista = "maestra" | "todos" | "propuestas" | "reportes";
 
@@ -120,14 +123,39 @@ function DocumentosContent() {
   const canTecnica = can("documentos", "R");
   const canView = can("documentos", "V");
 
-  const act = async (path: string, body: Record<string, unknown>, ok: string) => {
+  /* Errores de las acciones: pop-up con qué pasó y qué hacer; una contraseña rechazada marca su campo en el diálogo. */
+  const vAccion = useValidacion({ titulo: "No se pudo completar la acción", reglas: () => [] });
+  const vAprobar = useValidacion({ titulo: "No se pudo aprobar el documento", reglas: () => [] });
+  const vPublicar = useValidacion({ titulo: "No se pudo publicar el documento", reglas: () => [] });
+  const vAceptar = useValidacion({
+    titulo: "No se pudo aceptar la propuesta",
+    reglas: () => {
+      const out: Problema[] = [];
+      if (!aceptar) return out;
+      if (!aceptar.asignado) out.push({ campo: "acp-asignado", mensaje: msg.elige("quién elabora el documento") });
+      if (aceptar.item.tipo !== "cambio") {
+        if (!aceptar.clave.trim()) out.push({ campo: "acp-clave", mensaje: msg.indica("la clave (FX-<área><tipo>-<siglas>)") });
+        if (!aceptar.tipo) out.push({ campo: "acp-tipo", mensaje: msg.elige("el tipo de documento") });
+        if (!aceptar.area) out.push({ campo: "acp-area", mensaje: msg.elige("el área") });
+      }
+      return out;
+    },
+  });
+  const explicar = (err: unknown, val: Validacion = vAccion, password?: string) => {
+    const texto = err instanceof Error ? err.message : "";
+    if (password && /contraseña/i.test(texto)) val.avisar({ que: texto, hacer: "Vuelve a escribir tu contraseña.", problemas: [{ campo: password, mensaje: texto }] });
+    else val.errorServidor(err, { clave: "acp-clave" });
+  };
+  const act = async (path: string, body: Record<string, unknown>, ok: string, val: Validacion = vAccion, password?: string): Promise<boolean> => {
     try {
       const data = await sendJsonAuth("POST", `${API_BASE_URL}/documentos-sgc/${path}`, token, body);
       toast.success(String(data.message || ok));
       invalidate("documentos");
       detail.close();
+      return true;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo completar la acción");
+      explicar(err, val, password);
+      return false;
     }
   };
 
@@ -156,7 +184,7 @@ function DocumentosContent() {
       invalidate("documentos");
       detail.close();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo registrar la propuesta");
+      explicar(err);
     }
   };
   const cargarDestinatarios = async () => {
@@ -172,8 +200,7 @@ function DocumentosContent() {
     if (!publicar) return;
     armarReauth(claveAprobar ? { password: claveAprobar } : null);
     setClaveAprobar("");
-    await act(`${publicar.item.id}/publicar`, { fecha_vigencia: publicar.vigencia || null, usuarios: publicar.usuarios, roles: publicar.roles }, "Documento publicado");
-    setPublicar(null);
+    if (await act(`${publicar.item.id}/publicar`, { fecha_vigencia: publicar.vigencia || null, usuarios: publicar.usuarios, roles: publicar.roles }, "Documento publicado", vPublicar, "pub-password")) setPublicar(null);
   };
   const abrirAceptar = async (item: ApiRecord) => {
     await cargarDestinatarios();
@@ -181,13 +208,14 @@ function DocumentosContent() {
   };
   const confirmarAceptar = async () => {
     if (!aceptar) return;
+    if (!vAceptar.validar()) return;
     try {
       const data = await sendJsonAuth("POST", `${API_BASE_URL}/documentos-sgc/propuestas/${aceptar.item.id}/aceptar`, token, { asignado_a: Number(aceptar.asignado) || null, clave: aceptar.clave, tipo: aceptar.tipo, area: aceptar.area, requiere_revision_tecnica: aceptar.requiere });
       toast.success(String(data.message || "Propuesta aceptada"));
       invalidate("documentos");
       setAceptar(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo aceptar la propuesta");
+      explicar(err, vAceptar);
     }
   };
   const rechazarPropuesta = async (item: ApiRecord) => {
@@ -198,7 +226,7 @@ function DocumentosContent() {
       toast.success("Propuesta rechazada");
       invalidate("documentos");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo rechazar la propuesta");
+      explicar(err);
     }
   };
   const exportarCsv = async () => {
@@ -227,8 +255,7 @@ function DocumentosContent() {
     if (!aprobar) return;
     armarReauth(claveAprobar ? { password: claveAprobar } : null);
     setClaveAprobar("");
-    await act(`${aprobar.item.id}/aprobar`, { aprobo: { nombre: user?.nombre || user?.email || "", cargo: aprobar.cargo || null } }, "Documento aprobado");
-    setAprobar(null);
+    if (await act(`${aprobar.item.id}/aprobar`, { aprobo: { nombre: user?.nombre || user?.email || "", cargo: aprobar.cargo || null } }, "Documento aprobado", vAprobar, "ap-password")) setAprobar(null);
   };
   const abrirArchivo = (item: ApiRecord) => {
     if (!item.archivo_nombre) return toast.error("El documento no tiene archivo adjunto");
@@ -286,6 +313,8 @@ function DocumentosContent() {
 
   return (
     <>
+      <ValidacionAmbito v={vAccion}>{null}</ValidacionAmbito>
+      <FranjaPendientes entidades={["documentos_sgc"]} grupo="documentos" />
       <Toolbar
         end={
           <>
@@ -504,6 +533,7 @@ function DocumentosContent() {
       <Sheet open={detail.isOpen} onOpenChange={(open) => !open && detail.close()} title={detailItem ? `${detailItem.clave} · revisión ${detailItem.revision}` : "Documento"} description={detailItem?.titulo as string} size="lg">
         {detailItem ? (
           <div className="flex flex-col gap-5">
+            <SolicitudBannerDe entidad="documentos_sgc" entidadId={detailItem.id as number} />
             <div className="grid gap-3 sm:grid-cols-2 text-[13.5px]">
               <p><span className="text-ink-3">Estado: </span><StateBadge kind="documento" status={detailItem.estado} /></p>
               <p><span className="text-ink-3">Archivo: </span>{detailItem.archivo_original ? <button type="button" className="text-brand" onClick={() => abrirArchivo(detailItem)}>{String(detailItem.archivo_original)}</button> : "—"}</p>
@@ -586,12 +616,14 @@ function DocumentosContent() {
         }
       >
         {aprobar ? (
+          <ValidacionAmbito v={vAprobar}>
           <div className="flex flex-col gap-4">
             <Field label="Cargo de quien aprueba" htmlFor="ap-cargo">
               <Input id="ap-cargo" maxLength={120} value={aprobar.cargo} onChange={(event) => setAprobar({ ...aprobar, cargo: event.target.value })} placeholder="Ej. Director General" />
             </Field>
             <CampoIdentidad value={claveAprobar} onChange={setClaveAprobar} id="ap-password" />
           </div>
+          </ValidacionAmbito>
         ) : null}
       </Dialog>
       <Dialog
@@ -611,6 +643,7 @@ function DocumentosContent() {
         }
       >
         {publicar ? (
+          <ValidacionAmbito v={vPublicar}>
           <div className="flex flex-col gap-4">
             <Field label="Vigente desde" htmlFor="pub-vig" hint="Si se deja vacío, hoy.">
               <DateInput id="pub-vig" value={publicar.vigencia} onChange={(value) => setPublicar({ ...publicar, vigencia: value })} />
@@ -635,6 +668,7 @@ function DocumentosContent() {
             </div>
             <CampoIdentidad value={claveAprobar} onChange={setClaveAprobar} id="pub-password" />
           </div>
+          </ValidacionAmbito>
         ) : null}
       </Dialog>
 
@@ -655,6 +689,7 @@ function DocumentosContent() {
         }
       >
         {aceptar ? (
+          <ValidacionAmbito v={vAceptar}>
           <div className="flex flex-col gap-4">
             <Field label="Quién elabora" htmlFor="acp-asignado" required>
               <Select id="acp-asignado" value={aceptar.asignado} onChange={(event) => setAceptar({ ...aceptar, asignado: event.target.value })}>
@@ -695,6 +730,7 @@ function DocumentosContent() {
             ) : null}
             <Checkbox checked={aceptar.requiere} onChange={(event) => setAceptar({ ...aceptar, requiere: event.target.checked })} label="Requiere revisión técnica" />
           </div>
+          </ValidacionAmbito>
         ) : null}
       </Dialog>
     </>

@@ -3,6 +3,7 @@ import type { InventarioRow } from "@/lib/client/insumos";
 import type { ApiRecord } from "@/lib/client/types";
 import type { ExtractionType } from "@/lib/shared/extraction";
 import type { FormSectionDef } from "../FormLayout";
+import type { Problema } from "@/lib/client/mensajes";
 
 /*
  * Un "protocolo" describe un formato de extraccion (ASP, DSP...): sus
@@ -128,7 +129,14 @@ export interface ExtractionProtocol {
   tipo: ExtractionType;
   /* Secciones propias del protocolo (entre "Muestra y molienda" y "Resguardo"). */
   sections: FormSectionDef[];
-  /* Completitud de cada seccion del protocolo: true, false o undefined (sin evaluar / opcional sin llenar). */
+  /*
+   * Reglas de las secciones obligatorias del protocolo, en orden: dan la
+   * completitud de la guia y lo que falta al guardar (validacion compartida).
+   * Los pasos se marcan por su id `e-paso-<clave>` y las tablas de pesos por
+   * `e-pesos-<columna>`.
+   */
+  reglas: (form: ExtractionState) => Problema[];
+  /* Completitud de las secciones opcionales (true si se llenaron, undefined si no). */
   sectionComplete: (id: string, form: ExtractionState) => boolean | undefined;
   steps: StepDef[];
   fixedFields: FixedField[];

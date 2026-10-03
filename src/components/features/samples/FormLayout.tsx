@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, CaretDown, Check, CheckCircle, Clock, Info, ListNumbers, Rows, SealCheck, Warning, WarningCircle } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight, CaretDown, Check, CheckCircle, Clock, Info, ListNumbers, LockSimple, Rows, SealCheck, Warning, WarningCircle } from "@phosphor-icons/react";
 import { cn } from "@/components/ui/cn";
+import { CampoValidado, MensajeCampo, ValidacionAmbito, type Validacion } from "@/components/ui/Validacion";
 import { checkboxClass, radioClass } from "@/components/ui/Field";
 import { SegmentedTabs } from "@/components/ui/PageHeader";
 import { Badge, type Tone } from "@/components/ui/Primitives";
@@ -35,6 +36,9 @@ export interface FormSectionDef {
   complete?: boolean;
   /* Opcional: no bloquea el guardado ni cuenta en "n de m"; se pinta verde solo si se llenó. */
   optional?: boolean;
+  /* Etiqueta en lugar de "Opcional" (p. ej. "Puede decidirse después") y nota de por qué importa. */
+  optionalLabel?: string;
+  optionalNote?: string;
 }
 
 /* Secciones obligatorias con datos faltantes: con ellas el formato no se guarda. */
@@ -97,11 +101,11 @@ function readShowAll(): boolean | null {
  * formato este en solo lectura (p. ej. la evidencia instrumental: se consulta y
  * descarga siempre, antes de las firmas). `tail` vuelve a quedar en solo lectura.
  */
-export function FormPage({ backHref, backLabel, code, title, status, statusTone = "brand", actions, sections, children, interactive, tail, after, readOnly = false, error }: { backHref: string; backLabel: string; code: string; title: ReactNode; status?: string; statusTone?: Tone; actions: ReactNode; sections: FormSectionDef[]; interactive?: ReactNode; tail?: ReactNode; after?: ReactNode; readOnly?: boolean; children: ReactNode; error?: string | null }) {
+export function FormPage({ backHref, backLabel, code, title, status, statusTone = "brand", actions, sections, children, interactive, tail, after, readOnly = false, error, validacion }: { backHref: string; backLabel: string; code: string; title: ReactNode; status?: string; statusTone?: Tone; actions: ReactNode; sections: FormSectionDef[]; interactive?: ReactNode; tail?: ReactNode; after?: ReactNode; readOnly?: boolean; children: ReactNode; error?: string | null; /* Validacion compartida: completitud, aviso del encabezado y pop-up. */ validacion?: Validacion }) {
   const [openId, setOpenId] = useState(sections[0]?.id || "");
   const [opened, setVisited] = useState<Set<string>>(() => new Set(sections[0]?.id ? [sections[0].id] : []));
   // Al guardar con errores todas las secciones cuentan como vistas: se señalan todos los faltantes.
-  const visited = error ? new Set(sections.map((section) => section.id)) : opened;
+  const visited = error || validacion?.intentado ? new Set(sections.map((section) => section.id)) : opened;
   // Al consultar un registro terminado conviene verlo completo; al capturar, paso a paso. La persona puede cambiarlo y se recuerda.
   const [showAllPref, setShowAll] = useState<boolean>(() => (typeof window === "undefined" ? false : (readShowAll() ?? false)));
   // Un registro en solo lectura siempre se muestra completo: se consulta, no se captura.
@@ -196,7 +200,7 @@ export function FormPage({ backHref, backLabel, code, title, status, statusTone 
   // `sections` cambia en cada render (lleva el estado de completitud), así que memorizar el contexto no ahorra nada.
   const ctx: FormPageContextValue = { sections, visited, openId, showAll, readOnly, open, next };
 
-  return (
+  const page = (
     <FormPageContext.Provider value={ctx}>
       <div className="animate-rise-in -mt-6 flex flex-col sm:-mt-8">
         {/* Cabecera: regreso · título + estado · acciones. Una sola fila en escritorio, apilada en móvil. */}
@@ -220,7 +224,20 @@ export function FormPage({ backHref, backLabel, code, title, status, statusTone 
             </div>
             <div className="hidden shrink-0 items-center gap-2 sm:flex">{actions}</div>
           </div>
-          {error ? (
+          {validacion && validacion.faltantes.length && !readOnly ? (
+            // Mismas reglas que la guía: cada sección es un enlace a su primer campo faltante.
+            <p role="status" data-aviso-faltantes className="mx-auto flex max-w-[1184px] flex-wrap items-center gap-x-1.5 gap-y-1 px-4 pb-2.5 text-[12.5px] text-danger sm:px-8">
+              <span>Falta información en:</span>
+              {validacion.faltantes.map((f, i) => (
+                <span key={f.seccion}>
+                  <button type="button" onClick={() => validacion.irA(f.primero)} className="font-medium underline decoration-danger/40 underline-offset-2 hover:decoration-danger">
+                    {f.grupo}
+                  </button>
+                  {i < validacion.faltantes.length - 1 ? "," : ""}
+                </span>
+              ))}
+            </p>
+          ) : error ? (
             <p role="alert" className="mx-auto max-w-[1184px] px-4 pb-2.5 text-[12.5px] text-danger sm:px-8">
               {error}
             </p>
@@ -248,7 +265,8 @@ export function FormPage({ backHref, backLabel, code, title, status, statusTone 
             <ol className="scroll-thin -mx-4 flex gap-1 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:pb-0">
               {sections.map((section, index) => {
                 const active = openId === section.id;
-                const missing = !section.optional && section.complete === false && visited.has(section.id) && !active;
+                // Opcionales incluidas: si se evaluaron (complete === false), la guía coincide con el aviso del encabezado.
+                const missing = section.complete === false && visited.has(section.id) && !active;
                 return (
                   <li key={section.id} className="shrink-0">
                     <button
@@ -259,7 +277,7 @@ export function FormPage({ backHref, backLabel, code, title, status, statusTone 
                     >
                       <span className={cn("tnum flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10.5px] font-semibold", section.complete ? "bg-success text-white" : missing ? "bg-warning-soft text-warning-text" : active ? "bg-ink text-white" : "bg-surface-3 text-ink-3")}>{section.complete ? <Check size={11} weight="bold" /> : index + 1}</span>
                       <span className="truncate">{section.label}</span>
-                      {section.optional ? <span className="ml-auto shrink-0 text-[10.5px] font-medium uppercase tracking-wide text-ink-4">opcional</span> : null}
+                      {section.optional ? <span className="ml-auto shrink-0 text-[10.5px] font-medium uppercase tracking-wide text-ink-4">{section.optionalLabel ? "después" : "opcional"}</span> : null}
                     </button>
                   </li>
                 );
@@ -284,6 +302,8 @@ export function FormPage({ backHref, backLabel, code, title, status, statusTone 
           </nav>
 
           <div className="flex min-w-0 flex-col gap-4">
+            {/* Avisos con acciones (solicitud pendiente, visto bueno): fuera del fieldset, siguen activos en solo lectura. */}
+            <div id="form-avisos" className="flex flex-col gap-3 empty:hidden" />
             {/* En solo lectura el fieldset desactiva todos los controles del formato; lo que va en `after` (historial) sigue activo. */}
             <fieldset disabled={readOnly} className={cn("m-0 flex min-w-0 flex-col gap-4 border-0 p-0", readOnly && "form-readonly")}>
               {children}
@@ -303,6 +323,7 @@ export function FormPage({ backHref, backLabel, code, title, status, statusTone 
       </div>
     </FormPageContext.Provider>
   );
+  return validacion ? <ValidacionAmbito v={validacion}>{page}</ValidacionAmbito> : page;
 }
 
 export function FormCard({ id, title, description, children, aside, optional }: { id: string; title: ReactNode; description?: ReactNode; children: ReactNode; aside?: ReactNode; optional?: boolean }) {
@@ -314,7 +335,7 @@ export function FormCard({ id, title, description, children, aside, optional }: 
   const isLast = !!ctx && index === ctx.sections.length - 1;
   const stepMode = !!ctx && !ctx.showAll && !ctx.readOnly && index >= 0;
   const isOptional = optional || !!meta?.optional;
-  const missing = !!ctx && !isOptional && meta?.complete === false && ctx.visited.has(id) && !isOpen;
+  const missing = !!ctx && meta?.complete === false && ctx.visited.has(id) && !isOpen;
   // Mientras se despliega hace falta recortar; ya abierta, los desplegables (buscador de insumos) deben poder salir de la tarjeta.
   const [settled, setSettled] = useState(isOpen);
   const [prevOpen, setPrevOpen] = useState(isOpen);
@@ -342,7 +363,8 @@ export function FormCard({ id, title, description, children, aside, optional }: 
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-ink">{title}</h2>
-              {isOptional ? <span className="rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-medium text-ink-3">Opcional</span> : null}
+              {isOptional ? <span className="rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-medium text-ink-3">{meta?.optionalLabel || "Opcional"}</span> : null}
+              {meta?.optionalNote ? <span className="text-[12px] text-ink-3">{meta.optionalNote}</span> : null}
             </div>
             {description ? <p className="text-[13px] leading-snug text-ink-3">{description}</p> : null}
           </div>
@@ -451,12 +473,39 @@ export function ChoiceGrid({ children, className, cols = 3 }: { children: ReactN
 }
 
 /* Tarjeta seleccionable (checkbox o radio) con aspecto de opcion. */
-export function ChoiceCard({ checked, onChange, label, description, type = "checkbox", name, disabled }: { checked: boolean; onChange: (checked: boolean) => void; label: ReactNode; description?: ReactNode; type?: "checkbox" | "radio"; name?: string; disabled?: boolean }) {
+/*
+ * Opcion de una sola o varias respuestas. `bloqueada` (una regla no la
+ * permite ahora): se ve atenuada con candado, pero se puede pulsar y llama a
+ * `bloqueada()` para explicar por que (pop-up de validacion) en vez de no hacer nada.
+ */
+export function ChoiceCard({ checked, onChange, label, description, type = "checkbox", name, disabled, bloqueada, invalida }: { checked: boolean; onChange: (checked: boolean) => void; label: ReactNode; description?: ReactNode; type?: "checkbox" | "radio"; name?: string; disabled?: boolean; bloqueada?: () => void; /* La opcion elegida dejo de ser valida: se marca en rojo. */ invalida?: boolean }) {
   return (
-    <label className={cn("press flex cursor-pointer items-start gap-3 rounded-[12px] border px-3.5 py-3 transition-colors", checked ? "border-brand bg-brand-faint shadow-[0_0_0_1px_var(--color-brand)]" : "border-line bg-surface hover:border-line-strong", disabled && "cursor-not-allowed opacity-60")}>
-      <input type={type} name={name} disabled={disabled} className={cn(type === "radio" ? radioClass : checkboxClass, "mt-0.5")} checked={checked} onChange={(event) => onChange(event.target.checked)} />
+    <label
+      data-bloqueada={bloqueada ? "true" : undefined}
+      className={cn("press flex cursor-pointer items-start gap-3 rounded-[12px] border px-3.5 py-3 transition-colors", invalida ? "border-danger bg-danger-soft/40 shadow-[0_0_0_1px_var(--color-danger)]" : checked ? "border-brand bg-brand-faint shadow-[0_0_0_1px_var(--color-brand)]" : "border-line bg-surface hover:border-line-strong", disabled && "cursor-not-allowed opacity-60", bloqueada && !checked && "border-dashed bg-surface-2/60 text-ink-3")}
+    >
+      <input
+        type={type}
+        name={name}
+        disabled={disabled}
+        aria-invalid={invalida || undefined}
+        aria-disabled={bloqueada ? true : undefined}
+        className={cn(type === "radio" ? radioClass : checkboxClass, "mt-0.5")}
+        checked={checked}
+        onChange={(event) => {
+          if (bloqueada && event.target.checked) {
+            event.preventDefault();
+            bloqueada();
+            return;
+          }
+          onChange(event.target.checked);
+        }}
+      />
       <span className="flex flex-col gap-0.5">
-        <span className="text-[14px] font-medium text-ink">{label}</span>
+        <span className={cn("flex items-center gap-1.5 text-[14px] font-medium", bloqueada && !checked ? "text-ink-3" : "text-ink")}>
+          {label}
+          {bloqueada ? <LockSimple size={13} weight="bold" className="text-ink-4" aria-label="No disponible por ahora" /> : null}
+        </span>
         {description ? <span className="text-[12.5px] leading-snug text-ink-3">{description}</span> : null}
       </span>
     </label>
@@ -466,6 +515,9 @@ export function ChoiceCard({ checked, onChange, label, description, type = "chec
 const slug = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 /* Persona responsable: se elige del personal autorizado (o "Otra persona…") y firma compacta. El cargo sale del rol de la persona (no se captura). Varias se apilan. */
+/* id del selector de una PersonCard ("persona-<titulo>"); la firma es "<id>-firma". */
+export const personaId = (title: string) => `persona-${slug(title)}`;
+
 export function PersonCard({ title, name, onName, cargo, onCargo, signature, onSignature, disabled = false, requires = "muestras", firmante, onFirmante, firmanteSesion = true }: { title: string; name: string; onName: (v: string) => void; cargo?: string; onCargo?: (v: string) => void; signature: string; onSignature: (v: string) => void; disabled?: boolean; requires?: PersonaCapacidad; /* Fase 5: firma ligada a una cuenta activa (con contrasena si no es la sesion). */ firmante?: FirmanteState; onFirmante?: (v: FirmanteState) => void; firmanteSesion?: boolean }) {
   const id = `persona-${slug(title)}`;
   return (
@@ -503,12 +555,15 @@ export function PersonCard({ title, name, onName, cargo, onCargo, signature, onS
               />
             )}
           </label>
+          <MensajeCampo id={id} />
           {cargo && !(firmante && onFirmante) ? <p className="text-[12.5px] text-ink-3">Cargo: {cargo}</p> : null}
         </div>
       </div>
       <div className="flex min-w-0 flex-col gap-1.5">
         <span className="text-[12.5px] font-medium text-ink-2">Firma</span>
-        <SignaturePad value={signature} onChange={onSignature} disabled={disabled} label={`Firma · ${title}`} compact />
+        <CampoValidado id={`${id}-firma`}>
+          <SignaturePad value={signature} onChange={onSignature} disabled={disabled} label={`Firma · ${title}`} compact />
+        </CampoValidado>
       </div>
     </div>
   );

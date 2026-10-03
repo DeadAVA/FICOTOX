@@ -18,6 +18,8 @@ import { getReactivoTypeConfig } from "@/lib/client/reactivos";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { DateInput } from "@/components/ui/DateInput";
+import { CampoValidado, useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
+import { msg, type Problema } from "@/lib/client/mensajes";
 
 /* Alta y edicion de reactivos: los campos dependen de la categoria. */
 export function ReactivoSheet({ open, item, onClose }: { open: boolean; item: ApiRecord | null; onClose: () => void }) {
@@ -29,10 +31,37 @@ export function ReactivoSheet({ open, item, onClose }: { open: boolean; item: Ap
     return initial;
   });
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const formRef = useRef<HTMLFormElement>(null);
   const config = getReactivoTypeConfig(tipo);
   const editing = !!item?.id;
+  const valorDe = (fieldKey: string) => {
+    const meta = REACTIVO_FIELD_META[fieldKey] || { label: fieldKey };
+    return String(values[fieldKey] ?? values[meta.target || fieldKey] ?? "").trim();
+  };
+  /* Reglas en el orden de la hoja: categoría, datos de la categoría y existencias. */
+  const v = useValidacion({
+    titulo: editing ? "No se pudo guardar el reactivo" : "No se pudo crear el reactivo",
+    reglas: () => {
+      const out: Problema[] = [];
+      if (!tipo || !config) {
+        out.push({ campo: "reactivo-tipo", mensaje: msg.elige("la categoría del reactivo") });
+        return out;
+      }
+      const nombres = ["producto", "item_name", "nombre_crm"].filter((k) => config.fields.includes(k));
+      if (nombres.length && !nombres.some((k) => valorDe(k))) out.push({ campo: `reactivo-${nombres[0]}`, mensaje: msg.indica("el nombre del reactivo") });
+      for (const fieldKey of config.fields) {
+        const meta = REACTIVO_FIELD_META[fieldKey] || { label: fieldKey };
+        const valor = valorDe(fieldKey);
+        const campo = `reactivo-${fieldKey}`;
+        if (out.some((p) => p.campo === campo)) continue;
+        if (meta.required && !valor) out.push({ campo, mensaje: `Completa «${meta.label}»` });
+        else if (valor && meta.type === "number" && (Number.isNaN(Number(valor)) || (meta.min !== undefined && Number(valor) < Number(meta.min)))) out.push({ campo, mensaje: `«${meta.label}» debe ser un número${meta.min !== undefined ? ` mayor o igual a ${meta.min}` : ""}` });
+      }
+      if (values.cantidad_actual === "" || values.cantidad_actual === undefined) out.push({ campo: "reactivo-cantidad_actual", mensaje: msg.indica("la cantidad actual en existencia") });
+      else if (Number(values.cantidad_actual) < 0) out.push({ campo: "reactivo-cantidad_actual", mensaje: "La cantidad actual no puede ser negativa" });
+      if (!values.unidad) out.push({ campo: "reactivo-unidad", mensaje: msg.elige("la unidad de la existencia") });
+      return out;
+    },
+  });
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -43,33 +72,12 @@ export function ReactivoSheet({ open, item, onClose }: { open: boolean; item: Ap
     }
     // Existencias (comunes a todas las categorías): lo que mueve el medidor y los avisos de stock bajo.
     for (const key of ["cantidad_actual", "unidad", "stock_maximo", "stock_minimo"]) payload[key] = values[key] || null;
-    if (values.cantidad_actual === "" || values.cantidad_actual === undefined) {
-      setError("Captura la cantidad actual en existencia");
-      document.getElementById("reactivo-cantidad_actual")?.focus();
-      return;
-    }
-    if (!values.unidad) {
-      setError("Elige la unidad de la existencia");
-      document.getElementById("reactivo-unidad")?.focus();
-      return;
-    }
-    const productName = payload.producto || payload.item_name || payload.nombre_crm;
-    if (!tipo || !productName) {
-      setError("Selecciona la categoría y captura el nombre principal del reactivo");
-      formRef.current?.reportValidity();
-      return;
-    }
-    if (formRef.current && !formRef.current.checkValidity()) {
-      formRef.current.reportValidity();
-      setError("Completa los campos obligatorios de esta categoría");
-      return;
-    }
+    if (!v.validar()) return;
     if (!can("inventario", editing ? "E" : "C", { objeto: "catalogo_inventario" })) {
-      setError("No tienes permiso para esta acción");
+      v.avisar({ que: "No tienes permiso para guardar reactivos.", hacer: "Pide a la administración que revise tus roles y permisos." });
       return;
     }
     setSubmitting(true);
-    setError(null);
     try {
       if (editing) {
         await sendJsonAuth("PUT", `${API_BASE_URL}/inventory/reactivos/${item!.id}`, token, payload);
@@ -81,7 +89,7 @@ export function ReactivoSheet({ open, item, onClose }: { open: boolean; item: Ap
       invalidate("reactivos", "dashboard");
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo guardar el reactivo");
+      v.errorServidor(err);
     } finally {
       setSubmitting(false);
     }
@@ -125,7 +133,6 @@ export function ReactivoSheet({ open, item, onClose }: { open: boolean; item: Ap
       size="lg"
       footer={
         <>
-          {error ? <p className="mr-auto text-[13px] text-danger">{error}</p> : null}
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
@@ -135,13 +142,16 @@ export function ReactivoSheet({ open, item, onClose }: { open: boolean; item: Ap
         </>
       }
     >
-      <form id="reactivo-form" ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-7" noValidate>
+      <ValidacionAmbito v={v}>
+      <form id="reactivo-form" onSubmit={handleSubmit} className="flex flex-col gap-7" noValidate>
         <FormSection title="1. Categoría" description={config ? config.hint : "Elige la familia del reactivo: cada una tiene su propio formato de captura."}>
-          <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de reactivo">
-            {REACTIVO_TYPES.map((type) => (
-              <ChoiceCard key={type.value} type="radio" name="reactivo-tipo" checked={tipo === type.value} onChange={() => setTipo(type.value)} label={type.label} />
-            ))}
-          </div>
+          <CampoValidado id="reactivo-tipo">
+            <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de reactivo">
+              {REACTIVO_TYPES.map((type) => (
+                <ChoiceCard key={type.value} type="radio" name="reactivo-tipo" checked={tipo === type.value} onChange={() => setTipo(type.value)} label={type.label} />
+              ))}
+            </div>
+          </CampoValidado>
         </FormSection>
         {config ? (
           <FormSection title="2. Datos del reactivo" description="Los campos marcados con * son obligatorios para esta categoría.">
@@ -176,6 +186,7 @@ export function ReactivoSheet({ open, item, onClose }: { open: boolean; item: Ap
           </FormSection>
         ) : null}
       </form>
+      </ValidacionAmbito>
     </Sheet>
   );
 }

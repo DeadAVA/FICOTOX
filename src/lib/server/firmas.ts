@@ -5,9 +5,12 @@
  *   proceso, superviso, extrajo, limpio, analista) se elige de las cuentas
  *   activas: se guarda su usuario_id, su nombre y su cargo.
  * - Si quien firma no es la persona de la sesion, confirma con su propia
- *   contrasena en ese momento: POST /api/firmas/confirmar devuelve un token de
- *   firma de un solo uso ligado a esa cuenta (10 minutos), que el formato envia
- *   junto con el usuario_id del firmante.
+ *   contrasena. La interfaz la envia AL GUARDAR, junto con el usuario_id del
+ *   firmante (`firmantes.<rol>.password`), y el servidor la verifica al inicio
+ *   de esa misma peticion (verificarFirmasConPassword): antes de guardar no se
+ *   escribe nada (ni token ni bitacora). Se conserva el camino anterior por
+ *   API: POST /api/firmas/confirmar devuelve un token de firma de un solo uso
+ *   (10 minutos) que se envia como `token_firma`.
  * - Quien firma un trabajo tecnico (proceso, extrajo, limpio, analista) debe
  *   tener la autorizacion FX-THF-AP de esa actividad y metodo.
  * - Un nombre escrito sin cuenta (clientes anteriores de la API) se conserva
@@ -61,6 +64,41 @@ async function consumirToken(s: Session, token: string, firmanteId: number, sesi
   return r.rowcount > 0;
 }
 
+/*
+ * Firmas confirmadas con la contrasena enviada al guardar. Se marcan sobre el
+ * propio objeto del payload (no viaja en JSON, asi que no se puede falsificar).
+ */
+const verificadas = new WeakMap<object, Set<string>>();
+
+/*
+ * Verifica las contrasenas de los firmantes que vienen en el payload
+ * (`firmantes.<rol>.password`). Se llama al inicio del guardado, antes de
+ * cualquier otra escritura: si una no es correcta, solo se registra el intento
+ * fallido en la bitacora y no se guarda nada (401 firma_invalida, con el rol).
+ */
+const ETIQUETA_ROL: Record<string, string> = { recibio: "Recibido por", proceso: "Procesó", superviso: "Supervisó", extrajo: "Extrajo", limpio: "Realizó la limpieza", analista: "Analista" };
+
+export async function verificarFirmasConPassword(s: Session, user: CurrentUser, payload: Record<string, unknown>): Promise<void> {
+  const elegidos = (payload.firmantes && typeof payload.firmantes === "object" ? payload.firmantes : {}) as Record<string, { usuario_id?: unknown; password?: unknown } | null>;
+  const ok = new Set<string>();
+  for (const [rol, elegido] of Object.entries(elegidos)) {
+    const r = { rol, etiqueta: ETIQUETA_ROL[rol] || "Firma" };
+    const usuarioId = Number(elegido?.usuario_id) || 0;
+    const password = typeof elegido?.password === "string" ? elegido.password : "";
+    if (!usuarioId || !password) continue;
+    const fila = await s.queryOne<Row>("SELECT id, nombre, email, activo, password_hash, bloqueado_hasta FROM usuarios WHERE id = :id", { id: usuarioId });
+    if (!fila || !Number(fila.activo ?? 1)) throw new HttpError(400, { message: `${r.etiqueta}: elige una cuenta activa`, rol: r.rol });
+    if (fila.bloqueado_hasta && String(fila.bloqueado_hasta) > new Date().toISOString()) throw new HttpError(423, { message: `${r.etiqueta}: la cuenta de ${fila.nombre || fila.email} está bloqueada temporalmente`, codigo: "firma_bloqueada", rol: r.rol });
+    if (!verifyPassword(password, (fila.password_hash as string | null) || null)) {
+      await registrarAuditoria(s, user, { accion: "reauth_fallida", entidad: "usuarios", entidadId: usuarioId, referencia: String(fila.email), detalle: { motivo: "confirmar firma" } });
+      await s.commit();
+      throw new HttpError(401, { message: `${r.etiqueta}: la contraseña de ${fila.nombre || fila.email} no es correcta`, codigo: "firma_invalida", rol: r.rol });
+    }
+    ok.add(`${r.rol}:${usuarioId}`);
+  }
+  verificadas.set(payload, ok);
+}
+
 /* ---------- Firmantes de cada formato ---------- */
 
 export interface RolFirma {
@@ -101,7 +139,8 @@ export async function resolverFirmantes(s: Session, user: CurrentUser, payload: 
     const persona = await s.queryOne<Row>("SELECT id, nombre, email, activo FROM usuarios WHERE id = :id", { id: usuarioId });
     if (!persona || !Number(persona.activo ?? 1)) throw new HttpError(400, { message: `${r.etiqueta}: elige una cuenta activa` });
     const yaLigado = antes && Number(antes[`${r.rol}_usuario_id`]) === usuarioId;
-    if (usuarioId !== sesionId && !yaLigado && !(await consumirToken(s, String(elegido?.token_firma || ""), usuarioId, sesionId))) {
+    const conPassword = verificadas.get(payload)?.has(`${r.rol}:${usuarioId}`) || false;
+    if (usuarioId !== sesionId && !yaLigado && !conPassword && !(await consumirToken(s, String(elegido?.token_firma || ""), usuarioId, sesionId))) {
       throw new HttpError(403, { message: `${r.etiqueta}: ${persona.nombre || persona.email} debe confirmar su firma con su contraseña`, codigo: "firma_sin_confirmar", rol: r.rol });
     }
     if (r.requisitos?.length && getConfig().AUTORIZACIONES_OBLIGATORIAS) {

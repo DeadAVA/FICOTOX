@@ -13,6 +13,7 @@ import { FilterChips, FilterMenu, type FilterGroup, type FilterToggle } from "@/
 import { ActionMenu, Dropdown, type MenuItem } from "@/components/ui/Overlay";
 import { SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { EmptyState, ErrorState, Skeleton, TableSkeleton } from "@/components/ui/Primitives";
+import { FranjaPendientes } from "@/components/features/solicitudes/Solicitudes";
 import { StatusCell } from "@/components/ui/StatusFlag";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
@@ -134,6 +135,7 @@ function ExtraccionList() {
 
   return (
     <>
+      <FranjaPendientes entidades={["muestras_extraccion"]} grupo="extraccion" />
       <Toolbar
         end={
           canCreate ? (

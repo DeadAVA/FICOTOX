@@ -13,6 +13,7 @@ import { Avatar } from "@/components/ui/Primitives";
 import { isActivePath, isItemActive, visibleNav, type NavChild, type NavIcon, type NavItem } from "@/lib/client/nav";
 import { BrandLockup, BrandMark } from "./Brand";
 import { ABRIR_MIS_AUTORIZACIONES, AccountSheet, EVENTO_ABRIR_CUENTA } from "./AccountSheet";
+import { usePendientesPorResolver } from "@/components/features/solicitudes/Solicitudes";
 import { Campana } from "./Campana";
 import { CommandPalette } from "./CommandPalette";
 
@@ -216,6 +217,9 @@ type VisibleItem = NavItem & { children: NavChild[] };
 function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAccount, onClose, onReportar, isMac, user, onLogout }: { items: VisibleItem[]; pathname: string; collapsed: boolean; onSearch: () => void; onToggle: () => void; onAccount: () => void; onClose?: () => void; onReportar?: () => void; isMac: boolean; user: { nombre?: string; email?: string; roles?: string[]; avatar?: string | null } | null; onLogout: () => void }) {
   // El shell solo se monta ya autenticado (en el cliente), así que leer localStorage al iniciar no desajusta la hidratación.
   const [expanded, setExpanded] = useState<string[]>(() => (typeof window === "undefined" ? [] : readExpanded()));
+  // Contadores de lo que la persona puede resolver: "Por autorizar" y "Por supervisar".
+  const pendientes = usePendientesPorResolver();
+  const contador: Record<string, number> = { "/solicitudes": pendientes.solicitudes.length, "/supervision": pendientes.supervision.length };
 
   const toggleExpanded = (label: string, active: boolean) => {
     setExpanded((current) => {
@@ -336,6 +340,11 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
                             >
                               <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full transition-colors", childActive ? "bg-white" : "bg-line-strong")} aria-hidden="true" />
                               <span className="truncate">{child.label}</span>
+                              {contador[child.href] ? (
+                                <span className={cn("tnum ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold", childActive ? "bg-white/90 text-brand-strong" : "bg-warning text-white")} aria-label={`${contador[child.href]} pendientes`} data-contador={child.href}>
+                                  {contador[child.href]}
+                                </span>
+                              ) : null}
                             </Link>
                           </li>
                         );

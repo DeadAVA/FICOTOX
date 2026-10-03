@@ -9,6 +9,8 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Prohibit } from "@phosphor-icons/react";
 import { Callout, Panel } from "@/components/features/samples/FormLayout";
+import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
+import { msg, type Problema } from "@/lib/client/mensajes";
 import { useSession } from "@/components/session/SessionProvider";
 import { CampoIdentidad } from "@/components/session/Reautenticar";
 import { Button } from "@/components/ui/Button";
@@ -105,10 +107,20 @@ export function AutorizacionesUsuario({ usuarioId }: { usuarioId: number }) {
   }, [puede, catalogo, token]);
 
   const opciones = !catalogo ? [] : nueva.tipo === "metodo" ? catalogo.metodos : nueva.tipo === "equipo" ? catalogo.equipos : catalogo.actividades;
+  const queSe = nueva.tipo === "metodo" ? "el método" : nueva.tipo === "equipo" ? "el equipo" : "la actividad";
+  const v = useValidacion({
+    titulo: "No se pudo registrar la autorización",
+    reglas: () => {
+      const out: Problema[] = [];
+      if (!nueva.clave) out.push({ campo: "aut-clave", mensaje: msg.elige(`${queSe} que se autoriza`) });
+      if (nueva.desde && nueva.hasta && nueva.hasta < nueva.desde) out.push({ campo: "aut-hasta", mensaje: msg.fechaAnterior("La fecha de fin", "la de inicio") });
+      if (nueva.motivo.trim().length < 5) out.push({ campo: "aut-motivo", mensaje: msg.minimo("El motivo", 5) });
+      return out;
+    },
+  });
 
   const agregar = async () => {
-    if (!nueva.clave) return toast.error("Elige qué se autoriza");
-    if (nueva.motivo.trim().length < 5) return toast.error("Indica el motivo (al menos 5 caracteres)");
+    if (!v.validar()) return;
     armarReauth(clave ? { password: clave } : null);
     setGuardando(true);
     try {
@@ -126,7 +138,7 @@ export function AutorizacionesUsuario({ usuarioId }: { usuarioId: number }) {
       await cargar();
       invalidate("dashboard");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo registrar la autorización");
+      v.errorServidor(err, { motivo: "aut-motivo", password: "aut-clave-admin" });
     } finally {
       setGuardando(false);
     }
@@ -141,7 +153,7 @@ export function AutorizacionesUsuario({ usuarioId }: { usuarioId: number }) {
       await cargar();
       invalidate("dashboard");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo revocar la autorización");
+      v.errorServidor(err);
     }
   };
 
@@ -149,6 +161,7 @@ export function AutorizacionesUsuario({ usuarioId }: { usuarioId: number }) {
   if (!items) return <Skeleton className="h-24 w-full" />;
 
   return (
+    <ValidacionAmbito v={v}>
     <div className="flex flex-col gap-3" id="autorizaciones-usuario">
       <p className="text-[12.5px] text-ink-3">Además del rol, la persona solo opera los métodos, equipos y actividades para los que está autorizada en el formato FX-THF-AP, dentro de su vigencia.</p>
       <ListaAutorizaciones items={items} onRevocar={puede ? revocar : undefined} />
@@ -196,5 +209,6 @@ export function AutorizacionesUsuario({ usuarioId }: { usuarioId: number }) {
         </Panel>
       ) : null}
     </div>
+    </ValidacionAmbito>
   );
 }

@@ -17,6 +17,7 @@ import { resumenPermisos } from "@/lib/client/audit-humanize";
 import { fmt, normalizeText } from "@/lib/client/format";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
+import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
 import type { PermisoFila } from "@/lib/shared/permisos";
 
 export default function RolesPage() {
@@ -60,6 +61,8 @@ function RolesContent() {
     return term ? roles.filter((role) => normalizeText(`${role.nombre || ""} ${role.descripcion || ""}`).includes(term)) : roles;
   }, [roles, search]);
 
+  // Errores de las acciones (motivo y contraseña ya capturados): pop-up con qué pasó y qué hacer.
+  const vAccion = useValidacion({ titulo: "No se pudo completar la acción", reglas: () => [] });
   const openCreate = () => setSheet((prev) => ({ open: true, key: prev.key + 1, role: null, permisos: [], usuarios: [] }));
 
   const openRole = async (id: number) => {
@@ -79,7 +82,7 @@ function RolesContent() {
       toast.success("Rol eliminado");
       invalidate("roles", "usuarios");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo eliminar");
+      vAccion.errorServidor(err);
     }
   };
 
@@ -97,6 +100,7 @@ function RolesContent() {
 
   return (
     <>
+      <ValidacionAmbito v={vAccion}>{null}</ValidacionAmbito>
       <p className="tnum -mt-2 text-[12.5px] text-ink-3">
         <span className="font-medium text-ink">{fmt(roles.length)}</span> roles · <span className="font-medium text-ink">{fmt(roles.filter((r) => !!r.activo).length)}</span> activos · <span className="font-medium text-ink">{fmt(roles.filter((r) => !!r.es_sistemico).length)}</span> del sistema ·{" "}
         <span className="font-medium text-ink">{fmt(roles.reduce((acc, r) => acc + Number(r.total_usuarios || 0), 0))}</span> asignaciones vigentes

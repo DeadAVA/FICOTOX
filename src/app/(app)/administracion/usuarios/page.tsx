@@ -12,6 +12,7 @@ import { FilterChips, FilterMenu, type FilterGroup } from "@/components/ui/Filte
 import { ActionMenu, Dialog, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Avatar, Badge, EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
+import { FranjaPendientes } from "@/components/features/solicitudes/Solicitudes";
 import { StatusCell, StatusFlag } from "@/components/ui/StatusFlag";
 import { Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
@@ -19,6 +20,7 @@ import { fmt, fmtDate, fmtDateTime, normalizeText } from "@/lib/client/format";
 import { useOpenState } from "@/lib/client/hooks";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
+import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
 import { formatearHora } from "@/lib/shared/fechas";
 
 export default function UsuariosPage() {
@@ -59,6 +61,8 @@ function UsuariosContent() {
   }, [items, search, roleFilter]);
 
   const [soloLectura, setSoloLectura] = useState(false);
+  // Errores de las acciones (motivo y contraseña ya capturados): pop-up con qué pasó y qué hacer.
+  const vAccion = useValidacion({ titulo: "No se pudo completar la acción", reglas: () => [] });
   const editUser = async (id: number, lectura = false) => {
     try {
       const data = await getJsonAuth(`${API_BASE_URL}/admin/usuarios/${id}`, token);
@@ -78,7 +82,7 @@ function UsuariosContent() {
       toast.success("Usuario dado de baja");
       invalidate("usuarios", "roles");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo dar de baja");
+      vAccion.errorServidor(err);
     }
   };
 
@@ -91,7 +95,7 @@ function UsuariosContent() {
       toast.success("Cuenta desbloqueada");
       invalidate("usuarios");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo desbloquear");
+      vAccion.errorServidor(err);
     }
   };
 
@@ -104,7 +108,7 @@ function UsuariosContent() {
       setTemporal({ email: String(item.email || ""), password: String(data.password_temporal || "") });
       invalidate("usuarios");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo restablecer la contraseña");
+      vAccion.errorServidor(err);
     }
   };
 
@@ -137,11 +141,13 @@ function UsuariosContent() {
 
   return (
     <>
+      <ValidacionAmbito v={vAccion}>{null}</ValidacionAmbito>
       <p className="tnum -mt-2 text-[12.5px] text-ink-3">
         <span className="font-medium text-ink">{fmt(list.length)}</span> cuentas · <span className="font-medium text-ink">{fmt(list.filter((item) => !!item.activo).length)}</span> activas · <span className="font-medium text-ink">{fmt(list.filter((item) => !item.activo).length)}</span> inactivas ·{" "}
         <span className={list.some((item) => !item.tiene_password) ? "font-medium text-warning-text" : "font-medium text-ink"}>{fmt(list.filter((item) => !item.tiene_password).length)}</span> sin contraseña local
       </p>
 
+      <FranjaPendientes entidades={["usuarios"]} grupo="usuarios" />
       <Toolbar
         end={
           canCreate ? (

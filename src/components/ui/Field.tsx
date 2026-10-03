@@ -3,6 +3,7 @@
 import { forwardRef, useCallback, useEffect, useId, useLayoutEffect, useRef, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { CaretDown } from "@phosphor-icons/react";
 import { cn } from "./cn";
+import { useErrorDeCampo } from "./Validacion";
 
 /*
  * Controles de formulario. Etiqueta arriba, ayuda opcional, error abajo.
@@ -12,7 +13,7 @@ import { cn } from "./cn";
 
 /* Sin alto ni tamaño de letra: los fija la variante (clsx no fusiona clases de Tailwind, así que no se pueden sobrescribir después). */
 export const controlBase =
-  "w-full rounded-[10px] border border-line bg-surface-2/80 px-3 text-ink placeholder:text-ink-4 transition-[border-color,background-color] duration-150 ease-[var(--ease-spring)] hover:border-line-strong focus:border-brand/55 focus:outline-none disabled:cursor-not-allowed disabled:bg-surface-3/60 disabled:text-ink-3 read-only:bg-surface-3/50";
+  "w-full rounded-[10px] border border-line bg-surface-2/80 px-3 text-ink placeholder:text-ink-4 transition-[border-color,background-color] duration-150 ease-[var(--ease-spring)] hover:border-line-strong focus:border-brand/55 focus:outline-none aria-[invalid=true]:border-danger aria-[invalid=true]:focus:border-danger disabled:cursor-not-allowed disabled:bg-surface-3/60 disabled:text-ink-3 read-only:bg-surface-3/50";
 export const controlClass = `${controlBase} text-[14px]`;
 /* Control compacto para tablas y tarjetas por fila. */
 export const controlClassSm = `${controlBase} h-8 text-[13px]`;
@@ -28,7 +29,25 @@ export interface FieldProps {
   inline?: ReactNode;
 }
 
-export function Field({ label, hint, error, required, htmlFor, className, children, inline }: FieldProps) {
+export function Field({ label, hint, error: errorProp, required, htmlFor, className, children, inline }: FieldProps) {
+  // Error del formulario (useValidacion) para este campo: mensaje debajo y aria en el control.
+  const errorValidacion = useErrorDeCampo(htmlFor);
+  const error = errorProp || errorValidacion;
+  const errorId = htmlFor ? `${htmlFor}-error` : undefined;
+  useEffect(() => {
+    if (!htmlFor) return;
+    const el = document.getElementById(htmlFor);
+    if (!el) return;
+    if (errorValidacion) {
+      el.setAttribute("aria-invalid", "true");
+      el.setAttribute("aria-describedby", `${htmlFor}-error`);
+      el.dataset.validacion = "1";
+    } else if (el.dataset.validacion) {
+      el.removeAttribute("aria-invalid");
+      el.removeAttribute("aria-describedby");
+      delete el.dataset.validacion;
+    }
+  }, [htmlFor, errorValidacion]);
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
       {label ? (
@@ -42,7 +61,7 @@ export function Field({ label, hint, error, required, htmlFor, className, childr
       ) : null}
       {children}
       {error ? (
-        <p className="text-[12.5px] text-danger" role="alert">
+        <p id={errorId} className="text-[12.5px] text-danger">
           {error}
         </p>
       ) : hint ? (

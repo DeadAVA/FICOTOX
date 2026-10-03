@@ -15,7 +15,7 @@ import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from
 import { exigirAutorizaciones } from "../../autorizaciones";
 import { requisitosProcesamiento } from "../../../shared/autorizaciones";
 import { exigirAsignacion, filtroAsignadas } from "../../asignaciones";
-import { guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
+import { guardarFirmantes, resolverFirmantes, verificarFirmasConPassword, type RolFirma } from "../../firmas";
 
 /*
  * Portado de modules/samples/procesamiento.py del backend Flask original.
@@ -179,6 +179,8 @@ export async function createProcessingSample({ request, s }: RouteContext): Prom
   const actuo = cargoActuante(request, permiso);
 
   const payload = await readJson(request);
+  // Contraseñas de firmantes enviadas al guardar: se verifican antes de cualquier otra escritura.
+  await verificarFirmasConPassword(s, user, payload);
   const data = normalizePayload(payload);
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: false, insumosJson: data.uso_inventario_json });
   // Fase 4: autorizacion FX-THF-AP de quien captura.
@@ -257,6 +259,8 @@ export async function updateProcessingSample({ request, s, params }: RouteContex
   const actuo = cargoActuante(request, permiso);
   await assertEditableAsync(s, antes, TABLE);
   const payload = await readJson(request);
+  // Contraseñas de firmantes enviadas al guardar: se verifican antes de cualquier otra escritura.
+  await verificarFirmasConPassword(s, user, payload);
   const data = normalizePayload(payload);
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: false, insumosJson: data.uso_inventario_json });
   // Fase 4: autorizacion FX-THF-AP de quien captura.

@@ -1,20 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
-import { toast } from "sonner";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState, type ReactNode } from "react";
 import { ArrowSquareOut, CheckCircle, Prohibit, Stamp, XCircle } from "@phosphor-icons/react";
 import { PageBody } from "@/components/shell/AppShell";
-import { CampoIdentidad } from "@/components/session/Reautenticar";
+import { describirSolicitud, GRUPO_DE_ENTIDAD, haceCuanto, hrefDeSolicitud, NOMBRE_GRUPO, useAccionesSolicitud } from "@/components/features/solicitudes/Solicitudes";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
-import { Field, Switch, Textarea } from "@/components/ui/Field";
-import { Dialog, useConfirm, usePrompt } from "@/components/ui/Overlay";
+import { cn } from "@/components/ui/cn";
+import { Switch } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, TableSkeleton, type Tone } from "@/components/ui/Primitives";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
-import { API_BASE_URL, armarCargo, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
-import { invalidate, useResource } from "@/lib/client/store";
+import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
+import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { ETIQUETA_ESTADO_SOLICITUD, type EstadoSolicitud } from "@/lib/shared/acciones-criticas";
 import { formatearFecha, formatearFechaHora } from "@/lib/shared/fechas";
@@ -29,143 +29,49 @@ import { formatearFecha, formatearFechaHora } from "@/lib/shared/fechas";
  * La ve toda persona con sesion: la bandeja solo trae lo que le toca.
  */
 
-const KEYS = ["solicitudes", "muestras", "informes", "usuarios", "roles", "dashboard"];
-
 const TONO_ESTADO: Record<string, Tone> = { pendiente: "warning", aprobada: "success", rechazada: "danger", cancelada: "neutral", vencida: "neutral" };
-
-/* Enlace al registro de la solicitud. */
-function hrefDe(item: ApiRecord): string | null {
-  const id = String(item.entidad_id || "");
-  switch (String(item.entidad)) {
-    case "muestras_recepcion":
-      return `/muestras/recepcion/${id}`;
-    case "muestras_procesamiento":
-      return `/muestras/procesamiento/${id}`;
-    case "muestras_extraccion":
-      return `/muestras/extraccion/${id}`;
-    case "muestras_analisis":
-      return `/muestras/analisis/${id}`;
-    case "informes":
-      return `/informes/${id}`;
-    case "usuarios":
-      return "/administracion/usuarios";
-    case "documentos_sgc":
-      return "/documentos";
-    default:
-      return null;
-  }
-}
 
 export function EstadoSolicitudBadge({ estado }: { estado: unknown }) {
   const key = String(estado || "") as EstadoSolicitud;
   return <Badge tone={TONO_ESTADO[key] || "neutral"}>{ETIQUETA_ESTADO_SOLICITUD[key] || key || "—"}</Badge>;
 }
 
-/* Que se pidio, en palabras, con los datos de la solicitud. */
-function describir(item: ApiRecord): string {
-  const datos = (item.datos || {}) as ApiRecord;
-  switch (String(item.tipo)) {
-    case "asignar_rol":
-      return `Asignar el rol "${String(datos.rol || datos.rol_id || "")}"${datos.vigente_hasta ? ` hasta ${formatearFecha(datos.vigente_hasta)}` : ""}`;
-    case "ampliar_vigencia":
-      return datos.tipo_cuenta === "permanente" ? "Convertir la cuenta en permanente" : `Ampliar la vigencia hasta ${datos.vigente_hasta ? formatearFecha(datos.vigente_hasta) : "sin fecha de fin"}`;
-    case "excepcion_segregacion":
-      return `Excepción para ${String(datos.accion || item.accion)} lo que la misma persona elaboró`;
-    case "restaurar_registro":
-      return `Restaurar (volvería a "${String(datos.estado_previo || "")}")`;
-    default:
-      return String(item.etiqueta || item.tipo);
-  }
+export default function SolicitudesPage() {
+  return (
+    <Suspense fallback={null}>
+      <Bandeja />
+    </Suspense>
+  );
 }
 
-export default function SolicitudesPage() {
+function Bandeja() {
   const { token, user } = useSession();
-  const prompt = usePrompt();
-  const confirm = useConfirm();
+  const router = useRouter();
+  const params = useSearchParams();
+  const modulo = params.get("modulo") || "";
   const [historial, setHistorial] = useState(false);
-  const [aprobar, setAprobar] = useState<ApiRecord | null>(null);
-  const [motivo, setMotivo] = useState("");
-  const [clave, setClave] = useState("");
-  const [cargo, setCargo] = useState("");
-  const [enviando, setEnviando] = useState(false);
+  const acciones = useAccionesSolicitud();
 
   const resource = useResource<ApiRecord[]>(
-    [...KEYS, historial ? "solicitudes:todas" : "solicitudes:pendientes"],
+    ["solicitudes", historial ? "solicitudes:todas" : "solicitudes:pendientes"],
     async () => {
       const data = await getJsonAuth(`${API_BASE_URL}/solicitudes${historial ? "?estado=todas" : ""}`, token);
       return (data.items || []) as ApiRecord[];
     },
     { enabled: !!token },
   );
-  const items = resource.data || [];
+  const todos = resource.data || [];
+  const items = modulo ? todos.filter((i) => GRUPO_DE_ENTIDAD[String(i.entidad)] === modulo) : todos;
   const porAutorizar = items.filter((i) => i.puedo_aprobar);
   const mias = items.filter((i) => Number(i.solicitado_por) === Number(user?.id));
   const resto = items.filter((i) => !i.puedo_aprobar && Number(i.solicitado_por) !== Number(user?.id));
+  const grupos = [...new Set(todos.filter((i) => i.puedo_aprobar).map((i) => GRUPO_DE_ENTIDAD[String(i.entidad)]).filter(Boolean))];
 
-  const abrirAprobar = (item: ApiRecord) => {
-    setMotivo("");
-    setClave("");
-    setCargo("");
-    setAprobar(item);
-  };
-
-  const confirmarAprobacion = async () => {
-    if (!aprobar) return;
-    if (motivo.trim().length < 5) return toast.error("Indica el motivo de la aprobación (al menos 5 caracteres)");
-    setEnviando(true);
-    // Aprobar exige confirmar la identidad: la contrasena y el cargo de este dialogo se usan en la peticion.
-    armarReauth(clave ? { password: clave } : null);
-    armarCargo(cargo ? Number(cargo) : null);
-    setClave("");
-    try {
-      const data = await sendJsonAuth("POST", `${API_BASE_URL}/solicitudes/${aprobar.id}/aprobar`, token, { motivo: motivo.trim() });
-      toast.success(String(data.message || "Solicitud aprobada y ejecutada"));
-      setAprobar(null);
-      invalidate(...KEYS, "reactivos", "consumibles", "equipos", "movimientos");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo aprobar la solicitud");
-    } finally {
-      setEnviando(false);
-    }
-  };
-
-  const rechazar = async (item: ApiRecord) => {
-    const razon = await prompt({
-      critico: true,
-      title: `Rechazar solicitud #${item.id}`,
-      description: `${String(item.etiqueta)} · ${String(item.referencia || "")}. La acción no se ejecuta y quien la pidió verá tu motivo.`,
-      label: "Motivo del rechazo",
-      minLength: 5,
-      confirmLabel: "Rechazar",
-      tone: "danger",
-    });
-    if (!razon) return;
-    try {
-      await sendJsonAuth("POST", `${API_BASE_URL}/solicitudes/${item.id}/rechazar`, token, { motivo: razon });
-      toast.success(`Solicitud #${item.id} rechazada`);
-      invalidate(...KEYS);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo rechazar la solicitud");
-    }
-  };
-
-  const cancelar = async (item: ApiRecord) => {
-    const ok = await confirm({ title: `Cancelar solicitud #${item.id}`, description: `${String(item.etiqueta)} · ${String(item.referencia || "")}. La acción no se ejecutará; podrás pedirla de nuevo más adelante.`, confirmLabel: "Cancelar solicitud", cancelLabel: "Volver", tone: "danger" });
-    if (!ok) return;
-    try {
-      await sendJsonAuth("POST", `${API_BASE_URL}/solicitudes/${item.id}/cancelar`, token, {});
-      toast.success(`Solicitud #${item.id} cancelada`);
-      invalidate(...KEYS);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo cancelar la solicitud");
-    }
-  };
-
-  const fila = (item: ApiRecord, acciones: ReactNode) => {
-    const href = hrefDe(item);
+  const fila = (item: ApiRecord, botones: ReactNode) => {
+    const href = hrefDeSolicitud(item);
     return (
       <Tr key={String(item.id)}>
-        <Td>
+        <Td className="max-w-[340px]">
           <CellPrimary
             title={`#${String(item.id)} · ${String(item.etiqueta)}`}
             subtitle={
@@ -177,35 +83,41 @@ export default function SolicitudesPage() {
                 ) : (
                   <span>{String(item.referencia || item.entidad_id)}</span>
                 )}
-                <span className="text-ink-4">·</span>
-                <span>{describir(item)}</span>
+                {describirSolicitud(item) !== String(item.etiqueta) ? (
+                  <>
+                    <span className="text-ink-4">·</span>
+                    <span>{describirSolicitud(item)}</span>
+                  </>
+                ) : null}
               </span>
             }
           />
         </Td>
-        <Td>
-          <p className="text-[13px] text-ink-2">{String(item.motivo || "—")}</p>
-          {item.motivo_resolucion && item.estado !== "pendiente" ? <p className="mt-0.5 whitespace-pre-line text-[12px] text-ink-3">Resolución: {String(item.motivo_resolucion)}</p> : null}
-        </Td>
         <Td muted>
-          <p>
+          <p className="text-ink-2">
             {String(item.solicitado_nombre || `usuario #${String(item.solicitado_por)}`)}
             {item.solicitado_rol ? <span className="text-ink-4"> · {String(item.solicitado_rol)}</span> : null}
           </p>
-          <p className="tnum text-[12px]">{formatearFechaHora(item.solicitado_en)}</p>
+          <p className="tnum text-[12px]" title={formatearFechaHora(item.solicitado_en)}>
+            {haceCuanto(item.solicitado_en)}
+          </p>
+        </Td>
+        <Td className="max-w-[320px]">
+          <p className="whitespace-pre-line text-[13px] text-ink-2">{String(item.motivo || "—")}</p>
+          {item.motivo_resolucion && item.estado !== "pendiente" ? <p className="mt-0.5 whitespace-pre-line text-[12px] text-ink-3">Resolución: {String(item.motivo_resolucion)}</p> : null}
         </Td>
         <Td>
           <EstadoSolicitudBadge estado={item.estado} />
           {item.estado === "pendiente" ? <p className="tnum mt-0.5 text-[11.5px] text-ink-3">Vence {formatearFecha(item.vence_en)}</p> : item.resuelto_nombre ? <p className="mt-0.5 text-[11.5px] text-ink-3">{String(item.resuelto_nombre)} · {formatearFechaHora(item.resuelto_en)}</p> : null}
         </Td>
         <Td align="right">
-          <div className="flex flex-wrap justify-end gap-2">{acciones}</div>
+          <div className="flex flex-wrap justify-end gap-2">{botones}</div>
         </Td>
       </Tr>
     );
   };
 
-  const tabla = (lista: ApiRecord[], acciones: (item: ApiRecord) => ReactNode, vacio: { title: string; description: string }) => (
+  const tabla = (lista: ApiRecord[], botones: (item: ApiRecord) => ReactNode, vacio: { title: string; description: string }) => (
     <TableShell>
       {resource.loading && !resource.data ? (
         <TableSkeleton rows={3} cols={5} />
@@ -213,14 +125,14 @@ export default function SolicitudesPage() {
         <Table>
           <THead>
             <Tr>
-              <Th>Solicitud</Th>
+              <Th>Qué y de qué registro</Th>
+              <Th>Quién y hace cuánto</Th>
               <Th>Motivo</Th>
-              <Th>Pidió</Th>
               <Th>Estado</Th>
               <Th align="right">Acciones</Th>
             </Tr>
           </THead>
-          <TBody>{lista.map((item) => fila(item, acciones(item)))}</TBody>
+          <TBody>{lista.map((item) => fila(item, botones(item)))}</TBody>
         </Table>
       ) : (
         <EmptyState compact icon={<CheckCircle size={22} weight="duotone" />} title={vacio.title} description={vacio.description} />
@@ -233,12 +145,23 @@ export default function SolicitudesPage() {
       <PageHeader
         title="Por autorizar"
         description="Acciones críticas que esperan la aprobación de un segundo usuario: anulaciones fuera de borrador, informes autorizados, asignación de roles, reactivaciones, ampliaciones de vigencia y excepciones de segregación. Quien las pide no puede aprobarlas."
-        actions={
-          <Switch id="sol-historial" checked={historial} onCheckedChange={setHistorial} label="Ver historial" />
-        }
+        actions={<Switch id="sol-historial" checked={historial} onCheckedChange={setHistorial} label="Ver historial" />}
       />
 
       {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : null}
+
+      {modulo || grupos.length > 1 ? (
+        <div className="flex flex-wrap items-center gap-1.5" aria-label="Filtrar por módulo">
+          <button type="button" onClick={() => router.replace("/solicitudes")} className={cn("press h-8 rounded-full px-3 text-[13px] font-medium", !modulo ? "bg-ink text-white" : "bg-surface text-ink-2 shadow-card hover:text-ink")}>
+            Todos
+          </button>
+          {[...new Set([...(modulo ? [modulo] : []), ...grupos])].map((g) => (
+            <button key={g} type="button" onClick={() => router.replace(`/solicitudes?modulo=${g}`)} className={cn("press h-8 rounded-full px-3 text-[13px] font-medium", modulo === g ? "bg-ink text-white" : "bg-surface text-ink-2 shadow-card hover:text-ink")}>
+              {NOMBRE_GRUPO[g] || g}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <section className="flex flex-col gap-3" aria-labelledby="sol-pendientes">
         <h2 id="sol-pendientes" className="title-3 text-ink">
@@ -248,15 +171,15 @@ export default function SolicitudesPage() {
           porAutorizar,
           (item) => (
             <>
-              <Button size="sm" variant="secondary" icon={<XCircle size={15} />} onClick={() => rechazar(item)}>
+              <Button size="sm" variant="secondary" icon={<XCircle size={15} />} onClick={() => acciones.rechazar(item)}>
                 Rechazar
               </Button>
-              <Button size="sm" icon={<Stamp size={15} />} onClick={() => abrirAprobar(item)}>
+              <Button size="sm" icon={<Stamp size={15} />} onClick={() => acciones.aprobar(item)}>
                 Aprobar
               </Button>
             </>
           ),
-          { title: "Nada pendiente de tu autorización", description: "Cuando alguien pida una acción crítica que tú puedas aprobar, aparecerá aquí." },
+          { title: "Nada pendiente de tu autorización", description: modulo ? `No hay solicitudes de ${NOMBRE_GRUPO[modulo] || modulo} que puedas aprobar.` : "Cuando alguien pida una acción crítica que tú puedas aprobar, aparecerá aquí." },
         )}
       </section>
 
@@ -268,7 +191,7 @@ export default function SolicitudesPage() {
           mias,
           (item) =>
             item.puedo_cancelar ? (
-              <Button size="sm" variant="secondary" icon={<Prohibit size={15} />} onClick={() => cancelar(item)}>
+              <Button size="sm" variant="secondary" icon={<Prohibit size={15} />} onClick={() => acciones.cancelar(item)}>
                 Cancelar solicitud
               </Button>
             ) : null,
@@ -284,38 +207,7 @@ export default function SolicitudesPage() {
           {tabla(resto, () => null, { title: "Sin más solicitudes", description: "" })}
         </section>
       ) : null}
-
-      <Dialog
-        open={!!aprobar}
-        onOpenChange={(open) => !open && setAprobar(null)}
-        title={aprobar ? `Aprobar solicitud #${aprobar.id}` : "Aprobar"}
-        description={aprobar ? `${String(aprobar.etiqueta)} · ${String(aprobar.referencia || "")}. Al aprobar, el sistema ejecuta la acción en tu nombre como segundo usuario y todo queda en la bitácora enlazado a la solicitud.` : undefined}
-        size="sm"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setAprobar(null)}>
-              Volver
-            </Button>
-            <Button icon={<Stamp size={16} />} loading={enviando} onClick={confirmarAprobacion}>
-              Aprobar y ejecutar
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-4">
-          {aprobar ? (
-            <p className="rounded-[10px] bg-surface-2 px-3 py-2 text-[13px] text-ink-2 ring-1 ring-line">
-              <span className="font-medium text-ink">{describir(aprobar)}</span>
-              <br />
-              Motivo de quien la pidió: {String(aprobar.motivo || "—")}
-            </p>
-          ) : null}
-          <Field label="Motivo de la aprobación" htmlFor="ap-motivo" required>
-            <Textarea id="ap-motivo" rows={3} value={motivo} onChange={(event) => setMotivo(event.target.value)} placeholder="Por qué autorizas esta acción; queda en la bitácora" />
-          </Field>
-          <CampoIdentidad value={clave} onChange={setClave} id="ap-password" cargo={cargo} onCargo={setCargo} />
-        </div>
-      </Dialog>
+      {acciones.dialogo}
     </PageBody>
   );
 }

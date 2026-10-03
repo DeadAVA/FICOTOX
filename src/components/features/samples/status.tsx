@@ -1,7 +1,10 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useState, type ReactNode } from "react";
 import { Badge, type Tone } from "@/components/ui/Primitives";
 import { Button } from "@/components/ui/Button";
-import { Tooltip } from "@/components/ui/Overlay";
+import { Dialog, Tooltip } from "@/components/ui/Overlay";
+import { SolicitudBanner, SolicitudDetalle, SupervisionBanner } from "@/components/features/solicitudes/Solicitudes";
 import { StatusFlag } from "@/components/ui/StatusFlag";
 import type { ApiRecord } from "@/lib/client/types";
 import { Callout } from "./FormLayout";
@@ -63,14 +66,30 @@ export function SupervisionBadge({ estado }: { estado: unknown }) {
   return null;
 }
 
-export function SupervisionCallout({ item }: { item: ApiRecord | null | undefined }) {
+/* Tabla de supervision del registro por la ruta de la ficha (cuando el formato no la indica). */
+function tablaPorRuta(): string {
+  if (typeof window === "undefined") return "";
+  const p = window.location.pathname;
+  return p.startsWith("/muestras/recepcion/") ? "muestras_recepcion" : p.startsWith("/muestras/procesamiento/") ? "muestras_procesamiento" : p.startsWith("/muestras/extraccion/") ? "muestras_extraccion" : p.startsWith("/muestras/analisis/") ? "muestras_analisis" : p.startsWith("/informes/") ? "informes" : "";
+}
+
+export function SupervisionCallout({ item, tabla, referencia }: { item: ApiRecord | null | undefined; tabla?: string; referencia?: string }) {
   const estado = String(item?.supervision_estado || "");
   if (!item || !Number(item.requiere_supervision || 0)) return null;
   if (estado === "pendiente") {
-    return (
+    const t = tabla || tablaPorRuta();
+    const aviso = (
       <Callout tone="warning" title="Pendiente del visto bueno del supervisor">
         Lo capturó una persona bajo supervisión. No avanza (no se cierra, no se revisa ni aprueba y no sirve de origen de la etapa siguiente) hasta que su supervisor dé el visto bueno.
       </Callout>
+    );
+    // El supervisor asignado ve el banner con "Dar visto bueno" y "Regresar"; los demás, el aviso.
+    return t ? (
+      <SupervisionBanner item={item} tabla={t} tipo="Registro" referencia={referencia || String(item.folio || item.id || "")}>
+        {aviso}
+      </SupervisionBanner>
+    ) : (
+      aviso
     );
   }
   if (estado === "regresado") {
@@ -88,22 +107,27 @@ export function SupervisionCallout({ item }: { item: ApiRecord | null | undefine
  * restaurar) espera al segundo usuario. Mientras tanto el registro no se edita
  * ni sirve de origen.
  */
-export function SolicitudBadge({ solicitud }: { solicitud: ApiRecord | null | undefined }) {
+export function SolicitudBadge({ solicitud, entidad }: { solicitud: ApiRecord | null | undefined; entidad?: string }) {
+  const [abierta, setAbierta] = useState(false);
   if (!solicitud || String(solicitud.estado || "pendiente") !== "pendiente") return null;
   const etiqueta = `${String(solicitud.pendiente_etiqueta || "Solicitud")} · pendiente de autorización`;
   const quien = solicitud.solicitado_nombre ? `Pidió ${String(solicitud.solicitado_nombre)}` : null;
-  return <StatusFlag kind="pendiente" label={etiqueta} detail={[quien, solicitud.motivo ? `Motivo: ${String(solicitud.motivo)}` : null].filter(Boolean).join(" · ") || undefined} data-solicitud-pendiente={String(solicitud.id || "")} />;
+  return (
+    <>
+      <StatusFlag kind="pendiente" label={etiqueta} detail={[quien, solicitud.motivo ? `Motivo: ${String(solicitud.motivo)}` : null].filter(Boolean).join(" · ") || undefined} data-solicitud-pendiente={String(solicitud.id || "")} onClick={() => setAbierta(true)} />
+      {/* Panel rápido: la solicitud y sus botones, sin salir de la lista (los clics del portal no llegan a la fila). */}
+      <span className="contents" onClick={(event) => event.stopPropagation()}>
+        <Dialog open={abierta} onOpenChange={setAbierta} title={`${String(solicitud.pendiente_etiqueta || "Solicitud")} · #${String(solicitud.id)}`} description={String(solicitud.referencia || "")} size="sm">
+          <SolicitudDetalle sol={solicitud} entidad={entidad} onCambio={() => setAbierta(false)} />
+        </Dialog>
+      </span>
+    </>
+  );
 }
 
-export function SolicitudCallout({ item }: { item: ApiRecord | null | undefined }) {
-  const solicitud = item?.solicitud_pendiente as ApiRecord | null | undefined;
-  if (!solicitud) return null;
-  return (
-    <Callout tone="warning" title={`${String(solicitud.pendiente_etiqueta || "Solicitud")} · pendiente de autorización (solicitud #${String(solicitud.id)})`}>
-      {solicitud.solicitado_nombre ? `${String(solicitud.solicitado_nombre)} pidió esta acción` : "Se pidió esta acción"}
-      {solicitud.motivo ? ` (motivo: ${String(solicitud.motivo)})` : ""}. Un segundo usuario autorizado debe aprobarla o rechazarla; hasta entonces el registro no se puede editar ni usar como origen de la etapa siguiente.
-    </Callout>
-  );
+/* Banner arriba del formato: qué se pidió, quién, cuándo y motivo, con Aprobar/Rechazar o Cancelar según quien mira. */
+export function SolicitudCallout({ item, entidad }: { item: ApiRecord | null | undefined; entidad?: string }) {
+  return <SolicitudBanner item={item} entidad={entidad} />;
 }
 
 /*

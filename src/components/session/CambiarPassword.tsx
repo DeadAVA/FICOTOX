@@ -7,6 +7,8 @@ import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { API_BASE_URL, sendJsonAuth } from "@/lib/client/api";
+import { msg, type Problema } from "@/lib/client/mensajes";
+import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
 
 /*
  * Cambio de contrasena (Fase 2). Minimo 10 caracteres, distinta del correo y
@@ -18,14 +20,22 @@ export function FormCambiarPassword({ onDone, submitLabel = "Cambiar contraseña
   const [actual, setActual] = useState("");
   const [nueva, setNueva] = useState("");
   const [confirmar, setConfirmar] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const v = useValidacion({
+    titulo: "No se pudo cambiar la contraseña",
+    reglas: () => {
+      const out: Problema[] = [];
+      if (!actual) out.push({ campo: "pwd-actual", mensaje: msg.escribe("tu contraseña actual") });
+      if (!nueva) out.push({ campo: "pwd-nueva", mensaje: msg.escribe("la contraseña nueva") });
+      else if (nueva.length < 10) out.push({ campo: "pwd-nueva", mensaje: "La contraseña nueva debe tener al menos 10 caracteres" });
+      if (nueva && confirmar !== nueva) out.push({ campo: "pwd-confirmar", mensaje: confirmar ? "La confirmación no coincide con la contraseña nueva" : msg.escribe("otra vez la contraseña nueva") });
+      return out;
+    },
+  });
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    setError(null);
-    if (nueva.length < 10) return setError("La contraseña nueva debe tener al menos 10 caracteres");
-    if (nueva !== confirmar) return setError("La confirmación no coincide con la contraseña nueva");
+    if (!v.validar()) return;
     setBusy(true);
     try {
       const data = await sendJsonAuth("POST", `${API_BASE_URL}/auth/password`, token, { actual, nueva });
@@ -36,13 +46,17 @@ export function FormCambiarPassword({ onDone, submitLabel = "Cambiar contraseña
       toast.success("Contraseña cambiada; tus otras sesiones se cerraron");
       onDone?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo cambiar la contraseña");
+      // Contraseña actual incorrecta (401) o nueva no permitida (400): al campo correspondiente.
+      const texto = err instanceof Error ? err.message : "";
+      if (/contraseña actual/i.test(texto)) v.avisar({ que: texto, hacer: "Vuelve a escribir tu contraseña actual.", problemas: [{ campo: "pwd-actual", mensaje: texto }] });
+      else v.errorServidor(err, { password: "pwd-nueva" });
     } finally {
       setBusy(false);
     }
   };
 
   return (
+    <ValidacionAmbito v={v}>
     <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
       <Field label="Contraseña actual" htmlFor="pwd-actual" required>
         <Input id="pwd-actual" type="password" autoComplete="current-password" value={actual} onChange={(event) => setActual(event.target.value)} />
@@ -53,15 +67,11 @@ export function FormCambiarPassword({ onDone, submitLabel = "Cambiar contraseña
       <Field label="Confirma la contraseña nueva" htmlFor="pwd-confirmar" required>
         <Input id="pwd-confirmar" type="password" autoComplete="new-password" value={confirmar} onChange={(event) => setConfirmar(event.target.value)} />
       </Field>
-      {error ? (
-        <p role="alert" className="rounded-[10px] bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
-          {error}
-        </p>
-      ) : null}
-      <Button type="submit" loading={busy} disabled={!actual || !nueva || !confirmar}>
+      <Button type="submit" loading={busy}>
         {submitLabel}
       </Button>
     </form>
+    </ValidacionAmbito>
   );
 }
 

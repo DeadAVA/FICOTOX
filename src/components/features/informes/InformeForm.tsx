@@ -9,7 +9,9 @@ import { IncidenciasFormCard } from "@/components/features/calidad/IncidenciasDe
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
 import { BotonSegregado, FolioChip, SegregacionCallout, SolicitudCallout, SupervisionCallout } from "@/components/features/samples/status";
 import { SignDialog } from "@/components/features/samples/SignDialog";
-import { Callout, FlowSteps, FormCard, FormPage, FormTable, PersonCard, ReadValue, SignoffCard, formTd, formTh, missingMessage, missingSections, openFormSection, type FormSectionDef } from "@/components/features/samples/FormLayout";
+import { Callout, FlowSteps, FormCard, FormPage, FormTable, PersonCard, ReadValue, SignoffCard, formTd, formTh, personaId, type FormSectionDef } from "@/components/features/samples/FormLayout";
+import { CampoValidado, useValidacion } from "@/components/ui/Validacion";
+import { msg, type Problema } from "@/lib/client/mensajes";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
@@ -123,7 +125,6 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
   const [recepcionInfo, setRecepcionInfo] = useState<ApiRecord | null>((item?.recepcion as ApiRecord) || null);
   const [descargoSugerido, setDescargoSugerido] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [sign, setSign] = useState<"revisar" | "autorizar" | "liberar" | null>(null);
   const [signing, setSigning] = useState(false);
   const editing = !!item?.id;
@@ -183,22 +184,35 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
     observaciones: form.observaciones.trim() || null,
   });
 
-  const fail = (message: string, section: string) => {
-    setError(message);
-    toast.error(message);
-    openFormSection(section);
+  /*
+   * Reglas del formato, en el orden en que aparecen. La misma lista da la
+   * completitud de la guía, el aviso del encabezado y el pop-up al guardar.
+   */
+  const elaboroId = personaId("Elaboró");
+  const reglas = (): Problema[] => {
+    const out: Problema[] = [];
+    const en = (seccion: string, grupo: string) => (campo: string, mensaje: string) => out.push({ campo, mensaje, seccion, grupo });
+    const ori = en("sec-origen", "Recepción y cliente");
+    if (!form.recepcionId) ori("i-rec", msg.elige("la recepción que se informa"));
+    if (!form.clienteNombre.trim()) ori("i-cli", msg.indica("el nombre del cliente"));
+    if (form.recepcionId && !muestras.length) en("sec-muestras", "Ítems ensayados")("i-muestras", "La recepción elegida no tiene muestras para informar");
+    if (!form.analisisIds.length) en("sec-analisis", "Análisis incluidos")("i-analisis", msg.marca("al menos un análisis aprobado"));
+    const dec = en("sec-declaraciones", "Declaraciones");
+    if (!form.alcance.trim()) dec("i-alc", msg.escribe("el alcance de los resultados"));
+    if (!form.reglaDecision.trim()) dec("i-regla", msg.escribe("la regla de decisión"));
+    if (descargoSugerido && !form.descargo.trim()) dec("i-desc", msg.escribe("el descargo: la muestra se aceptó con desviación"));
+    if (!form.elaboradoNombre.trim()) en("sec-firmas", "Elaboró")(elaboroId, msg.elige("quién elabora el informe"));
+    return out;
   };
+  const v = useValidacion({ titulo: editing ? "No se pudo guardar el informe" : "No se pudo crear el informe", reglas: draft ? reglas : () => [] });
+  const camposServidor = { cliente: "i-cli" };
+  const ubicacionServidor = { cliente: { seccion: "sec-origen", grupo: "Recepción y cliente" } };
 
   const handleSave = async () => {
     const payload = buildPayload();
-    const incompletas = missingSections(sections);
-    if (incompletas.length) return fail(missingMessage(incompletas), incompletas[0].id);
-    if (!payload.recepcion_id) return fail("Selecciona la recepción que se informa", "sec-origen");
-    if (!payload.cliente.nombre) return fail("Indica el nombre del cliente", "sec-origen");
-    if (!payload.analisis_ids.length) return fail("Incluye al menos un análisis aprobado", "sec-analisis");
-    if (!canEdit) return fail("No tienes permiso para esta acción", "sec-origen");
+    if (!v.validar()) return;
+    if (!canEdit) return v.avisar({ que: "No tienes permiso para guardar este informe.", hacer: "Pide a la administración que revise tus roles y permisos." });
     setSubmitting(true);
-    setError(null);
     try {
       if (editing) {
         await sendJsonAuth("PUT", `${API_BASE_URL}/informes/${item!.id}`, token, payload);
@@ -213,9 +227,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
       invalidate("informes", "muestras", "dashboard");
       router.push("/informes");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "No se pudo guardar el informe";
-      setError(message);
-      toast.error(message);
+      v.errorServidor(err, camposServidor, ubicacionServidor);
       setSubmitting(false);
     }
   };
@@ -232,7 +244,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
       setSign(null);
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo completar la acción");
+      v.errorServidor(err);
     } finally {
       setSigning(false);
     }
@@ -250,7 +262,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
       invalidate("informes", "dashboard", "solicitudes");
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo anular");
+      v.errorServidor(err);
     }
   };
 
@@ -264,7 +276,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
       invalidate("informes", "dashboard");
       router.push(`/informes/${created.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo crear la enmienda");
+      v.errorServidor(err);
     }
   };
 
@@ -294,7 +306,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
       toast.info(String(data.message || "Excepción solicitada"));
       invalidate("solicitudes");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo solicitar la excepción");
+      v.errorServidor(err);
     }
   };
   const resultadosCongelados = (item?.resultados || []) as ApiRecord[];
@@ -310,12 +322,14 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
   const enviable = ["liberado", "enviado"].includes(estado);
   const folioLabel = editing ? `${item!.folio} · v${item!.version}` : "Nuevo informe";
 
+  // Completitud con las mismas reglas que el guardado (la guía y el aviso del encabezado no se contradicen).
+  const completa = (id: string) => (draft ? v.seccionCompleta(id) && (id !== "sec-muestras" || muestras.length > 0) : undefined);
   const sections: FormSectionDef[] = [
-    { id: "sec-origen", label: "Recepción y cliente", complete: draft ? !!form.recepcionId && !!form.clienteNombre.trim() : undefined },
-    { id: "sec-muestras", label: "Ítems ensayados", complete: draft ? muestras.length > 0 : undefined },
-    { id: "sec-analisis", label: "Análisis incluidos", complete: draft ? form.analisisIds.length > 0 : undefined },
-    { id: "sec-declaraciones", label: "Declaraciones", complete: draft ? !!form.alcance.trim() && !!form.reglaDecision.trim() && (!descargoSugerido || !!form.descargo.trim()) : undefined },
-    { id: "sec-firmas", label: "Elaboró, revisó, autorizó", complete: draft ? !!form.elaboradoNombre.trim() : undefined },
+    { id: "sec-origen", label: "Recepción y cliente", complete: completa("sec-origen") },
+    { id: "sec-muestras", label: "Ítems ensayados", complete: completa("sec-muestras") },
+    { id: "sec-analisis", label: "Análisis incluidos", complete: completa("sec-analisis") },
+    { id: "sec-declaraciones", label: "Declaraciones", complete: completa("sec-declaraciones") },
+    { id: "sec-firmas", label: "Elaboró, revisó, autorizó", complete: completa("sec-firmas") },
     ...(editing ? [{ id: "sec-historial", label: "Historial", optional: true }] : []),
   ];
 
@@ -336,7 +350,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
       status={REPORT_STATES[estado]?.label || estado}
       statusTone={REPORT_STATES[estado]?.tone || "neutral"}
       sections={sections}
-      error={error}
+      validacion={v}
       readOnly={!draft}
       after={
         editing ? (
@@ -481,6 +495,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
       </FormCard>
 
       <FormCard id="sec-muestras" title="Ítems ensayados" description="Descripción e identificación de las muestras tal como se recibieron (7.8.2 g).">
+        <CampoValidado id="i-muestras">
         {!muestras.length ? (
           <EmptyState compact title="Sin muestras" description="Selecciona una recepción para cargar sus muestras." />
         ) : (
@@ -509,14 +524,17 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
               </tbody>
             </FormTable>
         )}
+        </CampoValidado>
       </FormCard>
 
       <FormCard id="sec-analisis" title="Análisis incluidos" description={draft ? "Solo análisis aprobados de esta recepción. Los resultados se copian al informe al liberarlo." : "Resultados congelados al liberar el informe."}>
         {draft ? (
           !disponibles.length ? (
-            <EmptyState compact title="No hay análisis aprobados" description="Aprueba los análisis de esta recepción para poder informarlos." />
+            <CampoValidado id="i-analisis">
+              <EmptyState compact title="No hay análisis aprobados" description="Aprueba los análisis de esta recepción para poder informarlos." />
+            </CampoValidado>
           ) : (
-            <div className="flex flex-col gap-2">
+            <CampoValidado id="i-analisis" className="flex flex-col gap-2">
               {disponibles.map((a) => {
                 const id = Number(a.id);
                 const resultados = (a.resultados || []) as ApiRecord[];
@@ -535,7 +553,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
                   </div>
                 );
               })}
-            </div>
+            </CampoValidado>
           )
         ) : (
           <div className="flex flex-col gap-4">

@@ -22,7 +22,9 @@ import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { ANALYSIS_METHODS, ANALYSIS_STATES, ANALYSIS_TYPES, CONFORMITY_OPTIONS } from "@/lib/shared/sgc";
-import { Callout, ChoiceCard, ChoiceGrid, FieldGroup, FlowSteps, FormCard, FormPage, Panel, PersonCard, SignoffCard, missingMessage, missingSections, openFormSection, type FormSectionDef } from "./FormLayout";
+import { Callout, ChoiceCard, ChoiceGrid, FieldGroup, FlowSteps, FormCard, FormPage, Panel, PersonCard, SignoffCard, personaId, type FormSectionDef } from "./FormLayout";
+import { CampoValidado, MensajeCampo, useValidacion } from "@/components/ui/Validacion";
+import { msg, type Problema } from "@/lib/client/mensajes";
 import { InsumoSearch, InventarioRows, collectInventarioRows, newInventarioRow } from "./InsumoSearch";
 import { SignDialog } from "./SignDialog";
 import { BotonSegregado, FolioChip, SegregacionCallout, SolicitudCallout, SupervisionCallout } from "./status";
@@ -195,7 +197,6 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
   const [extracciones, setExtracciones] = useState<ApiRecord[]>([]);
   const [recepciones, setRecepciones] = useState<ApiRecord[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [sign, setSign] = useState<"revisar" | "aprobar" | null>(null);
   const [signing, setSigning] = useState(false);
   const { anular, restaurar } = useAnulacion("analysis", (row) => `A ${String(row.folio_num || 0).padStart(7, "0")}`);
@@ -345,33 +346,47 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
     analista_firma: form.analistaFirma || null,
   });
 
-  const fail = (message: string, section: string) => {
-    setError(message);
-    toast.error(message);
-    openFormSection(section);
+  const analistaId = personaId("Analista");
+  /*
+   * Reglas del formato, en orden: completitud de la guía, aviso del encabezado y pop-up.
+   * La evidencia se exige al enviar a revisión, no al guardar (y se adjunta después de registrar).
+   */
+  const reglas = (): Problema[] => {
+    const out: Problema[] = [];
+    const en = (seccion: string, grupo: string) => (campo: string, mensaje: string) => out.push({ campo, mensaje, seccion, grupo });
+    const datos = en("sec-datos", "Datos del análisis");
+    if (!form.folio) datos("a-folio", msg.indica("el folio del análisis"));
+    if (!form.fecha) datos("a-fecha", msg.indica("la fecha del análisis"));
+    if (!form.tipo) datos("a-tipo", msg.elige("el tipo de análisis"));
+    if (!form.metodo) datos("a-metodo", msg.elige("el método"));
+    else if (form.metodo === "otro" && !form.metodoOtro.trim()) datos("a-metodo-otro", msg.indica("el método"));
+    const origen = en("sec-origen", "Muestra y origen");
+    if (requiereExtraccion && !form.extraccionId) origen("a-ext", msg.elige("la extracción de origen (este análisis la requiere)"));
+    else if (!requiereExtraccion && !form.recepcionId && !form.extraccionId) origen("a-rec", msg.elige("la recepción de la muestra"));
+    if (!form.equipo) en("sec-equipo", "Equipo y condiciones")("a-equipo", msg.elige("el equipo empleado"));
+    const res = en("sec-resultados", "Resultados");
+    if (!form.resultados.length) res("a-resultados", "Agrega al menos una muestra con su resultado");
+    form.resultados.forEach((r, i) => {
+      if (!r.id_muestra.trim()) res(`a-res-id-${i}`, msg.indica(`el ID de la muestra ${i + 1}`));
+      if (!r.resultado.trim() && !r.resultado_texto.trim()) res(`a-res-val-${i}`, msg.indica(`el resultado de la muestra ${i + 1} (número o texto)`));
+    });
+    if (!form.analista.trim()) en("sec-personal", "Analista")(analistaId, msg.elige("al analista"));
+    return out;
   };
+  const v = useValidacion({ titulo: editing ? "No se pudo guardar el análisis" : "No se pudo registrar el análisis", reglas: readOnly ? () => [] : reglas });
+  const camposServidor = { folio: "a-folio", "firma:analista": analistaId };
+  const ubicacionServidor = { folio: { seccion: "sec-datos", grupo: "Datos del análisis" }, "firma:analista": { seccion: "sec-personal", grupo: "Analista" } };
 
   const handleSave = async () => {
     const payload = { ...buildPayload(), firmantes: firmantesPayload({ analista: analistaCuenta }) };
-    // La evidencia se exige al enviar a revisión, no al guardar (y se adjunta después de registrar).
-    const incompletas = missingSections(sections.filter((section) => section.id !== "sec-evidencia"));
-    if (incompletas.length) return fail(missingMessage(incompletas), incompletas[0].id);
-    if (!payload.tipo_analisis) return fail("Selecciona el tipo de análisis", "sec-datos");
-    if (!payload.metodo) return fail("Selecciona el método", "sec-datos");
-    if (!payload.fecha_analisis) return fail("La fecha del análisis es obligatoria", "sec-datos");
-    if (requiereExtraccion && !payload.extraccion_id) return fail("Este análisis requiere una extracción vinculada", "sec-origen");
-    if (!requiereExtraccion && !payload.extraccion_id && !payload.recepcion_id) return fail("Vincula la recepción de la muestra", "sec-origen");
-    if (!payload.resultados.length) return fail("Captura al menos un resultado", "sec-resultados");
-    if (payload.resultados.some((r) => !r.id_muestra || (r.resultado === null && !r.resultado_texto))) return fail("Cada fila necesita ID de muestra y resultado", "sec-resultados");
-    if (!payload.analista_nombre) return fail("Indica el nombre del analista", "sec-personal");
-    if (!canEdit) return fail("No tienes permiso para esta acción", "sec-datos");
+    if (!v.validar()) return;
+    if (!canEdit) return v.avisar({ que: "No tienes permiso para guardar este análisis.", hacer: "Pide a la administración que revise tus roles y permisos." });
     let motivo: string | null = null;
     if (editing && estado === "revisado") {
       motivo = await prompt({ title: "El análisis ya fue revisado", description: "Al editarlo vuelve a estado registrado y debe revisarse de nuevo. Indica el motivo del cambio.", confirmLabel: "Guardar y reiniciar revisión" });
       if (!motivo) return;
     }
     setSubmitting(true);
-    setError(null);
     try {
       if (editing) {
         await sendJsonAuth("PUT", `${API_BASE_URL}/samples/analysis/${item!.id}`, token, { ...payload, motivo_cambio: motivo });
@@ -383,9 +398,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       invalidate("muestras", "movimientos", "reactivos", "consumibles", "dashboard");
       router.push("/muestras/analisis");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "No se pudo guardar el análisis";
-      setError(message);
-      toast.error(message);
+      v.errorServidor(err, camposServidor, ubicacionServidor);
       setSubmitting(false);
     }
   };
@@ -403,7 +416,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       router.refresh();
       router.push(`/muestras/analisis`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo completar la acción");
+      v.errorServidor(err);
     } finally {
       setSigning(false);
     }
@@ -430,7 +443,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       toast.info(String(data.message || "Excepción solicitada"));
       invalidate("solicitudes");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo solicitar la excepción");
+      v.errorServidor(err);
     }
   };
   const version = Number(item?.version || 1);
@@ -446,7 +459,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       invalidate("muestras", "dashboard");
       return data;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo completar la acción");
+      v.errorServidor(err);
       return null;
     } finally {
       setFlujo(false);
@@ -466,19 +479,18 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
     const data = await accionFlujo("enmendar", { motivo });
     if (data?.id) router.push(`/muestras/analisis/${data.id}`);
   };
-  const resultadosOk = form.resultados.length > 0 && form.resultados.every((r) => r.id_muestra.trim() && (r.resultado.trim() || r.resultado_texto.trim()));
 
   const sections: FormSectionDef[] = [
-    { id: "sec-datos", label: "Datos del análisis", complete: readOnly ? undefined : !!form.folio && !!form.fecha && !!form.tipo && !!form.metodo && (form.metodo !== "otro" || !!form.metodoOtro.trim()) },
-    { id: "sec-origen", label: "Muestra y origen", complete: readOnly ? undefined : requiereExtraccion ? !!form.extraccionId : !!form.recepcionId || !!form.extraccionId },
+    { id: "sec-datos", label: "Datos del análisis", complete: readOnly ? undefined : v.seccionCompleta("sec-datos") },
+    { id: "sec-origen", label: "Muestra y origen", complete: readOnly ? undefined : v.seccionCompleta("sec-origen") },
     // El equipo es trazabilidad obligatoria (ISO/IEC 17025 6.4); los controles e insumos son opcionales.
-    { id: "sec-equipo", label: "Equipo y condiciones", complete: readOnly ? undefined : !!form.equipo },
-    { id: "sec-resultados", label: "Resultados", complete: readOnly ? undefined : resultadosOk },
+    { id: "sec-equipo", label: "Equipo y condiciones", complete: readOnly ? undefined : v.seccionCompleta("sec-equipo") },
+    { id: "sec-resultados", label: "Resultados", complete: readOnly ? undefined : v.seccionCompleta("sec-resultados") },
     { id: "sec-controles", label: "Controles de calidad", optional: true, complete: readOnly || !(form.blancoAceptable || form.mrAceptable || form.dupAceptable) ? undefined : true },
     { id: "sec-insumos", label: "Insumos", optional: true, complete: readOnly || !form.inventarioRows.some((row) => (row.ref || row.nombre || "").trim()) ? undefined : true },
     { id: "sec-evidencia", label: "Evidencia instrumental", optional: !evidenciaObligatoria, complete: editing && estado === "registrado" ? evidencias > 0 : editing && evidencias > 0 ? true : undefined },
-    { id: "sec-personal", label: "Analista", complete: readOnly ? undefined : !!form.analista.trim() },
-    { id: "sec-revision", label: "Revisión y aprobación", optional: true },
+    { id: "sec-personal", label: "Analista", complete: readOnly ? undefined : v.seccionCompleta("sec-personal") },
+    { id: "sec-revision", label: "Revisión y aprobación", optional: true, optionalLabel: "Se completa después", optionalNote: "La firman quien revisa y quien aprueba" },
     ...(editing ? [{ id: "sec-historial", label: "Historial", optional: true }] : []),
   ];
 
@@ -496,7 +508,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       status={ANALYSIS_STATES[estado]?.label || estado}
       statusTone={ANALYSIS_STATES[estado]?.tone || "brand"}
       sections={sections}
-      error={error}
+      validacion={v}
       readOnly={readOnly}
       interactive={
         <FormCard id="sec-evidencia" title="Evidencia instrumental" description="Cromatogramas, reportes del equipo, hojas de cálculo, curvas o certificados que respaldan los resultados. Se adjuntan antes de enviar a revisión; después quedan en solo lectura.">
@@ -651,11 +663,13 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
           </Field>
         </FormGrid>
         <FieldGroup label="Tipo de análisis" className="mt-5">
-          <ChoiceGrid>
-          {ANALYSIS_TYPES.map((t) => (
-            <ChoiceCard key={t.value} type="radio" name="a-tipo" checked={form.tipo === t.value} onChange={() => setTipo(t.value)} label={t.label} description={t.limite ? `Límite: ${t.limite.valor} ${t.limite.unidad}` : t.requiere_extraccion ? "Requiere extracción" : "Sin extracción"} />
-          ))}
-          </ChoiceGrid>
+          <CampoValidado id="a-tipo">
+            <ChoiceGrid>
+              {ANALYSIS_TYPES.map((t) => (
+                <ChoiceCard key={t.value} type="radio" name="a-tipo" checked={form.tipo === t.value} onChange={() => setTipo(t.value)} label={t.label} description={t.limite ? `Límite: ${t.limite.valor} ${t.limite.unidad}` : t.requiere_extraccion ? "Requiere extracción" : "Sin extracción"} />
+              ))}
+            </ChoiceGrid>
+          </CampoValidado>
         </FieldGroup>
         <FormGrid cols={3} className="mt-5">
           <Field label="Método" htmlFor="a-metodo" required>
@@ -726,6 +740,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
       <FormCard id="sec-equipo" title="Equipo y condiciones" description="Equipo empleado (con su bitácora) y condiciones ambientales cuando aplican.">
         <FormGrid cols={4}>
           <Field label="Equipo" className="sm:col-span-2">
+            <CampoValidado id="a-equipo">
             <InsumoSearch
               tipo="equipo"
               value={form.equipo}
@@ -739,6 +754,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
               }
               placeholder="Cromatógrafo, microscopio, fluorómetro…"
             />
+            </CampoValidado>
           </Field>
           <Field label="Folio de bitácora del equipo" htmlFor="a-bit">
             <Input id="a-bit" maxLength={60} value={form.equipoFolioBitacora} onChange={(event) => patch({ equipoFolioBitacora: event.target.value })} mono />
@@ -768,7 +784,9 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
         }
       >
         {!form.resultados.length ? (
-          <EmptyState compact title="Sin muestras" description="Vincula una extracción o agrega las muestras a mano." />
+          <CampoValidado id="a-resultados">
+            <EmptyState compact title="Sin muestras" description="Vincula una extracción o agrega las muestras a mano." />
+          </CampoValidado>
         ) : (
           <div className="flex flex-col gap-3">
             {form.resultados.map((row, index) => {
@@ -778,11 +796,13 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.1fr)_auto]">
                     <label className={cell}>
                       Muestra {index + 1}
-                      <input className={`${controlClassSm} font-mono`} placeholder="ID interno" value={row.id_muestra} onChange={(event) => updateRow(row.key, { id_muestra: event.target.value })} aria-label={`ID de la muestra ${index + 1}`} readOnly={readOnly} />
+                      <input id={`a-res-id-${index}`} className={`${controlClassSm} font-mono`} placeholder="ID interno" value={row.id_muestra} onChange={(event) => updateRow(row.key, { id_muestra: event.target.value })} aria-label={`ID de la muestra ${index + 1}`} readOnly={readOnly} />
+                      <MensajeCampo id={`a-res-id-${index}`} />
                     </label>
                     <label className={cell}>
                       Resultado
-                      <input type="number" step="0.0001" className={`${controlClassSm} tnum`} value={row.resultado} onChange={(event) => updateRow(row.key, { resultado: event.target.value })} aria-label={`Resultado de ${row.id_muestra}`} readOnly={readOnly} />
+                      <input id={`a-res-val-${index}`} type="number" step="0.0001" className={`${controlClassSm} tnum`} value={row.resultado} onChange={(event) => updateRow(row.key, { resultado: event.target.value })} aria-label={`Resultado de ${row.id_muestra}`} readOnly={readOnly} />
+                      <MensajeCampo id={`a-res-val-${index}`} />
                     </label>
                     <label className={cell}>
                       Unidad

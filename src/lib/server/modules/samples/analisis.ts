@@ -20,7 +20,7 @@ import { metodoDeTipoAnalisis, requisitosAnalisis, requisitosRevisionResultados 
 import { exigirSinSuspension, idsDeEquipos } from "../calidad/bloqueos";
 import { incidenciasPorEquiposNoAptos } from "../calidad/automaticas";
 import { exigirAsignacion, filtroAsignadas } from "../../asignaciones";
-import { firmanteElegido, guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
+import { firmanteElegido, guardarFirmantes, resolverFirmantes, verificarFirmasConPassword, type RolFirma } from "../../firmas";
 import { marcarRequiereEnmienda } from "../informes";
 import { contarVigentes, heredarAdjuntos, resumenAdjuntos } from "../../adjuntos";
 import { getConfig } from "../../config";
@@ -282,6 +282,8 @@ export async function createAnalysis({ request, s }: RouteContext): Promise<Resp
   const permiso = await requirePermission(s, user, "ensayos", "C", { objeto: "analisis", borrador: true });
   const actuo = cargoActuante(request, permiso);
   const payload = await readJson(request);
+  // Contraseñas de firmantes enviadas al guardar: se verifican antes de cualquier otra escritura.
+  await verificarFirmasConPassword(s, user, payload);
   const data = normalizePayload(payload);
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: !!(data.equipo_id || data.equipo_nombre), insumosJson: data.uso_inventario_json });
   // Fase 4: autorizacion FX-THF-AP: analisis, metodo del tipo de analisis y equipo usado (si esta en el inventario).
@@ -364,6 +366,8 @@ export async function updateAnalysis({ request, s, params }: RouteContext): Prom
   const permiso = await exigirAnalisisEditable(s, user, antes);
   const actuo = cargoActuante(request, permiso);
   const payload = await readJson(request);
+  // Contraseñas de firmantes enviadas al guardar: se verifican antes de cualquier otra escritura.
+  await verificarFirmasConPassword(s, user, payload);
   const data = normalizePayload(payload);
   await exigirUsoDeRecursos(s, user, permiso.auth, { equipos: !!(data.equipo_id || data.equipo_nombre), insumosJson: data.uso_inventario_json });
   // Fase 4: autorizacion FX-THF-AP: analisis, metodo del tipo de analisis y equipo usado (si esta en el inventario).

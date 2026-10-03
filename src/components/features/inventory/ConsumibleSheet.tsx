@@ -15,6 +15,8 @@ import { parseIntOrNull } from "@/lib/client/format";
 import { detectCsvDelimiter, mapCsvToPreviewRows, parseCsvText, readCsvFileText, workbookToConsumableRows, type ImportPreviewRow } from "@/lib/client/importing";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
+import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
+import { msg } from "@/lib/client/mensajes";
 
 export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: ApiRecord | null; onClose: () => void }) {
   const { token, can } = useSession();
@@ -31,9 +33,12 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
     stockMaximo: item?.stock_maximo === null || item?.stock_maximo === undefined ? "" : String(item.stock_maximo),
   });
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const editing = !!item?.id;
   const set = (key: keyof typeof form) => (event: ChangeEvent<HTMLInputElement>) => setForm((prev) => ({ ...prev, [key]: event.target.value }));
+  const v = useValidacion({
+    titulo: editing ? "No se pudo guardar el consumible" : "No se pudo crear el consumible",
+    reglas: () => (form.producto.trim() ? [] : [{ campo: "c-producto", mensaje: msg.indica("el nombre del producto") }]),
+  });
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -49,16 +54,12 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
       stock_maximo: parseIntOrNull(form.stockMaximo),
       cantidad_por_pieza: parseIntOrNull(form.cantidadPieza),
     };
-    if (!payload.producto) {
-      setError("El producto es obligatorio");
-      return;
-    }
+    if (!v.validar()) return;
     if (!can("inventario", editing ? "E" : "C", { objeto: "catalogo_inventario" })) {
-      setError("No tienes permiso para esta acción");
+      v.avisar({ que: "No tienes permiso para guardar consumibles.", hacer: "Pide a la administración que revise tus roles y permisos." });
       return;
     }
     setSubmitting(true);
-    setError(null);
     try {
       if (editing) {
         await sendJsonAuth("PUT", `${API_BASE_URL}/consumables/${item!.id}`, token, payload);
@@ -70,7 +71,7 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
       invalidate("consumibles", "dashboard");
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo guardar");
+      v.errorServidor(err);
     } finally {
       setSubmitting(false);
     }
@@ -84,7 +85,6 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
       description={editing ? `Registro #${item!.id}` : "Material de uso en laboratorio."}
       footer={
         <>
-          {error ? <p className="mr-auto text-[13px] text-danger">{error}</p> : null}
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
@@ -94,9 +94,10 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
         </>
       }
     >
+      <ValidacionAmbito v={v}>
       <form id="consumible-form" onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
-        <Field label="Producto" htmlFor="c-producto" required error={error && !form.producto.trim() ? error : undefined}>
-          <Input id="c-producto" maxLength={150} value={form.producto} onChange={set("producto")} autoFocus={!editing} invalid={!!error && !form.producto.trim()} />
+        <Field label="Producto" htmlFor="c-producto" required>
+          <Input id="c-producto" maxLength={150} value={form.producto} onChange={set("producto")} autoFocus={!editing} />
         </Field>
         <FormGrid>
           <Field label="Marca" htmlFor="c-marca">
@@ -128,6 +129,7 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
           </Field>
         </FormGrid>
       </form>
+      </ValidacionAmbito>
     </Sheet>
   );
 }

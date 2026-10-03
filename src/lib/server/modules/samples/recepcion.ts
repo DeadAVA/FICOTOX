@@ -16,7 +16,7 @@ import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from
 import { exigirAutorizaciones } from "../../autorizaciones";
 import { requisitosRecepcion } from "../../../shared/autorizaciones";
 import { exigirVistaAsignada, filtroAsignadas, soloAsignado } from "../../asignaciones";
-import { guardarFirmantes, resolverFirmantes, type RolFirma } from "../../firmas";
+import { guardarFirmantes, resolverFirmantes, verificarFirmasConPassword, type RolFirma } from "../../firmas";
 
 /*
  * Portado de modules/samples/recepcion.py del backend Flask original.
@@ -221,6 +221,8 @@ export async function createReceptionSample({ request, s }: RouteContext): Promi
   const supervision = marcaSupervision(permiso);
 
   const payload = await readJson(request);
+  // Contraseñas de firmantes enviadas al guardar: se verifican antes de cualquier otra escritura.
+  await verificarFirmasConPassword(s, user, payload);
   const data = normalizePayload(payload);
   // Fase 4: autorizacion FX-THF-AP de quien captura.
   await exigirAutorizaciones(s, user, requisitosRecepcion());
@@ -298,6 +300,8 @@ export async function updateReceptionSample({ request, s, params }: RouteContext
   // Fase 5: con alcance "asignado" solo se edita lo asignado (o registrado por la persona).
   if (antes) await exigirVistaAsignada(s, permiso, antes);
   const payload = await readJson(request);
+  // Contraseñas de firmantes enviadas al guardar: se verifican antes de cualquier otra escritura.
+  await verificarFirmasConPassword(s, user, payload);
   const data = normalizePayload(payload);
   // Fase 4: autorizacion FX-THF-AP de quien captura.
   await exigirAutorizaciones(s, user, requisitosRecepcion());

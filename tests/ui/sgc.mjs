@@ -132,9 +132,16 @@ try {
   await page.fill("#r-acep-temp", "6 °C");
   // Sin la información mínima (solicitante y custodio) el formato no se guarda: avisa y abre la sección.
   await page.getByRole("button", { name: "Registrar recepción" }).click();
-  await page.getByText(/Falta información en/).first().waitFor();
-  check("no deja guardar sin la información mínima", page.url().includes("/muestras/recepcion/nueva"));
+  // Validación compartida: pop-up con la lista de faltantes, campos en rojo y foco en el primero al cerrar.
+  const popup = page.locator('[data-validacion="faltan"]');
+  await popup.waitFor();
+  check("no deja guardar sin la información mínima: pop-up con los faltantes", page.url().includes("/muestras/recepcion/nueva") && /No se pudo registrar la recepción — Faltan \d+ datos/.test(await popup.textContent()) && (await popup.textContent()).includes("Solicitante: Indica el nombre de quien entrega"));
+  await popup.getByRole("button", { name: "Entendido" }).click();
+  await page.waitForFunction(() => document.activeElement?.id === "r-sol-nombre");
+  check("al cerrar, el foco queda en el primer campo con problema", (await page.locator("#r-sol-nombre").getAttribute("aria-invalid")) === "true");
+  check("el encabezado y la guía coinciden (Falta información en: …Solicitante…)", (await page.locator("[data-aviso-faltantes]").textContent()).includes("Solicitante"));
   await page.fill("#r-sol-nombre", "Juan Pérez");
+  check("el rojo desaparece al corregir, sin volver a guardar", (await page.locator("#r-sol-nombre").getAttribute("aria-invalid")) === null);
   await sign("Firma de conformidad del solicitante");
   await page.getByLabel(/He revisado la información/).check();
   await page.getByRole("radio", { name: /^Congelador/ }).check();
@@ -163,7 +170,7 @@ try {
   await row.getByRole("button", { name: "Acciones" }).click();
   await page.getByRole("menuitem", { name: /Anular recepción/ }).click();
   await fillPrompt("Prueba UI: registro duplicado", "Anular");
-  await page.getByRole("img", { name: /pendiente de autorización/i }).first().waitFor();
+  await page.locator("[data-solicitud-pendiente]").first().waitFor();
   check("anular una recepción aceptada queda pendiente de autorización", true);
   check("la Responsable General aprueba la anulación", (await aprobarComoRG(`R ${String(folio).padStart(7, "0")}`)) === 200);
   await page.reload();
@@ -175,7 +182,7 @@ try {
   await anulada.getByRole("button", { name: "Acciones" }).click();
   await page.getByRole("menuitem", { name: /Restaurar recepción/ }).click();
   await fillPrompt("Prueba UI: se anuló por error", "Restaurar");
-  await page.getByRole("img", { name: /pendiente de autorización/i }).first().waitFor();
+  await page.locator("[data-solicitud-pendiente]").first().waitFor();
   check("la Responsable General aprueba la restauración", (await aprobarComoRG(`R ${String(folio).padStart(7, "0")}`)) === 200);
   await page.reload();
   await setFilterToggle("Mostrar anuladas", false);

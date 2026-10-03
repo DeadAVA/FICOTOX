@@ -15,6 +15,7 @@ import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { descargarCsv } from "@/lib/client/files";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
+import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
 import { fmtBytes } from "@/lib/shared/adjuntos";
 import { formatearFechaHora } from "@/lib/shared/fechas";
 
@@ -65,6 +66,8 @@ function RespaldosContent() {
   const { token } = useSession();
   const confirm = useConfirm();
   const [creando, setCreando] = useState(false);
+  // Error al crear el respaldo: pop-up con qué pasó y qué hacer.
+  const vAccion = useValidacion({ titulo: "No se pudo crear el respaldo", reglas: () => [] });
   const resource = useResource<ApiRecord>("respaldos", () => getJsonAuth(`${API_BASE_URL}/respaldos`, token), { enabled: !!token });
   const data = resource.data;
   if (resource.error) return <ErrorState message={resource.error} onRetry={resource.reload} />;
@@ -90,7 +93,7 @@ function RespaldosContent() {
       invalidate("respaldos", "dashboard");
       resource.reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo crear el respaldo");
+      vAccion.errorServidor(err);
     } finally {
       setCreando(false);
     }
@@ -100,6 +103,7 @@ function RespaldosContent() {
 
   return (
     <div className="flex flex-col gap-8">
+      <ValidacionAmbito v={vAccion}>{null}</ValidacionAmbito>
       {avisos.map((a) => (
         <Callout key={String(a.tipo)} tone="warning" title={String(a.titulo)}>
           {String(a.detalle)}

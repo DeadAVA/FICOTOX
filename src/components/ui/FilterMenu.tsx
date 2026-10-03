@@ -49,23 +49,20 @@ export interface FilterToggle {
 
 const VISTA = "Vista";
 
-function FilterSwitchRow({ label, description, count, hint, tone, checked, disabled, onChange }: { label: ReactNode; description?: ReactNode; count?: number | null; hint?: ReactNode; tone?: FilterOption["tone"]; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
+/* Cada opción muestra solo su nombre (sin conteo ni texto de ayuda); "Próximamente" si aún no está disponible. */
+function FilterSwitchRow({ label, hint, checked, disabled, onChange }: { label: ReactNode; hint?: ReactNode; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      aria-label={typeof label === "string" ? `${label}${typeof count === "number" ? ` (${count})` : ""}` : undefined}
+      aria-label={typeof label === "string" ? label : undefined}
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn("press flex min-h-9 w-full items-center gap-2.5 rounded-[9px] px-2 py-1.5 text-left text-[13.5px]", disabled ? "cursor-not-allowed text-ink-4" : checked ? "text-ink" : "text-ink-2 hover:bg-surface-3/80 hover:text-ink")}
     >
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className={cn("truncate", checked && "font-medium")}>{label}</span>
-        {description ? <span className="text-[12px] leading-snug text-ink-3">{description}</span> : null}
-      </span>
+      <span className={cn("min-w-0 flex-1 truncate", checked && "font-medium")}>{label}</span>
       {hint ? <span className="rounded-full bg-surface-3 px-1.5 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-ink-4">{hint}</span> : null}
-      {typeof count === "number" ? <span className={cn("tnum text-[12px]", tone === "danger" ? "text-danger" : tone === "warning" ? "text-warning-text" : "text-ink-3")}>{count}</span> : null}
       <span aria-hidden="true" className={cn("relative h-[20px] w-[34px] shrink-0 rounded-full transition-colors duration-200 ease-[var(--ease-spring)]", checked ? "bg-success" : "bg-line-strong", disabled && "opacity-50")}>
         <span className={cn("absolute top-[2px] left-[2px] h-[16px] w-[16px] rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.25)] transition-transform duration-200 ease-[var(--ease-spring)]", checked && "translate-x-[14px]")} />
       </span>
@@ -94,7 +91,7 @@ export function FilterMenu({ groups = [], toggles = [], children, className, lab
   const sueltas = [...new Set(toggles.map((t) => t.group || VISTA))].filter((s) => !groupLabels.has(s)).sort((a, b) => (a === VISTA ? -1 : b === VISTA ? 1 : 0));
   const vista = sueltas.filter((s) => s === VISTA);
   const otras = sueltas.filter((s) => s !== VISTA);
-  const toggleRow = (toggle: FilterToggle) => <FilterSwitchRow key={toggle.key} label={toggle.label} description={toggle.description} checked={toggle.checked} onChange={toggle.onChange} />;
+  const toggleRow = (toggle: FilterToggle) => <FilterSwitchRow key={toggle.key} label={toggle.label} checked={toggle.checked} onChange={toggle.onChange} />;
   let index = 0;
   return (
     <RadixPopover.Root>
@@ -130,9 +127,7 @@ export function FilterMenu({ groups = [], toggles = [], children, className, lab
                     <FilterSwitchRow
                       key={option.value}
                       label={option.label}
-                      count={option.count}
                       hint={option.hint}
-                      tone={option.tone}
                       disabled={option.disabled}
                       checked={option.value === group.value}
                       onChange={(checked) => group.onChange(checked ? option.value : group.defaultValue)}
