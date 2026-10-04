@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Eye, LockKey, PencilSimple, Plus, Power, ShieldCheck, TextAa } from "@phosphor-icons/react";
+import { LockKey, PencilSimple, Plus, Power, ShieldCheck, TextAa } from "@phosphor-icons/react";
 import { IconoRol } from "@/components/features/admin/iconos";
 import { FigurasApiladas } from "@/components/ui/Insignias";
 import { ListaCuadricula, type ColumnaLista } from "@/components/ui/ListaCuadricula";
@@ -114,7 +114,8 @@ function RolesContent() {
 
   const menuFor = (role: ApiRecord): MenuItem[] => {
     const propio = rolesSesion.some((rol) => Number(rol.id) === Number(role.id));
-    if (!canAdmin || propio) return [{ label: "Ver permisos", icon: <Eye size={16} weight="duotone" />, tone: "brand", onSelect: () => abrir(role) }];
+    // El clic en el renglon ya abre la ventana (permisos en solo lectura): sin "Ver" en el menu.
+    if (!canAdmin || propio) return [];
     return [
       { label: "Editar permisos", icon: <PencilSimple size={16} weight="duotone" />, tone: "brand", onSelect: () => abrir(role, true) },
       { label: "Editar nombre y descripción", icon: <TextAa size={16} weight="duotone" />, onSelect: () => setDatos({ role }) },
@@ -156,9 +157,7 @@ function RolesContent() {
         activa={(_, i) => abierto === i}
         celdas={celdasRol}
         extremo={(role) => (
-          <span className="w-9">
-            <ActionMenu items={menuFor(role)} header={String(role.nombre || "")} />
-          </span>
+          <span className="w-9">{menuFor(role).length ? <ActionMenu items={menuFor(role)} header={String(role.nombre || "")} /> : null}</span>
         )}
         anchoExtremo="52px"
         propsFila={(role) => ({ "data-rol": String(role.id) })}

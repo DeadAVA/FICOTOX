@@ -192,7 +192,7 @@ try {
   // Quien no puede resolver (Técnico Auxiliar) no ve la franja.
   const pageMariana = await sesion(MARIANA, credenciales[MARIANA]);
   await pageMariana.goto(`${BASE}/muestras/recepcion`);
-  await pageMariana.locator("tbody tr").first().waitFor();
+  await pageMariana.locator("[data-recepcion]").first().waitFor();
   await pageMariana.waitForTimeout(800);
   check("la franja no aparece para quien no puede resolver", (await pageMariana.locator("[data-franja-pendientes]").count()) === 0);
   await pageMariana.context().close();
@@ -205,7 +205,7 @@ try {
   check("la franja «N solicitudes esperan tu autorización · Ver» aparece para quien puede resolver", /solicitud(es)? esperan? tu autorización/.test((await franja.textContent()) || ""));
   check("  … y enlaza a la bandeja filtrada por el módulo", (await franja.locator('a[href="/solicitudes?modulo=recepcion"]').count()) === 1);
   await pageRG.getByPlaceholder("Buscar por folio, solicitante o ID interno").fill(`VALC-${stamp}`);
-  const filaR3 = pageRG.locator("tbody tr").filter({ hasText: `VALC-${stamp}` }).first();
+  const filaR3 = pageRG.locator("[data-recepcion]").filter({ hasText: `VALC-${stamp}` }).first();
   await filaR3.waitFor();
   await filaR3.locator("button[data-status-flag]").click();
   const panel = pageRG.getByRole("dialog");
@@ -228,9 +228,14 @@ try {
   await pageRG.goto(`${BASE}/solicitudes?modulo=recepcion`);
   await pageRG.getByRole("heading", { name: "Pendientes de tu autorización" }).waitFor();
   const folioR3 = `R ${String((await api("GET", `/samples/reception/${R3}`, undefined, QA)).data?.item?.folio_num || 0).padStart(7, "0")}`;
-  const filaBandeja = pageRG.locator("tbody tr").filter({ hasText: folioR3 }).first();
+  const filaBandeja = pageRG.locator("[data-solicitud]").filter({ hasText: folioR3 }).first();
   await filaBandeja.waitFor();
-  check("la bandeja muestra qué, de qué registro, quién, hace cuánto y Aprobar/Rechazar", (await filaBandeja.count()) === 1 && /hace /.test((await filaBandeja.textContent()) || "") && (await filaBandeja.getByRole("button", { name: "Aprobar" }).count()) === 1);
+  const textoFila = (await filaBandeja.textContent()) || "";
+  await filaBandeja.locator("button[aria-haspopup=dialog]").click();
+  const ventanaSol = pageRG.locator("[data-solicitud-ventana]");
+  await ventanaSol.waitFor();
+  check("la bandeja muestra qué, de qué registro, quién, hace cuánto y la ventana Aprobar/Rechazar", (await filaBandeja.count()) === 1 && /hace /i.test(textoFila) && (await ventanaSol.getByRole("button", { name: "Aprobar" }).count()) === 1 && (await ventanaSol.getByRole("button", { name: "Rechazar" }).count()) === 1);
+  await pageRG.keyboard.press("Escape");
   const contador = await pageRG.locator('[data-contador="/solicitudes"]').first().textContent().catch(() => "");
   check("el menú lateral muestra el contador de «Por autorizar»", Number(contador) >= 1, String(contador));
   await pageRG.context().close();

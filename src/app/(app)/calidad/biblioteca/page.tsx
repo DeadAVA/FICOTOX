@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
 import { toast } from "sonner";
-import { Archive, ArrowCounterClockwise, ArrowSquareOut, Books, DownloadSimple, GearSix, ListBullets, PencilSimple, SquaresFour, UploadSimple } from "@phosphor-icons/react";
+import { Archive, ArrowCounterClockwise, Books, DownloadSimple, GearSix, ListBullets, PencilSimple, SquaresFour, UploadSimple } from "@phosphor-icons/react";
 import { CategoriasSheet } from "@/components/features/biblioteca/CategoriasSheet";
 import { cargarRoles, descargarVersion, IconoTipo, MiniaturaDocumento, etiquetaTipo, type Categoria, type DocBiblioteca, type RolOpcion } from "@/components/features/biblioteca/comun";
 import { EditarSheet } from "@/components/features/biblioteca/EditarSheet";
@@ -14,17 +14,18 @@ import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
-import { FilterChips, FilterMenu, type FilterGroup, type FilterToggle } from "@/components/ui/FilterMenu";
+import { FilterMenu, type FilterGroup, type FilterToggle } from "@/components/ui/FilterMenu";
+import { SinDato } from "@/components/ui/Insignias";
+import { ListaCuadricula, type ColumnaLista } from "@/components/ui/ListaCuadricula";
 import { ActionMenu, usePrompt, type MenuItem } from "@/components/ui/Overlay";
-import { PageHeader, SearchInput, SegmentedTabs, Toolbar } from "@/components/ui/PageHeader";
-import { Badge, EmptyState, ErrorState, Skeleton, TableSkeleton } from "@/components/ui/Primitives";
-import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
+import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
+import { Badge, EmptyState, ErrorState, Skeleton } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { useDebouncedValue } from "@/lib/client/hooks";
 import { invalidate, useResource } from "@/lib/client/store";
 import { fmtBytes } from "@/lib/shared/adjuntos";
 import { BIBLIOTECA_MAX_MB_DEFAULT, MOTIVO_MIN_BIBLIOTECA, TIPOS_ARCHIVO } from "@/lib/shared/biblioteca";
-import { formatearFecha } from "@/lib/shared/fechas";
+import { formatearFecha, formatearFechaCorta } from "@/lib/shared/fechas";
 
 /*
  * Calidad › Biblioteca: documentos de consulta (manual de calidad,
@@ -36,6 +37,16 @@ import { formatearFecha } from "@/lib/shared/fechas";
 type Vista = "cuadricula" | "lista";
 type Orden = "recientes" | "az" | "categoria";
 const CLAVE_VISTA = "ficotox.biblioteca.vista";
+
+/* Columnas fijas de la vista de lista (ListaCuadricula); en angostas, tarjeta. */
+const COLUMNAS: ColumnaLista[] = [
+  { clave: "documento", titulo: "Documento", ancho: "minmax(260px,2.2fr)" },
+  { clave: "categoria", titulo: "Categoría", ancho: "minmax(140px,1fr)" },
+  { clave: "tipo", titulo: "Tipo", ancho: "90px" },
+  { clave: "tamano", titulo: "Tamaño", ancho: "100px", ocultaEnTarjeta: true },
+  { clave: "fecha", titulo: "Fecha", ancho: "120px" },
+  { clave: "version", titulo: "Versión", ancho: "80px" },
+];
 
 interface Respuesta {
   items: DocBiblioteca[];
@@ -118,6 +129,10 @@ function Biblioteca() {
     { key: "tipo", label: "Tipo de archivo", value: tipo, defaultValue: "", onChange: setTipo, options: [{ value: "", label: "Todos" }, ...TIPOS_ARCHIVO.map((t) => ({ value: t.value, label: t.label }))] },
   ];
   const toggles: FilterToggle[] = [{ key: "archivados", label: "Mostrar archivados", checked: archivados, onChange: setArchivados }];
+  // "Ordenar por" va al final del menu Filtros (una sola seleccion).
+  const ordenar: FilterGroup[] = [
+    { key: "orden", label: "Ordenar por", value: orden, defaultValue: "recientes", showDefault: true, onChange: (v) => setOrden(v as Orden), options: [{ value: "recientes", label: "Más recientes" }, { value: "az", label: "Título A–Z" }, { value: "categoria", label: "Categoría" }] },
+  ];
   const filtrado = !!(debounced.trim() || categoria || tipo);
 
   const cerrarEditar = useCallback(() => setEditar(null), []);
@@ -144,7 +159,8 @@ function Biblioteca() {
   };
 
   const menuDe = (doc: DocBiblioteca): MenuItem[] => {
-    const lista: MenuItem[] = [{ label: "Abrir", description: "Leer en el visor", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => abrir(doc) }];
+    // Sin "Abrir": el clic en el documento ya abre el visor.
+    const lista: MenuItem[] = [];
     if (doc.version_actual_id) lista.push({ label: "Descargar", description: "Queda en la bitácora", icon: <DownloadSimple size={16} weight="duotone" />, onSelect: () => void descargarVersion(Number(doc.version_actual_id), token, String(doc.nombre_original || doc.titulo)) });
     if (doc.puede.subir_version) lista.push({ label: "Subir nueva versión", description: "La anterior se conserva", icon: <UploadSimple size={16} weight="duotone" />, tone: "success", onSelect: () => setVersion(doc) });
     if (doc.puede.editar) lista.push({ label: "Editar datos", description: "Título, categoría, etiquetas, visibilidad", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => setEditar(doc.id) });
@@ -189,17 +205,6 @@ function Biblioteca() {
       <Toolbar
         end={
           <div className="flex items-center gap-2">
-            <SegmentedTabs<Orden>
-              size="sm"
-              label="Orden"
-              value={orden}
-              onChange={setOrden}
-              options={[
-                { value: "recientes", label: "Recientes" },
-                { value: "az", label: "A–Z" },
-                { value: "categoria", label: "Por categoría" },
-              ]}
-            />
             <div className="flex rounded-full bg-surface-3 p-0.5" role="group" aria-label="Vista">
               <button type="button" data-testid="biblioteca-vista-cuadricula" aria-pressed={vista === "cuadricula"} aria-label="Ver en cuadrícula" onClick={() => setVista("cuadricula")} className={cn("press flex h-8 w-8 items-center justify-center rounded-full", vista === "cuadricula" ? "bg-surface text-ink shadow-card" : "text-ink-3 hover:text-ink")}>
                 <SquaresFour size={16} weight={vista === "cuadricula" ? "fill" : "regular"} />
@@ -212,17 +217,14 @@ function Biblioteca() {
         }
       >
         <SearchInput value={search} onChange={setSearch} placeholder="Buscar por título, clave, etiqueta o texto del PDF" className="w-full md:w-[360px]" />
-        <FilterMenu groups={groups} toggles={toggles} />
-        <FilterChips groups={groups} toggles={toggles} />
+        <FilterMenu groups={groups} toggles={toggles} gruposFinales={ordenar} />
       </Toolbar>
 
       {recurso.error ? (
         <ErrorState message={recurso.error} onRetry={recurso.reload} />
       ) : !data ? (
         vista === "lista" ? (
-          <TableShell>
-            <TableSkeleton cols={6} />
-          </TableShell>
+          <ListaCuadricula etiqueta="Documentos" columnas={COLUMNAS} filas={null} clave={() => ""} celdas={() => []} onAbrir={() => undefined} vacio={{ titulo: "" }} />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -247,8 +249,8 @@ function Biblioteca() {
         </div>
       ) : vista === "cuadricula" ? (
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-label="Documentos">
-          {items.map((doc) => (
-            <li key={doc.id}>
+          {items.map((doc, i) => (
+            <li key={doc.id} className="entrada-escalonada" style={{ ["--i" as string]: i }}>
               <article
                 data-testid="biblioteca-tarjeta"
                 data-id={doc.id}
@@ -260,17 +262,19 @@ function Biblioteca() {
                 className={cn("group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-card bg-surface shadow-card transition-shadow hover:shadow-raised", doc.archivado_en && "opacity-60")}
               >
                 <MiniaturaDocumento doc={doc} token={token} className="aspect-[4/3] w-full border-b border-line" />
-                <div className="absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
-                  <div className="rounded-full bg-surface/90 shadow-card">
-                    <ActionMenu items={menuDe(doc)} header={doc.titulo} />
+                {menuDe(doc).length ? (
+                  <div className="absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="rounded-full bg-surface/90 shadow-card">
+                      <ActionMenu items={menuDe(doc)} header={doc.titulo} />
+                    </div>
                   </div>
-                </div>
+                ) : null}
                 <div className="flex flex-1 flex-col gap-1.5 p-3.5">
                   <div className="flex items-start gap-2">
-                    <h3 className="line-clamp-2 min-w-0 flex-1 text-[14px] font-semibold leading-snug text-ink">{doc.titulo}</h3>
+                    <h3 className="min-w-0 flex-1 break-words text-[14px] font-semibold leading-snug text-ink">{doc.titulo}</h3>
                     {doc.archivado_en ? <Badge tone="neutral">Archivado</Badge> : null}
                   </div>
-                  <p className="truncate text-[12.5px] text-ink-3">
+                  <p className="break-words text-[12.5px] text-ink-3">
                     {[doc.categoria, doc.clave].filter(Boolean).join(" · ") || "Sin categoría"}
                   </p>
                   <p className="tnum mt-auto flex flex-wrap items-center gap-x-1.5 text-[12px] text-ink-3">
@@ -287,47 +291,39 @@ function Biblioteca() {
           ))}
         </ul>
       ) : (
-        <TableShell footer={`${items.length} ${items.length === 1 ? "documento" : "documentos"}`}>
-          <Table>
-            <THead>
-              <tr>
-                <Th>Documento</Th>
-                <Th>Categoría</Th>
-                <Th>Tipo</Th>
-                <Th>Tamaño</Th>
-                <Th>Fecha</Th>
-                <Th>Versión</Th>
-                <Th align="right" sticky />
-              </tr>
-            </THead>
-            <TBody>
-              {items.map((doc) => (
-                <Tr key={doc.id} interactive data-testid="biblioteca-fila" data-id={doc.id} onClick={() => abrir(doc)} className={doc.archivado_en ? "opacity-60" : undefined}>
-                  <Td className="max-w-[420px]">
-                    <div className="flex items-center gap-3">
-                      <IconoTipo extension={doc.extension} size={18} className="h-9 w-9 shrink-0" />
-                      <CellPrimary title={<span className="flex items-center gap-2">{doc.titulo}{doc.archivado_en ? <Badge tone="neutral">Archivado</Badge> : null}</span>} subtitle={doc.clave || doc.etiquetas.join(", ") || undefined} />
-                    </div>
-                  </Td>
-                  <Td muted>{doc.categoria || "—"}</Td>
-                  <Td muted>{etiquetaTipo(doc.extension)}</Td>
-                  <Td muted className="tnum whitespace-nowrap">
-                    {doc.tamano_bytes ? fmtBytes(Number(doc.tamano_bytes)) : "—"}
-                  </Td>
-                  <Td muted className="whitespace-nowrap">
-                    {formatearFecha(doc.fecha_documento || doc.subido_en)}
-                  </Td>
-                  <Td muted className="tnum">
-                    v{doc.version || 1}
-                  </Td>
-                  <Td align="right" sticky onClick={(e) => e.stopPropagation()}>
-                    <ActionMenu items={menuDe(doc)} header={doc.titulo} />
-                  </Td>
-                </Tr>
-              ))}
-            </TBody>
-          </Table>
-        </TableShell>
+        <ListaCuadricula
+          etiqueta="Documentos"
+          columnas={COLUMNAS}
+          filas={items}
+          clave={(doc) => String(doc.id)}
+          onAbrir={(doc) => abrir(doc)}
+          celdas={(doc) => [
+            <span key="d" className="flex min-w-0 items-start gap-3">
+              <IconoTipo extension={doc.extension} size={18} className="h-10 w-10 shrink-0" />
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="break-words text-[14px] leading-snug font-semibold text-ink">{doc.titulo}</span>
+                  {doc.archivado_en ? <Badge tone="neutral">Archivado</Badge> : null}
+                </span>
+                {doc.clave || doc.etiquetas.length ? <span className="break-words text-[12.5px] text-ink-3">{doc.clave || doc.etiquetas.join(", ")}</span> : null}
+              </span>
+            </span>,
+            doc.categoria ? <span key="c" className="text-[13px] text-ink-2">{doc.categoria}</span> : <SinDato key="c" />,
+            <span key="t" className="inline-flex rounded-[6px] bg-surface-3 px-1.5 py-0.5 text-[11.5px] font-semibold text-ink-2">{etiquetaTipo(doc.extension)}</span>,
+            <span key="s" className="tnum text-[13px] text-ink-2">{doc.tamano_bytes ? fmtBytes(Number(doc.tamano_bytes)) : "—"}</span>,
+            <span key="f" className="text-[13px] text-ink-2" title={formatearFecha(doc.fecha_documento || doc.subido_en)}>
+              {formatearFechaCorta(doc.fecha_documento || doc.subido_en)}
+            </span>,
+            <span key="v" className="tnum text-[13px] text-ink-2">v{doc.version || 1}</span>,
+          ]}
+          extremo={(doc) => {
+            const menu = menuDe(doc);
+            return <span className="w-9">{menu.length ? <ActionMenu items={menu} header={doc.titulo} /> : null}</span>;
+          }}
+          anchoExtremo="52px"
+          propsFila={(doc) => ({ "data-testid": "biblioteca-fila", "data-id": String(doc.id), "data-archivado": doc.archivado_en ? "1" : "0" })}
+          vacio={{ titulo: "Sin documentos" }}
+        />
       )}
 
       <SubirSheet open={subir} onClose={() => setSubir(false)} categorias={categorias} roles={roles} maxMb={maxMb} categoriaInicial={categoria} />

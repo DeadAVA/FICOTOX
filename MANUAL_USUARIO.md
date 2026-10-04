@@ -63,6 +63,17 @@ Atajos y ayudas:
 - Los avisos de una fila (solicitud pendiente de autorizacion, pendiente de visto bueno, requiere enmienda, retenido, vencida...) se muestran como un **icono pequeño** junto al estado; al pasar el cursor (o enfocarlo con el teclado) se lee el aviso completo. En la ficha del registro el aviso aparece completo. Las opciones en gris con "Proximamente" (PSP, pigmentos, sedimentos) todavia no estan disponibles.
 - Cada fila tiene un boton **⋯ Acciones** que agrupa todo lo que se puede hacer con ese registro: abrir, editar, procesar/extraer/analizar, rellenar, dar de baja, anular o restaurar. Hacer clic en la fila abre el registro.
 
+### 3.1 Listas y ventana de detalle (todas las pantallas)
+
+Todas las listas (recepciones, procesamientos, extracciones, analisis, informes, inventario, movimientos, mantenimiento, incidencias y NC, por autorizar, por supervisar, usuarios y roles) se usan igual:
+
+- **Buscar y filtrar**: el buscador y un solo boton **Filtros**. Dentro estan todos los filtros (interruptores agrupados, como Estado o Tipo), **Ordenar por** al final y **Limpiar filtros**. El boton muestra cuantos filtros hay activos.
+- **Lista**: columnas alineadas con encabezados discretos; cada dato siempre en su columna y "—" cuando no hay valor. Nada se corta: el texto largo pasa de linea. En pantallas angostas cada renglon se ve como tarjeta.
+- **Clic en un renglon**: abre una **ventana** al centro con lo principal del registro: datos rapidos, pestañas o secciones, las personas con su figura y las acciones que le tocan segun su estado y sus permisos. ↑/↓ pasan al registro anterior o siguiente; Esc, la × o un clic fuera la cierran.
+- **Abrir formato completo**: en recepciones, procesamientos, extracciones, analisis, informes y NC la ventana es una vista rapida; para capturar o editar todo, use **Abrir formato completo** (los formatos no cambiaron).
+- **Menu ⋯ del renglon**: solo las acciones que aplican (anular, reponer, asignar…); "Ver" y "Abrir" ya no estan porque el clic abre la ventana.
+- Excepcion: en la **Biblioteca**, el clic en un documento abre el visor, como siempre.
+
 ## 4. Inicio
 
 La pantalla de Inicio muestra solo lo importante:

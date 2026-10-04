@@ -93,7 +93,7 @@ try {
 
       await page.goto(`${BASE}/muestras/analisis`);
       await page.getByPlaceholder(/Buscar/).first().fill(id);
-      const fila = page.locator("tbody tr").filter({ hasText: /Aprobado/ }).first();
+      const fila = page.locator("[data-analisis]").filter({ hasText: /Aprobado/ }).first();
       await fila.waitFor();
       await fila.getByRole("button", { name: "Acciones" }).click();
       await page.getByRole("menuitem", { name: /Anular/ }).click();
@@ -122,9 +122,11 @@ try {
       check("el Inicio muestra el aviso 'Por autorizar'", true);
       await page.goto(`${BASE}/solicitudes`);
       await page.getByRole("heading", { name: "Pendientes de tu autorización" }).waitFor();
-      const fila = page.locator("tbody tr").filter({ hasText: `#${solicitudId} ·` }).first();
+      // Lista -> ventana: el renglón abre la ventana de la solicitud con Aprobar / Rechazar.
+      const fila = page.locator(`[data-solicitud="${solicitudId}"]`).first();
       await fila.waitFor();
-      await fila.getByRole("button", { name: "Aprobar", exact: true }).click();
+      await fila.locator("button[aria-haspopup=dialog]").click();
+      await page.locator(`[data-solicitud-ventana="${solicitudId}"]`).getByRole("button", { name: "Aprobar", exact: true }).click();
       await page.locator("#ap-motivo").fill("Confirmado con el analista");
       await page.locator("#ap-password").fill(credenciales[PATRICIA]);
       await page.getByRole("dialog").getByRole("button", { name: "Aprobar y ejecutar" }).click();

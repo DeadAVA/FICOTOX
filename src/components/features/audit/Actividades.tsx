@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, ChatCenteredText, Quotes } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
 import { VentanaCentrada, VentanaTitulo } from "@/components/ui/VentanaCentrada";
+import { VentanaEncabezado, VentanaSeccion } from "@/components/ui/Ventana";
 import { cn } from "@/components/ui/cn";
 import { datosPrincipales, dayLabel, fechaYHora, haceCuanto, humanizeAuditEntry, timeLabel, type ContextoActividad, type HumanEntry } from "@/lib/client/audit-humanize";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
@@ -92,7 +93,7 @@ export function FilaActividad({ grupo, activa, onAbrir }: { grupo: GrupoActivida
         onClick={onAbrir}
         aria-haspopup="dialog"
         className={cn(
-          "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 outline-none",
+          "flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-150 outline-none sm:px-5",
           "hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:shadow-[inset_0_0_0_2px_rgba(15,122,149,0.45)]",
           activa && "bg-brand-faint hover:bg-brand-faint",
         )}
@@ -150,12 +151,12 @@ export function ActividadDialog({ grupos, indice, onIndice, onCerrar }: { grupos
   );
 }
 
-function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+/* Secciones del detalle: las compartidas de la ventana (titulo discreto y entrada escalonada por `i`). */
+function Seccion({ titulo, i, children }: { titulo: string; i: number; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-2">
-      <h3 className="text-[13px] font-semibold text-ink-2">{titulo}</h3>
+    <VentanaSeccion titulo={titulo} i={i}>
       {children}
-    </section>
+    </VentanaSeccion>
   );
 }
 
@@ -188,14 +189,16 @@ function DetalleActividad({ grupo, onIr }: { grupo: GrupoActividad; onIr: () => 
 
   return (
     <article className="flex flex-col gap-6" data-actividad-detalle={entry.id}>
-      <header className="flex gap-3.5">
-        <EntryIcon entry={entry} size="lg" />
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <VentanaTitulo>
+      <VentanaEncabezado
+        figura={<EntryIcon entry={entry} size="lg" />}
+        titulo={
+          <>
             {entry.frase}
             {veces > 1 ? <span className="font-normal text-ink-3"> · {veces} veces</span> : null}
-          </VentanaTitulo>
-          <p className="text-[13.5px] text-ink-2">
+          </>
+        }
+        subtitulo={
+          <span className="text-ink-2">
             {!entry.isSystem && entry.actor ? (
               <>
                 <span className="font-medium text-ink">{entry.actor}</span>
@@ -205,11 +208,11 @@ function DetalleActividad({ grupo, onIr }: { grupo: GrupoActividad; onIr: () => 
             ) : null}
             <span>{fechaYHora(entry.when)}</span>
             <span className="text-ink-3"> · {haceCuanto(entry.when)}</span>
-          </p>
-        </div>
-      </header>
+          </span>
+        }
+      />
 
-      <Seccion titulo="Qué pasó">
+      <Seccion titulo="Qué pasó" i={1}>
         <p className="text-[14.5px] leading-[1.55] text-ink">{entry.quePaso}</p>
         {veces > 1 ? (
           <p className="text-[13.5px] text-ink-2">
@@ -219,7 +222,7 @@ function DetalleActividad({ grupo, onIr }: { grupo: GrupoActividad; onIr: () => 
       </Seccion>
 
       {entry.cambios.length ? (
-        <Seccion titulo="Qué cambió">
+        <Seccion titulo="Qué cambió" i={2}>
           <ul className="flex flex-col gap-1.5 text-[14px] leading-[1.5] text-ink">
             {entry.cambios.map((frase) => (
               <li key={frase} className="flex gap-2">
@@ -230,7 +233,7 @@ function DetalleActividad({ grupo, onIr }: { grupo: GrupoActividad; onIr: () => 
           </ul>
         </Seccion>
       ) : principales.length ? (
-        <Seccion titulo="Qué cambió">
+        <Seccion titulo="Qué cambió" i={3}>
           <p className="text-[14px] text-ink">Se registró con estos datos principales:</p>
           <dl className="grid gap-x-4 gap-y-1.5 rounded-[12px] bg-surface-2 px-3.5 py-3 text-[13.5px] ring-1 ring-line sm:grid-cols-[max-content_minmax(0,1fr)]">
             {principales.map((dato) => (
@@ -244,7 +247,7 @@ function DetalleActividad({ grupo, onIr }: { grupo: GrupoActividad; onIr: () => 
       ) : null}
 
       {motivos.length ? (
-        <Seccion titulo="Motivo">
+        <Seccion titulo="Motivo" i={4}>
           {motivos.map((motivo) => (
             <blockquote key={motivo} className="flex gap-2.5 rounded-[12px] bg-warning-soft/70 px-3.5 py-3 text-[14.5px] leading-[1.5] text-ink ring-1 ring-warning/15">
               <Quotes size={16} weight="fill" className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />

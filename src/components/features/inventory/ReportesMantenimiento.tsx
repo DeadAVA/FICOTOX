@@ -1,13 +1,13 @@
 "use client";
 
-import { ArrowSquareOut, FileText } from "@phosphor-icons/react";
+import { FilePdf, FileText } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
-import { Button } from "@/components/ui/Button";
-import { Badge, EmptyState, ErrorState, TableSkeleton, type Tone } from "@/components/ui/Primitives";
-import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
+import { ListaCuadricula, type ColumnaLista } from "@/components/ui/ListaCuadricula";
+import { Badge, type Tone } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { openProtectedFile } from "@/lib/client/files";
-import { fmt, fmtDate } from "@/lib/client/format";
+import { fmt } from "@/lib/client/format";
+import { formatearFechaCorta } from "@/lib/shared/fechas";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 
@@ -16,6 +16,14 @@ import type { ApiRecord } from "@/lib/client/types";
  * pestaña de Documentos SGC; al convertirse Documentos en la Biblioteca pasan
  * aqui, junto a los mantenimientos que los generan. Misma API (/api/documents).
  */
+const COLUMNAS: ColumnaLista[] = [
+  { clave: "codigo", titulo: "Reporte", ancho: "minmax(220px,1.4fr)" },
+  { clave: "tipo", titulo: "Tipo", ancho: "140px" },
+  { clave: "version", titulo: "Versión", ancho: "120px" },
+  { clave: "estado", titulo: "Estado", ancho: "140px" },
+  { clave: "fecha", titulo: "Fecha", ancho: "130px" },
+];
+
 const REPORTE_ESTADOS: Record<string, { label: string; tone: Tone }> = {
   borrador: { label: "Borrador", tone: "neutral" },
   en_revision: { label: "En revisión", tone: "warning" },
@@ -37,57 +45,38 @@ export function ReportesMantenimiento() {
       <h2 id="reportes-mant" className="title-3 text-ink">
         Reportes de mantenimiento (PDF)
       </h2>
-      <TableShell footer={recurso.data ? `${fmt(items.length)} reportes` : undefined}>
-        {recurso.error ? (
-          <ErrorState message={recurso.error} onRetry={recurso.reload} />
-        ) : !recurso.data ? (
-          <TableSkeleton cols={5} />
-        ) : !items.length ? (
-          <EmptyState compact icon={<FileText size={20} />} title="Sin reportes" description="Los reportes en PDF se generan desde el menú de cada mantenimiento." />
-        ) : (
-          <Table>
-            <THead>
-              <tr>
-                <Th>Código</Th>
-                <Th>Tipo</Th>
-                <Th>Versión</Th>
-                <Th>Estado</Th>
-                <Th>Fecha</Th>
-                <Th align="right" />
-              </tr>
-            </THead>
-            <TBody>
-              {items.map((item) => {
-                const meta = REPORTE_ESTADOS[String(item.estado || "")] || { label: String(item.estado || "-"), tone: "neutral" as Tone };
-                return (
-                  <Tr key={String(item.id)}>
-                    <Td>
-                      <CellPrimary title={String(item.codigo || "-")} mono />
-                    </Td>
-                    <Td muted className="capitalize">
-                      {String(item.tipo_mantenimiento || "-")}
-                    </Td>
-                    <Td muted>{String(item.version || "-")}</Td>
-                    <Td>
-                      <Badge tone={meta.tone} dot>
-                        {meta.label}
-                      </Badge>
-                    </Td>
-                    <Td muted>{fmtDate(item.fecha_reporte)}</Td>
-                    <Td align="right">
-                      {item.archivo_url ? (
-                        <Button variant="ghost" size="sm" iconRight={<ArrowSquareOut size={14} />} onClick={() => abrir(item)}>
-                          Abrir PDF
-                        </Button>
-                      ) : null}
-                    </Td>
-                  </Tr>
-                );
-              })}
-            </TBody>
-          </Table>
-        )}
-      </TableShell>
+      <ListaCuadricula
+        etiqueta="Reportes de mantenimiento"
+        columnas={COLUMNAS}
+        filas={recurso.data ? items : null}
+        error={recurso.error}
+        onReintentar={recurso.reload}
+        clave={(item) => String(item.id)}
+        onAbrir={(item) => (item.archivo_url ? abrir(item) : undefined)}
+        celdas={(item) => {
+          const meta = REPORTE_ESTADOS[String(item.estado || "")] || { label: String(item.estado || "—"), tone: "neutral" as Tone };
+          return [
+            <span key="c" className="flex min-w-0 items-center gap-3">
+              <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-danger-soft text-danger">
+                <FilePdf size={20} weight="duotone" />
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span className="text-[14.5px] leading-tight font-semibold text-ink">{String(item.codigo || "Reporte")}</span>
+                <span className="text-[12.5px] text-ink-3">{item.archivo_url ? "Pulsa para abrir el PDF" : "Sin PDF"}</span>
+              </span>
+            </span>,
+            <span key="t" className="text-[13.5px] capitalize text-ink-2">{String(item.tipo_mantenimiento || "—")}</span>,
+            <span key="v" className="text-[13.5px] text-ink-2">{item.version ? `Versión ${String(item.version)}` : "—"}</span>,
+            <Badge key="e" tone={meta.tone} dot>
+              {meta.label}
+            </Badge>,
+            <span key="f" className="text-[13.5px] text-ink-2">{formatearFechaCorta(item.fecha_reporte)}</span>,
+          ];
+        }}
+        anchoExtremo="12px"
+        vacio={{ icono: <FileText size={20} />, titulo: "Sin reportes", descripcion: "Los reportes en PDF se generan desde el menú de cada mantenimiento." }}
+      />
+      {recurso.data && items.length ? <p className="tnum px-1 text-[12px] text-ink-4">{items.length === 1 ? "1 reporte" : `${fmt(items.length)} reportes`}</p> : null}
     </section>
   );
 }

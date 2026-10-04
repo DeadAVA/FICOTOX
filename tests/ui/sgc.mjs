@@ -152,7 +152,7 @@ try {
   await page.getByRole("button", { name: "Registrar recepción" }).click();
   await page.waitForURL((url) => url.pathname === "/muestras/recepcion");
   await page.getByPlaceholder("Buscar por folio, solicitante o ID interno").fill(`UI-${stamp}`);
-  const row = page.locator("tbody tr").filter({ hasText: `UI-${stamp}` }).first();
+  const row = page.locator("[data-recepcion]").filter({ hasText: `UI-${stamp}` }).first();
   await row.waitFor();
   check("recepción aparece con decisión Aceptada", (await row.textContent()).includes("Aceptada"), `folio ${folio}`);
 
@@ -176,7 +176,7 @@ try {
   await page.reload();
   await setFilterToggle("Mostrar anuladas", true);
   // La lista se recarga sola tras anular: se espera a la fila ya marcada como anulada.
-  const anulada = page.locator("tbody tr").filter({ hasText: `UI-${stamp}` }).filter({ hasText: "Anulada" }).first();
+  const anulada = page.locator("[data-recepcion]").filter({ hasText: `UI-${stamp}` }).filter({ hasText: "Anulada" }).first();
   await anulada.waitFor();
   check("recepción anulada visible con 'Mostrar anuladas'", true);
   await anulada.getByRole("button", { name: "Acciones" }).click();
@@ -186,11 +186,12 @@ try {
   check("la Responsable General aprueba la restauración", (await aprobarComoRG(`R ${String(folio).padStart(7, "0")}`)) === 200);
   await page.reload();
   await setFilterToggle("Mostrar anuladas", false);
-  const restaurada = page.locator("tbody tr").filter({ hasText: `UI-${stamp}` }).filter({ hasNotText: "Anulada" }).first();
+  const restaurada = page.locator("[data-recepcion]").filter({ hasText: `UI-${stamp}` }).filter({ hasNotText: "Anulada" }).first();
   await restaurada.waitFor();
   check("recepción restaurada vuelve a la lista", true);
-  await restaurada.getByRole("button", { name: "Acciones" }).click();
-  await page.getByRole("menuitem", { name: "Editar" }).click();
+  // El clic en el renglon abre la ventana de detalle; el formato completo se abre desde ahi.
+  await restaurada.locator("button[aria-haspopup=dialog]").click();
+  await page.getByRole("link", { name: "Abrir formato completo" }).click();
   await page.getByText("Historial del registro").waitFor();
   // La actividad del historial aparece recogida: "Actividad · N actividades" la despliega.
   const bitacora = page.getByRole("button", { name: /^Actividad · \d+ actividad/ });
@@ -239,10 +240,12 @@ try {
   check("conformidad sugerida contra el límite (12.5 < 20 => cumple)", cumple === "cumple", `cumple=${cumple}`);
   await page.getByRole("button", { name: "Registrar análisis" }).click();
   await page.waitForURL((url) => url.pathname === "/muestras/analisis");
-  const rowA = page.locator("tbody tr").filter({ hasText: new RegExp(`A\\s*${folioA.padStart(7, "0")}`) }).first();
+  const rowA = page.locator("[data-analisis]").filter({ hasText: new RegExp(`A\\s*${folioA.padStart(7, "0")}`) }).first();
   await rowA.waitFor();
   check("análisis en la lista con estado Registrado", (await rowA.textContent()).includes("Registrado"), `folio A ${folioA}`);
-  await rowA.click();
+  // El clic abre la ventana de detalle; el formato completo se abre desde ella.
+  await rowA.locator("button[aria-haspopup=dialog]").click();
+  await page.getByRole("link", { name: "Abrir formato completo" }).click();
   // Fase 3 (segregación): quien lo elaboró ve el botón deshabilitado con la explicación.
   await page.getByText("Separación de funciones").first().waitFor();
   check("QA no puede revisar su propio análisis (botón deshabilitado con explicación)", await page.getByRole("button", { name: "Marcar revisado" }).isDisabled());
@@ -269,15 +272,16 @@ try {
   await page2.getByRole("button", { name: "Marcar revisado" }).click();
   await page2.getByRole("dialog").getByRole("button", { name: "Marcar revisado", exact: true }).click();
   await page2.waitForURL((url) => url.pathname === "/muestras/analisis");
-  const rowA2 = page2.locator("tbody tr").filter({ hasText: new RegExp(`A\\s*${folioA.padStart(7, "0")}`) }).first();
+  const rowA2 = page2.locator("[data-analisis]").filter({ hasText: new RegExp(`A\\s*${folioA.padStart(7, "0")}`) }).first();
   await rowA2.waitFor();
   check("análisis revisado por otra persona", (await rowA2.textContent()).includes("Revisado"));
-  await rowA2.click();
+  await rowA2.locator("button[aria-haspopup=dialog]").click();
+  await page2.getByRole("link", { name: "Abrir formato completo" }).click();
   await page2.getByRole("button", { name: "Aprobar", exact: true }).click();
   await page2.locator("#sign-password").fill(credenciales[RICARDO]);
   await page2.getByRole("dialog").getByRole("button", { name: "Aprobar", exact: true }).click();
   await page2.waitForURL((url) => url.pathname === "/muestras/analisis");
-  const rowA3 = page2.locator("tbody tr").filter({ hasText: new RegExp(`A\\s*${folioA.padStart(7, "0")}`) }).first();
+  const rowA3 = page2.locator("[data-analisis]").filter({ hasText: new RegExp(`A\\s*${folioA.padStart(7, "0")}`) }).first();
   await rowA3.waitFor();
   check("análisis aprobado por la misma persona que lo revisó (distinta de quien lo elaboró)", (await rowA3.textContent()).includes("Aprobado"));
   await page.goto(analisisUrl);
@@ -373,24 +377,24 @@ try {
   /* ---------- Inventario: baja logica + reactivar ---------- */
   await page.goto(`${BASE}/inventario/reactivos`);
   await page.getByPlaceholder("Buscar por nombre, lote, CAS o catálogo").fill("2-Propanol");
-  const rrow = page.locator("tbody tr").filter({ hasText: "2-Propanol" }).first();
+  const rrow = page.locator("[data-reactivo]").filter({ hasText: "2-Propanol" }).first();
   await rrow.waitFor();
-  const before = await page.locator("tbody tr").filter({ hasText: "2-Propanol" }).count();
+  const before = await page.locator("[data-reactivo]").filter({ hasText: "2-Propanol" }).count();
   await rrow.getByRole("button", { name: "Acciones" }).click();
   await page.getByRole("menuitem", { name: /Dar de baja/ }).click();
   await fillPrompt("Prueba UI: frasco roto", "Dar de baja");
   await page.getByText(/baja/i).first().waitFor();
-  await page.waitForFunction((n) => [...document.querySelectorAll("tbody tr")].filter((tr) => tr.textContent.includes("2-Propanol")).length === n - 1, before);
+  await page.waitForFunction((n) => [...document.querySelectorAll("[data-reactivo]")].filter((tr) => tr.textContent.includes("2-Propanol")).length === n - 1, before);
   check("reactivo dado de baja desaparece de la lista", true, `antes=${before}`);
   await setFilterToggle("Mostrar bajas", true);
-  const brow = page.locator("tbody tr").filter({ hasText: "2-Propanol" }).filter({ hasText: "Baja" }).first();
+  const brow = page.locator("[data-reactivo]").filter({ hasText: "2-Propanol" }).filter({ hasText: "Baja" }).first();
   await brow.waitFor();
   check("reactivo en baja se distingue con etiqueta 'Baja'", true);
   await brow.getByRole("button", { name: "Acciones" }).click();
-  await page.getByRole("menuitem", { name: /Reactivar reactivo/ }).click();
+  await page.getByRole("menuitem", { name: /^Reactivar/ }).click();
   await fillPrompt("Prueba UI: se repuso el frasco", "Reactivar");
   await setFilterToggle("Mostrar bajas", false);
-  await page.waitForFunction((n) => [...document.querySelectorAll("tbody tr")].filter((tr) => tr.textContent.includes("2-Propanol")).length === n, before);
+  await page.waitForFunction((n) => [...document.querySelectorAll("[data-reactivo]")].filter((tr) => tr.textContent.includes("2-Propanol")).length === n, before);
   check("reactivo reactivado vuelve a la lista", true);
 
   /* ---------- Inicio: flujo en curso, avisos y buscador ---------- */

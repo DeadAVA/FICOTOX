@@ -40,6 +40,7 @@ export function ListaCuadricula<T>({
   onReintentar,
   vacio,
   propsFila,
+  atenuada,
 }: {
   etiqueta: string;
   columnas: ColumnaLista[];
@@ -57,6 +58,8 @@ export function ListaCuadricula<T>({
   onReintentar?: () => void;
   vacio: { icono?: ReactNode; titulo: string; descripcion?: string; accion?: ReactNode };
   propsFila?: (fila: T) => HTMLAttributes<HTMLLIElement> & Record<`data-${string}`, string>;
+  /* Renglon atenuado (anulado, archivado, de baja): se ve mas tenue pero se lee completo. */
+  atenuada?: (fila: T) => boolean;
 }) {
   const pistas = `${columnas.map((c) => c.ancho).join(" ")} ${anchoExtremo}`;
   const estilo = { ["--cols" as string]: pistas } as CSSProperties;
@@ -94,10 +97,11 @@ export function ListaCuadricula<T>({
             {filas.map((fila, i) => {
               const valores = celdas(fila, i);
               const esActiva = activa?.(fila, i) ?? false;
+              const tenue = atenuada?.(fila) ?? false;
               return (
                 <li
                   key={clave(fila)}
-                  className={cn("entrada-escalonada group grid grid-cols-[minmax(0,1fr)_auto] items-start transition-colors duration-200 hover:bg-surface-2/70 md:grid-cols-[var(--cols)] md:items-center", esActiva && "bg-brand-faint hover:bg-brand-faint")}
+                  className={cn("entrada-escalonada group grid grid-cols-[minmax(0,1fr)_auto] items-start transition-colors duration-200 hover:bg-surface-2/70 md:grid-cols-[var(--cols)] md:items-center", esActiva && "bg-brand-faint hover:bg-brand-faint", tenue && "[&>button]:opacity-60")}
                   style={{ ...estilo, ["--i" as string]: i } as CSSProperties}
                   {...propsFila?.(fila)}
                 >
