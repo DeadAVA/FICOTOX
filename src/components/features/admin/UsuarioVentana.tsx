@@ -23,7 +23,9 @@ import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/clie
 import { msg, type Problema } from "@/lib/client/mensajes";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
-import { diasEntre, formatearFecha, formatearFechaHora, formatearHora, hoyLocal, instanteDe } from "@/lib/shared/fechas";
+import { diasEntre, formatearFecha, formatearFechaCorta, formatearFechaHora, formatearHora, hoyLocal, instanteDe } from "@/lib/shared/fechas";
+import { DatosRapidos } from "@/components/ui/Ventana";
+import { haceCuantoCorto } from "@/lib/client/tiempo";
 import { descripcionDeRol } from "@/lib/shared/roles-descripcion";
 
 /*
@@ -94,20 +96,6 @@ export function UsuarioVentana({ usuarios, todos, indice, onIndice, onCerrar, on
     <VentanaCentrada abierta={!!item} onCerrar={onCerrar} onMover={mover} puedeAnterior={indice !== null && indice > 0} puedeSiguiente={indice !== null && indice < usuarios.length - 1} etiquetaAnterior="Persona anterior" etiquetaSiguiente="Persona siguiente">
       {item ? <FichaUsuario key={String(item.id)} base={item} todos={todos} onDesbloquear={onDesbloquear} onAbrirPersona={onAbrirPersona} /> : <VentanaTitulo className="sr-only">Usuario</VentanaTitulo>}
     </VentanaCentrada>
-  );
-}
-
-function DatoRapido({ icono, etiqueta, valor, titulo, i }: { icono: ReactNode; etiqueta: string; valor: ReactNode; titulo?: string; i: number }) {
-  return (
-    <div className="entrada-escalonada flex min-w-0 items-center gap-2.5 rounded-[14px] bg-surface-2 px-3 py-2.5 ring-1 ring-line" style={{ ["--i" as string]: i }} title={titulo}>
-      <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-surface text-brand-strong shadow-card">
-        {icono}
-      </span>
-      <span className="flex min-w-0 flex-col">
-        <span className="text-[11.5px] text-ink-3">{etiqueta}</span>
-        <span className="truncate text-[14px] font-semibold text-ink">{valor}</span>
-      </span>
-    </div>
   );
 }
 
@@ -193,12 +181,14 @@ function FichaUsuario({ base, todos, onDesbloquear, onAbrirPersona }: { base: Ap
         </div>
       </header>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <DatoRapido i={0} icono={<ClockCounterClockwise size={17} weight="duotone" />} etiqueta="Último acceso" valor={ultimoAcceso(item)} titulo={item.ultimo_acceso ? formatearFechaHora(item.ultimo_acceso) : undefined} />
-        <DatoRapido i={1} icono={<CalendarBlank size={17} weight="duotone" />} etiqueta="Cuenta desde" valor={formatearFecha(item.vigente_desde || item.creado_en)} />
-        <DatoRapido i={2} icono={<IdentificationBadge size={17} weight="duotone" />} etiqueta="Roles vigentes" valor={roles.length} />
-        <DatoRapido i={3} icono={<Certificate size={17} weight="duotone" />} etiqueta="Autorizaciones vigentes" valor={Number(item.autorizaciones_vigentes || 0)} />
-      </div>
+      <DatosRapidos
+        datos={[
+          { icono: <ClockCounterClockwise size={17} weight="duotone" />, etiqueta: "Último acceso", valor: item.ultimo_acceso ? haceCuantoCorto(item.ultimo_acceso) : "Nunca", titulo: item.ultimo_acceso ? formatearFechaHora(item.ultimo_acceso) : undefined },
+          { icono: <CalendarBlank size={17} weight="duotone" />, etiqueta: "Cuenta desde", valor: formatearFechaCorta(item.vigente_desde || item.creado_en), titulo: formatearFecha(item.vigente_desde || item.creado_en) },
+          { icono: <IdentificationBadge size={17} weight="duotone" />, etiqueta: "Roles", valor: String(roles.length) },
+          { icono: <Certificate size={17} weight="duotone" />, etiqueta: "Autorizaciones", valor: String(Number(item.autorizaciones_vigentes || 0)) },
+        ]}
+      />
 
       <PestanasDeslizantes
         label="Información de la persona"
@@ -249,7 +239,7 @@ function FichaUsuario({ base, todos, onDesbloquear, onAbrirPersona }: { base: Ap
                   >
                     <Avatar name={supervisor?.nombre || item.supervisor_nombre} email={supervisor?.email} avatar={supervisor?.avatar} size="md" animado="al-pasar" />
                     <span className="flex min-w-0 flex-col">
-                      <span className="truncate text-[14px] font-medium text-ink">{String(item.supervisor_nombre || supervisor?.nombre || "Supervisor")}</span>
+                      <span className="break-words text-[14px] font-medium text-ink">{String(item.supervisor_nombre || supervisor?.nombre || "Supervisor")}</span>
                       <span className="text-[12.5px] text-ink-3">Da el visto bueno a lo que registra · ver su información</span>
                     </span>
                   </button>

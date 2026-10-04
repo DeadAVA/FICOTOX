@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useSession } from "@/components/session/SessionProvider";
 import { AvatarArt, AVATARS, resolveAvatarKey } from "@/components/ui/AvatarArt";
+import { useFiguraDe } from "@/components/ui/Figura";
+import { isAvatarKey } from "@/lib/shared/avatars";
 import { AvatarPicker } from "@/components/ui/AvatarPicker";
 import { Button } from "@/components/ui/Button";
 import { Sheet, useConfirm } from "@/components/ui/Overlay";
@@ -69,8 +71,12 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
     }
   };
   const seed = (user?.email || user?.nombre || "?").trim().toLowerCase();
-  const current = resolveAvatarKey(user?.avatar, seed);
-  const [choice, setChoice] = useState<string>(current);
+  // Sin figura elegida: la misma figura por omision que ven los demas (distinta a la de otras personas).
+  const porDefecto = useFiguraDe(null, seed);
+  const current = resolveAvatarKey(isAvatarKey(user?.avatar) ? user?.avatar : porDefecto, seed);
+  // null = sin cambio: muestra la figura actual (la elegida o la que le toca por omision).
+  const [elegida, setChoice] = useState<string | null>(null);
+  const choice = elegida ?? current;
   const [saving, setSaving] = useState(false);
   const dirty = choice !== current;
 

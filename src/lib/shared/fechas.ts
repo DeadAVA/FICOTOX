@@ -107,6 +107,12 @@ export function formatearFechaLarga(value: unknown, vacio = "—"): string {
   return m ? `${Number(m[3])} de ${MESES[Number(m[2]) - 1]} de ${m[1]}` : vacio;
 }
 
+/* Fecha corta para tarjetas y listas ("25 sep 2026"), en la zona del laboratorio. */
+export function formatearFechaCorta(value: unknown, vacio = "—"): string {
+  const m = SOLO_FECHA.exec(fechaSola(value));
+  return m ? `${Number(m[3])} ${MESES[Number(m[2]) - 1].slice(0, 3)} ${m[1]}` : vacio;
+}
+
 /* Nombre del dia de la semana de una fecha sola ("miércoles"); "" si no es fecha. */
 const DIAS_SEMANA = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 export function diaSemana(value: unknown): string {

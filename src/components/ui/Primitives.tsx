@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type HTMLAttributes, type ReactNode } from "react";
+import { useFiguraDe } from "./Figura";
 import { AvatarArt } from "./AvatarArt";
 import { cn } from "./cn";
 
@@ -102,8 +103,10 @@ export function Kbd({ children }: { children: ReactNode }) {
  */
 export function Avatar({ name, email, avatar, size = "md", className, animado }: { name?: unknown; email?: unknown; avatar?: unknown; size?: "xs" | "sm" | "md" | "lg" | "xl"; className?: string; animado?: "siempre" | "al-pasar" | false }) {
   const px = { xs: 24, sm: 28, md: 36, lg: 48, xl: 72 }[size];
-  // La misma figura que en Mi cuenta: la elegida o, si no eligio, la que le toca por su correo (siempre la misma).
-  return <AvatarArt avatar={avatar} seed={String(email || name || "?").trim().toLowerCase()} size={px} animado={animado} className={cn("rounded-full shadow-[0_1px_2px_rgba(16,32,43,0.18)]", className)} />;
+  const seed = String(email || name || "?").trim().toLowerCase();
+  // La misma figura que en Mi cuenta: la elegida o, si no eligio, una distinta a la de los demas (directorio), siempre la misma.
+  const figura = useFiguraDe(avatar, seed);
+  return <AvatarArt avatar={figura} seed={seed} size={px} animado={animado} className={cn("rounded-full shadow-[0_1px_2px_rgba(16,32,43,0.18)]", className)} />;
 }
 
 export function Stat({ label, value, hint, tone = "neutral", icon, className }: { label: ReactNode; value: ReactNode; hint?: ReactNode; tone?: "neutral" | "brand" | "warning" | "danger" | "success"; icon?: ReactNode; className?: string }) {

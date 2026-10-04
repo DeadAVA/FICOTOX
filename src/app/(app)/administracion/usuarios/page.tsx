@@ -6,7 +6,9 @@ import { toast } from "sonner";
 import { ArrowCounterClockwise, Certificate, Copy, Key, LockOpen, PencilSimple, Plus, Trash, Users } from "@phosphor-icons/react";
 import { UserSheet } from "@/components/features/admin/AdminSheets";
 import { EtiquetaRol } from "@/components/features/admin/iconos";
-import { estadoCuenta, ultimoAcceso, UsuarioVentana } from "@/components/features/admin/UsuarioVentana";
+import { ListaCuadricula, type ColumnaLista } from "@/components/ui/ListaCuadricula";
+import { haceCuantoCorto } from "@/lib/client/tiempo";
+import { estadoCuenta, UsuarioVentana } from "@/components/features/admin/UsuarioVentana";
 import { SolicitudBadge } from "@/components/features/samples/status";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
@@ -15,8 +17,7 @@ import { Button } from "@/components/ui/Button";
 import { FilterMenu, type FilterGroup, type FilterToggle } from "@/components/ui/FilterMenu";
 import { ActionMenu, Dialog, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
-import { Avatar, Badge, EmptyState, ErrorState, Skeleton } from "@/components/ui/Primitives";
-import { cn } from "@/components/ui/cn";
+import { Avatar, Badge } from "@/components/ui/Primitives";
 import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
 import { fmt, normalizeText } from "@/lib/client/format";
@@ -260,33 +261,31 @@ function UsuariosContent() {
         {!propio ? <FilterMenu groups={groups} toggles={toggles} gruposFinales={ordenar} /> : null}
       </Toolbar>
 
-      <div className="overflow-hidden rounded-card bg-surface shadow-card" aria-label="Usuarios">
-        {resource.error ? (
-          <ErrorState message={resource.error} onRetry={resource.reload} />
-        ) : !resource.data ? (
-          <div className="flex flex-col divide-y divide-line" aria-hidden="true">
-            {Array.from({ length: 6 }, (_, i) => (
-              <div key={i} className="flex items-center gap-4 px-5 py-4">
-                <Skeleton className="h-11 w-11 rounded-full" />
-                <div className="flex flex-1 flex-col gap-2">
-                  <Skeleton className="h-3.5 w-1/4" />
-                  <Skeleton className="h-3 w-1/3" />
-                </div>
-                <Skeleton className="hidden h-5 w-40 rounded-full md:block" />
-                <Skeleton className="h-5 w-20 rounded-full" />
-              </div>
-            ))}
-          </div>
-        ) : !rows.length ? (
-          <EmptyState icon={<Users size={20} />} title="Sin usuarios" description={filtrando ? "No hay personas con estos filtros." : "Crea la primera cuenta de acceso."} />
-        ) : (
-          <ul className="divide-y divide-line">
-            {rows.map((item, i) => (
-              <FilaUsuario key={String(item.id)} i={i} item={item} supervisor={item.supervisor_id ? items.find((u) => Number(u.id) === Number(item.supervisor_id)) : undefined} yo={Number(me?.id) === Number(item.id)} activa={indice !== null && rows[indice] === item} onAbrir={() => setAbierta(i)} menu={menuFor(item)} />
-            ))}
-          </ul>
-        )}
-      </div>
+      <ListaCuadricula
+        etiqueta="Usuarios"
+        columnas={COLUMNAS}
+        filas={resource.data ? rows : null}
+        error={resource.error}
+        onReintentar={resource.reload}
+        clave={(item) => String(item.id)}
+        onAbrir={(_, i) => setAbierta(i)}
+        activa={(_, i) => indice === i}
+        celdas={(item) => celdasUsuario(item, items, Number(me?.id) === Number(item.id))}
+        extremo={(item) => {
+          const menu = menuFor(item);
+          return (
+            <>
+              <span className="flex w-7 justify-center">
+                <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} entidad="usuarios" />
+              </span>
+              <span className="w-9">{menu.length ? <ActionMenu items={menu} header={String(item.nombre || item.email || "")} /> : null}</span>
+            </>
+          );
+        }}
+        anchoExtremo="84px"
+        propsFila={(item) => ({ "data-usuario": String(item.id) })}
+        vacio={{ icono: <Users size={20} />, titulo: "Sin usuarios", descripcion: filtrando ? "No hay personas con estos filtros." : "Crea la primera cuenta de acceso." }}
+      />
       {resource.data && rows.length ? <p className="tnum mt-2 px-1 text-[12px] text-ink-4">{rows.length === 1 ? "1 persona" : `${fmt(rows.length)} personas`}</p> : null}
 
       <UsuarioVentana usuarios={rows} todos={items} indice={indice} onIndice={setAbierta} onCerrar={cerrar} onDesbloquear={desbloquear} onAbrirPersona={abrirPersona} />
@@ -326,72 +325,69 @@ function UsuariosContent() {
   );
 }
 
+/* Columnas fijas de la lista (encabezados discretos); en angostas, tarjeta. */
+const COLUMNAS: ColumnaLista[] = [
+  { clave: "persona", titulo: "Persona", ancho: "minmax(230px,1.3fr)" },
+  { clave: "roles", titulo: "Roles", ancho: "minmax(200px,1.5fr)" },
+  { clave: "estado", titulo: "Estado", ancho: "minmax(170px,1fr)" },
+  { clave: "acceso", titulo: "Último acceso", ancho: "130px" },
+  { clave: "autorizaciones", titulo: "Autorizaciones", ancho: "140px" },
+];
+
 /*
- * Un renglon: figura de perfil (quieta; flota al pasar el cursor), nombre en
- * negritas y correo; roles completos (pasan de linea si no caben); estado con
- * su insignia (temporal: hasta cuando y quien supervisa); ultimo acceso
- * (fecha exacta al pasar el cursor); autorizaciones vigentes y solicitud
- * pendiente. En pantallas angostas, tarjeta compacta.
+ * Celdas de un renglon: figura (quieta; flota al pasar el cursor), nombre y
+ * correo; roles completos (pasan de linea dentro de su columna); estado con su
+ * insignia (temporal: hasta cuando y quien supervisa); ultimo acceso (fecha
+ * exacta al pasar el cursor); autorizaciones vigentes o "—".
  */
-function FilaUsuario({ item, supervisor, i, yo, activa, onAbrir, menu }: { item: ApiRecord; supervisor?: ApiRecord; i: number; yo: boolean; activa: boolean; onAbrir: () => void; menu: MenuItem[] }) {
+function celdasUsuario(item: ApiRecord, todos: ApiRecord[], yo: boolean) {
   const roles = ((item.roles || []) as ApiRecord[]).map((r) => String(r.nombre || "")).filter(Boolean);
   const estado = estadoCuenta(item);
   const temporal = String(item.tipo_cuenta || "") === "temporal";
   const autorizaciones = Number(item.autorizaciones_vigentes || 0);
-  return (
-    <li className={cn("entrada-escalonada group relative transition-colors duration-200 hover:bg-surface-2/70", activa && "bg-brand-faint hover:bg-brand-faint")} style={{ ["--i" as string]: i }} data-usuario={String(item.id)}>
-      <div className="flex items-start gap-2 pr-2 md:items-center">
-        <button type="button" onClick={onAbrir} aria-haspopup="dialog" className="grid min-w-0 flex-1 gap-x-5 gap-y-2.5 px-4 py-4 text-left outline-none focus-visible:shadow-[inset_0_0_0_2px_rgba(15,122,149,0.45)] sm:px-5 md:grid-cols-[minmax(200px,1.1fr)_minmax(0,1.5fr)_minmax(150px,auto)_minmax(110px,auto)] md:items-center">
-          <span className="flex min-w-0 items-center gap-3">
-            <Avatar name={item.nombre} email={item.email} avatar={item.avatar} size="lg" animado="al-pasar" className="h-11 w-11" />
-            <span className="flex min-w-0 flex-col">
-              <span className="text-[14.5px] font-semibold leading-tight text-ink">
-                {String(item.nombre || "Sin nombre")}
-                {yo ? <span className="ml-1.5 text-[12px] font-normal text-ink-3">(tú)</span> : null}
-              </span>
-              <span className="break-all text-[12.5px] text-ink-3">{String(item.email || "")}</span>
-            </span>
-          </span>
-          <span className="flex flex-wrap items-center gap-1.5" aria-label="Roles vigentes">
-            {roles.map((r) => (
-              <EtiquetaRol key={r}>{r}</EtiquetaRol>
-            ))}
-            {!roles.length ? <span className="text-[12.5px] text-ink-4">Sin roles vigentes</span> : null}
-          </span>
-          <span className="flex flex-col items-start gap-1">
-            <Badge tone={estado.tone} dot>
-              {estado.label}
-            </Badge>
-            {temporal && item.vigente_hasta ? (
-              <span className="flex items-center gap-1.5 text-[12px] text-ink-3">
-                Hasta {formatearFecha(item.vigente_hasta)}
-                {item.supervisor_nombre ? (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <Avatar name={supervisor?.nombre || item.supervisor_nombre} email={supervisor?.email} avatar={supervisor?.avatar} size="xs" className="h-4 w-4" />
-                    supervisa {String(item.supervisor_nombre).split(" ")[0]}
-                  </>
-                ) : null}
-              </span>
-            ) : null}
-          </span>
-          <span className="flex flex-col items-start gap-1 text-[12.5px] text-ink-3">
-            <span title={item.ultimo_acceso ? `Último acceso: ${formatearFechaHora(item.ultimo_acceso)}` : undefined}>{ultimoAcceso(item)}</span>
-            {autorizaciones ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-brand-faint px-2 py-0.5 text-[11.5px] font-medium text-brand-strong">
-                <Certificate size={12} weight="duotone" />
-                {autorizaciones === 1 ? "1 autorización" : `${autorizaciones} autorizaciones`}
-              </span>
-            ) : null}
-          </span>
-        </button>
-        <span className="flex shrink-0 items-center gap-1 pt-4 md:pt-0">
-          <span className="flex w-7 justify-center">
-            <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} entidad="usuarios" />
-          </span>
-          <span className="w-9">{menu.length ? <ActionMenu items={menu} header={String(item.nombre || item.email || "")} /> : null}</span>
+  const supervisor = item.supervisor_id ? todos.find((u) => Number(u.id) === Number(item.supervisor_id)) : undefined;
+  return [
+    <span key="p" className="flex min-w-0 items-center gap-3">
+      <Avatar name={item.nombre} email={item.email} avatar={item.avatar} size="lg" animado="al-pasar" className="h-11 w-11" />
+      <span className="flex min-w-0 flex-col">
+        <span className="text-[14.5px] leading-tight font-semibold text-ink">
+          {String(item.nombre || "Sin nombre")}
+          {yo ? <span className="ml-1.5 text-[12px] font-normal text-ink-3">(tú)</span> : null}
         </span>
-      </div>
-    </li>
-  );
+        <span className="break-all text-[12.5px] text-ink-3">{String(item.email || "")}</span>
+      </span>
+    </span>,
+    <span key="r" className="flex flex-wrap items-center gap-1.5">
+      {roles.map((r) => (
+        <EtiquetaRol key={r}>{r}</EtiquetaRol>
+      ))}
+      {!roles.length ? <span className="text-[13px] text-ink-4">—</span> : null}
+    </span>,
+    <span key="e" className="flex flex-col items-start gap-1">
+      <Badge tone={estado.tone} dot>
+        {estado.label}
+      </Badge>
+      {temporal && item.vigente_hasta ? (
+        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-ink-3">
+          Hasta {formatearFecha(item.vigente_hasta)}
+          {item.supervisor_nombre ? (
+            <span className="inline-flex items-center gap-1">
+              · <Avatar name={supervisor?.nombre || item.supervisor_nombre} email={supervisor?.email} avatar={supervisor?.avatar} size="xs" className="h-4 w-4" /> supervisa {String(item.supervisor_nombre).split(" ")[0]}
+            </span>
+          ) : null}
+        </span>
+      ) : null}
+    </span>,
+    <span key="a" className="text-[13px] text-ink-2" title={item.ultimo_acceso ? `Último acceso: ${formatearFechaHora(item.ultimo_acceso)}` : undefined}>
+      {item.ultimo_acceso ? haceCuantoCorto(item.ultimo_acceso) : <span className="text-ink-4">Nunca</span>}
+    </span>,
+    autorizaciones ? (
+      <span key="z" className="inline-flex items-center gap-1 rounded-full bg-brand-faint px-2 py-0.5 text-[12px] font-medium text-brand-strong">
+        <Certificate size={13} weight="duotone" />
+        {autorizaciones === 1 ? "1 vigente" : `${autorizaciones} vigentes`}
+      </span>
+    ) : (
+      <span key="z" className="text-[13px] text-ink-4">—</span>
+    ),
+  ];
 }
