@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarBlank, CheckCircle, FilePdf, LinkSimple, PencilSimple, Prohibit, Toolbox, User, Wrench } from "@phosphor-icons/react";
+import { CalendarBlank, CheckCircle, FilePdf, PencilSimple, Prohibit, Toolbox, User, Wrench } from "@phosphor-icons/react";
 import { MANTENIMIENTO_ESTADOS, MANTENIMIENTO_TIPOS, metaFor } from "@/components/features/inventory/meta";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
@@ -11,9 +11,11 @@ import { DatosLista, DatosRapidos, VentanaAcciones, VentanaCentrada, VentanaEnca
 import { API_BASE_URL } from "@/lib/client/api";
 import { openProtectedFile } from "@/lib/client/files";
 import { fmt } from "@/lib/client/format";
-import { ColumnasVentana, DatoLateral, origenDeMovimiento, esEntrada, IconoEquipo, IconoMantenimiento, IconoMovimiento, moverEn, TarjetaLateral } from "./comun";
+import { ColumnasVentana, DatoLateral, origenDeMovimiento, esEntrada, IconoEquipo, IconoMantenimiento, IconoMovimientoInsumo, IconoOrigen, moverEn, TarjetaLateral } from "./comun";
+import { cn } from "@/components/ui/cn";
+import { haceCuantoCorto } from "@/lib/client/tiempo";
 import type { ApiRecord } from "@/lib/client/types";
-import { formatearFecha, formatearFechaCorta, formatearFechaHora, hoyLocal } from "@/lib/shared/fechas";
+import { formatearFecha, formatearFechaCorta, formatearFechaHora, formatearHora, hoyLocal } from "@/lib/shared/fechas";
 
 /*
  * Ventanas de Mantenimiento (detalle de un mantenimiento con sus acciones de
@@ -137,52 +139,84 @@ export function MovimientoVentana({ items, indice, onIndice, onCerrar }: { items
     const siguiente = moverEn(indice, items.length, paso);
     if (siguiente !== null) onIndice(siguiente);
   };
-  const origen = m ? origenDeMovimiento(m) : null;
-  const tipoInsumo = m?.tabla_origen === "reactivos" ? "Reactivo" : m?.tabla_origen === "consumibles" ? "Consumible" : "Insumo";
-  const fichaInsumo = m ? (m.tabla_origen === "reactivos" ? `/inventario/reactivos?buscar=${encodeURIComponent(nombreInsumo(m))}` : m.tabla_origen === "consumibles" ? `/inventario/consumibles?buscar=${encodeURIComponent(nombreInsumo(m))}` : null) : null;
   return (
-    <VentanaCentrada amplia abierta={!!m} onCerrar={onCerrar} onMover={mover} puedeAnterior={indice !== null && indice > 0} puedeSiguiente={indice !== null && indice < items.length - 1} etiquetaAnterior="Movimiento anterior" etiquetaSiguiente="Movimiento siguiente">
-      {m && origen ? (
-        <div key={String(m.id)} className="flex flex-col gap-6" data-movimiento-ventana={String(m.id)}>
-          <VentanaEncabezado
-            figura={<IconoMovimiento m={m} grande />}
-            titulo={`${esEntrada(m) ? "Entrada" : "Salida"} de ${fmt(m.cantidad)} · ${nombreInsumo(m)}`}
-            insignia={<Badge tone={esEntrada(m) ? "success" : "warning"} dot>{esEntrada(m) ? "Entrada" : "Salida"}</Badge>}
-            subtitulo={`${tipoInsumo} · ${formatearFechaHora(m.fecha_hora)}`}
-          />
-          <ColumnasVentana
-            principal={
-              <VentanaSeccion titulo="Detalle" i={1}>
-                <VentanaTarjeta>
-                  <DatosLista
-                    datos={[
-                      { etiqueta: tipoInsumo, valor: fichaInsumo ? <Link href={fichaInsumo} className="text-brand hover:underline">{nombreInsumo(m)}</Link> : nombreInsumo(m) },
-                      m.item_codigo && m.item_codigo !== m.item_nombre ? { etiqueta: "Código", valor: String(m.item_codigo) } : null,
-                      { etiqueta: "Cantidad", valor: `${esEntrada(m) ? "+" : "−"}${fmt(m.cantidad)}` },
-                      { etiqueta: "Cuándo", valor: formatearFechaHora(m.fecha_hora) },
-                      m.motivo ? { etiqueta: "Motivo", valor: String(m.motivo) } : null,
-                    ]}
-                  />
-                </VentanaTarjeta>
-              </VentanaSeccion>
-            }
-            lateral={
-              <TarjetaLateral icono={<LinkSimple size={15} weight="duotone" />} titulo="Registro de origen" tono={esEntrada(m) ? "success" : "warning"} i={0}>
-                {origen.href ? (
-                  <Link href={origen.href} className="text-[14px] font-medium text-brand hover:underline">
-                    {origen.texto}
-                  </Link>
-                ) : (
-                  <p className="text-[14px] text-ink">{origen.texto}</p>
-                )}
-                <p className="text-[12.5px] text-ink-3">{origen.href ? "Se descontó al capturar ese formato." : esEntrada(m) ? "Entrada registrada en el inventario." : "Movimiento registrado en el inventario."}</p>
-              </TarjetaLateral>
-            }
-          />
-        </div>
-      ) : (
-        <VentanaTitulo className="sr-only">Movimiento</VentanaTitulo>
-      )}
+    <VentanaCentrada abierta={!!m} onCerrar={onCerrar} onMover={mover} puedeAnterior={indice !== null && indice > 0} puedeSiguiente={indice !== null && indice < items.length - 1} etiquetaAnterior="Movimiento anterior" etiquetaSiguiente="Movimiento siguiente">
+      {m ? <FichaMovimiento key={String(m.id)} m={m} /> : <VentanaTitulo className="sr-only">Movimiento</VentanaTitulo>}
     </VentanaCentrada>
+  );
+}
+
+/*
+ * Ficha de un movimiento, en una sola columna ordenada: el insumo con su
+ * figura y la flecha de entrada o salida; la cantidad grande con signo y
+ * color; los datos (insumo, codigo, motivo, cuando) y el registro de origen
+ * enlazado con su icono.
+ */
+function FichaMovimiento({ m }: { m: ApiRecord }) {
+  const entrada = esEntrada(m);
+  const origen = origenDeMovimiento(m);
+  const tipoInsumo = m.tabla_origen === "reactivos" ? "Reactivo" : m.tabla_origen === "consumibles" ? "Consumible" : "Insumo";
+  const fichaInsumo = m.tabla_origen === "reactivos" ? `/inventario/reactivos?buscar=${encodeURIComponent(nombreInsumo(m))}` : m.tabla_origen === "consumibles" ? `/inventario/consumibles?buscar=${encodeURIComponent(nombreInsumo(m))}` : null;
+  return (
+    <div className="flex flex-col gap-5" data-movimiento-ventana={String(m.id)}>
+      <VentanaEncabezado
+        figura={<IconoMovimientoInsumo m={m} grande />}
+        titulo={nombreInsumo(m)}
+        insignia={
+          <Badge tone={entrada ? "success" : "warning"} dot>
+            {entrada ? "Entrada" : "Salida"}
+          </Badge>
+        }
+        subtitulo={tipoInsumo}
+      />
+
+      <VentanaSeccion i={0}>
+        <div className={cn("flex flex-wrap items-center justify-between gap-4 rounded-[16px] px-5 py-4 ring-1", entrada ? "bg-success-soft/60 ring-success/20" : "bg-warning-soft/60 ring-warning/20")}>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[12.5px] text-ink-3">{entrada ? "Entró al inventario" : "Salió del inventario"}</span>
+            <span className={cn("tnum text-[30px] leading-none font-semibold tracking-[-0.02em]", entrada ? "text-success-text" : "text-warning-text")}>
+              {entrada ? "+" : "−"}
+              {fmt(m.cantidad)}
+            </span>
+          </div>
+          <div className="flex flex-col items-end gap-0.5 text-right">
+            <span className="text-[14px] font-medium text-ink">{formatearFechaCorta(m.fecha_hora)}</span>
+            <span className="text-[12.5px] text-ink-3" title={formatearFechaHora(m.fecha_hora)}>
+              {formatearHora(m.fecha_hora)} · {haceCuantoCorto(m.fecha_hora).toLowerCase()}
+            </span>
+          </div>
+        </div>
+      </VentanaSeccion>
+
+      <VentanaSeccion titulo="Detalle" i={1}>
+        <VentanaTarjeta>
+          <DatosLista
+            datos={[
+              { etiqueta: tipoInsumo, valor: fichaInsumo ? <Link href={fichaInsumo} className="font-medium text-brand hover:underline">{nombreInsumo(m)}</Link> : nombreInsumo(m) },
+              m.item_codigo && m.item_codigo !== m.item_nombre ? { etiqueta: "Código", valor: String(m.item_codigo) } : null,
+              { etiqueta: "Tipo", valor: entrada ? "Entrada al inventario" : "Salida del inventario" },
+              m.motivo ? { etiqueta: "Motivo", valor: String(m.motivo) } : null,
+              { etiqueta: "Fecha y hora", valor: formatearFechaHora(m.fecha_hora) },
+            ]}
+          />
+        </VentanaTarjeta>
+      </VentanaSeccion>
+
+      <VentanaSeccion titulo="Registro de origen" i={2}>
+        <div className="flex items-start gap-3 rounded-[14px] bg-surface-2 px-4 py-3.5 ring-1 ring-line transition-shadow duration-200 hover:shadow-raised">
+          <IconoOrigen m={m} />
+          <div className="flex min-w-0 flex-col gap-0.5">
+            {origen.href ? (
+              <Link href={origen.href} className="break-words text-[14px] font-medium text-brand hover:underline">
+                {origen.texto}
+              </Link>
+            ) : (
+              <p className="break-words text-[14px] font-medium text-ink">{origen.texto}</p>
+            )}
+            <p className="text-[12.5px] text-ink-3">{origen.href ? "Se descontó al capturar ese formato." : entrada ? "Entrada registrada en el inventario." : "Movimiento registrado en el inventario."}</p>
+          </div>
+        </div>
+      </VentanaSeccion>
+    </div>
   );
 }

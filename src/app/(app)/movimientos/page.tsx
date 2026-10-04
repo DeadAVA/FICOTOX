@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ArrowsLeftRight } from "@phosphor-icons/react";
-import { esEntrada, IconoMovimiento, origenDeMovimiento } from "@/components/features/inventory/ventanas/comun";
+import { esEntrada, IconoMovimientoInsumo, origenDeMovimiento } from "@/components/features/inventory/ventanas/comun";
 import { MovimientoVentana, nombreInsumo } from "@/components/features/inventory/ventanas/MantenimientoVentana";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
@@ -124,7 +124,7 @@ function MovimientosContent() {
     const entrada = esEntrada(item);
     return [
       <span key="i" className="flex min-w-0 items-center gap-3">
-        <IconoMovimiento m={item} />
+        <IconoMovimientoInsumo m={item} />
         <span className="flex min-w-0 flex-col">
           <span className="text-[14.5px] leading-tight font-semibold text-ink">{nombreInsumo(item)}</span>
           <span className="text-[12.5px] text-ink-3">

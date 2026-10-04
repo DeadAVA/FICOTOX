@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowDownLeft, ArrowUpRight, Atom, Bag, ChartLine, CheckSquare, Cylinder, Diamond, Disc, Drop, Eyedropper, Fire, FirstAid, Flask, Funnel, Gauge, HandPalm, Jar, Lightbulb, Microscope, Monitor, Package, Ruler, Scales, Scroll, SealCheck, ShieldCheck, Snowflake, Spinner, Syringe, Tag, TestTube, Thermometer, Toolbox, Tornado, Tray, Vibrate, Waves, Wind, Wrench } from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, ArrowsLeftRight, Atom, Truck, Bag, ChartLine, CheckSquare, Cylinder, Diamond, Disc, Drop, Eyedropper, Fire, FirstAid, Flask, Funnel, Gauge, HandPalm, Jar, Lightbulb, Microscope, Monitor, Package, Ruler, Scales, Scroll, SealCheck, ShieldCheck, Snowflake, Spinner, Syringe, Tag, TestTube, Thermometer, Toolbox, Tornado, Tray, Vibrate, Waves, Wind, Wrench } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
 import { cn } from "@/components/ui/cn";
 import { Skeleton } from "@/components/ui/Primitives";
@@ -212,13 +212,35 @@ export function origenDeMovimiento(m: ApiRecord): { texto: string; href: string 
 
 export const esEntrada = (m: ApiRecord) => String(m.tipo || "").toLowerCase() === "entrada";
 
-/* Icono de entrada (verde) o salida (ambar) de un movimiento. */
-export function IconoMovimiento({ m, grande = false }: { m: ApiRecord; grande?: boolean }) {
+/*
+ * Icono de un movimiento: la figura del insumo (reactivo: matraz; consumible:
+ * lo que es por su nombre) con una flecha en la esquina, verde hacia abajo si
+ * entro al inventario y ambar hacia arriba si salio.
+ */
+export function IconoMovimientoInsumo({ m, grande = false }: { m: ApiRecord; grande?: boolean }) {
   const entrada = esEntrada(m);
+  const consumible = m.tabla_origen === "consumibles";
+  const figura = consumible ? porNombre(m.item_nombre, CONSUMIBLES, CONSUMIBLE_OMISION) : { icono: (s: number) => <Flask size={s} weight="duotone" />, clase: "bg-brand-faint text-brand-strong" };
   return (
-    <CuadroIcono grande={grande} clase={entrada ? "bg-success-soft text-success-text" : "bg-warning-soft text-warning-text"}>
-      {entrada ? <ArrowDownLeft size={grande ? T_GDE : T_PEQ} weight="bold" /> : <ArrowUpRight size={grande ? T_GDE : T_PEQ} weight="bold" />}
-    </CuadroIcono>
+    <span className="relative shrink-0" aria-hidden="true">
+      <CuadroIcono grande={grande} clase={figura.clase}>
+        {figura.icono(grande ? T_GDE : T_PEQ)}
+      </CuadroIcono>
+      <span className={cn("absolute -right-1 -bottom-1 flex items-center justify-center rounded-full ring-2 ring-surface", grande ? "h-7 w-7" : "h-5 w-5", entrada ? "bg-success text-white" : "bg-warning text-white")}>
+        {entrada ? <ArrowDown size={grande ? 15 : 11} weight="bold" /> : <ArrowUp size={grande ? 15 : 11} weight="bold" />}
+      </span>
+    </span>
+  );
+}
+
+/* Icono del origen de un movimiento (formato de captura o entrada al inventario). */
+export function IconoOrigen({ m }: { m: ApiRecord }) {
+  const ref = String(m.referencia || "");
+  const icono = /^EXT-/.test(ref) ? <Flask size={18} weight="duotone" /> : /^PROC-/.test(ref) ? <TestTube size={18} weight="duotone" /> : /^(ANA|AN)-/.test(ref) ? <ChartLine size={18} weight="duotone" /> : esEntrada(m) ? <Truck size={18} weight="duotone" /> : <ArrowsLeftRight size={18} weight="duotone" />;
+  return (
+    <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-surface text-brand-strong shadow-card">
+      {icono}
+    </span>
   );
 }
 
@@ -249,7 +271,7 @@ export function MovimientosRecientes({ tabla, id, unidad }: { tabla: "reactivos"
         const origen = origenDeMovimiento(m);
         return (
           <li key={String(m.id)} className="entrada-escalonada flex items-start gap-3 rounded-[12px] bg-surface px-3 py-2.5 ring-1 ring-line" style={{ ["--i" as string]: i }}>
-            <IconoMovimiento m={m} />
+            <IconoMovimientoInsumo m={m} />
             <div className="flex min-w-0 flex-1 flex-col">
               <span className="text-[13.5px] font-medium text-ink">
                 {esEntrada(m) ? "Entrada" : "Salida"} de {fmt(m.cantidad)}
