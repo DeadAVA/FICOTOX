@@ -100,9 +100,10 @@ export function Kbd({ children }: { children: ReactNode }) {
  * Avatar: una ilustracion del catalogo (`AvatarArt`). Si la persona no ha
  * elegido, se deriva del correo para que siempre le toque la misma.
  */
-export function Avatar({ name, email, avatar, size = "md", className }: { name?: string; email?: string; avatar?: string | null; size?: "xs" | "sm" | "md" | "lg" | "xl"; className?: string }) {
+export function Avatar({ name, email, avatar, size = "md", className, animado }: { name?: unknown; email?: unknown; avatar?: unknown; size?: "xs" | "sm" | "md" | "lg" | "xl"; className?: string; animado?: "siempre" | "al-pasar" | false }) {
   const px = { xs: 24, sm: 28, md: 36, lg: 48, xl: 72 }[size];
-  return <AvatarArt avatar={avatar} seed={(email || name || "?").trim().toLowerCase()} size={px} className={cn("rounded-full shadow-[0_1px_2px_rgba(16,32,43,0.18)]", className)} />;
+  // La misma figura que en Mi cuenta: la elegida o, si no eligio, la que le toca por su correo (siempre la misma).
+  return <AvatarArt avatar={avatar} seed={String(email || name || "?").trim().toLowerCase()} size={px} animado={animado} className={cn("rounded-full shadow-[0_1px_2px_rgba(16,32,43,0.18)]", className)} />;
 }
 
 export function Stat({ label, value, hint, tone = "neutral", icon, className }: { label: ReactNode; value: ReactNode; hint?: ReactNode; tone?: "neutral" | "brand" | "warning" | "danger" | "success"; icon?: ReactNode; className?: string }) {

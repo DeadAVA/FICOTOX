@@ -3,9 +3,10 @@
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowCounterClockwise, Copy, Key, LockOpen, PencilSimple, Plus, Trash, Users } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, Certificate, Copy, Key, LockOpen, PencilSimple, Plus, Trash, Users } from "@phosphor-icons/react";
 import { UserSheet } from "@/components/features/admin/AdminSheets";
-import { estadoCuenta, Iniciales, ultimoAcceso, UsuarioVentana } from "@/components/features/admin/UsuarioVentana";
+import { EtiquetaRol } from "@/components/features/admin/iconos";
+import { estadoCuenta, ultimoAcceso, UsuarioVentana } from "@/components/features/admin/UsuarioVentana";
 import { SolicitudBadge } from "@/components/features/samples/status";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
@@ -13,8 +14,8 @@ import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { FilterMenu, type FilterGroup, type FilterToggle } from "@/components/ui/FilterMenu";
 import { ActionMenu, Dialog, usePrompt, type MenuItem } from "@/components/ui/Overlay";
-import { PageHeader, SearchInput, SegmentedTabs, Toolbar } from "@/components/ui/PageHeader";
-import { Badge, EmptyState, ErrorState, Skeleton } from "@/components/ui/Primitives";
+import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
+import { Avatar, Badge, EmptyState, ErrorState, Skeleton } from "@/components/ui/Primitives";
 import { cn } from "@/components/ui/cn";
 import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
@@ -22,15 +23,16 @@ import { fmt, normalizeText } from "@/lib/client/format";
 import { useOpenState } from "@/lib/client/hooks";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
-import { formatearFecha, formatearHora, hoyLocal, sumarDias } from "@/lib/shared/fechas";
+import { formatearFecha, formatearFechaHora, formatearHora, hoyLocal, sumarDias } from "@/lib/shared/fechas";
 
 /*
- * Usuarios (minimalista): una lista sencilla (iniciales, nombre y correo, roles
- * vigentes, estado, ultimo acceso y solicitud pendiente) y, al pulsar una
- * persona, su ventana centrada (General, Roles y Autorizaciones). Integra lo
- * que era "Revision de accesos": accesos rapidos arriba de la lista, filtros de
- * vigencia y bloqueos, temporales con su supervisor. Sin exportacion. Las
- * acciones y sus reglas no cambian.
+ * Usuarios: lista elaborada (figura de perfil, nombre y correo, roles
+ * completos, estado, supervisor, ultimo acceso, autorizaciones y solicitud
+ * pendiente) y, al pulsar una persona, su ventana centrada (General, Roles y
+ * Autorizaciones). Lo que era "Revision de accesos" vive en el menu Filtros
+ * (Estado, Tipo de cuenta, Rol, Vigencia, Otros y Ordenar por); los avisos
+ * del Inicio y la campana llegan con el filtro en la URL. Sin exportacion.
+ * Las acciones y sus reglas no cambian.
  */
 
 export default function UsuariosPage() {
@@ -205,10 +207,14 @@ function UsuariosContent() {
     setAbierta(null);
     setAbrirPendiente(null);
   };
-
-  /* Accesos rapidos (lo que era Revision de accesos): solo los que tienen algo, para usuarios:V completo. */
-  const n = (f: (i: ApiRecord) => boolean) => items.filter(f).length;
-  const limpiar = () => {
+  // Abrir la ventana de otra persona (p. ej. el supervisor): si los filtros la ocultan, se limpian.
+  const abrirPersona = (id: number) => {
+    const enLista = rows.findIndex((r) => Number(r.id) === id);
+    if (enLista >= 0) {
+      setAbierta(enLista);
+      return;
+    }
+    setSearch("");
     setEstado("");
     setTipo("");
     setVigencia("");
@@ -216,16 +222,9 @@ function UsuariosContent() {
     setConSolicitudes(false);
     setSinRoles(false);
     setSinAutorizaciones(false);
+    setAbierta(null);
+    setAbrirPendiente(String(id));
   };
-  const rapidos = propio
-    ? []
-    : [
-        { key: "vence7", total: n((i) => venceEnSemana(i, hoy)), texto: (k: number) => (k === 1 ? "1 acceso vence esta semana" : `${k} accesos vencen esta semana`), activo: vigencia === "vence7", aplicar: () => (limpiar(), setVigencia("vence7")) },
-        { key: "bloqueadas", total: n((i) => !!i.bloqueado_hasta), texto: (k: number) => (k === 1 ? "1 cuenta bloqueada" : `${k} cuentas bloqueadas`), activo: estado === "bloqueados", aplicar: () => (limpiar(), setEstado("bloqueados")) },
-        { key: "temporales", total: n((i) => !!i.activo && String(i.tipo_cuenta || "") === "temporal"), texto: (k: number) => (k === 1 ? "1 cuenta temporal" : `${k} cuentas temporales`), activo: tipo === "temporal" && estado === "activos", aplicar: () => (limpiar(), setTipo("temporal"), setEstado("activos")) },
-        { key: "vencidas", total: n((i) => !!i.activo && i.cuenta_vigente === false), texto: (k: number) => (k === 1 ? "1 acceso vencido" : `${k} accesos vencidos`), activo: vigencia === "vencido", aplicar: () => (limpiar(), setVigencia("vencido")) },
-        { key: "solicitudes", total: n((i) => !!i.solicitud_pendiente), texto: (k: number) => (k === 1 ? "1 solicitud de acceso pendiente" : `${k} solicitudes de acceso pendientes`), activo: conSolicitudes, aplicar: () => (limpiar(), setConSolicitudes(true)) },
-      ].filter((r) => r.total > 0);
 
   const groups: FilterGroup[] = [
     { key: "estado", label: "Estado", value: estado, defaultValue: "", onChange: (v) => setEstado(v as EstadoFiltro), options: [{ value: "", label: "Todos" }, { value: "activos", label: "Activos" }, { value: "baja", label: "De baja" }, { value: "bloqueados", label: "Bloqueados" }] },
@@ -238,42 +237,27 @@ function UsuariosContent() {
     { key: "sin-roles", label: "Sin roles vigentes", group: "Otros", checked: sinRoles, onChange: setSinRoles },
     { key: "sin-aut", label: "Sin autorizaciones FX-THF-AP", group: "Otros", checked: sinAutorizaciones, onChange: setSinAutorizaciones },
   ];
+  // Una sola seleccion; va al final del menu de filtros.
+  const ordenar: FilterGroup[] = [
+    { key: "orden", label: "Ordenar por", value: orden, defaultValue: "nombre", showDefault: true, onChange: (v) => setOrden(v as Orden), options: [{ value: "nombre", label: "Nombre A–Z" }, { value: "acceso", label: "Último acceso" }, { value: "alta", label: "Fecha de alta" }] },
+  ];
   const filtrando = !!search.trim() || !!estado || !!tipo || !!vigencia || !!rol || conSolicitudes || sinRoles || sinAutorizaciones;
 
   return (
     <>
       <ValidacionAmbito v={vAccion}>{null}</ValidacionAmbito>
 
-      {rapidos.length ? (
-        <div className="mb-3 flex flex-wrap gap-1.5" aria-label="Accesos rápidos">
-          {rapidos.map((r) => (
-            <button
-              key={r.key}
-              type="button"
-              onClick={() => (r.activo ? limpiar() : r.aplicar())}
-              aria-pressed={r.activo}
-              className={cn("press inline-flex h-8 items-center rounded-full px-3 text-[13px] font-medium", r.activo ? "bg-brand text-white" : "bg-surface text-ink-2 shadow-card hover:text-ink")}
-            >
-              {r.texto(r.total)}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
       <Toolbar
         end={
-          <div className="flex items-center gap-2">
-            <SegmentedTabs size="sm" label="Ordenar" value={orden} onChange={setOrden} options={[{ value: "nombre", label: "A–Z" }, { value: "acceso", label: "Último acceso" }, { value: "alta", label: "Fecha de alta" }]} />
-            {canAdmin && !propio ? (
-              <Button icon={<Plus size={16} weight="bold" />} onClick={() => modal.open(null)}>
-                Nuevo usuario
-              </Button>
-            ) : null}
-          </div>
+          canAdmin && !propio ? (
+            <Button icon={<Plus size={16} weight="bold" />} onClick={() => modal.open(null)}>
+              Nuevo usuario
+            </Button>
+          ) : null
         }
       >
         <SearchInput value={search} onChange={setSearch} placeholder="Buscar por nombre o correo" className="w-full md:w-[340px]" />
-        {!propio ? <FilterMenu groups={groups} toggles={toggles} /> : null}
+        {!propio ? <FilterMenu groups={groups} toggles={toggles} gruposFinales={ordenar} /> : null}
       </Toolbar>
 
       <div className="overflow-hidden rounded-card bg-surface shadow-card" aria-label="Usuarios">
@@ -282,9 +266,14 @@ function UsuariosContent() {
         ) : !resource.data ? (
           <div className="flex flex-col divide-y divide-line" aria-hidden="true">
             {Array.from({ length: 6 }, (_, i) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3">
-                <Skeleton className="h-9 w-9 rounded-full" />
-                <Skeleton className="h-3.5 w-1/3" />
+              <div key={i} className="flex items-center gap-4 px-5 py-4">
+                <Skeleton className="h-11 w-11 rounded-full" />
+                <div className="flex flex-1 flex-col gap-2">
+                  <Skeleton className="h-3.5 w-1/4" />
+                  <Skeleton className="h-3 w-1/3" />
+                </div>
+                <Skeleton className="hidden h-5 w-40 rounded-full md:block" />
+                <Skeleton className="h-5 w-20 rounded-full" />
               </div>
             ))}
           </div>
@@ -293,14 +282,14 @@ function UsuariosContent() {
         ) : (
           <ul className="divide-y divide-line">
             {rows.map((item, i) => (
-              <FilaUsuario key={String(item.id)} item={item} yo={Number(me?.id) === Number(item.id)} activa={indice !== null && rows[indice] === item} onAbrir={() => setAbierta(i)} menu={menuFor(item)} />
+              <FilaUsuario key={String(item.id)} i={i} item={item} supervisor={item.supervisor_id ? items.find((u) => Number(u.id) === Number(item.supervisor_id)) : undefined} yo={Number(me?.id) === Number(item.id)} activa={indice !== null && rows[indice] === item} onAbrir={() => setAbierta(i)} menu={menuFor(item)} />
             ))}
           </ul>
         )}
       </div>
       {resource.data && rows.length ? <p className="tnum mt-2 px-1 text-[12px] text-ink-4">{rows.length === 1 ? "1 persona" : `${fmt(rows.length)} personas`}</p> : null}
 
-      <UsuarioVentana usuarios={rows} indice={indice} onIndice={setAbierta} onCerrar={cerrar} onDesbloquear={desbloquear} />
+      <UsuarioVentana usuarios={rows} todos={items} indice={indice} onIndice={setAbierta} onCerrar={cerrar} onDesbloquear={desbloquear} onAbrirPersona={abrirPersona} />
 
       <Dialog
         open={!!temporal}
@@ -337,43 +326,72 @@ function UsuariosContent() {
   );
 }
 
-/* Un renglon: iniciales, nombre y correo; roles (maximo 2 y "+N"); estado; ultimo acceso; solicitud pendiente. */
-function FilaUsuario({ item, yo, activa, onAbrir, menu }: { item: ApiRecord; yo: boolean; activa: boolean; onAbrir: () => void; menu: MenuItem[] }) {
+/*
+ * Un renglon: figura de perfil (quieta; flota al pasar el cursor), nombre en
+ * negritas y correo; roles completos (pasan de linea si no caben); estado con
+ * su insignia (temporal: hasta cuando y quien supervisa); ultimo acceso
+ * (fecha exacta al pasar el cursor); autorizaciones vigentes y solicitud
+ * pendiente. En pantallas angostas, tarjeta compacta.
+ */
+function FilaUsuario({ item, supervisor, i, yo, activa, onAbrir, menu }: { item: ApiRecord; supervisor?: ApiRecord; i: number; yo: boolean; activa: boolean; onAbrir: () => void; menu: MenuItem[] }) {
   const roles = ((item.roles || []) as ApiRecord[]).map((r) => String(r.nombre || "")).filter(Boolean);
   const estado = estadoCuenta(item);
   const temporal = String(item.tipo_cuenta || "") === "temporal";
+  const autorizaciones = Number(item.autorizaciones_vigentes || 0);
   return (
-    <li className={cn("flex items-center gap-2 pr-2 transition-colors duration-150 hover:bg-surface-2", activa && "bg-brand-faint hover:bg-brand-faint")} data-usuario={String(item.id)}>
-      <button type="button" onClick={onAbrir} aria-haspopup="dialog" className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left outline-none focus-visible:shadow-[inset_0_0_0_2px_rgba(15,122,149,0.45)]">
-        <Iniciales nombre={item.nombre || item.email} />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-[14px] font-medium text-ink">
-            {String(item.nombre || "Sin nombre")}
-            {yo ? <span className="ml-1.5 text-[12px] font-normal text-ink-3">(tú)</span> : null}
+    <li className={cn("entrada-escalonada group relative transition-colors duration-200 hover:bg-surface-2/70", activa && "bg-brand-faint hover:bg-brand-faint")} style={{ ["--i" as string]: i }} data-usuario={String(item.id)}>
+      <div className="flex items-start gap-2 pr-2 md:items-center">
+        <button type="button" onClick={onAbrir} aria-haspopup="dialog" className="grid min-w-0 flex-1 gap-x-5 gap-y-2.5 px-4 py-4 text-left outline-none focus-visible:shadow-[inset_0_0_0_2px_rgba(15,122,149,0.45)] sm:px-5 md:grid-cols-[minmax(200px,1.1fr)_minmax(0,1.5fr)_minmax(150px,auto)_minmax(110px,auto)] md:items-center">
+          <span className="flex min-w-0 items-center gap-3">
+            <Avatar name={item.nombre} email={item.email} avatar={item.avatar} size="lg" animado="al-pasar" className="h-11 w-11" />
+            <span className="flex min-w-0 flex-col">
+              <span className="text-[14.5px] font-semibold leading-tight text-ink">
+                {String(item.nombre || "Sin nombre")}
+                {yo ? <span className="ml-1.5 text-[12px] font-normal text-ink-3">(tú)</span> : null}
+              </span>
+              <span className="break-all text-[12.5px] text-ink-3">{String(item.email || "")}</span>
+            </span>
           </span>
-          <span className="truncate text-[12.5px] text-ink-3">{String(item.email || "")}</span>
-        </span>
-        <span className="hidden min-w-0 flex-wrap items-center gap-1 md:flex md:w-[260px]">
-          {roles.slice(0, 2).map((r) => (
-            <Badge key={r} tone="neutral" className="max-w-[180px] truncate">
-              {r}
+          <span className="flex flex-wrap items-center gap-1.5" aria-label="Roles vigentes">
+            {roles.map((r) => (
+              <EtiquetaRol key={r}>{r}</EtiquetaRol>
+            ))}
+            {!roles.length ? <span className="text-[12.5px] text-ink-4">Sin roles vigentes</span> : null}
+          </span>
+          <span className="flex flex-col items-start gap-1">
+            <Badge tone={estado.tone} dot>
+              {estado.label}
             </Badge>
-          ))}
-          {roles.length > 2 ? <span className="text-[12px] text-ink-3">+{roles.length - 2}</span> : null}
-          {!roles.length ? <span className="text-[12px] text-ink-4">Sin roles</span> : null}
+            {temporal && item.vigente_hasta ? (
+              <span className="flex items-center gap-1.5 text-[12px] text-ink-3">
+                Hasta {formatearFecha(item.vigente_hasta)}
+                {item.supervisor_nombre ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <Avatar name={supervisor?.nombre || item.supervisor_nombre} email={supervisor?.email} avatar={supervisor?.avatar} size="xs" className="h-4 w-4" />
+                    supervisa {String(item.supervisor_nombre).split(" ")[0]}
+                  </>
+                ) : null}
+              </span>
+            ) : null}
+          </span>
+          <span className="flex flex-col items-start gap-1 text-[12.5px] text-ink-3">
+            <span title={item.ultimo_acceso ? `Último acceso: ${formatearFechaHora(item.ultimo_acceso)}` : undefined}>{ultimoAcceso(item)}</span>
+            {autorizaciones ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-brand-faint px-2 py-0.5 text-[11.5px] font-medium text-brand-strong">
+                <Certificate size={12} weight="duotone" />
+                {autorizaciones === 1 ? "1 autorización" : `${autorizaciones} autorizaciones`}
+              </span>
+            ) : null}
+          </span>
+        </button>
+        <span className="flex shrink-0 items-center gap-1 pt-4 md:pt-0">
+          <span className="flex w-7 justify-center">
+            <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} entidad="usuarios" />
+          </span>
+          <span className="w-9">{menu.length ? <ActionMenu items={menu} header={String(item.nombre || item.email || "")} /> : null}</span>
         </span>
-        <span className="flex w-[150px] shrink-0 flex-col items-start gap-0.5">
-          <Badge tone={estado.tone} dot>
-            {estado.label}
-          </Badge>
-          {temporal && item.vigente_hasta ? <span className="text-[11.5px] text-ink-3">hasta el {formatearFecha(item.vigente_hasta)}</span> : null}
-        </span>
-        <span className="hidden w-[110px] shrink-0 text-[12.5px] text-ink-3 lg:block">{ultimoAcceso(item)}</span>
-      </button>
-      <span className="flex w-7 shrink-0 justify-center">
-        <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} entidad="usuarios" />
-      </span>
-      <span className="w-9 shrink-0">{menu.length ? <ActionMenu items={menu} header={String(item.nombre || item.email || "")} /> : null}</span>
+      </div>
     </li>
   );
 }

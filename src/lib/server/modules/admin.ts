@@ -84,7 +84,14 @@ export async function listRoles({ request, s }: RouteContext): Promise<Response>
   if (soloPropio(permiso)) throw new HttpError(403, { message: "Tu alcance en usuarios es solo tu propia cuenta" });
   const rows = await rolesConConteo(s);
   const filas = await filasDeRoles(s, rows.map((r) => Number(r.id)));
-  const items = rows.map((row) => ({ ...row, permisos: filas.get(Number(row.id)) || [] }));
+  // Para la lista de Roles: las personas con el rol vigente hoy (nombre y figura de perfil; solo lectura).
+  const personas = await s.query<Row>(
+    `SELECT DISTINCT ur.rol_id, u.id, u.nombre, u.email, u.avatar FROM usuario_roles ur INNER JOIN usuarios u ON u.id = ur.usuario_id
+     WHERE ur.revocado_en IS NULL AND ur.vigente_desde <= :hoy AND (ur.vigente_hasta IS NULL OR ur.vigente_hasta >= :hoy)
+     ORDER BY u.nombre`,
+    { hoy: hoy() },
+  );
+  const items = rows.map((row) => ({ ...row, permisos: filas.get(Number(row.id)) || [], personas: personas.filter((p) => Number(p.rol_id) === Number(row.id)).map((p) => ({ id: Number(p.id), nombre: p.nombre, email: p.email, avatar: p.avatar ?? null })) }));
   return json({ items, total: items.length });
 }
 
@@ -98,7 +105,7 @@ export async function getRoleDetail({ request, s, params }: RouteContext): Promi
   const permisos = (await filasDeRoles(s, [roleId])).get(roleId) || [];
   const usuarios = await s.query(
     `
-    SELECT u.id, u.nombre, u.email, ur.vigente_desde, ur.vigente_hasta
+    SELECT u.id, u.nombre, u.email, u.avatar, ur.vigente_desde, ur.vigente_hasta
     FROM usuario_roles ur INNER JOIN usuarios u ON u.id = ur.usuario_id
     WHERE ur.rol_id = :id AND ur.revocado_en IS NULL AND (ur.vigente_hasta IS NULL OR ur.vigente_hasta >= :hoy)
     ORDER BY u.nombre
@@ -230,7 +237,7 @@ async function asignacionesDe(s: Session, userIds: number[]): Promise<Map<number
   const placeholders = userIds.map((_, i) => `:u${i}`).join(", ");
   const rows = await s.query<Row>(
     `
-    SELECT ur.id, ur.usuario_id, ur.rol_id, r.nombre AS rol, r.activo AS rol_activo, ur.vigente_desde, ur.vigente_hasta, ur.motivo,
+    SELECT ur.id, ur.usuario_id, ur.rol_id, r.nombre AS rol, r.clave AS rol_clave, r.activo AS rol_activo, ur.vigente_desde, ur.vigente_hasta, ur.motivo,
            ur.asignado_por, ua.nombre AS asignado_por_nombre, ur.asignado_en, ur.revocado_en, ur.revocado_por, ur2.nombre AS revocado_por_nombre, ur.motivo_revocacion
     FROM usuario_roles ur
     LEFT JOIN roles r ON r.id = ur.rol_id
@@ -255,7 +262,7 @@ function conRoles(row: Row, asignaciones: Row[]): Row {
   const vigentes = asignaciones.filter((a) => a.estado === "vigente" && Number(a.rol_activo) === 1);
   // Bloqueo vigente (vencido = ya no bloqueada) y vigencia de la cuenta a hoy.
   const bloqueada = row.bloqueado_hasta && Date.parse(String(row.bloqueado_hasta)) > Date.now() ? String(row.bloqueado_hasta) : null;
-  return { ...row, bloqueado_hasta: bloqueada, cuenta_vigente: cuentaVigente(row), roles: vigentes.map((a) => ({ id: Number(a.rol_id), nombre: a.rol, vigente_hasta: a.vigente_hasta ?? null })), rol: vigentes.map((a) => a.rol).join(", ") || null };
+  return { ...row, bloqueado_hasta: bloqueada, cuenta_vigente: cuentaVigente(row), roles: vigentes.map((a) => ({ id: Number(a.rol_id), nombre: a.rol, clave: a.rol_clave ?? null, vigente_hasta: a.vigente_hasta ?? null })), rol: vigentes.map((a) => a.rol).join(", ") || null };
 }
 
 export async function listUsuarios({ request, s }: RouteContext): Promise<Response> {

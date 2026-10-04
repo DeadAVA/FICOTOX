@@ -108,7 +108,7 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
     >
       <div className="flex flex-col gap-6">
         <div className="flex items-center gap-4 rounded-[14px] bg-surface-2 p-4 ring-1 ring-line">
-          <AvatarArt avatar={choice} seed={seed} size={72} className="shadow-[0_6px_16px_-6px_rgba(16,32,43,0.35)]" />
+          <AvatarArt avatar={choice} seed={seed} size={72} animado="siempre" className="shadow-[0_6px_16px_-6px_rgba(16,32,43,0.35)]" />
           <div className="flex min-w-0 flex-col">
             <p className="truncate text-[16px] font-semibold text-ink">{user?.nombre || user?.email}</p>
             <p className="truncate text-[13px] text-ink-3">{user?.email}</p>

@@ -368,10 +368,10 @@ Las areas son: Muestras (recepcion, custodia y disposicion), Ensayos (procesamie
 
 ### 12.1 Ver y editar un rol
 
-En la barra lateral, grupo **Administracion**, elija **Roles**. La lista muestra cada rol con cuantas personas lo tienen y, si aplica, las etiquetas **Del sistema** e **Inactivo**. Se busca por nombre y se filtra con **Filtros** (Estado, Tipo y Uso).
+En la barra lateral, grupo **Administracion**, elija **Roles**. Cada renglon muestra el icono del rol, su nombre completo, su proposito en una linea, las figuras de las personas que lo tienen (hasta 4 y "+N") con el total, y las etiquetas **Del sistema** e **Inactivo**. Se busca por nombre y se filtra con **Filtros** (Estado, Tipo y Uso).
 
-- **Ver un rol**: pulse el rol. Se abre una ventana al centro con su nombre, descripcion y estado; **Que puede hacer**, por area y en palabras ("Muestras: ver y registrar; editar solo las asignadas"); y las **personas con este rol** (al pulsar una se abre su ventana en Usuarios). Las flechas ↑/↓ pasan al rol anterior o siguiente.
-- **Editar permisos** (Usuarios: G): en la ventana o en el menu **⋯**. La ventana se amplia con la tabla de areas y las columnas **Ver, Crear, Editar, Revisar, Aprobar, Anular y Administrar**; en cada casilla marcada se elige **hasta donde** (Todo, Solo lo asignado, Solo su propia cuenta, Solo en borrador…). Al guardar se pide el **motivo** y su contrasena.
+- **Ver un rol**: pulse el rol. Se abre una ventana al centro con su icono, nombre, estado y proposito, y estas secciones: **Responsabilidades del puesto**, **Lo que no puede hacer**, **Que puede hacer en la plataforma** (por area, en frases generadas de sus permisos reales: "Puede ver y registrar recepciones y muestras"), **Reglas importantes** (las que aplican: autorizacion FX-THF-AP, no aprobar lo propio, cuenta temporal con supervisor, combinaciones prohibidas) y **Personas con este rol** (al pulsar una se abre su ventana en Usuarios). Los roles personalizados muestran un proposito generico y responsabilidades sacadas de sus permisos. ↑/↓ pasan al rol anterior o siguiente.
+- **Editar permisos** (Usuarios: G): en la ventana o en el menu **⋯**. La ventana se amplia con la tabla de areas y las columnas **Ver, Crear, Editar, Revisar, Aprobar, Anular y Administrar**; en cada casilla marcada se elige **hasta donde**. Al guardar se pide el **motivo** y su contrasena.
 - **Editar nombre y descripcion**, **Activar / Desactivar** (con motivo) y **Nuevo rol**: en el menu **⋯** y en la barra. Un rol nuevo nace sin permisos; despues se definen con Editar permisos.
 - Si el rol es suyo, solo puede **ver** sus permisos: los cambia otra persona que administre usuarios.
 
@@ -381,12 +381,11 @@ Si el cambio dejaria a alguien con una **combinacion de roles prohibida** (por e
 
 La seccion **Usuarios** muestra a las personas que entran a la plataforma. Quien solo tiene permiso sobre su propia cuenta ve unicamente la suya.
 
-- **Lista**: cada renglon muestra las iniciales, el nombre y el correo, hasta dos roles vigentes ("+N" si hay mas), el estado (**Activo, De baja, Bloqueado, Temporal** —con su fecha de fin— o **Acceso vencido**), el ultimo acceso ("hace 2 h") y un indicador si hay una solicitud pendiente sobre la cuenta.
-- **Accesos rapidos** (arriba de la lista, para quien ve todas las cuentas): "3 accesos vencen esta semana", "1 cuenta bloqueada", "2 cuentas temporales", "1 acceso vencido", "1 solicitud de acceso pendiente". Solo aparecen los que tienen algo; al pulsarlos se aplica el filtro. Los avisos del Inicio y de la campana sobre accesos que vencen llevan aqui con el filtro aplicado.
-- **Buscar y filtrar**: por nombre o correo, y **Filtros**: Estado (Activos, De baja, Bloqueados), Tipo de cuenta, Rol, Vigencia (vence en los proximos 7 dias, acceso vencido) y Otros (con solicitudes pendientes, sin roles vigentes, sin autorizaciones FX-THF-AP). Orden: A–Z, ultimo acceso o fecha de alta.
-- **Ventana de la persona**: al pulsar a alguien se abre una ventana al centro con su nombre, correo, estado y cargo, y tres pestañas: **General** (tipo de cuenta, vigencia, supervisor si es temporal, ultimo acceso, bloqueo con **Desbloquear** y solicitudes pendientes con **Aprobar** o **Rechazar** para quien pueda), **Roles** (cada rol con desde, hasta y quien lo asigno; **Asignar rol** y **Revocar**) y **Autorizaciones** (FX-THF-AP; **Agregar** y **Revocar**). ↑/↓ pasan a la persona anterior o siguiente; Esc, la × o un clic fuera la cierran.
+- **Lista**: cada renglon muestra la **figura de perfil** de la persona (la misma de Mi cuenta: la que eligio o, si no eligio, la que le toca siempre), su nombre en negritas y su correo; sus roles vigentes con el nombre completo; el estado (**Activo, De baja, Bloqueado, Temporal** —con "Hasta 31/03/2027 · supervisa Ricardo"— o **Acceso vencido**); el ultimo acceso ("hace 2 h"; la fecha exacta al pasar el cursor); cuantas **autorizaciones FX-THF-AP** vigentes tiene y un indicador si hay una solicitud pendiente sobre la cuenta. En pantallas angostas cada renglon es una tarjeta.
+- **Buscar y filtrar**: por nombre o correo, y todo lo demas dentro de **Filtros**: Estado (Activos, De baja, Bloqueados), Tipo de cuenta, Rol, Vigencia (vence en los proximos 7 dias, acceso vencido), Otros (con solicitudes pendientes, sin roles vigentes, sin autorizaciones FX-THF-AP) y **Ordenar por** (Nombre A–Z, Ultimo acceso, Fecha de alta). **Limpiar filtros** los quita todos. Los avisos del Inicio y de la campana sobre accesos que vencen abren Usuarios con el filtro ya activado.
+- **Ventana de la persona**: al pulsar a alguien se abre una ventana al centro con su figura animada, nombre, correo, estado, roles y cargo; una franja con **Ultimo acceso, Cuenta desde, Roles vigentes y Autorizaciones vigentes**; y tres pestañas: **General** (tipo de cuenta y vigencia con una barra del tiempo restante, tarjeta del supervisor —al pulsarla se abre su ventana—, bloqueo con **Desbloquear** y solicitudes pendientes con **Aprobar** o **Rechazar** para quien pueda), **Roles** (cada rol como tarjeta con su icono, que hace, desde y hasta con su barra y quien lo asigno; **Asignar rol** y **Revocar**; los terminados o revocados en **Historial de roles**) y **Autorizaciones** (agrupadas en Actividades, Metodos y Equipos, con "vigente hasta … · quedan N dias" y un aviso si vencen en menos de 30 dias; **Agregar** y **Revocar**; las revocadas o vencidas plegadas). ↑/↓ pasan a la persona anterior o siguiente; Esc, la × o un clic fuera la cierran.
 - **Menu ⋯ del renglon**: **Editar datos**, **Restablecer contraseña**, **Desbloquear** (si esta bloqueada) y **Dar de baja** o **Reactivar**.
-- La revision periodica de accesos se hace aqui (la pantalla Revision de accesos se retiro). Los cambios de un periodo (bloqueos, roles asignados o revocados, vigencias) se consultan en **Calidad › Auditoria**. No hay exportacion.
+- La revision periodica de accesos se hace aqui (la pantalla Revision de accesos se retiro). Los cambios de un periodo se consultan en **Calidad › Auditoria**. No hay exportacion.
 
 ### 13.1 Crear usuario
 
@@ -423,7 +422,7 @@ Cuando firma, revisa, aprueba, autoriza, libera, envia o anula, el sistema guard
 
 ### 13.5 Revision de accesos
 
-Se hace en **Administracion › Usuarios** (13): accesos rapidos, filtros de vigencia y bloqueos, cuentas temporales con su supervisor y la ventana de cada persona. Los cambios de un periodo se consultan en **Calidad › Auditoria**. La antigua pantalla y su exportacion se retiraron.
+Se hace en **Administracion › Usuarios** (13): filtros de vigencia, bloqueos y solicitudes, cuentas temporales con su supervisor y la ventana de cada persona. Los cambios de un periodo se consultan en **Calidad › Auditoria**. La antigua pantalla y su exportacion se retiraron.
 
 ### 13.6 Supervision (cuentas temporales y alcance "supervisado")
 

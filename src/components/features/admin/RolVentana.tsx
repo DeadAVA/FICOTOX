@@ -1,20 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { PencilSimple } from "@phosphor-icons/react";
+import { CheckCircle, Info, PencilSimple, Prohibit } from "@phosphor-icons/react";
+import { IconoArea, IconoRol } from "@/components/features/admin/iconos";
 import { Callout } from "@/components/features/samples/FormLayout";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, Field, FormGrid, Input, Textarea } from "@/components/ui/Field";
 import { Dialog, usePrompt } from "@/components/ui/Overlay";
-import { Badge, Skeleton } from "@/components/ui/Primitives";
+import { Avatar, Badge, Skeleton } from "@/components/ui/Primitives";
 import { VentanaCentrada, VentanaTitulo } from "@/components/ui/VentanaCentrada";
 import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { msg } from "@/lib/client/mensajes";
-import { ACCIONES_LEGIBLES, ALCANCES_LEGIBLES, AREAS_PERMISOS, quepuedeHacer } from "@/lib/client/permisos-legibles";
+import { ACCIONES_LEGIBLES, ALCANCES_LEGIBLES, AREAS_PERMISOS, frasesPorArea, reglasDeRol, responsabilidadesDePermisos } from "@/lib/client/permisos-legibles";
+import { claveDeRol, descripcionDeRol } from "@/lib/shared/roles-descripcion";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { REGLAS_COMBINACION } from "@/lib/shared/combinaciones-roles";
@@ -93,18 +95,33 @@ function FichaRol({ id, editar, onEditar, onCerrar }: { id: number; editar: bool
     );
   }
   const { role, permisos, usuarios } = detalle;
-  const puede = quepuedeHacer(permisos);
+  const desc = descripcionDeRol(role);
+  const clave = claveDeRol(role);
+  const responsabilidades = desc.delCatalogo ? desc.responsabilidades : responsabilidadesDePermisos(permisos);
+  const areas = frasesPorArea(permisos);
+  const reglas = reglasDeRol(clave, permisos);
+  let paso = 0;
+  const seccion = (titulo: string, contenido: ReactNode) => (
+    <section className="entrada-escalonada flex flex-col gap-2.5" style={{ ["--i" as string]: paso++ }}>
+      <h3 className="text-[13px] font-semibold tracking-[-0.005em] text-ink-2">{titulo}</h3>
+      {contenido}
+    </section>
+  );
 
   return (
     <div className="flex flex-col gap-6" data-rol-ventana={String(id)}>
-      <header className="flex flex-col gap-1.5">
-        <VentanaTitulo>{String(role.nombre || "Rol")}</VentanaTitulo>
-        {role.descripcion ? <p className="text-[14px] text-ink-2">{String(role.descripcion)}</p> : null}
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={role.activo ? "success" : "neutral"} dot>
-            {role.activo ? "Activo" : "Inactivo"}
-          </Badge>
-          {role.es_sistemico ? <Badge tone="neutral">Del sistema</Badge> : null}
+      <header className="flex items-start gap-4">
+        <IconoRol icono={desc.icono} grande />
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <VentanaTitulo>{String(role.nombre || "Rol")}</VentanaTitulo>
+            <Badge tone={role.activo ? "success" : "neutral"} dot>
+              {role.activo ? "Activo" : "Inactivo"}
+            </Badge>
+            {role.es_sistemico ? <Badge tone="neutral">Del sistema</Badge> : null}
+          </div>
+          <p className="text-[14.5px] leading-[1.5] text-ink-2">{desc.proposito}</p>
+          {role.descripcion && !desc.delCatalogo ? <p className="text-[13.5px] text-ink-3">{String(role.descripcion)}</p> : null}
         </div>
       </header>
 
@@ -121,25 +138,76 @@ function FichaRol({ id, editar, onEditar, onCerrar }: { id: number; editar: bool
       ) : (
         <>
           {editar && rolPropio ? <Callout tone="warning" title="No puedes editar un rol que tienes asignado">Sus permisos los debe cambiar otra persona que administre usuarios.</Callout> : null}
-          <section className="flex flex-col gap-2">
-            <h3 className="text-[13px] font-semibold text-ink-2">Qué puede hacer</h3>
-            {puede.length ? (
-              <ul className="flex flex-col gap-1.5 text-[14px] leading-[1.5] text-ink">
-                {puede.map((p) => (
-                  <li key={p.area}>
-                    <span className="font-medium">{p.area}:</span> {p.frase}.
+
+          {responsabilidades.length
+            ? seccion(
+                "Responsabilidades del puesto",
+                <ul className="flex flex-col gap-1.5 text-[14px] leading-[1.5] text-ink">
+                  {responsabilidades.map((r) => (
+                    <li key={r} className="flex gap-2.5">
+                      <CheckCircle size={17} weight="duotone" className="mt-0.5 shrink-0 text-success" aria-hidden="true" />
+                      {r}
+                    </li>
+                  ))}
+                </ul>,
+              )
+            : null}
+
+          {desc.noPuede.length
+            ? seccion(
+                "Lo que no puede hacer",
+                <ul className="flex flex-col gap-1.5 text-[14px] leading-[1.5] text-ink">
+                  {desc.noPuede.map((r) => (
+                    <li key={r} className="flex gap-2.5">
+                      <Prohibit size={17} className="mt-0.5 shrink-0 text-ink-4" aria-hidden="true" />
+                      {r}
+                    </li>
+                  ))}
+                </ul>,
+              )
+            : null}
+
+          {seccion(
+            "Qué puede hacer en la plataforma",
+            areas.length ? (
+              <ul className="grid gap-2 sm:grid-cols-2">
+                {areas.map((a) => (
+                  <li key={a.clave} className="flex gap-3 rounded-[14px] bg-surface-2 px-3.5 py-3 ring-1 ring-line transition-shadow duration-200 hover:shadow-raised">
+                    <IconoArea clave={a.clave} />
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span className="text-[13.5px] font-semibold text-ink">{a.area}</span>
+                      {a.frases.map((f) => (
+                        <span key={f} className="text-[13px] leading-[1.45] text-ink-2">
+                          {f}.
+                        </span>
+                      ))}
+                    </div>
                   </li>
                 ))}
               </ul>
             ) : (
               <p className="text-[14px] text-ink-3">Este rol todavía no tiene permisos: quien lo tenga no verá nada.</p>
-            )}
-          </section>
+            ),
+          )}
 
-          <section className="flex flex-col gap-2">
-            <h3 className="text-[13px] font-semibold text-ink-2">Personas con este rol</h3>
-            {usuarios.length ? (
-              <ul className="flex flex-wrap gap-1.5">
+          {reglas.length
+            ? seccion(
+                "Reglas importantes",
+                <ul className="flex flex-col gap-1.5 rounded-[14px] bg-warning-soft/50 px-4 py-3 text-[13.5px] leading-[1.5] text-ink ring-1 ring-warning/15">
+                  {reglas.map((r) => (
+                    <li key={r} className="flex gap-2.5">
+                      <Info size={16} weight="duotone" className="mt-0.5 shrink-0 text-warning-text" aria-hidden="true" />
+                      {r}
+                    </li>
+                  ))}
+                </ul>,
+              )
+            : null}
+
+          {seccion(
+            "Personas con este rol",
+            usuarios.length ? (
+              <ul className="flex flex-wrap gap-2">
                 {usuarios.map((u) => (
                   <li key={String(u.id)}>
                     <button
@@ -148,8 +216,9 @@ function FichaRol({ id, editar, onEditar, onCerrar }: { id: number; editar: bool
                         onCerrar();
                         router.push(`/administracion/usuarios?abrir=${encodeURIComponent(String(u.id))}`);
                       }}
-                      className="press inline-flex h-8 items-center rounded-full bg-surface-2 px-3 text-[13px] text-ink ring-1 ring-line hover:bg-brand-faint"
+                      className="press group inline-flex items-center gap-2 rounded-full bg-surface py-1 pr-3.5 pl-1 text-[13.5px] text-ink shadow-card ring-1 ring-line transition-shadow duration-200 hover:shadow-raised focus-visible:shadow-[var(--shadow-focus)] focus-visible:outline-none"
                     >
+                      <Avatar name={u.nombre} email={u.email} avatar={u.avatar} size="sm" animado="al-pasar" />
                       {String(u.nombre || u.email)}
                     </button>
                   </li>
@@ -157,8 +226,8 @@ function FichaRol({ id, editar, onEditar, onCerrar }: { id: number; editar: bool
               </ul>
             ) : (
               <p className="text-[14px] text-ink-3">Nadie tiene este rol.</p>
-            )}
-          </section>
+            ),
+          )}
 
           {puedeEditar ? (
             <div>

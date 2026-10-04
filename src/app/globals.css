@@ -227,6 +227,41 @@
 }
 
 @layer components {
+  /*
+   * Figuras de perfil (AvatarArt): flotan suave (subir 1.5 px y girar 2°) en un
+   * ciclo lento. `avatar-vivo` siempre; `avatar-al-pasar` solo cuando el
+   * cursor esta sobre su renglon (.group). Con prefers-reduced-motion, quietas.
+   */
+  @keyframes avatar-flota {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-1.5px) rotate(-2deg); }
+  }
+  .avatar-arte {
+    transform-box: fill-box;
+    transform-origin: 50% 60%;
+  }
+  .avatar-vivo .avatar-arte,
+  .group:hover .avatar-al-pasar .avatar-arte {
+    animation: avatar-flota 3.6s var(--ease-fluid) infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .avatar-vivo .avatar-arte,
+    .group:hover .avatar-al-pasar .avatar-arte {
+      animation: none;
+    }
+  }
+
+  /* Entrada escalonada de listas: cada elemento con --i (0, 1, 2…), maximo ~12 pasos. */
+  .entrada-escalonada {
+    animation: var(--animate-rise-in);
+    animation-delay: calc(min(var(--i, 0), 12) * 28ms);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .entrada-escalonada {
+      animation: none;
+    }
+  }
+
   .tnum {
     font-variant-numeric: tabular-nums;
   }

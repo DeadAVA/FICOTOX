@@ -83,13 +83,15 @@ function FilterSection({ title, children, first }: { title: string; children: Re
   );
 }
 
-export function FilterMenu({ groups = [], toggles = [], children, className, label = "Filtros", vistaAlFinal = false }: { groups?: FilterGroup[]; toggles?: FilterToggle[]; children?: ReactNode; className?: string; label?: string; vistaAlFinal?: boolean }) {
-  const active = groups.filter((g) => g.value !== g.defaultValue).length + toggles.filter((t) => t.checked).length;
+export function FilterMenu({ groups = [], toggles = [], children, className, label = "Filtros", vistaAlFinal = false, gruposFinales = [] }: { groups?: FilterGroup[]; toggles?: FilterToggle[]; children?: ReactNode; className?: string; label?: string; vistaAlFinal?: boolean; gruposFinales?: FilterGroup[] }) {
+  // `gruposFinales` (p. ej. "Ordenar por") van despues de las demas secciones.
+  const todosGrupos = [...groups, ...gruposFinales];
+  const active = todosGrupos.filter((g) => g.value !== g.defaultValue).length + toggles.filter((t) => t.checked).length;
   const reset = () => {
-    groups.forEach((g) => g.onChange(g.defaultValue));
+    todosGrupos.forEach((g) => g.onChange(g.defaultValue));
     toggles.forEach((t) => t.onChange(false));
   };
-  const groupLabels = new Set(groups.map((g) => g.label));
+  const groupLabels = new Set(todosGrupos.map((g) => g.label));
   const togglesOf = (section: string) => toggles.filter((t) => (t.group || VISTA) === section);
   /* Secciones de interruptores sueltos que no coinciden con ningun grupo ("Vista" siempre primero). */
   const sueltas = [...new Set(toggles.map((t) => t.group || VISTA))].filter((s) => !groupLabels.has(s)).sort((a, b) => (a === VISTA ? -1 : b === VISTA ? 1 : 0));
@@ -98,6 +100,24 @@ export function FilterMenu({ groups = [], toggles = [], children, className, lab
   const otras = vistaAlFinal ? [...sueltas.filter((s) => s !== VISTA), ...sueltas.filter((s) => s === VISTA)] : sueltas.filter((s) => s !== VISTA);
   const toggleRow = (toggle: FilterToggle) => <FilterSwitchRow key={toggle.key} label={toggle.label} checked={toggle.checked} onChange={toggle.onChange} />;
   let index = 0;
+  const grupo = (group: FilterGroup) => (
+    <FilterSection key={group.key} title={group.label} first={index++ === 0}>
+      {group.options
+        .filter((option) => group.showDefault || option.value !== group.defaultValue)
+        .map((option) => (
+          <FilterSwitchRow
+            key={option.value}
+            label={option.label}
+            hint={option.hint}
+            disabled={option.disabled}
+            checked={option.value === group.value}
+            onChange={(checked) => group.onChange(checked ? option.value : group.defaultValue)}
+          />
+        ))}
+      {togglesOf(group.label).map(toggleRow)}
+      {group.extra ? <div className="px-2 pt-1.5 pb-1">{group.extra}</div> : null}
+    </FilterSection>
+  );
   return (
     <RadixPopover.Root>
       <RadixPopover.Trigger asChild>
@@ -124,29 +144,13 @@ export function FilterMenu({ groups = [], toggles = [], children, className, lab
                 {togglesOf(section).map(toggleRow)}
               </FilterSection>
             ))}
-            {groups.map((group) => (
-              <FilterSection key={group.key} title={group.label} first={index++ === 0}>
-                {group.options
-                  .filter((option) => group.showDefault || option.value !== group.defaultValue)
-                  .map((option) => (
-                    <FilterSwitchRow
-                      key={option.value}
-                      label={option.label}
-                      hint={option.hint}
-                      disabled={option.disabled}
-                      checked={option.value === group.value}
-                      onChange={(checked) => group.onChange(checked ? option.value : group.defaultValue)}
-                    />
-                  ))}
-                {togglesOf(group.label).map(toggleRow)}
-                {group.extra ? <div className="px-2 pt-1.5 pb-1">{group.extra}</div> : null}
-              </FilterSection>
-            ))}
+            {groups.map((group) => grupo(group))}
             {otras.map((section) => (
               <FilterSection key={section} title={section} first={index++ === 0}>
                 {togglesOf(section).map(toggleRow)}
               </FilterSection>
             ))}
+            {gruposFinales.map((group) => grupo(group))}
             {children ? <div className={cn("flex flex-col gap-3 px-2", index > 0 && "border-t border-line pt-3")}>{children}</div> : null}
           </div>
         </RadixPopover.Content>

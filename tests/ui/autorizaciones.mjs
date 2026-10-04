@@ -88,7 +88,7 @@ try {
       const fila = page.locator("[data-usuario]").filter({ hasText: /Luis Fernando/ }).first();
       await fila.waitFor();
       await fila.locator("button[aria-haspopup=dialog]").click();
-      await page.getByRole("radio", { name: "Autorizaciones" }).click();
+      await page.getByRole("tab", { name: "Autorizaciones" }).click();
       const panel = page.locator("#autorizaciones-usuario");
       await panel.getByText("FX-THF-AP-DEMO").first().waitFor();
       check("la ventana muestra la pestaña de autorizaciones con las del seed", true);
