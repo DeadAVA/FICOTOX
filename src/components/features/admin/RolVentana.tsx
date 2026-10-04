@@ -12,6 +12,7 @@ import { Checkbox, Field, FormGrid, Input, Textarea } from "@/components/ui/Fiel
 import { Dialog, usePrompt } from "@/components/ui/Overlay";
 import { Avatar, Badge, Skeleton } from "@/components/ui/Primitives";
 import { VentanaCentrada, VentanaTitulo } from "@/components/ui/VentanaCentrada";
+import { VentanaEncabezado } from "@/components/ui/Ventana";
 import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { msg } from "@/lib/client/mensajes";
@@ -110,20 +111,21 @@ function FichaRol({ id, editar, onEditar, onCerrar }: { id: number; editar: bool
 
   return (
     <div className="flex flex-col gap-6" data-rol-ventana={String(id)}>
-      <header className="flex items-start gap-4">
-        <IconoRol icono={desc.icono} grande />
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <VentanaTitulo>{String(role.nombre || "Rol")}</VentanaTitulo>
+      <VentanaEncabezado
+        figura={<IconoRol icono={desc.icono} grande />}
+        titulo={String(role.nombre || "Rol")}
+        insignia={
+          <>
             <Badge tone={role.activo ? "success" : "neutral"} dot>
               {role.activo ? "Activo" : "Inactivo"}
             </Badge>
             {role.es_sistemico ? <Badge tone="neutral">Del sistema</Badge> : null}
-          </div>
-          <p className="text-[14.5px] leading-[1.5] text-ink-2">{desc.proposito}</p>
-          {role.descripcion && !desc.delCatalogo ? <p className="text-[13.5px] text-ink-3">{String(role.descripcion)}</p> : null}
-        </div>
-      </header>
+          </>
+        }
+        subtitulo={<span className="text-[14.5px] leading-[1.5] text-ink-2">{desc.proposito}</span>}
+      >
+        {role.descripcion && !desc.delCatalogo ? <p className="text-[13.5px] text-ink-3">{String(role.descripcion)}</p> : null}
+      </VentanaEncabezado>
 
       {editar && puedeEditar ? (
         <EditorPermisos

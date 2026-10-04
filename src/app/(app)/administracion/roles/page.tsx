@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Eye, LockKey, PencilSimple, Plus, Power, ShieldCheck, TextAa } from "@phosphor-icons/react";
 import { IconoRol } from "@/components/features/admin/iconos";
+import { FigurasApiladas } from "@/components/ui/Insignias";
+import { ListaCuadricula, type ColumnaLista } from "@/components/ui/ListaCuadricula";
 import { cargarRol, DatosRolDialog, guardarRol, RolVentana } from "@/components/features/admin/RolVentana";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
@@ -12,8 +14,7 @@ import { Button } from "@/components/ui/Button";
 import { FilterMenu, type FilterGroup } from "@/components/ui/FilterMenu";
 import { ActionMenu, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
-import { Avatar, Badge, EmptyState, ErrorState, Skeleton } from "@/components/ui/Primitives";
-import { cn } from "@/components/ui/cn";
+import { Avatar, Badge, EmptyState } from "@/components/ui/Primitives";
 import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { fmt, normalizeText } from "@/lib/client/format";
@@ -144,32 +145,25 @@ function RolesContent() {
         <FilterMenu groups={groups} />
       </Toolbar>
 
-      <div className="overflow-hidden rounded-card bg-surface shadow-card" aria-label="Roles">
-        {resource.error ? (
-          <ErrorState message={resource.error} onRetry={resource.reload} />
-        ) : !resource.data ? (
-          <div className="flex flex-col divide-y divide-line" aria-hidden="true">
-            {Array.from({ length: 6 }, (_, i) => (
-              <div key={i} className="flex items-center gap-4 px-5 py-4">
-                <Skeleton className="h-10 w-10 rounded-[12px]" />
-                <div className="flex flex-1 flex-col gap-2">
-                  <Skeleton className="h-3.5 w-1/4" />
-                  <Skeleton className="h-3 w-1/2" />
-                </div>
-                <Skeleton className="h-7 w-24 rounded-full" />
-              </div>
-            ))}
-          </div>
-        ) : !rows.length ? (
-          <EmptyState icon={<ShieldCheck size={20} />} title="Sin roles" description={filtrando ? "No hay roles con estos filtros." : "Crea un rol para definir qué puede hacer cada persona."} />
-        ) : (
-          <ul className="divide-y divide-line">
-            {rows.map((role, i) => (
-              <FilaRol key={String(role.id)} role={role} i={i} activa={abierto === i} onAbrir={() => abrir(role)} menu={menuFor(role)} />
-            ))}
-          </ul>
+      <ListaCuadricula
+        etiqueta="Roles"
+        columnas={COLUMNAS}
+        filas={resource.data ? rows : null}
+        error={resource.error}
+        onReintentar={resource.reload}
+        clave={(role) => String(role.id)}
+        onAbrir={(role) => abrir(role)}
+        activa={(_, i) => abierto === i}
+        celdas={celdasRol}
+        extremo={(role) => (
+          <span className="w-9">
+            <ActionMenu items={menuFor(role)} header={String(role.nombre || "")} />
+          </span>
         )}
-      </div>
+        anchoExtremo="52px"
+        propsFila={(role) => ({ "data-rol": String(role.id) })}
+        vacio={{ icono: <ShieldCheck size={20} />, titulo: "Sin roles", descripcion: filtrando ? "No hay roles con estos filtros." : "Crea un rol para definir qué puede hacer cada persona." }}
+      />
 
       <RolVentana roles={rows} indice={abierto} editar={editar} onIndice={setAbierto} onEditar={setEditar} onCerrar={() => (setAbierto(null), setEditar(false))} />
       {datos ? <DatosRolDialog role={datos.role} onCerrar={() => setDatos(null)} /> : null}
@@ -177,47 +171,38 @@ function RolesContent() {
   );
 }
 
-/*
- * Un renglon: icono del rol, nombre completo y su proposito en gris; figuras de
- * las personas que lo tienen (maximo 4 y "+N") con el total; "Del sistema" e
- * "Inactivo". En pantallas angostas, tarjeta compacta.
- */
-function FilaRol({ role, i, activa, onAbrir, menu }: { role: ApiRecord; i: number; activa: boolean; onAbrir: () => void; menu: MenuItem[] }) {
+const COLUMNAS: ColumnaLista[] = [
+  { clave: "rol", titulo: "Rol", ancho: "minmax(300px,2fr)" },
+  { clave: "personas", titulo: "Personas", ancho: "minmax(210px,1fr)" },
+  { clave: "tipo", titulo: "Tipo", ancho: "160px" },
+];
+
+/* Celdas: icono, nombre completo y proposito; figuras de las personas (maximo 4 y "+N") con el total; Del sistema / Inactivo. */
+function celdasRol(role: ApiRecord) {
   const desc = descripcionDeRol(role);
   const personas = (role.personas || []) as ApiRecord[];
   const total = Number(role.total_usuarios || personas.length || 0);
-  return (
-    <li className={cn("entrada-escalonada group transition-colors duration-200 hover:bg-surface-2/70", activa && "bg-brand-faint hover:bg-brand-faint")} style={{ ["--i" as string]: i }} data-rol={String(role.id)}>
-      <div className="flex items-start gap-2 pr-2 md:items-center">
-        <button type="button" onClick={onAbrir} aria-haspopup="dialog" className="grid min-w-0 flex-1 gap-x-5 gap-y-3 px-4 py-4 text-left outline-none focus-visible:shadow-[inset_0_0_0_2px_rgba(15,122,149,0.45)] sm:px-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-          <span className="flex min-w-0 items-start gap-3.5">
-            <IconoRol icono={desc.icono} />
-            <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="flex flex-wrap items-center gap-2">
-                <span className="text-[14.5px] font-semibold leading-tight text-ink">{String(role.nombre || "Rol")}</span>
-                {role.es_sistemico ? <Badge tone="neutral">Del sistema</Badge> : null}
-                {!role.activo ? <Badge tone="warning">Inactivo</Badge> : null}
-              </span>
-              <span className="text-[13px] leading-[1.45] text-ink-3">{desc.proposito}</span>
-            </span>
-          </span>
-          <span className="flex items-center gap-2.5 pl-[54px] md:pl-0">
-            {personas.length ? (
-              <span className="flex -space-x-2" aria-hidden="true">
-                {personas.slice(0, 4).map((p) => (
-                  <Avatar key={String(p.id)} name={p.nombre} email={p.email} avatar={p.avatar} size="sm" className="ring-2 ring-surface transition-transform duration-200 ease-[var(--ease-spring)] group-hover:-translate-y-0.5" />
-                ))}
-                {personas.length > 4 ? <span className="flex h-7 w-7 items-center justify-center rounded-full bg-surface-3 text-[11px] font-semibold text-ink-2 ring-2 ring-surface">+{personas.length - 4}</span> : null}
-              </span>
-            ) : null}
-            <span className="text-[13px] text-ink-3">{total ? (total === 1 ? "1 persona" : `${fmt(total)} personas`) : "Sin personas"}</span>
-          </span>
-        </button>
-        <span className="w-9 shrink-0 pt-4 md:pt-0">
-          <ActionMenu items={menu} header={String(role.nombre || "")} />
-        </span>
-      </div>
-    </li>
-  );
+  return [
+    <span key="r" className="flex min-w-0 items-start gap-3.5">
+      <IconoRol icono={desc.icono} />
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-[14.5px] leading-tight font-semibold text-ink">{String(role.nombre || "Rol")}</span>
+        <span className="text-[13px] leading-[1.45] text-ink-3">{desc.proposito}</span>
+      </span>
+    </span>,
+    <span key="p" className="flex items-center gap-2.5">
+      {personas.length ? (
+        <FigurasApiladas total={personas.length}>
+          {personas.map((p) => (
+            <Avatar key={String(p.id)} name={p.nombre} email={p.email} avatar={p.avatar} size="sm" className="ring-2 ring-surface transition-transform duration-200 ease-[var(--ease-spring)] group-hover:-translate-y-0.5" />
+          ))}
+        </FigurasApiladas>
+      ) : null}
+      <span className="text-[13px] text-ink-3">{total ? (total === 1 ? "1 persona" : `${fmt(total)} personas`) : "Sin personas"}</span>
+    </span>,
+    <span key="t" className="flex flex-wrap gap-1.5">
+      {role.es_sistemico ? <Badge tone="neutral">Del sistema</Badge> : <Badge tone="brand">Personalizado</Badge>}
+      {!role.activo ? <Badge tone="warning">Inactivo</Badge> : null}
+    </span>,
+  ];
 }
-

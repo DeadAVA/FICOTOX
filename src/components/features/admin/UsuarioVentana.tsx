@@ -24,7 +24,7 @@ import { msg, type Problema } from "@/lib/client/mensajes";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { diasEntre, formatearFecha, formatearFechaCorta, formatearFechaHora, formatearHora, hoyLocal, instanteDe } from "@/lib/shared/fechas";
-import { DatosRapidos } from "@/components/ui/Ventana";
+import { DatosRapidos, VentanaEncabezado } from "@/components/ui/Ventana";
 import { haceCuantoCorto } from "@/lib/client/tiempo";
 import { descripcionDeRol } from "@/lib/shared/roles-descripcion";
 
@@ -157,29 +157,30 @@ function FichaUsuario({ base, todos, onDesbloquear, onAbrirPersona }: { base: Ap
 
   return (
     <div className="flex flex-col gap-5" data-usuario-ventana={String(base.id)}>
-      <header className="flex items-start gap-4">
-        <Avatar name={item.nombre} email={item.email} avatar={item.avatar} size="xl" animado="siempre" className="shadow-[0_6px_16px_-6px_rgba(16,32,43,0.35)]" />
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <VentanaTitulo>
-              {String(item.nombre || item.email || "Sin nombre")}
-              {esPropia ? <span className="ml-1.5 text-[13px] font-normal text-ink-3">(tú)</span> : null}
-            </VentanaTitulo>
-            <Badge tone={estado.tone} dot>
-              {estado.label}
-            </Badge>
+      <VentanaEncabezado
+        figura={<Avatar name={item.nombre} email={item.email} avatar={item.avatar} size="xl" animado="siempre" className="shadow-[0_6px_16px_-6px_rgba(16,32,43,0.35)]" />}
+        titulo={
+          <>
+            {String(item.nombre || item.email || "Sin nombre")}
+            {esPropia ? <span className="ml-1.5 text-[13px] font-normal text-ink-3">(tú)</span> : null}
+          </>
+        }
+        insignia={
+          <Badge tone={estado.tone} dot>
+            {estado.label}
+          </Badge>
+        }
+        subtitulo={<span className="break-all">{String(item.email || "")}</span>}
+      >
+        {roles.length ? (
+          <div className="flex flex-wrap gap-1.5" aria-label="Roles vigentes">
+            {roles.map((r) => (
+              <EtiquetaRol key={String(r.id)}>{String(r.nombre)}</EtiquetaRol>
+            ))}
           </div>
-          <p className="break-all text-[13.5px] text-ink-3">{String(item.email || "")}</p>
-          {roles.length ? (
-            <div className="flex flex-wrap gap-1.5" aria-label="Roles vigentes">
-              {roles.map((r) => (
-                <EtiquetaRol key={String(r.id)}>{String(r.nombre)}</EtiquetaRol>
-              ))}
-            </div>
-          ) : null}
-          {item.cargo_predeterminado ? <p className="text-[13px] text-ink-2">Firma normalmente como {String(item.cargo_predeterminado)}</p> : null}
-        </div>
-      </header>
+        ) : null}
+        {item.cargo_predeterminado ? <p className="text-[13px] text-ink-2">Firma normalmente como {String(item.cargo_predeterminado)}</p> : null}
+      </VentanaEncabezado>
 
       <DatosRapidos
         datos={[
