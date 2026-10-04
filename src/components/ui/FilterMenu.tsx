@@ -35,6 +35,10 @@ export interface FilterGroup<T extends string = string> {
   defaultValue: T;
   options: FilterOption<T>[];
   onChange: (value: T) => void;
+  /* Muestra tambien la opcion por omision (p. ej. "Últimos 30 días"), encendida cuando no hay otra. */
+  showDefault?: boolean;
+  /* Contenido debajo de las opciones (p. ej. las fechas de "Personalizado"). */
+  extra?: ReactNode;
 }
 
 export interface FilterToggle {
@@ -79,7 +83,7 @@ function FilterSection({ title, children, first }: { title: string; children: Re
   );
 }
 
-export function FilterMenu({ groups = [], toggles = [], children, className, label = "Filtros" }: { groups?: FilterGroup[]; toggles?: FilterToggle[]; children?: ReactNode; className?: string; label?: string }) {
+export function FilterMenu({ groups = [], toggles = [], children, className, label = "Filtros", vistaAlFinal = false }: { groups?: FilterGroup[]; toggles?: FilterToggle[]; children?: ReactNode; className?: string; label?: string; vistaAlFinal?: boolean }) {
   const active = groups.filter((g) => g.value !== g.defaultValue).length + toggles.filter((t) => t.checked).length;
   const reset = () => {
     groups.forEach((g) => g.onChange(g.defaultValue));
@@ -89,8 +93,9 @@ export function FilterMenu({ groups = [], toggles = [], children, className, lab
   const togglesOf = (section: string) => toggles.filter((t) => (t.group || VISTA) === section);
   /* Secciones de interruptores sueltos que no coinciden con ningun grupo ("Vista" siempre primero). */
   const sueltas = [...new Set(toggles.map((t) => t.group || VISTA))].filter((s) => !groupLabels.has(s)).sort((a, b) => (a === VISTA ? -1 : b === VISTA ? 1 : 0));
-  const vista = sueltas.filter((s) => s === VISTA);
-  const otras = sueltas.filter((s) => s !== VISTA);
+  // "Vista" va primero, salvo que la lista pida mostrarla al final (Auditoría).
+  const vista = vistaAlFinal ? [] : sueltas.filter((s) => s === VISTA);
+  const otras = vistaAlFinal ? [...sueltas.filter((s) => s !== VISTA), ...sueltas.filter((s) => s === VISTA)] : sueltas.filter((s) => s !== VISTA);
   const toggleRow = (toggle: FilterToggle) => <FilterSwitchRow key={toggle.key} label={toggle.label} checked={toggle.checked} onChange={toggle.onChange} />;
   let index = 0;
   return (
@@ -122,7 +127,7 @@ export function FilterMenu({ groups = [], toggles = [], children, className, lab
             {groups.map((group) => (
               <FilterSection key={group.key} title={group.label} first={index++ === 0}>
                 {group.options
-                  .filter((option) => option.value !== group.defaultValue)
+                  .filter((option) => group.showDefault || option.value !== group.defaultValue)
                   .map((option) => (
                     <FilterSwitchRow
                       key={option.value}
@@ -134,6 +139,7 @@ export function FilterMenu({ groups = [], toggles = [], children, className, lab
                     />
                   ))}
                 {togglesOf(group.label).map(toggleRow)}
+                {group.extra ? <div className="px-2 pt-1.5 pb-1">{group.extra}</div> : null}
               </FilterSection>
             ))}
             {otras.map((section) => (

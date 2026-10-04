@@ -192,8 +192,8 @@ try {
   await restaurada.getByRole("button", { name: "Acciones" }).click();
   await page.getByRole("menuitem", { name: "Editar" }).click();
   await page.getByText("Historial del registro").waitFor();
-  // La bitácora del historial aparece recogida: "Bitácora · N eventos" la despliega.
-  const bitacora = page.getByRole("button", { name: /^Bitácora · \d+ eventos?/ });
+  // La actividad del historial aparece recogida: "Actividad · N actividades" la despliega.
+  const bitacora = page.getByRole("button", { name: /^Actividad · \d+ actividad/ });
   check("la bitácora del historial aparece recogida", (await bitacora.getAttribute("aria-expanded")) === "false");
   check("el historial ya no tiene 'Exportar' ni 'Actualizar'", (await page.locator("#sec-historial").getByRole("button", { name: /^(Exportar|Actualizar)$/ }).count()) === 0);
   await bitacora.click();
@@ -352,23 +352,23 @@ try {
   check("/documentos lleva a Calidad › Biblioteca, con «Subir documento»", true);
   check("Biblioteca aparece en el menú Calidad (y ya no «Documentos»)", (await page.locator("nav a", { hasText: /^Biblioteca$/ }).count()) > 0 && (await page.locator("nav a", { hasText: /^Documentos$/ }).count()) === 0);
 
-  /* ---------- Auditoria (lista resumida + detalle; la integridad se verifica sola) ---------- */
+  /* ---------- Auditoria (lenguaje simple; la integridad se verifica sola y solo avisa si falla) ---------- */
   await page.goto(`${BASE}/auditoria`);
   await page.getByText("Quién hizo qué, cuándo y por qué").waitFor();
-  const timeline = page.locator("[data-audit-fila]");
+  const timeline = page.locator("[data-actividad]");
   await timeline.first().waitFor();
-  await page.locator('[data-integridad="ok"]').waitFor();
-  check("bitácora: verificación de integridad automática OK (Íntegra · N entradas)", /Íntegra ·/.test((await page.locator("[data-integridad]").textContent()) || ""));
-  // Cada entrada es una frase en español (actor + verbo), sin JSON ni nombres de columna.
+  // Cada actividad es una frase en español, sin JSON ni nombres de columna.
   const firstText = (await timeline.first().textContent()) || "";
-  check("bitácora: entradas en lenguaje llano", /(inició sesión|creó|editó|anuló|restauró|aprobó|autorizó|marcó como revisado|dio de baja|reactivó|registró la entrega|envió|liberó|descargó|cambió|acceso fallido|repuso|importó|emitió|exportó|aceptó)/i.test(firstText) && !firstText.includes("_json") && !firstText.includes("{"), firstText.slice(0, 80));
-  await timeline.filter({ hasText: /\d+ cambios?/ }).first().click();
-  await page.locator("[data-audit-detalle]").getByText("Datos técnicos").waitFor();
-  check("bitácora: detalle con cambios antes → después y datos técnicos", (await page.locator("[data-audit-detalle]").getByText(/Qué cambió|Datos principales/).count()) > 0);
-  await page.getByRole("button", { name: /^Acción/ }).click();
-  await page.getByRole("menuitemradio", { name: "Anular / rechazar" }).click();
-  await timeline.filter({ hasText: /anuló/ }).first().waitFor();
-  check("bitácora: filtro por acción (categoría)", true);
+  check("bitácora: actividades en lenguaje llano", firstText.length > 10 && !firstText.includes("_") && !firstText.includes("{") && !/#\d/.test(firstText), firstText.slice(0, 80));
+  await timeline.first().click();
+  await page.locator("[data-actividad-detalle]").getByText("Qué pasó").waitFor();
+  check("bitácora: detalle en ventana con «Qué pasó»", true);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /^Filtros/ }).click();
+  await page.getByRole("switch", { name: "Anulaciones y rechazos" }).click();
+  await page.keyboard.press("Escape");
+  await timeline.filter({ hasText: /anuló|rechazó|dio de baja/ }).first().waitFor();
+  check("bitácora: filtro por tipo de actividad", true);
 
   /* ---------- Inventario: baja logica + reactivar ---------- */
   await page.goto(`${BASE}/inventario/reactivos`);

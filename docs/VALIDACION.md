@@ -84,7 +84,8 @@ corredor devuelve codigo 1 si alguna falla. Las de navegador guardan
 - Abrir un PDF de informe autorizado y comprobar folio, version, paginacion,
   resultados, declaraciones y firmas.
 - Revisar en **Auditoria** que la accion realizada aparezca con su motivo y que
-  **Verificar integridad** siga en verde.
+  no salga el aviso rojo de posible cambio no autorizado (`npm run verificar-instalacion`
+  confirma la cadena).
 - Con un usuario sin R/A en ensayos o informes (p. ej. Técnico Analista), confirmar que los
   botones de revisar/aprobar/autorizar no aparecen y que la API responde 403.
 - Con una persona con dos roles que otorgan la misma accion (p. ej. Responsable General +

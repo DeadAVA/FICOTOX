@@ -1,4 +1,5 @@
 import { randomAvatar } from "../../shared/avatars";
+import { exportacionBitacoraRetirada } from "../retirado";
 import { evaluarCombinacion } from "../../shared/combinaciones-roles";
 import { ACCIONES, ALCANCES, MODULOS, expandirPermisos, firmaFilas, permite } from "../../shared/permisos";
 import { requireUser, userIdFromClaims, type CurrentUser } from "../auth";
@@ -791,8 +792,8 @@ function csv(encabezados: string[], filas: unknown[][]): string {
 /*
  * Revision periodica de accesos (usuarios:V): cuentas y roles vigentes,
  * cuentas temporales con su supervisor, vencimientos proximos, bloqueos y
- * cambios de roles o vigencia en un periodo. `formato=csv&seccion=cuentas|eventos`
- * exporta cada seccion.
+ * cambios de roles o vigencia en un periodo. `formato=csv&seccion=cuentas`
+ * exporta las cuentas; los eventos salen de la bitacora y no se exportan.
  */
 export async function revisionAccesos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
@@ -860,23 +861,18 @@ export async function revisionAccesos({ request, s }: RouteContext): Promise<Res
   });
 
   const formato = url.searchParams.get("formato");
+  // Los eventos salen de la bitacora, que no se exporta (decision confirmada por el laboratorio).
+  if (formato === "csv" && url.searchParams.get("seccion") === "eventos") return exportacionBitacoraRetirada();
   if (formato === "csv") {
-    const seccion = url.searchParams.get("seccion") === "eventos" ? "eventos" : "cuentas";
-    const cuerpo =
-      seccion === "eventos"
-        ? csv(
-            ["fecha_hora", "accion", "referencia", "rol", "motivo", "realizado_por"],
-            eventosItems.map((e) => [formatearFechaHora(e.fecha_hora, ""), e.accion, e.referencia, e.rol, e.motivo, e.por]),
-          )
-        : csv(
-            ["nombre", "email", "activa", "tipo_cuenta", "vigente_desde", "vigente_hasta", "vigente_hoy", "supervisor", "bloqueada_hasta", "ultimo_acceso", "roles"],
-            // Fase 3: fechas dd/mm/aaaa y horas en la zona del laboratorio, igual que en pantalla.
-            cuentas.map((c) => [c.nombre, c.email, c.activo ? "si" : "no", c.tipo_cuenta, formatearFecha(c.vigente_desde, ""), formatearFecha(c.vigente_hasta, ""), c.cuenta_vigente ? "si" : "no", c.supervisor_nombre, formatearFechaHora(c.bloqueado_hasta, ""), formatearFechaHora(c.ultimo_acceso, ""), c.roles.map((r) => `${r.rol}${r.vigente_hasta ? ` (hasta ${formatearFecha(r.vigente_hasta)})` : ""}${r.estado === "futuro" ? " [por comenzar]" : ""}`).join(" | ")]),
-          );
+    const cuerpo = csv(
+      ["nombre", "email", "activa", "tipo_cuenta", "vigente_desde", "vigente_hasta", "vigente_hoy", "supervisor", "bloqueada_hasta", "ultimo_acceso", "roles"],
+      // Fase 3: fechas dd/mm/aaaa y horas en la zona del laboratorio, igual que en pantalla.
+      cuentas.map((c) => [c.nombre, c.email, c.activo ? "si" : "no", c.tipo_cuenta, formatearFecha(c.vigente_desde, ""), formatearFecha(c.vigente_hasta, ""), c.cuenta_vigente ? "si" : "no", c.supervisor_nombre, formatearFechaHora(c.bloqueado_hasta, ""), formatearFechaHora(c.ultimo_acceso, ""), c.roles.map((r) => `${r.rol}${r.vigente_hasta ? ` (hasta ${formatearFecha(r.vigente_hasta)})` : ""}${r.estado === "futuro" ? " [por comenzar]" : ""}`).join(" | ")]),
+    );
     return new Response(cuerpo, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="revision-accesos-${seccion}-${fecha}.csv"`,
+        "Content-Disposition": `attachment; filename="revision-accesos-cuentas-${fecha}.csv"`,
         "Cache-Control": "no-store",
       },
     });

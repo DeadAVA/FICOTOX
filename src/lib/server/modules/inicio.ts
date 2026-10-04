@@ -1,5 +1,6 @@
 import { requireUser } from "../auth";
 import { avisosCalidad } from "./calidad/tablero";
+import { alertaBitacoraAbierta } from "./audit";
 import { type Row } from "../db";
 import { json, type RouteContext } from "../http";
 import { cargarAutorizacion, permisoDe, requirePermission, soloEstado } from "../rbac";
@@ -382,6 +383,11 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
   for (const [key, label, tone, href, tipos] of grupos) {
     const items = calidad.filter((a) => tipos.includes(a.tipo));
     if (items.length) avisos.push({ key, label, tone: items.some((a) => a.tono === "danger") ? "danger" : tone, count: items.length, href, items: items.slice(0, MAX_ITEMS).map((a) => ({ label: a.titulo, sub: a.detalle, href: a.href })) });
+  }
+
+  // Registro de actividad: posible cambio no autorizado (incidencia automatica abierta), a quien consulta Calidad.
+  if (permisoDe(auth, "calidad", "V") && (await alertaBitacoraAbierta(s))) {
+    avisos.unshift({ key: "bitacora_alterada", label: "Posible cambio no autorizado", tone: "danger", count: 1, href: "/auditoria", items: [{ label: "Se detectó un posible cambio no autorizado en el registro de actividad", sub: "Avisa a la Coordinación de Mejora Continua", href: "/auditoria" }] });
   }
 
   // Fase 10: respaldos sin hacer o sin prueba de restauracion (a quien respalda y a quien revisa).

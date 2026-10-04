@@ -120,8 +120,11 @@ propuestas) se retiró: sus tablas quedan en solo lectura.
 Tabla `auditoria` de solo inserción (triggers abortan `UPDATE`/`DELETE` en SQLite
 y MySQL). Cada entrada guarda usuario, fecha/hora, acción, entidad, referencia,
 motivo, el dato anterior y el nuevo, y un **sello HMAC-SHA256 encadenado** al
-sello previo. Página `/auditoria` con filtros y **Verificar integridad** (detecta
-alteración, filas borradas al final, huecos intermedios y falta de triggers).
+sello previo. Página `/auditoria` en lenguaje simple (frases, "Qué pasó", ventana
+centrada, filtros como en Muestras); la verificación de integridad corre sola
+(detecta alteración, filas borradas al final, huecos intermedios y falta de
+triggers) y solo avisa si falla, con alerta e incidencia automática. **La
+bitácora no se exporta** (decisión confirmada por el laboratorio; 410).
 
 ## 5. Reglas de negocio que NO se deben reabrir sin preguntar
 
@@ -450,7 +453,7 @@ Módulo encendido (`FEATURES.documentos`); flujo borrador → revision_calidad �
 
 ## 8 decies. Fase 9 — cierre (rama `fase-9-cierre`)
 
-Campana de notificaciones calculada al vuelo en `GET /api/notificaciones` (`src/lib/server/modules/notificaciones.ts`); exportación CSV de la bitácora y del historial de un registro con `GET /api/audit?formato=csv` (mismos filtros y alcances; queda como acción `exportar`); pendientes consolidados en `docs/PENDIENTES.md`.
+Campana de notificaciones calculada al vuelo en `GET /api/notificaciones` (`src/lib/server/modules/notificaciones.ts`); la exportación CSV de la bitácora y del historial se retiró después (decisión del laboratorio: `GET /api/audit?formato=…` responde 410; las entradas antiguas `exportar` se muestran como "descargó una copia de…"); pendientes consolidados en `docs/PENDIENTES.md`.
 
 ## 8 undecies. Fase 10 — evidencia instrumental y prueba de restauración (rama `fase-10-cumplimiento`)
 
@@ -473,7 +476,7 @@ Campana de notificaciones calculada al vuelo en `GET /api/notificaciones` (`src/
 - **Migraciones** (§10.2 del manual): `src/lib/server/migraciones/` y `npm run migrar [--estado|--simular]`. Versiones 9–12 (coinciden con `ESQUEMA_VERSION` 10/11 de los respaldos anteriores). Línea base de bases anteriores por esquema normalizado; deriva → aborta sin tocar. Bloqueo en `schema_migraciones_bloqueo` + `servidor.lock`. Respaldo `pre-migracion` antes; entrada «Sistema aplicó la migración N». `restaurar-ficotox.mjs` migra respaldos viejos y rechaza los más nuevos. Fixtures congeladas del código anterior en `tests/fixtures/esquema-anterior-fase{9,10,11}.sqlite3`.
 - **Motor**: pragmas WAL/NORMAL/busy_timeout/foreign_keys (`db.ts`); `apiRoute` recibe el cuerpo antes de la sesión y reintenta folio duplicado, `SQLITE_BUSY*` e interbloqueos MySQL (3 intentos → 409 `conflicto_concurrencia`). `docs/DECISION_BASE_DE_DATOS.md`: SQLite recomendado, umbrales y `npm run sqlite-a-mysql`. MySQL **no probado** (sin Docker); `npm run test:mysql` listo.
 - **Operación**: `npm run configurar`, `instancia-nueva -- --confirmar`, `instalar-servicio`/`quitar-servicio`, `actualizar`, `verificar-instalacion` (reporte en `<instancia>/verificaciones/`). HTTPS con `TLS_CERT`/`TLS_KEY` (`scripts/https-lanzador.mjs`); registros en `<instancia>/logs` (`scripts/lib/registro.mjs`). Guía del personal: `docs/INSTALACION.md`.
-- **Deuda**: historial con alcances (`acceso-registro.ts`; 404 si no visible, también CSV y solicitudes); CSV de la bitácora con aviso de truncado y por periodo; lint 0.
+- **Deuda**: historial con alcances (`acceso-registro.ts`; 404 si no visible, también CSV y solicitudes); lint 0. (El CSV de la bitácora se retiró después: la bitácora no se exporta.)
 - **Pruebas**: `tests/api-produccion.mjs` (en la lista de API), `tests/migraciones.mjs`, `tests/operacion.mjs`, `tests/concurrencia.mjs`, `tests/carga.mjs`, `tests/mysql.mjs`.
 
 ## 8 quattuordecies. Biblioteca de documentos (rama `biblioteca`)

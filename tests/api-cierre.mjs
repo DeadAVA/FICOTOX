@@ -2,8 +2,7 @@
  * Fase 9 (cierre), contra el servidor de prueba:
  * - Documentos SGC retirado (la Biblioteca lo reemplaza): sus escrituras y listas responden 410;
  * - la campana muestra a Luis su muestra asignada y a Patricia un informe por autorizar;
- *   a Mariana no le muestra el informe;
- * - exportar la bitacora devuelve CSV con los filtros aplicados (y queda en la bitacora).
+ *   a Mariana no le muestra el informe.
  */
 import "./lib/reauth-auto.mjs";
 import { readFileSync } from "node:fs";
@@ -69,19 +68,6 @@ const sufijo = Date.now().toString(36).toUpperCase().slice(-5);
   check("la campana muestra a Patricia el informe por autorizar", patricia.some((n) => n.tipo === "informe" && n.href === `/informes/${inf}` && /Autorizar/.test(n.titulo)), JSON.stringify(patricia.map((n) => n.titulo).slice(0, 6)));
   const mariana = (await api("GET", "/notificaciones", undefined, tM)).data?.items || [];
   check("a Mariana no le muestra el informe", !mariana.some((n) => n.href === `/informes/${inf}`), JSON.stringify(mariana.map((n) => n.titulo).slice(0, 6)));
-}
-
-/* ---------- Exportar la bitacora con filtros ---------- */
-{
-  const csv = await api("GET", `/audit?formato=csv&accion=aprobar&usuario=${encodeURIComponent("ricardo.medina")}`, undefined, QA);
-  const lineas = String(csv.data).replace(/^﻿/, "").trim().split(/\r?\n/);
-  const filas = lineas.slice(1);
-  check("exportar la bitacora devuelve CSV con los filtros aplicados (solo 'aprobar' de Ricardo)", csv.status === 200 && csv.type.includes("text/csv") && lineas[0].includes("Acción") && filas.length > 0 && filas.every((l) => l.includes("Aprobó") && l.includes("ricardo.medina@ficotox.local")), `${csv.status} ${filas.length} ${filas[0]?.slice(0, 120)}`);
-  const hist = await api("GET", `/audit?formato=csv&entidad=informes&entidad_id=1`, undefined, QA);
-  const exportado = (await api("GET", "/audit?accion=exportar&limit=5", undefined, QA)).data?.items || [];
-  check("el historial de un registro tambien se exporta y la exportacion queda en la bitacora", hist.status === 200 && exportado.length >= 2, `${hist.status} ${exportado.length}`);
-  const sinPermiso = await api("GET", "/audit?formato=csv", undefined, tM);
-  check("exportar la bitacora completa respeta permisos (sin calidad:V -> 403)", sinPermiso.status === 403, `${sinPermiso.status}`);
 }
 
 const failed = results.filter((r) => !r.ok).length;

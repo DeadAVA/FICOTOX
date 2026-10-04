@@ -10,8 +10,7 @@ Ya resuelto, así que no se repite abajo:
 - Fase 10: adjuntar evidencia instrumental a los análisis (sección 7, "Resultados") y la prueba documentada de restauración de respaldos con acta (sección 9 y PVVC).
 - Fase 11: incidencias, no conformidades y acciones correctivas (7.10 y 8.7), con el alcance `incidencias` aplicado, las reglas de segregación 7–10, suspensiones de método o equipo y retención de informes; la tabla `adjuntos` ya sirve también a incidencias y acciones correctivas.
 - Fase 12: migraciones versionadas (`schema_migraciones`, checksum, línea base, bloqueo, respaldo previo) en lugar de `ensure*Schema()`; el servidor no arranca con deriva, checksum alterado o base más nueva.
-- Fase 12: el historial de un registro (vista, CSV y solicitudes) aplica los alcances de la ficha (asignado, autorizados, propio, incidencias): lo no visible es 404.
-- Fase 12: el CSV de la bitácora avisa si quedó cortado (fila final, encabezados, nombre «-parcial», aviso en la interfaz y en la bitácora) y se exporta por periodo; el límite subió a 50 000 filas (`BITACORA_CSV_MAX_FILAS`).
+- Fase 12: el historial de un registro (vista y solicitudes) aplica los alcances de la ficha (asignado, autorizados, propio, incidencias): lo no visible es 404.
 - Fase 12: línea base de lint en 0.
 - Fase 12: folios de todas las series con restricción única y reintento (MySQL o dos procesos): ya no hay 500 por folio duplicado; los interbloqueos de MySQL (p. ej. suspensiones simultáneas) también se reintentan.
 - Fase 12: la evidencia grande se recibe antes de abrir la sesión de base (ya no retiene a los demás mientras llega).
@@ -20,6 +19,7 @@ Ya resuelto, así que no se repite abajo:
 
 ## Decisiones confirmadas por el laboratorio
 
+- **Decisión confirmada por el laboratorio: la bitácora no se exporta; se consulta solo dentro de la plataforma.** Se retiraron el botón «Exportar CSV» de Auditoría, la exportación por API (`/api/audit?formato=…` y los eventos de Revisión de accesos responden 410) y el límite `BITACORA_CSV_MAX_FILAS`. La insignia «Íntegra · N entradas» también se retiró: la verificación corre en segundo plano y solo avisa (Auditoría, Inicio y campana, con incidencia automática) si detecta un posible cambio no autorizado.
 - **Decisión confirmada por el laboratorio: Calidad › Documentos funciona como biblioteca de consulta y reemplaza el flujo de control documental de la sección 6 de la especificación.** Con ella se retiraron (sin borrar datos) la revisión de calidad y técnica, la aprobación y publicación, la lista maestra, la distribución con acuse de lectura («Leí y comprendí»), las propuestas de documento (también desde una NC), la obsolescencia por solicitud (`obsoletar_documento`), la regla de segregación 5 y los avisos de documentos del Inicio y la campana; por eso ya no figuran aquí sus pendientes de la Fase 7. Ver docs/CATALOGO_PERMISOS.md §6 octies.
 
 ## Validar con Mejora Continua

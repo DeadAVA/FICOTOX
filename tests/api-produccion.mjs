@@ -1,40 +1,32 @@
 /*
  * Fase 12 · deuda y concurrencia contra el servidor de prueba (base de instance/test):
- * - historial por registro (bitacora, su CSV y sus solicitudes) con los alcances
+ * - historial por registro (bitacora y sus solicitudes) con los alcances
  *   de la ficha: asignado (muestras), autorizados (Biblioteca), propio (usuarios),
  *   incidencias (calidad); lo no visible es 404, igual que si no existiera;
- * - CSV de la bitacora: aviso de exportacion parcial (fila final, encabezados,
- *   nombre -parcial, entrada en la bitacora) y exportacion por periodo;
+ * - la lista de la bitacora dice si esta cortada (la bitacora no se exporta);
  * - folios bajo concurrencia: muchas altas simultaneas de varias personas, sin
  *   errores 500 y con folios unicos y consecutivos.
  */
 import "./lib/reauth-auto.mjs";
-import { api, cadena, crearCheck, fila, filas, hoy, sesiones } from "./lib/calidad.mjs";
+import { api, cadena, crearCheck, fila, filas, sesiones } from "./lib/calidad.mjs";
 import { pdfConTexto } from "./lib/archivos.mjs";
 
 const { check, terminar } = crearCheck();
 const { t, id } = await sesiones();
-const historial = (entidad, entidadId, token, csv = false) => api("GET", `/audit?entidad=${entidad}&entidad_id=${entidadId}${csv ? "&formato=csv" : ""}`, undefined, token);
+const historial = (entidad, entidadId, token) => api("GET", `/audit?entidad=${entidad}&entidad_id=${entidadId}`, undefined, token);
 const solicitudes = (entidad, entidadId, token) => api("GET", `/solicitudes?entidad=${entidad}&entidad_id=${entidadId}`, undefined, token);
 
 /* ================= Historial con alcances ================= */
 // Asignado: recepcion no asignada a Luis (Tecnico Analista, muestras:V asignado).
 {
   const c = await cadena(t, "HISTASIG");
-  const [h, csv, sol, ficha] = await Promise.all([historial("muestras_recepcion", c.R, t.luis), historial("muestras_recepcion", c.R, t.luis, true), solicitudes("muestras_recepcion", c.R, t.luis), api("GET", `/samples/reception/${c.R}`, undefined, t.luis)]);
-  check("historial de una recepción NO asignada (alcance asignado): 404 en la bitácora, en el CSV y en las solicitudes (la ficha tampoco se ve)", h.status === 404 && csv.status === 404 && sol.status === 404 && [403, 404].includes(ficha.status), `${h.status} ${csv.status} ${sol.status} ficha ${ficha.status}`);
+  const [h, sol, ficha] = await Promise.all([historial("muestras_recepcion", c.R, t.luis), solicitudes("muestras_recepcion", c.R, t.luis), api("GET", `/samples/reception/${c.R}`, undefined, t.luis)]);
+  check("historial de una recepción NO asignada (alcance asignado): 404 en la bitácora y en las solicitudes (la ficha tampoco se ve)", h.status === 404 && sol.status === 404 && [403, 404].includes(ficha.status), `${h.status} ${sol.status} ficha ${ficha.status}`);
   await api("POST", `/samples/reception/${c.R}/asignaciones`, { usuario_id: id.luis, motivo: "Asignación de prueba de historial" }, t.ricardo);
-  const [h2, csv2] = await Promise.all([historial("muestras_recepcion", c.R, t.luis), historial("muestras_recepcion", c.R, t.luis, true)]);
-  check("  … una vez asignada: 200 (bitácora y CSV)", h2.status === 200 && (h2.data?.items || []).length > 0 && csv2.status === 200 && String(csv2.data).includes("Recepción"), `${h2.status} ${csv2.status}`);
+  const h2 = await historial("muestras_recepcion", c.R, t.luis);
+  check("  … una vez asignada: 200", h2.status === 200 && (h2.data?.items || []).length > 0, `${h2.status}`);
   const h3 = await historial("muestras_recepcion", c.R, t.ana);
   check("  … quien tiene muestras:V total la ve sin asignación", h3.status === 200, String(h3.status));
-  // Ajustes de interfaz: el historial ya no tiene "Exportar"; se exporta desde Calidad › Auditoría buscando el folio.
-  const folioR = `R ${String((await api("GET", `/samples/reception/${c.R}`, undefined, t.ana)).data?.item?.folio_num || 0).padStart(7, "0")}`;
-  const porFolio = await api("GET", `/audit?formato=csv&search=${encodeURIComponent(folioR)}`, undefined, t.ana);
-  const filasFolio = String(porFolio.data || "").split("\n").filter((l) => l.includes(folioR));
-  // Las exportaciones previas del historial quedan como "exportar" con referencia "Historial …": no son eventos del registro.
-  const eventos = (h3.data?.items || []).filter((e) => e.accion !== "exportar").length;
-  check("  … Auditoría › Exportar CSV filtrando por el folio trae los eventos del registro", porFolio.status === 200 && eventos > 0 && filasFolio.length >= eventos, `${porFolio.status} ${filasFolio.length} filas vs ${eventos} eventos`);
 }
 
 // Autorizados: Diego (Estudiante, documentos:V autorizados) solo ve los documentos de la Biblioteca visibles para todos o para su rol.
@@ -52,10 +44,10 @@ const solicitudes = (entidad, entidadId, token) => api("GET", `/solicitudes?enti
   const paraTodos = await subir(`Para todos historial ${sufijo}`, { visibilidad: "todos" });
   const R = restringido.data?.item?.id;
   const T = paraTodos.data?.item?.id;
-  const [hR, csvR, fichaR] = await Promise.all([historial("biblioteca_documentos", R, t.diego), historial("biblioteca_documentos", R, t.diego, true), api("GET", `/biblioteca/${R}`, undefined, t.diego)]);
-  check("historial de un documento de la Biblioteca no visible para su rol (alcance autorizados): 404 en la bitácora, el CSV y la ficha", restringido.status === 201 && hR.status === 404 && csvR.status === 404 && fichaR.status === 404, `${restringido.status} ${hR.status} ${csvR.status} ${fichaR.status}`);
-  const [hT, csvT, fichaT] = await Promise.all([historial("biblioteca_documentos", T, t.diego), historial("biblioteca_documentos", T, t.diego, true), api("GET", `/biblioteca/${T}`, undefined, t.diego)]);
-  check("  … uno visible para todos SÍ se ve: ficha, historial y CSV 200", paraTodos.status === 201 && fichaT.status === 200 && hT.status === 200 && (hT.data?.items || []).length > 0 && csvT.status === 200, `${paraTodos.status} ${fichaT.status} ${hT.status} ${csvT.status}`);
+  const [hR, fichaR] = await Promise.all([historial("biblioteca_documentos", R, t.diego), api("GET", `/biblioteca/${R}`, undefined, t.diego)]);
+  check("historial de un documento de la Biblioteca no visible para su rol (alcance autorizados): 404 en la bitácora y la ficha", restringido.status === 201 && hR.status === 404 && fichaR.status === 404, `${restringido.status} ${hR.status} ${fichaR.status}`);
+  const [hT, fichaT] = await Promise.all([historial("biblioteca_documentos", T, t.diego), api("GET", `/biblioteca/${T}`, undefined, t.diego)]);
+  check("  … uno visible para todos SÍ se ve: ficha e historial 200", paraTodos.status === 201 && fichaT.status === 200 && hT.status === 200 && (hT.data?.items || []).length > 0, `${paraTodos.status} ${fichaT.status} ${hT.status}`);
   const deAna = await historial("biblioteca_documentos", R, t.ana);
   check("  … quien administra la Biblioteca ve el historial del restringido (200)", deAna.status === 200 && (deAna.data?.items || []).length > 0, String(deAna.status));
 }
@@ -69,9 +61,9 @@ const solicitudes = (entidad, entidadId, token) => api("GET", `/solicitudes?enti
 // Incidencias: Luis solo ve las suyas.
 {
   const ajena = await api("POST", "/calidad/incidencias", { tipo: "otro", fecha_hora_ocurrencia: new Date().toISOString(), descripcion: "Incidencia de Mariana para la prueba de historial", impacto_resultados: "no", accion_inmediata: "Ninguna" }, t.mariana);
-  const [h, csv] = await Promise.all([historial("incidencias", ajena.data?.id, t.luis), historial("incidencias", ajena.data?.id, t.luis, true)]);
+  const h = await historial("incidencias", ajena.data?.id, t.luis);
   const propia = await historial("incidencias", ajena.data?.id, t.mariana);
-  check("historial de una incidencia ajena (alcance incidencias): 404 (bitácora y CSV); la propia 200", ajena.status === 201 && h.status === 404 && csv.status === 404 && propia.status === 200, `${ajena.status} ${h.status} ${csv.status} ${propia.status}`);
+  check("historial de una incidencia ajena (alcance incidencias): 404; la propia 200", ajena.status === 201 && h.status === 404 && propia.status === 200, `${ajena.status} ${h.status} ${propia.status}`);
 }
 
 // Registro inexistente y sin permiso del modulo.
@@ -80,24 +72,10 @@ const solicitudes = (entidad, entidadId, token) => api("GET", `/solicitudes?enti
   check("historial de un registro inexistente: 404; sin V del módulo: 403 (como antes)", nada.status === 404 && sinModulo.status === 403, `${nada.status} ${sinModulo.status}`);
 }
 
-/* ================= CSV: aviso de exportacion parcial ================= */
+/* ================= Lista de la bitacora cortada ================= */
 {
-  const antes = fila("SELECT MAX(id) AS id FROM auditoria").id;
-  const parcial = await api("GET", "/audit?formato=csv&limit=3", undefined, t.ana);
-  const lineas = String(parcial.data).trim().split(/\r?\n/);
-  check(
-    "CSV de la bitácora cortado: X-Bitacora-Truncado=1, archivo «-parcial» y fila final «AVISO: exportación PARCIAL… Exporta por periodo»",
-    parcial.status === 200 && parcial.headers.get("x-bitacora-truncado") === "1" && parcial.headers.get("x-bitacora-filas") === "3" && /-parcial\.csv/.test(parcial.headers.get("content-disposition") || "") && /AVISO: exportación PARCIAL/.test(lineas.at(-1)) && /por periodo/.test(lineas.at(-1)) && lineas.length === 5,
-    `${parcial.status} ${parcial.headers.get("x-bitacora-truncado")} ${lineas.length} líneas`,
-  );
-  const entrada = fila("SELECT * FROM auditoria WHERE id > ? AND accion = 'exportar' ORDER BY id DESC LIMIT 1", antes);
-  check("  … la exportación queda en la bitácora con «truncado»", entrada && /"truncado":true/.test(entrada.datos_nuevos_json || entrada.cambios_json || ""), entrada ? (entrada.datos_nuevos_json || entrada.cambios_json || "").slice(0, 120) : "sin entrada");
   const json = await api("GET", "/audit?limit=2", undefined, t.ana);
-  check("  … la lista (JSON) también dice si está cortada", json.status === 200 && json.data?.truncado === true, String(json.data?.truncado));
-  const hoyL = hoy();
-  const periodo = await api("GET", `/audit?formato=csv&desde=${hoyL}&hasta=${hoyL}`, undefined, t.ana);
-  const vacio = await api("GET", "/audit?formato=csv&desde=2001-01-01&hasta=2001-01-31", undefined, t.ana);
-  check("CSV por periodo (Desde/Hasta): completo sin aviso; un periodo sin registros da solo encabezados", periodo.status === 200 && periodo.headers.get("x-bitacora-truncado") === "0" && !/AVISO/.test(String(periodo.data)) && vacio.status === 200 && String(vacio.data).trim().split(/\r?\n/).length === 1, `${periodo.headers.get("x-bitacora-filas")} filas; vacío ${String(vacio.data).trim().split(/\r?\n/).length} línea(s)`);
+  check("la lista de la bitácora dice si está cortada", json.status === 200 && json.data?.truncado === true, String(json.data?.truncado));
 }
 
 /* ================= Folios bajo concurrencia ================= */

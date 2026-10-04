@@ -83,7 +83,7 @@ El **modo prueba** (por omisión) restaura en `instance-restaurada/<fecha>/` y *
 3. Esquema compatible (Fase 12: mismo motor de migraciones que el servidor): si el respaldo es de una versión **más nueva** que la app, o su esquema tiene diferencias desconocidas, falla. Si es más vieja (o anterior a las migraciones, reconocida por línea base), se restaura y **se migra** a la versión actual; la migración queda en la bitácora de la base restaurada.
 4. Llave: su huella coincide con la del manifest y el **sello del manifest** es válido con ella (detecta un respaldo alterado aunque se hayan recalculado las huellas). También se compara con la llave **configurada en esta instalación** y el acta dice si coincide.
    - **Alcance del sello:** protege de verdad los respaldos que **no** llevan la llave (copias externas). Si la llave viaja dentro del respaldo, quien pueda escribir ese respaldo puede resellarlo; por eso la llave se guarda **aparte** y, ante la duda, la prueba se repite con `--llave <la guardada aparte>` o en la instalación del laboratorio (donde el acta confirma que es la misma llave).
-5. Cadena de la bitácora íntegra con esa llave: sellos, huecos de id, filas faltantes al final y triggers. Usa la misma verificación que **Verificar integridad**.
+5. Cadena de la bitácora íntegra con esa llave: sellos, huecos de id, filas faltantes al final y triggers. Usa la misma verificación que la revisión automática de Auditoría.
 6. Conteos por tabla iguales al manifest, y el sello de la última entrada de la bitácora.
 7. Archivos contra la base: los PDF de informes, las evidencias de envío, los adjuntos, los documentos SGC anteriores, las versiones de la Biblioteca y los PDF de no conformidades tienen el SHA-256 registrado en la base. Reporta los faltantes y los alterados.
 8. Tiempo total.
@@ -113,7 +113,7 @@ Solo ante una pérdida o corrupción de datos, y con la decisión registrada.
    - reemplaza la base y las carpetas de archivos y, si la llave es `auditoria.key`, la deja en `instance/`;
    - agrega a la bitácora de la base restaurada la entrada **"restauración desde respaldo &lt;id&gt;"** (actor: sistema), sellada con `audit-chain.mjs`, y comprueba que la cadena sigue íntegra;
    - genera el acta (modo real).
-5. **Arrancar el servidor** y entrar a **Auditoría › Verificar integridad**. Debe salir en verde y la última entrada debe ser la restauración.
+5. **Arrancar el servidor** y correr `npm run verificar-instalacion`: la bitácora debe salir íntegra. En **Auditoría** no debe aparecer el aviso rojo y la actividad más reciente debe ser la restauración.
 6. **Revisar** con Mejora Continua lo capturado después del respaldo (RPO) y registrarlo de nuevo si hace falta.
 
 ## 9. Formato del acta

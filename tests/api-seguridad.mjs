@@ -453,8 +453,7 @@ const temporal = (extra = {}) => ({ tipo_cuenta: "temporal", vigente_hasta: "209
   check("revision de accesos: cuentas, temporales, vencimientos, bloqueos y eventos", rev.status === 200 && rev.data?.cuentas?.length > 0 && rev.data?.temporales?.some((c) => c.email === DIEGO) && Array.isArray(rev.data?.vencimientos) && rev.data?.eventos?.some((e) => e.accion === "bloquear") && rev.data?.eventos?.some((e) => e.accion === "cambiar_vigencia"), `${rev.status}`);
   const csv = await fetch(`${BASE}/admin/accesos?formato=csv&seccion=cuentas`, { headers: { Authorization: `Bearer ${QA}` } });
   const csvTexto = await csv.text();
-  const csvEv = await fetch(`${BASE}/admin/accesos?formato=csv&seccion=eventos&desde=2020-01-01`, { headers: { Authorization: `Bearer ${QA}` } });
-  check("revision de accesos: exportacion CSV de cuentas y eventos", csv.status === 200 && /text\/csv/.test(csv.headers.get("content-type") || "") && csvTexto.includes("tipo_cuenta") && csvTexto.includes(DIEGO) && csvEv.status === 200 && (await csvEv.text()).includes("bloquear"), `${csv.status} ${csvEv.status}`);
+  check("revision de accesos: exportacion CSV de cuentas", csv.status === 200 && /text\/csv/.test(csv.headers.get("content-type") || "") && csvTexto.includes("tipo_cuenta") && csvTexto.includes(DIEGO), `${csv.status}`);
   const analista = await token("luis.castro@ficotox.local");
   const propia = await api("GET", "/admin/accesos", undefined, analista);
   const aux = await api("GET", "/admin/accesos", undefined, await token("carmen.aguilar@ficotox.local"));

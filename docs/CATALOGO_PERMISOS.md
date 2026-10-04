@@ -64,7 +64,7 @@ El módulo `aprobaciones` desapareció: revisar y aprobar son acciones de `ensay
 | Alta / edición / importación de reactivos y consumibles | `inventario:C` / `inventario:E` |
 | Reponer stock (registra movimiento) | `inventario:C` (alcance `movimientos` basta) |
 | Baja / reactivar reactivo o consumible | `inventario:AN` / `inventario:G` |
-| Bitácora y "Verificar integridad" | `calidad:V` (con alcance `incidencias` no: 403) |
+| Bitácora (Calidad › Auditoría; la verificación de integridad corre sola y solo avisa si falla) | `calidad:V` (con alcance `incidencias` no: 403). **La bitácora no se exporta** (decisión del laboratorio): `GET /api/audit?formato=…` y los eventos de Revisión de accesos responden 410 para todos |
 | Reportar incidencia (Fase 11) | `calidad:C` con cualquier alcance; **nunca sujeto a visto bueno** (cuenta supervisada o temporal incluida) |
 | Ver incidencias y NC (Fase 11) | `calidad:V` total; con `incidencias`, solo las incidencias propias y las NC o acciones donde es responsable (lo ajeno responde 404). `bitacora` (Admin técnico) no las ve |
 | Evaluar incidencia: cerrar sin NC o escalar (Fase 11) | `calidad:R` (regla 7) |
@@ -103,7 +103,7 @@ Un permiso es `(rol, módulo, acción, alcance)`. `total` = sin límite.
 | `preparacion` | En ensayos: C/E solo sobre procesamiento (extracción y análisis → 403). |
 | `borrador` | C/E solo mientras el registro está en borrador o registrado. |
 | `bitacora` | En calidad: solo la bitácora de auditoría (no incidencias ni NC). |
-| `incidencias` | (Fase 11) En calidad: crear incidencias y ver solo las propias (reportadas por la persona) y las NC o acciones correctivas donde es responsable. Solo vale sobre esos objetos (`ALCANCES_SOLO_CON_OBJETO`): no abre la bitácora, los respaldos ni otras incidencias, por lista, ficha, búsqueda, filtro por registro, campana, historial, adjuntos ni exportación. Su V implícita es `incidencias`. |
+| `incidencias` | (Fase 11) En calidad: crear incidencias y ver solo las propias (reportadas por la persona) y las NC o acciones correctivas donde es responsable. Solo vale sobre esos objetos (`ALCANCES_SOLO_CON_OBJETO`): no abre la bitácora, los respaldos ni otras incidencias, por lista, ficha, búsqueda, filtro por registro, campana, historial, adjuntos ni exportación de listas. Su V implícita es `incidencias`. |
 
 **Bitácora y alcances**: `calidad:V` permite ver qué pasó, quién y cuándo en todo el sistema, pero los **datos** de una entrada (antes, después y cambios) solo se entregan si la persona puede ver el módulo del registro y, en muestras, si su alcance no es solo `estado` (`datos_restringidos: true`). Así un alcance no se elude leyendo la bitácora.
 | `uso` | En equipos: solo registrar uso y folio de bitácora al capturar extracciones y análisis; no edita el catálogo ni los mantenimientos. |

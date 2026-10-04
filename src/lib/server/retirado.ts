@@ -11,3 +11,8 @@ export const MENSAJE_RETIRADO = "Funcionalidad retirada: Calidad › Documentos 
 export async function funcionalidadRetirada(): Promise<Response> {
   return NextResponse.json({ message: MENSAJE_RETIRADO, codigo: "retirado" }, { status: 410 });
 }
+
+/* Decision confirmada por el laboratorio: la bitacora (y el historial de cada registro) no se exporta. */
+export function exportacionBitacoraRetirada(): Response {
+  return NextResponse.json({ message: "Funcionalidad retirada: la bitácora no se exporta; se consulta solo dentro de la plataforma", codigo: "retirado" }, { status: 410 });
+}

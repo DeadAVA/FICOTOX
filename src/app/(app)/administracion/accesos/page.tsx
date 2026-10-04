@@ -81,7 +81,8 @@ function AccesosContent() {
   const data = resource.data;
 
   // Descarga el CSV con el token (no es un enlace publico).
-  const exportar = async (seccion: "cuentas" | "eventos") => {
+  // Solo la lista de cuentas: los eventos vienen de la bitacora, que no se exporta (decision del laboratorio).
+  const exportar = async (seccion: "cuentas") => {
     try {
       const res = await fetch(`${API_BASE_URL}/admin/accesos?${query}&formato=csv&seccion=${seccion}`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) {
@@ -299,11 +300,6 @@ function AccesosContent() {
       <Seccion
         title="Cambios del periodo"
         description="Bloqueos, desbloqueos, asignaciones, revocaciones y vencimientos de roles, cambios de vigencia, restablecimientos de contraseña y bajas."
-        actions={
-          <Button variant="secondary" size="sm" icon={<DownloadSimple size={15} />} onClick={() => exportar("eventos")}>
-            Exportar CSV de eventos
-          </Button>
-        }
       >
         <TableShell footer={data ? `${fmt(eventos.length)} eventos` : undefined}>
           {!data ? (

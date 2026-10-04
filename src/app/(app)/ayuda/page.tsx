@@ -283,7 +283,7 @@ export default function AyudaPage() {
 
           <Section anchor="calidad" title="Auditoría y trazabilidad" lead="Todo lo que se hace queda registrado: quién, qué, cuándo y por qué.">
             <p>
-              Cada formato tiene al final un <b>Historial</b> con frases sencillas («Axel aprobó el análisis A 0000004») y el botón «Ver cambios» para comparar valor anterior y nuevo. En <b>Calidad › Auditoría</b> se ve lo mismo para todo el sistema, con filtros por persona, acción y fecha. La bitácora está sellada: si alguien altera una entrada, la cadena se rompe y el sistema lo detecta.
+              Cada formato tiene al final un <b>Historial</b> con frases sencillas («Axel aprobó el análisis A 0000004»); al pulsar una actividad se abre una ventana con qué pasó, qué cambió y el motivo. En <b>Calidad › Auditoría</b> se ve lo mismo para toda la plataforma, con el buscador y el botón «Filtros» (periodo, personas, tipo de actividad y área). La bitácora no se exporta: se consulta solo aquí. Está sellada: si alguien la altera fuera de la plataforma, se detecta solo y aparece un aviso rojo.
             </p>
           </Section>
 

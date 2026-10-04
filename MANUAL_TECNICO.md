@@ -172,7 +172,6 @@ Se leen desde `.env` en la raiz. `FICOTOX_ENV_FILE` permite indicar otro archivo
 | `MIGRAR_MYSQL_RESPALDO_HECHO` | Fase 12, solo MySQL: declara que ya se respaldo con `mysqldump` (sin ella, el servidor no migra al arrancar) | `false` |
 | `TLS_CERT` / `TLS_KEY` / `TLS_CA` | Fase 12: HTTPS opcional (PEM; rutas relativas a la raiz). Los dos primeros juntos o ninguno | No definidas (HTTP) |
 | `LOG_DIR` / `LOG_MAX_MB` / `LOG_RETENCION_DIAS` | Fase 12: registros del servidor (carpeta, tamano de rotacion, dias que se conservan) | `<instancia>/logs` / `10` / `90` |
-| `BITACORA_CSV_MAX_FILAS` | Fase 12: filas maximas por CSV de la bitacora (si hay mas, el archivo lo avisa) | `50000` |
 
 Se aceptan tambien los nombres anteriores `FLASK_HOST`, `FLASK_PORT` y `FLASK_OPEN_BROWSER`.
 
@@ -247,7 +246,7 @@ POST   /api/admin/usuarios/<id>/roles                  asignar { rol_id, vigente
 POST   /api/admin/usuarios/<id>/roles/<asig>/revocar   revocar { motivo }
 POST   /api/admin/usuarios/<id>/desbloquear            { motivo } (reautenticacion)
 POST   /api/admin/usuarios/<id>/password               { motivo } -> { password_temporal } (se muestra una vez; cambio obligatorio)
-GET    /api/admin/accesos?desde&hasta&dias             revision de accesos; &formato=csv&seccion=cuentas|eventos
+GET    /api/admin/accesos?desde&hasta&dias             revision de accesos; &formato=csv&seccion=cuentas (los eventos salen de la bitacora: 410)
 ```
 
 - **Fase 2 · cuentas**: `tipo_cuenta` (`permanente|temporal`), `vigente_desde`, `vigente_hasta`, `supervisor_id`, `motivo_ultimo_cambio` (en el alta y en `PUT`; `motivo_cuenta` es obligatorio si cambian). Temporal exige fecha de fin y supervisor. El supervisor es una persona activa, vigente, con cuenta permanente y un rol con R o A en `ensayos` o `muestras` (por permisos); nadie se supervisa a si mismo. El rol de estudiante (`clave = estudiante`) solo va en cuentas temporales. Un rol no puede quedar vigente fuera de la vigencia de la cuenta (400); al acortar la cuenta, sus roles se acotan. Cambiar vigencia o supervisor deja `cambiar_vigencia` en la bitacora, y cada rol ajustado su propio evento: `acotar_rol` (nueva fecha de fin) o `revocar_rol` si el rol empezaba despues del nuevo fin (no quedan rangos invertidos). Extender despues la cuenta no devuelve esos roles: se reasignan.
@@ -427,13 +426,23 @@ src/lib/server/modules/audit.ts
 ```
 
 ```text
-GET /api/audit?entidad=&entidad_id=&accion=&usuario=&search=&desde=&hasta=&limit=
+GET /api/audit?entidad=&entidad_id=&accion=&usuario=&usuarios=&acciones=&entidades=&search=&desde=&hasta=&sin_accesos=&antes_de=&limit=
 GET /api/audit/<id>
 GET /api/audit/summary
-GET /api/audit/verify          # recorre la cadena de hashes
+GET /api/audit/verify          # recorre la cadena de hashes; si falla: alerta_integridad + incidencia automatica
+# formato=csv (y cualquier formato) -> 410 «Funcionalidad retirada»: la bitacora no se exporta
 ```
 
 `registrarAuditoria(s, user, { accion, entidad, entidadId, referencia, motivo, antes, despues, detalle })` calcula el diff entre `antes` y `despues` (omite campos volatiles y sustituye las imagenes de firma por `[firma]`), guarda los dos snapshots y encadena el sello `hash = HMAC-SHA256(SECRET_KEY, contenido + hash_anterior)`. La llave vive fuera de la base: `SECRET_KEY` cuando esta configurada, y si no, una llave aleatoria de 32 bytes que el sistema crea la primera vez en `<instance>/auditoria.key` (permisos 600) para que la proteccion no dependa de recordar configurar el entorno. Asi, quien solo tenga el archivo de la base no puede recalcular la cadena despues de alterarla. **Respalda la llave junto con la base: si cambia o se pierde, la verificacion de lo ya escrito falla.** La tabla `auditoria` tiene triggers que abortan cualquier `UPDATE` o `DELETE` (SQLite `RAISE(ABORT)`, MySQL `SIGNAL`). El historial de un registro (`entidad` + `entidad_id`) lo puede leer quien tenga permiso de lectura del modulo al que pertenece la entidad (`muestras_* -> muestras`, `informes`, `documentos_sgc -> documentos`, `reactivos`, `usuarios`, ...); el log completo, `summary` y `verify` requieren `auditoria:read`. `verify` devuelve `{ ok, total, primer_error, filas_faltantes_al_final, filas_faltantes_intermedias, triggers_ok }`: recalcula la cadena, comprueba que no falten filas al final (`sqlite_sequence` / `AUTO_INCREMENT` contra `MAX(id)`) ni en medio (huecos de id) y que los dos triggers de proteccion sigan presentes; los triggers se reponen en cada escritura si alguien los retiro.
+
+**Auditoria en lenguaje simple** (`/auditoria` y el Historial de cada registro; solo presentacion):
+
+- **La bitacora no se exporta** (decision confirmada por el laboratorio): `GET /api/audit?formato=…` responde **410** (`exportacionBitacoraRetirada`, `src/lib/server/retirado.ts`), igual que `GET /api/admin/accesos?formato=csv&seccion=eventos` (eventos de la bitacora). No hay scripts ni comandos de exportacion. Las entradas antiguas `exportar` se muestran como "descargó una copia de…".
+- **Catalogo de lenguaje simple** en `src/lib/client/audit-humanize.ts`: para cada accion y entidad, la frase de la lista, el parrafo "Que paso" y, por dato (`FIELD`), su nombre con articulo y su formato (fechas dd/mm/aaaa, Si/No, unidades, nombres de persona por id con `/api/cuentas/activas`, catalogos). Los datos sin etiqueta no se muestran; nunca se muestran ids, sellos, checksums, commits, rutas, JSON ni nombres internos (siguen en la base).
+- **Componentes**: `src/components/features/audit/Actividades.tsx` (lista agrupada por dia, repeticiones seguidas de la misma persona, accion y registro en 10 minutos como "· N veces" —solo visual—, y `ActividadDialog`: ventana centrada con fondo difuminado, Esc/×/clic fuera, ↑/↓, foco atrapado) y `categorias.tsx` (tipos de actividad del filtro).
+- **Filtros** (`FilterMenu` como en Muestras): Periodo (por omision 30 dias), Personas (`usuarios=` correos), Tipo de actividad (`acciones=`), Area (`entidades=`) y Vista › Mostrar inicios de sesion (`sin_accesos`). El buscador incluye el nombre de la persona.
+- **Integridad**: la insignia se retiro. `GET /api/audit/verify` corre en segundo plano al abrir Auditoria; si la cadena falla registra una sola vez `alerta_integridad` (entidad `auditoria`, referencia con la clave del hecho) y la incidencia automatica `alerta_integridad:bitacora:…`; mientras esa incidencia este abierta (reportada o en evaluacion) aparece el aviso en el Inicio y la campana de quien tiene `calidad:V`. Respaldos y `verificar-instalacion` muestran el estado como antes.
+- El detalle pide `GET /api/audit/:id` (requiere `calidad:V`) solo para mostrar los datos principales de un registro nuevo y las unidades; en el Historial sin `calidad:V` esa seccion no aparece.
 
 ### 7.6 `documents`
 
@@ -628,7 +637,7 @@ La bitacora se sella con HMAC-SHA256 encadenado (`src/lib/shared/audit-chain.mjs
 Migrar la llave (solo si es imprescindible, con el servidor detenido):
 
 1. Respaldar la base y el `.env` / `auditoria.key` actuales.
-2. Verificar la cadena con la llave actual (`/auditoria` en verde).
+2. Verificar la cadena con la llave actual (`npm run verificar-instalacion`; Auditoria solo avisa si falla).
 3. Dejar constancia: la cadena anterior se conserva sellada con la llave vieja; guarda esa llave en custodia (sin ella no se puede volver a verificar lo anterior).
 4. Configurar la llave nueva y, antes de atender peticiones, agregar una entrada de corte que declare el cambio. Mientras no exista una herramienta de "resellado" versionada, **no cambies la llave** en una instalacion con datos: la verificacion de toda la cadena anterior fallaria.
 
@@ -801,7 +810,7 @@ Procedimiento aplicado el 2026-09-24 (rama `fase-0-reinicio`); repetible en otra
    ```
 
    Crea los 10 roles de `scripts/roles-catalogo.json` con su matriz de la Fase 1 (y `roles.clave`), un usuario local por rol y su asignacion en `usuario_roles`, con `hashPassword()` de `src/lib/server/password.ts` (requiere Node 22.18+ o 24). Es idempotente: un rol (por clave o nombre) o usuario (por correo) existente no se duplica; a un rol existente sin permisos del modelo nuevo (p. ej. de la Fase 0) se le carga la matriz; si ya tiene otros permisos se respeta (aviso) salvo con `--actualizar-permisos`; si una persona no tiene vigente su rol del catalogo, se le asigna. Cada cambio queda en la bitacora (actor `sistema`, motivo `--motivo`, por omision "Catálogo de roles Fase 1") sellado con `src/lib/shared/audit-chain.mjs`, **la misma implementacion que usa el servidor**, y al final recalcula la cadena completa. Requiere el esquema de la Fase 1 (arrancar el servidor una vez). Solo SQLite (en MySQL, ver abajo).
-7. **Comprobar**: iniciar sesion con cada usuario, revisar el menu y pulsar **Verificar integridad** en Auditoria.
+7. **Comprobar**: iniciar sesion con cada usuario, revisar el menu, abrir Auditoria (la verificacion corre sola y solo avisa si falla) y confirmar la cadena con `npm run verificar-instalacion`.
 
 **MySQL/MariaDB.** El script solo aplica a SQLite y el arranque ya no crea ningun rol, asi que en una instalacion MySQL nueva nadie puede entrar a Administracion hasta crear a mano el primer administrador (despues de `npm run migrar -- --respaldo-hecho`, que crea el esquema):
 

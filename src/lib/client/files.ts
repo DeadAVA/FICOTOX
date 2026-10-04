@@ -33,7 +33,7 @@ export async function openProtectedFile(url: string, token: string, filename?: s
   }
 }
 
-/* Descarga un CSV protegido por token (bitacora, historial de un registro). */
+/* Descarga un archivo protegido por token (listas de incidencias y NC, actas de restauracion). La bitacora no se exporta. */
 export async function descargarCsv(url: string, token: string, filename: string): Promise<boolean> {
   try {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -50,12 +50,9 @@ export async function descargarCsv(url: string, token: string, filename: string)
     const objectUrl = URL.createObjectURL(await res.blob());
     const link = document.createElement("a");
     link.href = objectUrl;
-    // Fase 12: si la bitacora se corto (demasiadas filas), el archivo lo dice y aqui se avisa: nunca en silencio.
-    const truncado = res.headers.get("x-bitacora-truncado") === "1";
-    link.download = truncado ? filename.replace(/\.csv$/, "-parcial.csv") : filename;
+    link.download = filename;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
-    if (truncado) toast.warning(`Exportación parcial: se descargaron ${Number(res.headers.get("x-bitacora-filas") || 0).toLocaleString("es-MX")} filas y hay más. Exporta por periodo (filtros Desde/Hasta) para obtener el resto; el archivo lo indica en su última fila.`, { duration: 12_000 });
     return true;
   } catch (err) {
     toast.error(err instanceof Error ? err.message : "No se pudo exportar");

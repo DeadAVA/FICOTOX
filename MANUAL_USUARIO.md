@@ -350,7 +350,13 @@ La seccion **Mantenimiento** permite programar y controlar mantenimientos de equ
 
 ## 11.1 Bitacora de auditoria
 
-En la barra lateral, grupo **Calidad**, **Auditoria** (permiso Calidad: V) muestra quien hizo que, cuando y por que en todo el sistema: altas, ediciones (con el valor anterior y el nuevo), anulaciones, bajas, revisiones, aprobaciones, autorizaciones, liberaciones, envios de informes, inicios de sesion e intentos fallidos. Se presenta como la lista de Movimientos: una tabla con fecha y hora, usuario, accion (etiqueta de color), **que paso** en una frase ("Dio de baja el reactivo CH-3B" con el motivo y los hechos clave debajo), el registro afectado con enlace **Abrir**, y a la derecha "n cambios": al hacer clic en la fila se despliega el detalle de cada dato con su valor anterior y el nuevo. Arriba a la derecha van los contadores (total, 30 dias, anulaciones, accesos fallidos). Se filtra por entidad, accion, usuario, fecha y texto. La bitacora no se puede editar ni borrar; **Verificar integridad** comprueba la cadena de hashes, que no falten entradas al final y que la proteccion de la tabla siga activa, y avisa si algo fue alterado. Cada formato muestra su propio **Historial** a quien puede leer ese modulo.
+En la barra lateral, grupo **Calidad**, **Auditoria** (permiso Calidad: V) muestra quien hizo que, cuando y por que en toda la plataforma, en lenguaje sencillo.
+
+- **Lista**: agrupada por dia (Hoy, Ayer, 24 de septiembre…). Cada renglon es una frase ("Mariana imprimio la etiqueta de la recepcion R 0000001") y debajo la hora y el area ("20:24 · Recepcion de muestras"). Un icono de comentario indica que la actividad tiene motivo. Si la misma persona repite la misma accion sobre el mismo registro en pocos minutos (por ejemplo, imprimir etiquetas), se muestra un solo renglon "· 4 veces"; en la bitacora siguen siendo entradas separadas.
+- **Buscar y filtrar**: el buscador ("Buscar por folio, persona o motivo") y el boton **Filtros**, que indica cuantos hay activos: **Periodo** (Hoy, Ultimos 7 dias, Ultimos 30 dias —por omision—, Todo o Personalizado con fechas desde/hasta), **Personas**, **Tipo de actividad** (creaciones, cambios, firmas y aprobaciones, anulaciones y rechazos, solicitudes, impresiones y descargas, sistema), **Area** (Muestras, Informes, Inventario, Equipos, Calidad, Biblioteca, Usuarios y accesos) y **Vista › Mostrar inicios de sesion**. **Limpiar filtros** los quita todos.
+- **Detalle**: al pulsar una actividad se abre una ventana al centro (el resto de la pantalla se difumina) con la frase, quien la hizo y con que cargo, cuando ("3 de octubre de 2026 a las 16:57 · hace 2 horas"), **Que paso** explicado en palabras, **Que cambio** (una frase por dato: "El estado cambio de Aceptada a Cerrada"; en los registros nuevos, sus datos principales), el **Motivo** si lo hubo y el boton **Ver el registro**. Las flechas ↑/↓ pasan a la actividad anterior o siguiente; Esc, la × o un clic fuera la cierran.
+- **Integridad**: la plataforma revisa sola, en segundo plano, que nadie haya alterado el registro de actividad. Si todo esta bien no muestra nada; si detecta un posible cambio no autorizado, aparece un aviso rojo arriba de Auditoria ("Avisa a la Coordinacion de Mejora Continua"), en el Inicio y en la campana de quien tiene Calidad, y se crea una incidencia automatica. Las pruebas de restauracion de la pantalla Respaldos y `npm run verificar-instalacion` siguen mostrando el estado de integridad.
+- **La bitacora no se exporta** (decision confirmada por el laboratorio): se consulta solo dentro de la plataforma. No se puede editar ni borrar. Cada formato muestra su propio **Historial** (con la misma lista y el mismo detalle) a quien puede leer ese modulo.
 
 ## 12. Roles y permisos
 
@@ -422,7 +428,7 @@ Cuando firma, revisa, aprueba, autoriza, libera, envia o anula, el sistema guard
 
 ### 13.5 Revision de accesos
 
-En **Administracion › Revisión de accesos** se consultan, para la revision periodica: las cuentas y sus roles vigentes, las cuentas temporales con su supervisor, los vencimientos proximos (7, 30 o 90 dias), las cuentas bloqueadas y los cambios de un periodo (bloqueos, desbloqueos, roles asignados, revocados o vencidos, cambios de vigencia, contrasenas restablecidas y bajas). Los botones **Exportar CSV de cuentas** y **Exportar CSV de eventos** descargan cada seccion. Quien solo ve su propia cuenta ve solo la suya. En el **Inicio**, la administracion y los supervisores ven el aviso de accesos que vencen en 7 dias.
+En **Administracion › Revisión de accesos** se consultan, para la revision periodica: las cuentas y sus roles vigentes, las cuentas temporales con su supervisor, los vencimientos proximos (7, 30 o 90 dias), las cuentas bloqueadas y los cambios de un periodo (bloqueos, desbloqueos, roles asignados, revocados o vencidos, cambios de vigencia, contrasenas restablecidas y bajas). El boton **Exportar CSV de cuentas** descarga la lista de cuentas; los cambios del periodo salen de la bitacora y no se exportan. Quien solo ve su propia cuenta ve solo la suya. En el **Inicio**, la administracion y los supervisores ven el aviso de accesos que vencen en 7 dias.
 
 ### 13.6 Supervision (cuentas temporales y alcance "supervisado")
 
@@ -535,15 +541,14 @@ Resumen del estado final (Fases 9 y 10). El detalle por modulo, accion y alcance
 | Técnico Analista | Trabaja las muestras asignadas: procesa, extrae, analiza, adjunta la evidencia instrumental y envia a revision; crea informes en borrador; registra uso de equipos y movimientos de inventario. |
 | Técnico Auxiliar | Registra recepciones y procesamientos; uso de equipos y movimientos de inventario. |
 | Administrador/a Auxiliar | Mantenimientos de equipos, inventario y compras; ve el estado de las muestras. |
-| Auditor Interno | Consulta todo (solo lectura), incluida la bitacora y su exportacion. |
+| Auditor Interno | Consulta todo (solo lectura), incluida la bitacora. |
 | Estudiante / personal en formación | Trabaja las muestras asignadas con supervision (todo queda pendiente del visto bueno de su supervisor); en la Biblioteca solo ve los documentos visibles para todos o para su rol. |
 
-### 13.19 Notificaciones y exportacion
+### 13.19 Notificaciones
 
 - **Campana** (barra lateral): contador y panel con lo que te toca, calculado al momento: muestras asignadas a ti en los ultimos 7 dias; analisis e informes que puedes revisar, aprobar, autorizar o liberar; solicitudes **Por autorizar** y registros **Por supervisar**; mantenimientos vencidos o proximos (si ves equipos); cuentas, roles y autorizaciones que vencen pronto (las tuyas, y las de otros si administras); y, para el Administrador tecnico y quien revisa en Calidad, **respaldos** sin hacer en las ultimas 24 h o sin prueba de restauracion en 90 dias (13.20); y los avisos de **calidad** (13.21). Cada elemento abre su registro.
-- **Exportar la bitacora**: en **Auditoria**, **Exportar CSV** descarga lo que muestran los filtros aplicados (fecha, usuario, accion, modulo, referencia, motivo y los cambios en texto legible).
-- **Exportar el historial de un registro**: en **Calidad › Auditoria**, escriba el folio del registro (por ejemplo `R 0000012`) en la busqueda y use **Exportar CSV**.
-- Las exportaciones respetan tus permisos y alcances (lo que no puedes ver sale como "datos restringidos") y quedan en la bitacora.
+- Si la revision automatica detecta un posible cambio no autorizado en el registro de actividad, quien tiene Calidad lo ve en la campana y en el Inicio.
+- **La bitacora no se exporta** (ni completa ni el historial de un registro): se consulta solo dentro de la plataforma, en **Calidad › Auditoria** y en el **Historial** de cada formato.
 
 ### 13.20 Respaldos (Administracion › Respaldos)
 
