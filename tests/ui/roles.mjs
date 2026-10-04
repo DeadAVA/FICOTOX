@@ -97,11 +97,9 @@ function enlacesEsperados(modulos) {
   // Calidad › Biblioteca (modulo documentos; reemplaza a Documentos SGC) para quien ve documentos.
   if (set.has("documentos")) out.add("/calidad/biblioteca");
   if (set.has("usuarios")) {
+    // Revision de accesos se integro en Usuarios y la pantalla Respaldos se retiro.
     out.add("/administracion/usuarios");
-    out.add("/administracion/accesos");
     if (!propio) out.add("/administracion/roles");
-    // Fase 10: Respaldos para usuarios:G o calidad:V (en el catalogo, todo rol que ve calidad tambien ve usuarios).
-    if (set.has("calidad") && calidad !== "incidencias") out.add("/administracion/respaldos");
   }
   return out;
 }

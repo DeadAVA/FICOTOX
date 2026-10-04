@@ -3,8 +3,7 @@
  * con los scripts de terminal. Todo sobre carpetas de instance/test (el servidor
  * de prueba respalda en instance/test/backups, FICOTOX_BACKUP_DIR); nunca toca
  * instance/ real ni backups/ real.
- * - Pantalla Respaldos: Jorge (usuarios:G) la ve y crea; Patricia (calidad:V)
- *   solo lectura; Luis no la ve.
+ * - La pantalla Respaldos se retiro (410): el respaldo se crea con npm run respaldar.
  * - Respaldo con el servidor encendido: snapshot valido (integrity_check ok);
  *   manifest con conteos, archivos y huella de la llave; sin secretos.
  * - Restauracion en modo prueba: todas las verificaciones ✅ y acta.
@@ -91,9 +90,6 @@ const leerEnv = () => {
 
 const QA = await login("qa@ficotox.local", "QaFicotox2026!");
 const tJ = await login("jorge.ramirez@ficotox.local");
-const tP = await login("patricia.luna@ficotox.local");
-const tL = await login("luis.castro@ficotox.local");
-const tA = await login("ana.torres@ficotox.local");
 const sufijo = Date.now().toString(36).toUpperCase().slice(-5);
 
 /* Una evidencia en disco para que el respaldo incluya archivos (la suite puede correr sola). */
@@ -108,25 +104,22 @@ const sufijo = Date.now().toString(36).toUpperCase().slice(-5);
   check("datos: un analisis con evidencia en disco", r.status === 201, `${r.status}`);
 }
 
-/* ---------- Pantalla Respaldos: permisos ---------- */
+/* ---------- Respaldo por linea de comandos (la pantalla Respaldos se retiro) ---------- */
 let respaldoId = null;
 {
-  const [j, p, l, a] = await Promise.all([tJ, tP, tL, tA].map((t) => api("GET", "/respaldos", undefined, t)));
-  check("Jorge (usuarios:G) ve los respaldos y puede crear; Patricia (calidad:V) y Ana solo lectura; Luis 403", j.status === 200 && j.data?.puede_crear === true && p.status === 200 && p.data?.puede_crear === false && a.status === 200 && l.status === 403, `${j.status}/${j.data?.puede_crear} ${p.status}/${p.data?.puede_crear} ${a.status} ${l.status}`);
-  const pCrea = await api("POST", "/respaldos", {}, tP);
-  check("Patricia no crea respaldos (403)", pCrea.status === 403, `${pCrea.status}`);
-  const sinReauth = await api("POST", "/respaldos", {}, tJ, { "X-Sin-Reauth-Auto": "1" });
-  check("crear respaldo exige reautenticacion (401)", sinReauth.status === 401 && sinReauth.data?.codigo === "reauth_required", `${sinReauth.status}`);
-  const crea = await api("POST", "/respaldos", {}, tJ);
-  respaldoId = crea.data?.id;
-  check("con el servidor encendido, Jorge crea un respaldo (201)", crea.status === 201 && !!respaldoId, `${crea.status} ${crea.data?.message}`);
-  const bitacora = (await api("GET", "/audit?accion=respaldar&limit=5", undefined, QA)).data?.items || [];
-  check("el respaldo queda en la bitacora", bitacora.some((e) => e.referencia === respaldoId), `${bitacora.length}`);
-  const lista = (await api("GET", "/respaldos", undefined, tP)).data;
-  check("la lista muestra el respaldo (con llave, sin verificar) y el aviso de prueba de restauracion", lista?.respaldos?.[0]?.id === respaldoId && lista.respaldos[0].incluye_llave === true && lista.respaldos[0].verificacion === null && lista.avisos?.some((x) => x.tipo === "sin_prueba"), JSON.stringify(lista?.avisos));
+  const retirada = await api("GET", "/respaldos", undefined, tJ);
+  const crearRetirado = await api("POST", "/respaldos", {}, tJ);
+  check("la pantalla y el endpoint de Respaldos están retirados (410)", retirada.status === 410 && crearRetirado.status === 410, `${retirada.status} ${crearRetirado.status}`);
+  // Con el servidor encendido: npm run respaldar (snapshot en linea).
+  const r = script("respaldar-ficotox.mjs", ["--json"]);
+  try {
+    respaldoId = JSON.parse(r.out.trim().split("\n").filter((l) => l.startsWith("{")).pop() || "{}").id || null;
+  } catch {
+    respaldoId = null;
+  }
+  check("con el servidor encendido, npm run respaldar crea un respaldo", r.code === 0 && !!respaldoId, `${r.code} ${r.out.slice(0, 160)}`);
   const noti = (await api("GET", "/notificaciones", undefined, tJ)).data?.items || [];
-  const notiLuis = (await api("GET", "/notificaciones", undefined, tL)).data?.items || [];
-  check("la campana avisa a Jorge de la prueba de restauracion pendiente (a Luis no)", noti.some((n) => n.tipo === "prueba_restauracion") && !notiLuis.some((n) => n.href === "/administracion/respaldos"), `${noti.map((n) => n.tipo).join(",")}`);
+  check("la campana ya no avisa de respaldos", !noti.some((n) => n.tipo === "respaldo" || n.tipo === "prueba_restauracion"), `${noti.map((n) => n.tipo).join(",")}`);
 }
 
 const carpeta = path.join(BACKUPS, respaldoId || "sin-id");
@@ -159,12 +152,6 @@ let destinoPrueba = null;
   check("el modo prueba no toca la instancia real de prueba y deja la copia en el destino", fs.existsSync(path.join(destinoPrueba, "ficotox.sqlite3")) && fs.existsSync(path.join(destinoPrueba, "evidencias")), destinoPrueba);
   // Biblioteca: el respaldo incluye instance/biblioteca/ con huellas y la restauracion la copia y verifica (paso 7).
   check("biblioteca: el respaldo incluye sus archivos (con SHA-256) y la restauración los copia y verifica", manifest.archivos.some((a) => a.ruta.startsWith("archivos/biblioteca/")) && fs.existsSync(path.join(destinoPrueba, "biblioteca")) && verif(acta, 7)?.ok === true && /biblioteca/i.test(verif(acta, 7)?.detalle || ""), `${verif(acta, 7)?.detalle}`);
-  const lista = (await api("GET", "/respaldos", undefined, tJ)).data;
-  check("la pantalla muestra la prueba (resultado, responsable) y el respaldo como verificado", lista?.ultima_prueba?.resultado === "aprobada" && lista.ultima_prueba.responsable === "Administrador técnico (pruebas)" && lista.respaldos.find((x) => x.id === respaldoId)?.verificacion?.resultado === "aprobada" && !lista.avisos.some((x) => x.tipo === "sin_prueba"), JSON.stringify(lista?.ultima_prueba));
-  const md = await api("GET", `/respaldos/actas/${lista?.ultima_prueba?.archivo}`, undefined, tP);
-  check("el acta se descarga (Patricia, solo lectura) y trae verificaciones y conclusion", md.status === 200 && /Acta de prueba de restauración/.test(md.data) && /✅/.test(md.data) && /Conclusión/.test(md.data), `${md.status}`);
-  const traversal = await api("GET", "/respaldos/actas/..%2F..%2Fmanifest", undefined, tJ);
-  check("el nombre del acta se valida (sin rutas)", traversal.status === 404, `${traversal.status}`);
 }
 
 /* ---------- Respaldo alterado, llave distinta y sin llave ---------- */

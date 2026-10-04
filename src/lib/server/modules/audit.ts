@@ -3,6 +3,7 @@ import { exigirVerRegistro } from "../acceso-registro";
 import { advertenciaLlaveBitacora, origenLlaveBitacora, registrarAuditoria, verifyAuditChain, type AuditVerification } from "../audit";
 import { type Row, type Session } from "../db";
 import { incidenciaPorAlertaIntegridad } from "./calidad/automaticas";
+import { alertasDeRespaldo } from "./respaldos";
 import { exportacionBitacoraRetirada } from "../retirado";
 import { json, type RouteContext } from "../http";
 import { cargarAutorizacion, finDiaLocal, inicioDiaLocal, permisoDe, requirePermission, soloEstado, type Autorizacion } from "../rbac";
@@ -224,6 +225,8 @@ export async function verifyAudit({ request, s }: RouteContext): Promise<Respons
   await requirePermission(s, user, "calidad", "V");
   const resultado = await verifyAuditChain(s);
   if (!resultado.ok) await alertarAlteracionBitacora(s, resultado);
+  // Actas de restauracion con la verificacion 1 fallida (la pantalla Respaldos se retiro): alerta e incidencia automatica.
+  if (await alertasDeRespaldo(s)) await s.commit();
   // Origen de la llave (nunca la llave) y advertencias para Respaldos y la verificacion de la instalacion.
   return json({ ...resultado, llave: { origen: origenLlaveBitacora(), advertencias: advertenciaLlaveBitacora() } });
 }

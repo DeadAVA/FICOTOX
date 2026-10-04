@@ -18,7 +18,6 @@ import { ACCIONES_CRITICAS } from "../../shared/acciones-criticas";
 import { formatearFecha, hoyLocal, sumarDias } from "../../shared/fechas";
 import { vencimientosProximos } from "./admin";
 
-import { avisosRespaldo, recibeAvisosRespaldo } from "./respaldos";
 
 export interface Notificacion {
   tipo: string;
@@ -83,10 +82,8 @@ export async function notificacionesDe(s: Session, auth: Autorizacion): Promise<
   // Cuentas, roles y autorizaciones que vencen pronto (las propias; las de otros si administra).
   const administra = !!permisoDe(auth, "usuarios", "G");
   const vencen = administra ? await vencimientosProximos(s, 7) : (await vencimientosProximos(s, 7)).filter((v) => Number(v.usuario_id ?? v.id) === yo);
-  for (const v of vencen.slice(0, LIMITE)) out.push({ tipo: "acceso", titulo: `${v.rol ? `Rol ${v.rol}` : "Cuenta"} vence el ${formatearFecha(v.vigente_hasta)}`, detalle: String(v.nombre || v.email || ""), href: administra ? "/administracion/accesos" : "/#mis-autorizaciones", tono: "warning" });
+  for (const v of vencen.slice(0, LIMITE)) out.push({ tipo: "acceso", titulo: `${v.rol ? `Rol ${v.rol}` : "Cuenta"} vence el ${formatearFecha(v.vigente_hasta)}`, detalle: String(v.nombre || v.email || ""), href: administra ? "/administracion/usuarios?vigencia=vence7" : "/#mis-autorizaciones", tono: "warning" });
   for (const a of (await autorizacionesPorVencer(s, auth, 30)).slice(0, LIMITE)) out.push({ tipo: "autorizacion", titulo: `Autorización por vencer: ${a.etiqueta}`, detalle: `${a.propia ? "Tuya" : a.persona} · vence el ${formatearFecha(a.vigente_hasta)}`, href: a.propia ? "/#mis-autorizaciones" : "/administracion/usuarios", tono: "warning" });
-  // Fase 10: respaldos (quien respalda y quien revisa): sin respaldo reciente o sin prueba de restauracion.
-  if (recibeAvisosRespaldo(auth)) for (const a of avisosRespaldo()) out.push({ tipo: a.tipo === "sin_respaldo" ? "respaldo" : "prueba_restauracion", titulo: a.titulo, detalle: a.detalle, href: "/administracion/respaldos", tono: "warning" });
   // Registro de actividad: posible cambio no autorizado (a quien consulta Calidad).
   if (puede("calidad", "V") && (await alertaBitacoraAbierta(s))) out.unshift({ tipo: "bitacora_alterada", titulo: "Posible cambio no autorizado en el registro de actividad", detalle: "Avisa a la Coordinación de Mejora Continua", href: "/auditoria", tono: "danger" });
   // Fase 11: incidencias por evaluar, mis acciones (proximas y vencidas), verificaciones, informes retenidos y suspensiones.

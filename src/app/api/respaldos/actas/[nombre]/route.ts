@@ -1,4 +1,4 @@
-import { apiRoute } from "@/lib/server/http";
-import { descargarActa } from "@/lib/server/modules/respaldos";
+import { pantallaRetirada } from "@/lib/server/retirado";
 
-export const GET = apiRoute(descargarActa);
+/* Las actas de restauración se consultan en backups/pruebas-restauracion/ (la pantalla Respaldos se retiró). */
+export const GET = () => pantallaRetirada("las actas de restauración se consultan en la carpeta de respaldos");

@@ -355,43 +355,38 @@ En la barra lateral, grupo **Calidad**, **Auditoria** (permiso Calidad: V) muest
 - **Lista**: agrupada por dia (Hoy, Ayer, 24 de septiembre…). Cada renglon es una frase ("Mariana imprimio la etiqueta de la recepcion R 0000001") y debajo la hora y el area ("20:24 · Recepcion de muestras"). Un icono de comentario indica que la actividad tiene motivo. Si la misma persona repite la misma accion sobre el mismo registro en pocos minutos (por ejemplo, imprimir etiquetas), se muestra un solo renglon "· 4 veces"; en la bitacora siguen siendo entradas separadas.
 - **Buscar y filtrar**: el buscador ("Buscar por folio, persona o motivo") y el boton **Filtros**, que indica cuantos hay activos: **Periodo** (Hoy, Ultimos 7 dias, Ultimos 30 dias —por omision—, Todo o Personalizado con fechas desde/hasta), **Personas**, **Tipo de actividad** (creaciones, cambios, firmas y aprobaciones, anulaciones y rechazos, solicitudes, impresiones y descargas, sistema), **Area** (Muestras, Informes, Inventario, Equipos, Calidad, Biblioteca, Usuarios y accesos) y **Vista › Mostrar inicios de sesion**. **Limpiar filtros** los quita todos.
 - **Detalle**: al pulsar una actividad se abre una ventana al centro (el resto de la pantalla se difumina) con la frase, quien la hizo y con que cargo, cuando ("3 de octubre de 2026 a las 16:57 · hace 2 horas"), **Que paso** explicado en palabras, **Que cambio** (una frase por dato: "El estado cambio de Aceptada a Cerrada"; en los registros nuevos, sus datos principales), el **Motivo** si lo hubo y el boton **Ver el registro**. Las flechas ↑/↓ pasan a la actividad anterior o siguiente; Esc, la × o un clic fuera la cierran.
-- **Integridad**: la plataforma revisa sola, en segundo plano, que nadie haya alterado el registro de actividad. Si todo esta bien no muestra nada; si detecta un posible cambio no autorizado, aparece un aviso rojo arriba de Auditoria ("Avisa a la Coordinacion de Mejora Continua"), en el Inicio y en la campana de quien tiene Calidad, y se crea una incidencia automatica. Las pruebas de restauracion de la pantalla Respaldos y `npm run verificar-instalacion` siguen mostrando el estado de integridad.
+- **Integridad**: la plataforma revisa sola, en segundo plano, que nadie haya alterado el registro de actividad. Si todo esta bien no muestra nada; si detecta un posible cambio no autorizado, aparece un aviso rojo arriba de Auditoria ("Avisa a la Coordinacion de Mejora Continua"), en el Inicio y en la campana de quien tiene Calidad, y se crea una incidencia automatica. `npm run verificar-instalacion` y las actas de las pruebas de restauracion siguen mostrando el estado de integridad.
 - **La bitacora no se exporta** (decision confirmada por el laboratorio): se consulta solo dentro de la plataforma. No se puede editar ni borrar. Cada formato muestra su propio **Historial** (con la misma lista y el mismo detalle) a quien puede leer ese modulo.
 
 ## 12. Roles y permisos
 
 Cada persona puede tener **uno o varios roles**, cada uno con fecha de inicio y, si se quiere, fecha de fin. Lo que una persona puede hacer es la suma de sus roles vigentes. El detalle de los 10 roles del laboratorio, sus permisos y las combinaciones prohibidas esta en `docs/CATALOGO_PERMISOS.md`.
 
-Cada permiso dice **que** se puede hacer en cada modulo:
+Cada permiso dice **que** se puede hacer en cada area —**Ver, Crear, Editar** (solo mientras el registro no pasa a revision o aprobacion), **Revisar, Aprobar** (tambien validar, autorizar o liberar), **Anular** (con justificacion) y **Administrar** (todo lo anterior)— y **hasta donde**: por ejemplo "solo recepciones", "solo su propia cuenta", "solo el estado de la muestra", "solo lo asignado" o "solo mantenimientos". La pantalla lo muestra siempre en palabras, nunca con letras ni claves.
 
-| Letra | Significa |
-| --- | --- |
-| V | Ver |
-| C | Crear o capturar |
-| E | Editar un borrador (solo mientras el registro no pasa a revision o aprobacion) |
-| R | Revisar |
-| A | Aprobar, validar, autorizar o liberar |
-| AN | Anular con justificacion |
-| G | Administrar (todo lo anterior) |
-
-y **hasta donde** (alcance): por ejemplo "solo recepcion", "solo su propia cuenta", "solo el estado de la muestra" o "solo mantenimientos". Algunos alcances se guardan ya pero se aplicaran en fases posteriores; la pantalla los marca con "se aplica en Fase X".
-
-Los modulos son: Usuarios y roles, Documentos, Muestras (recepcion, custodia y disposicion), Ensayos (procesamiento, extraccion y analisis), Informes, Equipos (y mantenimientos), Inventario (reactivos, consumibles y movimientos), Calidad (bitacora de auditoria) y Compras. El Inicio lo ve toda persona activa, pero cada panel y aviso aparece solo si puede ver ese modulo.
+Las areas son: Muestras (recepcion, custodia y disposicion), Ensayos (procesamiento, extraccion y analisis), Informes, Equipos (y mantenimientos), Inventario (reactivos, consumibles y movimientos), Calidad (registro de actividad, incidencias y no conformidades), Biblioteca, Usuarios y Compras. El Inicio lo ve toda persona activa, pero cada panel y aviso aparece solo si puede ver esa area.
 
 ### 12.1 Ver y editar un rol
 
-Requiere el permiso de administrar usuarios (Usuarios: G).
+En la barra lateral, grupo **Administracion**, elija **Roles**. La lista muestra cada rol con cuantas personas lo tienen y, si aplica, las etiquetas **Del sistema** e **Inactivo**. Se busca por nombre y se filtra con **Filtros** (Estado, Tipo y Uso).
 
-1. En la barra lateral, grupo **Administracion**, elija **Roles**.
-2. Presione **Nuevo rol** o elija **Editar** en el menu **⋯** de un rol.
-3. En la **matriz** marque, por modulo, las acciones (V C E R A AN G) y elija el alcance de cada una.
-4. Guarde e indique el **motivo** del cambio (queda en la bitacora).
+- **Ver un rol**: pulse el rol. Se abre una ventana al centro con su nombre, descripcion y estado; **Que puede hacer**, por area y en palabras ("Muestras: ver y registrar; editar solo las asignadas"); y las **personas con este rol** (al pulsar una se abre su ventana en Usuarios). Las flechas ↑/↓ pasan al rol anterior o siguiente.
+- **Editar permisos** (Usuarios: G): en la ventana o en el menu **⋯**. La ventana se amplia con la tabla de areas y las columnas **Ver, Crear, Editar, Revisar, Aprobar, Anular y Administrar**; en cada casilla marcada se elige **hasta donde** (Todo, Solo lo asignado, Solo su propia cuenta, Solo en borrador…). Al guardar se pide el **motivo** y su contrasena.
+- **Editar nombre y descripcion**, **Activar / Desactivar** (con motivo) y **Nuevo rol**: en el menu **⋯** y en la barra. Un rol nuevo nace sin permisos; despues se definen con Editar permisos.
+- Si el rol es suyo, solo puede **ver** sus permisos: los cambia otra persona que administre usuarios.
 
-Si el cambio dejaria a alguien con una **combinacion de roles prohibida** (por ejemplo, administracion tecnica del sistema junto con captura o aprobacion de ensayos), el sistema no lo guarda y muestra a quien afectaria. Tampoco permite dejar el sistema sin ninguna persona activa que pueda administrar usuarios y roles. El rol "Administrador técnico del sistema" no se puede eliminar; un rol que ya se asigno a alguien tampoco (se puede desactivar).
+Si el cambio dejaria a alguien con una **combinacion de roles prohibida** (por ejemplo, administracion tecnica del sistema junto con captura o aprobacion de ensayos), el sistema no lo guarda y dice a quien afectaria. Tampoco permite dejar el sistema sin ninguna persona activa que pueda administrar usuarios y roles.
 
 ## 13. Usuarios
 
-La seccion **Usuarios** permite administrar cuentas de acceso y sus roles. Quien solo tiene permiso sobre su propia cuenta ve unicamente la suya.
+La seccion **Usuarios** muestra a las personas que entran a la plataforma. Quien solo tiene permiso sobre su propia cuenta ve unicamente la suya.
+
+- **Lista**: cada renglon muestra las iniciales, el nombre y el correo, hasta dos roles vigentes ("+N" si hay mas), el estado (**Activo, De baja, Bloqueado, Temporal** —con su fecha de fin— o **Acceso vencido**), el ultimo acceso ("hace 2 h") y un indicador si hay una solicitud pendiente sobre la cuenta.
+- **Accesos rapidos** (arriba de la lista, para quien ve todas las cuentas): "3 accesos vencen esta semana", "1 cuenta bloqueada", "2 cuentas temporales", "1 acceso vencido", "1 solicitud de acceso pendiente". Solo aparecen los que tienen algo; al pulsarlos se aplica el filtro. Los avisos del Inicio y de la campana sobre accesos que vencen llevan aqui con el filtro aplicado.
+- **Buscar y filtrar**: por nombre o correo, y **Filtros**: Estado (Activos, De baja, Bloqueados), Tipo de cuenta, Rol, Vigencia (vence en los proximos 7 dias, acceso vencido) y Otros (con solicitudes pendientes, sin roles vigentes, sin autorizaciones FX-THF-AP). Orden: A–Z, ultimo acceso o fecha de alta.
+- **Ventana de la persona**: al pulsar a alguien se abre una ventana al centro con su nombre, correo, estado y cargo, y tres pestañas: **General** (tipo de cuenta, vigencia, supervisor si es temporal, ultimo acceso, bloqueo con **Desbloquear** y solicitudes pendientes con **Aprobar** o **Rechazar** para quien pueda), **Roles** (cada rol con desde, hasta y quien lo asigno; **Asignar rol** y **Revocar**) y **Autorizaciones** (FX-THF-AP; **Agregar** y **Revocar**). ↑/↓ pasan a la persona anterior o siguiente; Esc, la × o un clic fuera la cierran.
+- **Menu ⋯ del renglon**: **Editar datos**, **Restablecer contraseña**, **Desbloquear** (si esta bloqueada) y **Dar de baja** o **Reactivar**.
+- La revision periodica de accesos se hace aqui (la pantalla Revision de accesos se retiro). Los cambios de un periodo (bloqueos, roles asignados o revocados, vigencias) se consultan en **Calidad › Auditoria**. No hay exportacion.
 
 ### 13.1 Crear usuario
 
@@ -407,7 +402,7 @@ Para una contrasena olvidada use **Restablecer contraseña…** en el menu de la
 
 ### 13.2 Asignar y revocar roles
 
-1. Abra la ficha del usuario: sus roles aparecen como lista con su **vigencia** (desde / hasta) y su estado (vigente, por comenzar, vencido o revocado).
+1. Abra la ventana de la persona, pestaña **Roles**: sus roles aparecen con su **vigencia** (desde / hasta), su estado y quien lo asigno; los terminados o revocados se ven con **Ver roles anteriores**.
 2. **Asignar rol**: elija el rol, la fecha de inicio, opcionalmente la fecha de fin, y escriba el **motivo** (minimo 5 caracteres).
 3. **Revocar**: en el rol vigente, presione **Revocar** e indique el motivo. El rol deja de contar de inmediato, sin que la persona tenga que volver a iniciar sesion.
 
@@ -420,7 +415,7 @@ Reglas:
 
 ### 13.3 Activar o desactivar usuario
 
-Edite el usuario y cambie su estado a activo o inactivo. Un usuario inactivo no puede iniciar sesion ni usar una sesion abierta. La accion **Dar de baja** de la lista tambien desactiva la cuenta pidiendo un motivo; los usuarios nunca se borran, porque la bitacora y los registros que firmaron los referencian.
+Use **Dar de baja** o **Reactivar** en el menu **⋯** de la persona (con motivo y su contrasena; la reactivacion la aprueba otra persona autorizada). Un usuario dado de baja no puede iniciar sesion ni usar una sesion abierta. Los usuarios nunca se borran, porque la bitacora y los registros que firmaron los referencian.
 
 ### 13.4 Con que cargo firmo
 
@@ -428,7 +423,7 @@ Cuando firma, revisa, aprueba, autoriza, libera, envia o anula, el sistema guard
 
 ### 13.5 Revision de accesos
 
-En **Administracion › Revisión de accesos** se consultan, para la revision periodica: las cuentas y sus roles vigentes, las cuentas temporales con su supervisor, los vencimientos proximos (7, 30 o 90 dias), las cuentas bloqueadas y los cambios de un periodo (bloqueos, desbloqueos, roles asignados, revocados o vencidos, cambios de vigencia, contrasenas restablecidas y bajas). El boton **Exportar CSV de cuentas** descarga la lista de cuentas; los cambios del periodo salen de la bitacora y no se exportan. Quien solo ve su propia cuenta ve solo la suya. En el **Inicio**, la administracion y los supervisores ven el aviso de accesos que vencen en 7 dias.
+Se hace en **Administracion › Usuarios** (13): accesos rapidos, filtros de vigencia y bloqueos, cuentas temporales con su supervisor y la ventana de cada persona. Los cambios de un periodo se consultan en **Calidad › Auditoria**. La antigua pantalla y su exportacion se retiraron.
 
 ### 13.6 Supervision (cuentas temporales y alcance "supervisado")
 
@@ -470,7 +465,7 @@ Ademas de su rol, cada persona solo puede operar las actividades, metodos y equi
 
 - **Que se autoriza**: actividades (recepcion de muestras, procesamiento, extraccion, analisis, revision de resultados, aprobacion de resultados, revision de informes, autorizacion de informes), metodos (ASP, DSP, PSP, pigmentos, plancton, otro) y equipos activos del inventario.
 - **Que pide cada formato**: recepcion pide la actividad de recepcion; procesamiento, la de procesamiento; extraccion, la de extraccion mas el metodo del tipo (E-A es ASP, E-D es DSP) y cada equipo del inventario que se use; analisis, la de analisis mas el metodo del tipo de analisis y el equipo usado; revisar o aprobar un analisis, la actividad correspondiente mas el metodo; revisar o autorizar un informe, la actividad correspondiente. Los equipos o insumos que no estan en el inventario no se validan.
-- **Quien las registra**: la Coordinacion del Area Tecnica, Mejora Continua o la Responsable General, desde **Administracion › Usuarios**, ficha de la persona, pestaña **Autorizaciones (FX-THF-AP)**. **Agregar** pide tipo, actividad/metodo/equipo, vigencia (desde y, si aplica, hasta), el folio del formato en papel y el motivo; **Revocar** pide el motivo. Ambas piden su contrasena y quedan en la bitacora. Nadie puede otorgarse ni revocarse autorizaciones a si mismo. Nada se borra: una autorizacion revocada o vencida sigue en la lista con su estado.
+- **Quien las registra**: la Coordinacion del Area Tecnica, Mejora Continua o la Responsable General, desde **Administracion › Usuarios**, ventana de la persona, pestaña **Autorizaciones**. **Agregar** pide tipo, actividad/metodo/equipo, vigencia (desde y, si aplica, hasta), el folio del formato en papel y el motivo; **Revocar** pide el motivo. Ambas piden su contrasena y quedan en la bitacora. Nadie puede otorgarse ni revocarse autorizaciones a si mismo. Nada se borra: una autorizacion revocada o vencida sigue en la lista con su estado.
 - **Si le falta una**: al abrir el formato aparece un aviso con lo que le falta, y al guardar el sistema lo impide con un mensaje como "No tienes autorización vigente para extracción DSP" o "... para el equipo CE1". Pida a su coordinacion que la registre.
 - **Mis autorizaciones**: en **Mi cuenta** puede consultar (solo lectura) sus autorizaciones, su vigencia, folio y estado.
 - **Vencimientos**: el Inicio avisa de las autorizaciones que vencen en los proximos 30 dias, a la persona y a quien las administra. Al vencer, la autorizacion deja de valer sola y queda anotado en la bitacora. Si usted no administra autorizaciones, el aviso lo lleva a **Mi cuenta › Mis autorizaciones**.
@@ -533,7 +528,7 @@ Resumen del estado final (Fases 9 y 10). El detalle por modulo, accion y alcance
 
 | Rol | Tareas principales |
 | --- | --- |
-| Administrador técnico del sistema | Administra cuentas y roles (alta, baja, vigencias, bloqueos); no aprueba cambios de acceso ni otorga autorizaciones FX-THF-AP; consulta la bitacora y el estado de las muestras; crea los respaldos y ejecuta las pruebas de restauracion (13.20). |
+| Administrador técnico del sistema | Administra cuentas y roles (alta, baja, vigencias, bloqueos); no aprueba cambios de acceso ni otorga autorizaciones FX-THF-AP; consulta la bitacora y el estado de las muestras; crea los respaldos y ejecuta las pruebas de restauracion por linea de comandos (13.20). |
 | Responsable General | Aprueba asignaciones de rol, reactivaciones y ampliaciones de vigencia; revisa y autoriza informes y los libera; archiva y restaura documentos de la Biblioteca; anula con justificacion y aprueba solicitudes; otorga autorizaciones FX-THF-AP. |
 | Coordinador/a de Mejora Continua | Gestiona el SGC: administra la Biblioteca (sube, edita y archiva cualquier documento, categorias); excepciones de segregacion; bitacora completa; otorga autorizaciones FX-THF-AP. |
 | Coordinador/a del Área Técnica | Asigna muestras; recibe, procesa, extrae, analiza, revisa y aprueba resultados; revisa, autoriza y libera informes; decide rechazos, desviaciones, cambios de folio y reaperturas; administra equipos e inventario; otorga autorizaciones FX-THF-AP. |
@@ -546,19 +541,13 @@ Resumen del estado final (Fases 9 y 10). El detalle por modulo, accion y alcance
 
 ### 13.19 Notificaciones
 
-- **Campana** (barra lateral): contador y panel con lo que te toca, calculado al momento: muestras asignadas a ti en los ultimos 7 dias; analisis e informes que puedes revisar, aprobar, autorizar o liberar; solicitudes **Por autorizar** y registros **Por supervisar**; mantenimientos vencidos o proximos (si ves equipos); cuentas, roles y autorizaciones que vencen pronto (las tuyas, y las de otros si administras); y, para el Administrador tecnico y quien revisa en Calidad, **respaldos** sin hacer en las ultimas 24 h o sin prueba de restauracion en 90 dias (13.20); y los avisos de **calidad** (13.21). Cada elemento abre su registro.
+- **Campana** (barra lateral): contador y panel con lo que te toca, calculado al momento: muestras asignadas a ti en los ultimos 7 dias; analisis e informes que puedes revisar, aprobar, autorizar o liberar; solicitudes **Por autorizar** y registros **Por supervisar**; mantenimientos vencidos o proximos (si ves equipos); cuentas, roles y autorizaciones que vencen pronto (las tuyas, y las de otros si administras); y los avisos de **calidad** (13.21). Cada elemento abre su registro.
 - Si la revision automatica detecta un posible cambio no autorizado en el registro de actividad, quien tiene Calidad lo ve en la campana y en el Inicio.
 - **La bitacora no se exporta** (ni completa ni el historial de un registro): se consulta solo dentro de la plataforma, en **Calidad › Auditoria** y en el **Historial** de cada formato.
 
-### 13.20 Respaldos (Administracion › Respaldos)
+### 13.20 Respaldos
 
-La pantalla **Respaldos** la administra el **Administrador tecnico del sistema** y la consultan en solo lectura Mejora Continua, el Auditor y la Responsable General (quien tiene Calidad: V).
-
-- **Respaldos locales**: cada respaldo es una carpeta en `backups/` con la base (copia consistente tomada sin detener el servidor), los PDF de informes, las evidencias de envio y de analisis, los documentos del SGC y los reportes de mantenimiento, un **manifest** con los conteos y las huellas SHA-256, y la **llave de la bitacora** aparte (solo en el respaldo local). Se muestra su fecha, tamano, si incluye la llave y si ya paso una **prueba de restauracion**.
-- **Crear respaldo ahora** (solo el Administrador tecnico, con su contrasena): crea un respaldo al momento; queda en la bitacora. Los respaldos programados (diarios) los crea el script de respaldo.
-- **Pruebas de restauracion**: cada prueba genera un **acta** (fecha, respaldo, responsable, cada verificacion con ✅/❌, tiempo y conclusion) que se descarga desde la tabla. La ultima prueba aparece arriba.
-- **Avisos**: si no hay respaldo en las ultimas 24 h o no hay prueba de restauracion aprobada en 90 dias, se avisa en esta pantalla, en el Inicio y en la campana.
-- **La restauracion no se hace desde la interfaz**: solo por linea de comandos y con el servidor detenido. La pantalla muestra los comandos; el procedimiento completo esta en `docs/RESPALDO_Y_RECUPERACION.md`.
+La pantalla **Respaldos** se retiro de la interfaz (junto con "Crear respaldo ahora", la descarga de actas y los avisos de respaldo del Inicio y la campana). Los respaldos y las pruebas de restauracion los hace el **Administrador tecnico del sistema** por linea de comandos, sin cambios: `npm run respaldar` (y la tarea programada diaria), `npm run restaurar` (modo prueba por omision, con su **acta** en `backups/pruebas-restauracion/`) y `npm run verificar-instalacion` para revisar el estado. El procedimiento completo esta en `docs/RESPALDO_Y_RECUPERACION.md`. Si una prueba de restauracion detecta un respaldo alterado, se crea una incidencia automatica (se revisa al abrir Auditoria).
 
 ### 13.21 Incidencias y no conformidades (Calidad › Incidencias y NC)
 

@@ -13,7 +13,6 @@ import { vencimientosProximos } from "./admin";
 
 import { diasDesde, formatearFecha, hoyLocal, sumarDias } from "../../shared/fechas";
 import { esCoordinacion, filtroAsignadas, soloAsignado } from "../asignaciones";
-import { avisosRespaldo, recibeAvisosRespaldo } from "./respaldos";
 
 /*
  * Datos del Inicio.
@@ -350,8 +349,9 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
       label: administra ? "Accesos que vencen en 7 días" : "Accesos de tus supervisados que vencen en 7 días",
       tone: "warning",
       count: vencen.length,
-      href: administra ? "/administracion/accesos" : "/supervision",
-      items: vencen.slice(0, MAX_ITEMS).map((v) => ({ label: String(v.nombre || v.email), sub: `${v.rol ? `Rol ${v.rol}` : "Cuenta"} vence el ${fmtDate(v.vigente_hasta)}`, href: administra ? "/administracion/accesos" : "/supervision" })),
+      // Revision de accesos se integro en Usuarios: el aviso abre la lista con el filtro de vencimientos.
+      href: administra ? "/administracion/usuarios?vigencia=vence7" : "/supervision",
+      items: vencen.slice(0, MAX_ITEMS).map((v) => ({ label: String(v.nombre || v.email), sub: `${v.rol ? `Rol ${v.rol}` : "Cuenta"} vence el ${fmtDate(v.vigente_hasta)}`, href: administra ? "/administracion/usuarios?vigencia=vence7" : "/supervision" })),
     });
   }
 
@@ -388,12 +388,6 @@ export async function inicioAvisos({ request, s }: RouteContext): Promise<Respon
   // Registro de actividad: posible cambio no autorizado (incidencia automatica abierta), a quien consulta Calidad.
   if (permisoDe(auth, "calidad", "V") && (await alertaBitacoraAbierta(s))) {
     avisos.unshift({ key: "bitacora_alterada", label: "Posible cambio no autorizado", tone: "danger", count: 1, href: "/auditoria", items: [{ label: "Se detectó un posible cambio no autorizado en el registro de actividad", sub: "Avisa a la Coordinación de Mejora Continua", href: "/auditoria" }] });
-  }
-
-  // Fase 10: respaldos sin hacer o sin prueba de restauracion (a quien respalda y a quien revisa).
-  if (recibeAvisosRespaldo(auth)) {
-    const respaldo = avisosRespaldo();
-    if (respaldo.length) avisos.push({ key: "respaldos", label: "Respaldos", tone: "warning", count: respaldo.length, href: "/administracion/respaldos", items: respaldo.map((a) => ({ label: a.titulo, sub: a.detalle, href: "/administracion/respaldos" })) });
   }
 
   return json({ items: avisos, total: avisos.reduce((sum, a) => sum + a.count, 0) });

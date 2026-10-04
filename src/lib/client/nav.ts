@@ -19,7 +19,7 @@ export interface NavChild {
   module?: Modulo;
   /* Oculta el destino si el alcance de V en su modulo es uno de estos (p. ej. "propio"). */
   hideForScopes?: string[];
-  /* Fase 10: regla propia de visibilidad (sustituye a `module`), p. ej. Respaldos: usuarios:G o calidad:V. */
+  /* Fase 10: regla propia de visibilidad (sustituye a `module`), p. ej. por combinación de permisos. */
   visible?: (permissions: PermissionsMap) => boolean;
 }
 
@@ -84,9 +84,7 @@ export const NAV_ITEMS: NavItem[] = [
     children: [
       { href: "/administracion/usuarios", label: "Usuarios", module: "usuarios" },
       { href: "/administracion/roles", label: "Roles", module: "usuarios", hideForScopes: ["propio"] },
-      { href: "/administracion/accesos", label: "Revisión de accesos", module: "usuarios" },
       // Fase 10: los administra usuarios:G y los consulta calidad:V (solo lectura).
-      { href: "/administracion/respaldos", label: "Respaldos", visible: (p) => !!p.usuarios?.G || (!!p.calidad?.V && p.calidad.V !== "incidencias") },
     ],
   },
 ];

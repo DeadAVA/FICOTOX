@@ -1,5 +1,4 @@
 import { randomAvatar } from "../../shared/avatars";
-import { exportacionBitacoraRetirada } from "../retirado";
 import { evaluarCombinacion } from "../../shared/combinaciones-roles";
 import { ACCIONES, ALCANCES, MODULOS, expandirPermisos, firmaFilas, permite } from "../../shared/permisos";
 import { requireUser, userIdFromClaims, type CurrentUser } from "../auth";
@@ -7,13 +6,13 @@ import { registrarAuditoria, snapshotRow } from "../audit";
 import { getConfig } from "../config";
 import { isIntegrityError, type Row, type Session } from "../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
-import { afectadosPorCambioDeRol, assertAdministratorRemains, countActiveAdministrators, cuentaVigente, finDiaLocal, inicioDiaLocal, filasDeRoles, guardarFilasRol, hoy, mensajeViolaciones, normalizarFilas, requirePermission, rolesComprometidos, rolesVigentes, toBit, type Permiso } from "../rbac";
+import { afectadosPorCambioDeRol, assertAdministratorRemains, countActiveAdministrators, cuentaVigente, filasDeRoles, guardarFilasRol, hoy, mensajeViolaciones, normalizarFilas, requirePermission, rolesComprometidos, rolesVigentes, toBit, type Permiso } from "../rbac";
 import { normalizeUserPayload } from "../users";
 import { hashPassword, validatePasswordStrength } from "../password";
 import { exigirReauth } from "../seguridad";
-import { crearSolicitud, datosDe, detalleSolicitud, respuestaSolicitud, serializarSolicitud, type ContextoEjecucion, type Solicitud } from "../solicitudes";
+import { crearSolicitud, datosDe, detalleSolicitud, pendientesDe, respuestaSolicitud, serializarSolicitud, type ContextoEjecucion, type Solicitud } from "../solicitudes";
 import { ACCIONES_CRITICAS } from "../../shared/acciones-criticas";
-import { formatearFecha, formatearFechaHora, sumarDias } from "../../shared/fechas";
+import { sumarDias } from "../../shared/fechas";
 import { randomBytes } from "node:crypto";
 
 /*
@@ -265,9 +264,31 @@ export async function listUsuarios({ request, s }: RouteContext): Promise<Respon
   const rows = soloPropio(permiso)
     ? await s.query(`${USUARIO_SELECT} WHERE u.id = :id`, { id: permiso.auth.userId })
     : await s.query(`${USUARIO_SELECT} ORDER BY u.id DESC LIMIT 200`);
-  const asignaciones = await asignacionesDe(s, rows.map((r) => Number(r.id)));
-  const items = rows.map((row) => conRoles(row, asignaciones.get(Number(row.id)) || []));
+  const ids = rows.map((r) => Number(r.id));
+  const asignaciones = await asignacionesDe(s, ids);
+  // Para la lista de Usuarios: solicitud pendiente sobre la cuenta y numero de autorizaciones FX-THF-AP vigentes (solo lectura).
+  const pendientes = await pendientesDe(s, "usuarios", ids);
+  const autorizaciones = await autorizacionesVigentesPorPersona(s, ids);
+  const items = rows.map((row) => {
+    const p = pendientes.get(String(row.id));
+    return { ...conRoles(row, asignaciones.get(Number(row.id)) || []), solicitud_pendiente: p ? serializarSolicitud(p) : null, autorizaciones_vigentes: autorizaciones.get(Number(row.id)) || 0 };
+  });
   return json({ items, total: items.length });
+}
+
+/* Autorizaciones FX-THF-AP vigentes hoy (no revocadas, ya iniciadas y sin vencer), por persona. */
+async function autorizacionesVigentesPorPersona(s: Session, ids: number[]): Promise<Map<number, number>> {
+  const out = new Map<number, number>();
+  if (!ids.length) return out;
+  const fecha = hoy();
+  const filas = await s.query<Row>(
+    `SELECT usuario_id, COUNT(*) AS n FROM autorizaciones_personal
+     WHERE usuario_id IN (${ids.map((_, i) => `:u${i}`).join(", ")}) AND revocada_en IS NULL AND vigente_desde <= :hoy AND (vigente_hasta IS NULL OR vigente_hasta >= :hoy)
+     GROUP BY usuario_id`,
+    { hoy: fecha, ...Object.fromEntries(ids.map((id, i) => [`u${i}`, id])) },
+  );
+  for (const f of filas) out.set(Number(f.usuario_id), Number(f.n || 0));
+  return out;
 }
 
 export async function getUsuario({ request, s, params }: RouteContext): Promise<Response> {
@@ -774,124 +795,8 @@ export async function revocarRolUsuario({ request, s, params }: RouteContext): P
   return json({ message: "Rol revocado" });
 }
 
-/* ---------- Revision de accesos (Fase 2) ---------- */
+/* ---------- Vencimientos proximos (avisos del Inicio y la campana; la revision de accesos esta en Usuarios) ---------- */
 
-const ACCIONES_ACCESO = ["bloquear", "desbloquear", "asignar_rol", "revocar_rol", "vencer_rol", "acotar_rol", "cambiar_vigencia", "restablecer_password", "baja", "reactivar", "cerrar_sesiones", "crear"];
-
-function csvCelda(value: unknown): string {
-  const text = value === null || value === undefined ? "" : String(value);
-  // Evita que Excel interprete formulas (inyeccion CSV).
-  const seguro = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
-  return /[",\n;]/.test(seguro) ? `"${seguro.replace(/"/g, '""')}"` : seguro;
-}
-
-function csv(encabezados: string[], filas: unknown[][]): string {
-  return `﻿${[encabezados, ...filas].map((f) => f.map(csvCelda).join(",")).join("\r\n")}\r\n`;
-}
-
-/*
- * Revision periodica de accesos (usuarios:V): cuentas y roles vigentes,
- * cuentas temporales con su supervisor, vencimientos proximos, bloqueos y
- * cambios de roles o vigencia en un periodo. `formato=csv&seccion=cuentas`
- * exporta las cuentas; los eventos salen de la bitacora y no se exportan.
- */
-export async function revisionAccesos({ request, s }: RouteContext): Promise<Response> {
-  const user = await requireUser(request);
-  const permiso = await requirePermission(s, user, "usuarios", "V");
-  const url = new URL(request.url);
-  const fecha = hoy();
-  const desde = fechaValida(url.searchParams.get("desde")) || sumarDias(fecha, -30);
-  const hasta = fechaValida(url.searchParams.get("hasta")) || fecha;
-  const dias = Math.min(Math.max(Number.parseInt(url.searchParams.get("dias") || "30", 10) || 30, 1), 365);
-  const limite = sumarDias(fecha, dias);
-  const propio = soloPropio(permiso);
-
-  const rows = propio ? await s.query(`${USUARIO_SELECT} WHERE u.id = :id`, { id: permiso.auth.userId }) : await s.query(`${USUARIO_SELECT} ORDER BY u.nombre ASC`);
-  const asignaciones = await asignacionesDe(s, rows.map((r) => Number(r.id)));
-  const cuentas = rows.map((row) => {
-    const conR = conRoles(row, asignaciones.get(Number(row.id)) || []);
-    const propias = asignaciones.get(Number(row.id)) || [];
-    return {
-      id: Number(row.id),
-      nombre: row.nombre,
-      email: row.email,
-      activo: Number(row.activo ?? 1) === 1,
-      tipo_cuenta: row.tipo_cuenta || "permanente",
-      vigente_desde: row.vigente_desde || null,
-      vigente_hasta: row.vigente_hasta || null,
-      cuenta_vigente: conR.cuenta_vigente,
-      supervisor_id: row.supervisor_id ?? null,
-      supervisor_nombre: row.supervisor_nombre || null,
-      bloqueado_hasta: conR.bloqueado_hasta,
-      ultimo_acceso: row.ultimo_acceso || null,
-      roles: propias.filter((a) => a.estado === "vigente" || a.estado === "futuro").map((a) => ({ rol: a.rol, estado: a.estado, vigente_desde: a.vigente_desde, vigente_hasta: a.vigente_hasta ?? null })),
-    };
-  });
-  const activas = cuentas.filter((c) => c.activo);
-  const vencimientos: Array<{ tipo: "cuenta" | "rol"; usuario_id: number; nombre: unknown; email: unknown; rol: unknown; vigente_hasta: string }> = [];
-  for (const c of activas) {
-    if (c.vigente_hasta && c.vigente_hasta >= fecha && c.vigente_hasta <= limite) vencimientos.push({ tipo: "cuenta", usuario_id: c.id, nombre: c.nombre, email: c.email, rol: null, vigente_hasta: String(c.vigente_hasta) });
-    for (const r of c.roles) {
-      if (r.vigente_hasta && String(r.vigente_hasta) >= fecha && String(r.vigente_hasta) <= limite) vencimientos.push({ tipo: "rol", usuario_id: c.id, nombre: c.nombre, email: c.email, rol: r.rol, vigente_hasta: String(r.vigente_hasta) });
-    }
-  }
-  vencimientos.sort((a, b) => a.vigente_hasta.localeCompare(b.vigente_hasta));
-
-  const placeholders = ACCIONES_ACCESO.map((_, i) => `:a${i}`).join(", ");
-  const eventos = await s.query<Row>(
-    `
-    SELECT id, fecha_hora, usuario_nombre, usuario_email, accion, entidad, entidad_id, referencia, motivo, cambios_json
-    FROM auditoria
-    WHERE entidad IN ('usuarios', 'roles') AND accion IN (${placeholders})
-      AND fecha_hora >= :desde AND fecha_hora <= :hasta_fin
-      ${propio ? "AND entidad = 'usuarios' AND entidad_id = :propio" : ""}
-    ORDER BY id DESC
-    LIMIT 2000
-    `,
-    { ...Object.fromEntries(ACCIONES_ACCESO.map((a, i) => [`a${i}`, a])), desde: inicioDiaLocal(desde), hasta_fin: finDiaLocal(hasta), propio: String(permiso.auth.userId) },
-  );
-  const eventosItems = eventos.map((e) => {
-    let detalle: Record<string, unknown> = {};
-    try {
-      detalle = (JSON.parse(String(e.cambios_json || "{}"))._detalle as Record<string, unknown>) || {};
-    } catch {
-      detalle = {};
-    }
-    return { id: Number(e.id), fecha_hora: e.fecha_hora, accion: e.accion, entidad: e.entidad, referencia: e.referencia, motivo: e.motivo, por: e.usuario_nombre || e.usuario_email || "Sistema", rol: detalle.rol ?? null, detalle };
-  });
-
-  const formato = url.searchParams.get("formato");
-  // Los eventos salen de la bitacora, que no se exporta (decision confirmada por el laboratorio).
-  if (formato === "csv" && url.searchParams.get("seccion") === "eventos") return exportacionBitacoraRetirada();
-  if (formato === "csv") {
-    const cuerpo = csv(
-      ["nombre", "email", "activa", "tipo_cuenta", "vigente_desde", "vigente_hasta", "vigente_hoy", "supervisor", "bloqueada_hasta", "ultimo_acceso", "roles"],
-      // Fase 3: fechas dd/mm/aaaa y horas en la zona del laboratorio, igual que en pantalla.
-      cuentas.map((c) => [c.nombre, c.email, c.activo ? "si" : "no", c.tipo_cuenta, formatearFecha(c.vigente_desde, ""), formatearFecha(c.vigente_hasta, ""), c.cuenta_vigente ? "si" : "no", c.supervisor_nombre, formatearFechaHora(c.bloqueado_hasta, ""), formatearFechaHora(c.ultimo_acceso, ""), c.roles.map((r) => `${r.rol}${r.vigente_hasta ? ` (hasta ${formatearFecha(r.vigente_hasta)})` : ""}${r.estado === "futuro" ? " [por comenzar]" : ""}`).join(" | ")]),
-    );
-    return new Response(cuerpo, {
-      headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="revision-accesos-cuentas-${fecha}.csv"`,
-        "Cache-Control": "no-store",
-      },
-    });
-  }
-  return json({
-    periodo: { desde, hasta },
-    dias_vencimiento: dias,
-    cuentas,
-    temporales: cuentas.filter((c) => c.tipo_cuenta === "temporal"),
-    vencimientos,
-    bloqueadas: cuentas.filter((c) => c.bloqueado_hasta),
-    eventos: eventosItems,
-  });
-}
-
-/*
- * Cuentas o roles que vencen en los proximos `dias` (para el aviso del Inicio).
- * `supervisorId`: solo las cuentas que esa persona supervisa.
- */
 export async function vencimientosProximos(s: Session, dias: number, supervisorId?: number): Promise<Row[]> {
   const fecha = hoy();
   const limite = sumarDias(fecha, dias);

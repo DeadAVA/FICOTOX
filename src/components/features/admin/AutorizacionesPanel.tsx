@@ -38,16 +38,18 @@ export function ListaAutorizaciones({ items, onRevocar }: { items: AutorizacionP
           <li key={a.id} className="flex flex-wrap items-start gap-3 px-3 py-2.5" data-autorizacion={a.id}>
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[12px] text-ink-3">{ETIQUETA_TIPO[a.tipo] || a.tipo}</span>
-                <span className="font-medium text-ink">{a.etiqueta || a.clave}</span>
+                <span className="font-medium text-ink">
+                  {ETIQUETA_TIPO[a.tipo] ? `${ETIQUETA_TIPO[a.tipo]} · ` : ""}
+                  {a.etiqueta || "Autorización"}
+                </span>
                 <Badge tone={TONO_ESTADO[estado]} dot>
                   {ETIQUETA_ESTADO_AUTORIZACION[estado]}
                 </Badge>
               </div>
               <span className="text-[12.5px] text-ink-3">
-                Desde {formatearFecha(a.vigente_desde)}
-                {a.vigente_hasta ? ` hasta ${formatearFecha(a.vigente_hasta)}` : " · sin fecha de fin"}
-                {a.folio_fx_thf_ap ? ` · folio ${a.folio_fx_thf_ap}` : ""}
+                {estado === "por_iniciar" ? `Empieza el ${formatearFecha(a.vigente_desde)}` : `Desde el ${formatearFecha(a.vigente_desde)}`}
+                {a.vigente_hasta ? `${estado === "vencida" ? " · venció el " : " · vigente hasta el "}${formatearFecha(a.vigente_hasta)}` : ", sin fecha de fin"}
+                {a.folio_fx_thf_ap ? ` · formato ${a.folio_fx_thf_ap}` : ""}
               </span>
               {a.motivo ? <span className="whitespace-pre-line text-[12.5px] text-ink-2">Motivo: {a.motivo}</span> : null}
               {a.revocada_en ? (
@@ -82,6 +84,8 @@ export function AutorizacionesUsuario({ usuarioId }: { usuarioId: number }) {
   const [nueva, setNueva] = useState({ tipo: "actividad", clave: "", desde: hoyLocal(), hasta: "", folio: "", motivo: "" });
   const [clave, setClave] = useState("");
   const [guardando, setGuardando] = useState(false);
+  // El formulario de alta aparece al pulsar "Agregar".
+  const [agregarAbierto, setAgregarAbierto] = useState(false);
 
   const cargar = useCallback(async () => {
     try {
@@ -135,6 +139,7 @@ export function AutorizacionesUsuario({ usuarioId }: { usuarioId: number }) {
       toast.success(String(data.message || "Autorización registrada"));
       setNueva((prev) => ({ ...prev, clave: "", hasta: "", motivo: "" }));
       setClave("");
+      setAgregarAbierto(false);
       await cargar();
       invalidate("dashboard");
     } catch (err) {
@@ -163,9 +168,16 @@ export function AutorizacionesUsuario({ usuarioId }: { usuarioId: number }) {
   return (
     <ValidacionAmbito v={v}>
     <div className="flex flex-col gap-3" id="autorizaciones-usuario">
-      <p className="text-[12.5px] text-ink-3">Además del rol, la persona solo opera los métodos, equipos y actividades para los que está autorizada en el formato FX-THF-AP, dentro de su vigencia.</p>
+      <p className="text-[13px] text-ink-3">Además del rol, la persona solo puede trabajar con los métodos, equipos y actividades para los que está autorizada (formato FX-THF-AP), mientras la autorización esté vigente.</p>
       <ListaAutorizaciones items={items} onRevocar={puede ? revocar : undefined} />
-      {puede ? (
+      {puede && !agregarAbierto ? (
+        <div>
+          <Button size="sm" icon={<Plus size={14} weight="bold" />} onClick={() => setAgregarAbierto(true)}>
+            Agregar
+          </Button>
+        </div>
+      ) : null}
+      {puede && agregarAbierto ? (
         <Panel title="Agregar autorización" description="La registra quien aprueba en ensayos o calidad; nadie se autoriza a sí mismo. Queda en la bitácora con su motivo.">
           <FormGrid>
             <Field label="Tipo" htmlFor="aut-tipo" required>
@@ -201,7 +213,10 @@ export function AutorizacionesUsuario({ usuarioId }: { usuarioId: number }) {
             </Field>
           </FormGrid>
           <CampoIdentidad value={clave} onChange={setClave} id="aut-clave-admin" />
-          <div>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setAgregarAbierto(false)}>
+              Cancelar
+            </Button>
             <Button icon={<Plus size={14} weight="bold" />} onClick={agregar} loading={guardando} id="aut-agregar">
               Agregar
             </Button>

@@ -117,7 +117,7 @@ export function SolicitudBadge({ solicitud, entidad }: { solicitud: ApiRecord | 
       <StatusFlag kind="pendiente" label={etiqueta} detail={[quien, solicitud.motivo ? `Motivo: ${String(solicitud.motivo)}` : null].filter(Boolean).join(" · ") || undefined} data-solicitud-pendiente={String(solicitud.id || "")} onClick={() => setAbierta(true)} />
       {/* Panel rápido: la solicitud y sus botones, sin salir de la lista (los clics del portal no llegan a la fila). */}
       <span className="contents" onClick={(event) => event.stopPropagation()}>
-        <Dialog open={abierta} onOpenChange={setAbierta} title={`${String(solicitud.pendiente_etiqueta || "Solicitud")} · #${String(solicitud.id)}`} description={String(solicitud.referencia || "")} size="sm">
+        <Dialog open={abierta} onOpenChange={setAbierta} title={String(solicitud.pendiente_etiqueta || "Solicitud")} description={String(solicitud.referencia || "")} size="sm">
           <SolicitudDetalle sol={solicitud} entidad={entidad} onCambio={() => setAbierta(false)} />
         </Dialog>
       </span>

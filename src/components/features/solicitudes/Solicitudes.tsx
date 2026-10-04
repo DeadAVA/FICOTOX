@@ -175,7 +175,7 @@ export function useAccionesSolicitud(onCambio?: () => void) {
   const rechazar = async (sol: ApiRecord) => {
     const razon = await prompt({
       critico: true,
-      title: `Rechazar solicitud #${sol.id}`,
+      title: `Rechazar la solicitud: ${String(sol.etiqueta || "")}`.replace(/: $/, ""),
       description: `${String(sol.etiqueta)} · ${String(sol.referencia || "")}. La acción no se ejecuta y quien la pidió verá tu motivo.`,
       label: "Motivo del rechazo",
       minLength: 5,
@@ -192,7 +192,7 @@ export function useAccionesSolicitud(onCambio?: () => void) {
     }
   };
   const cancelar = async (sol: ApiRecord) => {
-    const ok = await confirm({ title: `Cancelar solicitud #${sol.id}`, description: `${String(sol.etiqueta)} · ${String(sol.referencia || "")}. La acción no se ejecutará; podrás pedirla de nuevo más adelante.`, confirmLabel: "Cancelar solicitud", cancelLabel: "Volver", tone: "danger" });
+    const ok = await confirm({ title: "Cancelar la solicitud", description: `${String(sol.etiqueta)} · ${String(sol.referencia || "")}. La acción no se ejecutará; podrás pedirla de nuevo más adelante.`, confirmLabel: "Cancelar solicitud", cancelLabel: "Volver", tone: "danger" });
     if (!ok) return;
     try {
       await sendJsonAuth("POST", `${API_BASE_URL}/solicitudes/${sol.id}/cancelar`, token, {});
@@ -207,7 +207,7 @@ export function useAccionesSolicitud(onCambio?: () => void) {
     <Dialog
       open={!!aprobando}
       onOpenChange={(open) => !open && setAprobando(null)}
-      title={aprobando ? `Aprobar solicitud #${aprobando.id}` : "Aprobar"}
+      title={aprobando ? `Aprobar la solicitud: ${String(aprobando.etiqueta || "")}`.replace(/: $/, "") : "Aprobar"}
       description={aprobando ? `${String(aprobando.etiqueta)} · ${String(aprobando.referencia || "")}. Al aprobar, el sistema ejecuta la acción en tu nombre como segundo usuario y todo queda en la bitácora enlazado a la solicitud.` : undefined}
       size="sm"
       footer={
@@ -254,7 +254,7 @@ export function SolicitudDetalle({ sol, entidad, onCambio, compacto = false }: {
   const resuelve = puedeResolver(conEntidad);
   // La ficha trae la solicitud sin el nombre de quien la pidió: se toma de las cuentas activas.
   const cuentas = useCuentasActivas();
-  const nombre = String(sol.solicitado_nombre || cuentas.find((c) => c.id === Number(sol.solicitado_por))?.nombre || `usuario #${String(sol.solicitado_por || "")}`);
+  const nombre = String(sol.solicitado_nombre || cuentas.find((c) => c.id === Number(sol.solicitado_por))?.nombre || "Otra persona");
   const propia = Number(sol.solicitado_por) === Number(user?.id);
   return (
     <div className="flex flex-col gap-3" data-solicitud-detalle={String(sol.id || "")}>
@@ -323,7 +323,7 @@ export function SolicitudBanner({ item, entidad, onCambio }: { item: ApiRecord |
       <Clock size={20} weight="duotone" className="mt-0.5 shrink-0 text-warning-text" aria-hidden="true" />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <p className="text-[14.5px] font-semibold text-ink">
-          {String(sol.pendiente_etiqueta || "Solicitud")} · pendiente de autorización <span className="font-normal text-ink-3">(solicitud #{String(sol.id)})</span>
+          {String(sol.pendiente_etiqueta || "Solicitud")} · pendiente de autorización
         </p>
         <SolicitudDetalle sol={sol} entidad={entidad} onCambio={onCambio} />
       </div>

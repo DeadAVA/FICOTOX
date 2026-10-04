@@ -33,9 +33,8 @@ Cada respaldo es una carpeta `backups/<AAAAMMDD-HHMMSS>/` (o `FICOTOX_BACKUP_DIR
 | --- | --- | --- |
 | Terminal | `npm run respaldar` (añade `--sin-llave` para omitir la llave y `--etiqueta "texto"` para identificarlo) | No. El registro es el `manifest.json`: el script no escribe en la base mientras el servidor atiende. |
 | Tarea programada (Windows) | `scripts\backup-ficotox.cmd --target database`, que llama a `backup_ficotox.py` y este a `respaldar-ficotox.mjs` | No (igual que la terminal). |
-| Interfaz | **Administración › Respaldos › Crear respaldo ahora** (usuarios:G, con contraseña) | Sí (`respaldar`). |
 
-Las tres vías usan la **misma implementación**: `src/lib/shared/respaldo.mjs`. La comparten el servidor y los scripts, igual que `audit-chain.mjs`.
+Las dos vías usan la **misma implementación**: `src/lib/shared/respaldo.mjs`, igual que `audit-chain.mjs`. La pantalla **Administración › Respaldos** (con «Crear respaldo ahora») se retiró de la interfaz.
 
 **Copias externas** (OneDrive, rclone o Microsoft Graph): `backup_ficotox.py` empaqueta la carpeta en `backups/database/ficotox-respaldo-<id>.zip` **sin la llave** y la copia al destino configurado (ver `docs/backups.md`). Con `--incluir-llave` la llave va en el zip; hacerlo solo si el destino es un medio controlado.
 
@@ -65,11 +64,11 @@ La llave del sello **no se cambia nunca** (ver `MANUAL_TECNICO.md` §9.5).
 ## 6. Responsables
 
 - **Ejecuta** respaldos, pruebas y restauraciones: el **Administrador técnico del sistema**.
-- **Revisa** las actas y la periodicidad de las pruebas: **Mejora Continua**. La Responsable General y el Auditor pueden consultarlas en **Administración › Respaldos**.
+- **Revisa** las actas y la periodicidad de las pruebas: **Mejora Continua**. La Responsable General y el Auditor pueden consultarlas en `backups/pruebas-restauracion/` (la pantalla Respaldos se retiró de la interfaz).
 
 ## 7. Prueba de restauración (trimestral)
 
-Es obligatoria **cada trimestre**, además de después de un cambio importante de versión o de servidor. Si no hay una prueba aprobada en `PRUEBA_RESTAURACION_AVISO_DIAS` (90), el sistema avisa en Respaldos, en el Inicio y en la campana.
+Es obligatoria **cada trimestre**, además de después de un cambio importante de versión o de servidor. Si no hay una prueba aprobada en `PRUEBA_RESTAURACION_AVISO_DIAS` (90), `npm run verificar-instalacion` lo avisa (la pantalla Respaldos se retiró de la interfaz).
 
 ```bash
 npm run respaldar                      # si no hay uno reciente
@@ -97,7 +96,7 @@ La copia restaurada de `instance-restaurada/<fecha>/` contiene **datos del labor
 Solo ante una pérdida o corrupción de datos, y con la decisión registrada.
 
 1. **Avisar** al personal y **detener el servidor** de FICOTOX con `npm run detener` (Fase 12: detiene al lanzador y al servidor sin que se relance; en Windows, desde PowerShell como administrador si corre como servicio).
-2. **Elegir el respaldo**: el más reciente verificado en **Administración › Respaldos**, o en `backups/`.
+2. **Elegir el respaldo**: el más reciente verificado en `backups/` (sus actas están en `backups/pruebas-restauracion/`).
 3. **Ubicar la llave**: la del respaldo (`llave/`) o la guardada aparte (`--llave <ruta>`). Si la instancia usa `SECRET_KEY`, el `.env` debe tener **la misma** llave del respaldo. Si no, el script se niega.
 4. **Ejecutar:**
 
@@ -118,7 +117,7 @@ Solo ante una pérdida o corrupción de datos, y con la decisión registrada.
 
 ## 9. Formato del acta
 
-`backups/pruebas-restauracion/<AAAAMMDD-HHMMSS>.md` (legible) y `.json` (para la pantalla Respaldos):
+`backups/pruebas-restauracion/<AAAAMMDD-HHMMSS>.md` (legible) y `.json` (para `verificar-instalacion` y las herramientas):
 
 - **Encabezado:** fecha (America/Tijuana), respaldo usado y su fecha, responsable, modo (prueba o real), destino, equipo, versión de la app y tiempo total.
 - **Verificaciones:** tabla con el número, el nombre, ✅/❌ y el detalle de cada una de las 8 verificaciones.

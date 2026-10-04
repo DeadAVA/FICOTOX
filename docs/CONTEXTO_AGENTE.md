@@ -370,7 +370,7 @@ npm run test:reset-db # solo regenerar la base de prueba
 - Secretos: en producción no arranca con `JWT_SECRET` inseguro
   (`src/instrumentation.ts`, `scripts/start-ficotox.mjs`). La llave de la bitácora
   NO se toca (la cadena actual se sella con `SECRET_KEY` del `.env`).
-- Revisión de accesos: `/administracion/accesos` y `GET /api/admin/accesos` (CSV).
+- Revisión de accesos: integrada en Administración › Usuarios (accesos rápidos y filtros); `/administracion/accesos` redirige allí y `GET /api/admin/accesos` responde 410 (sin CSV).
 - Pruebas: `tests/api-seguridad.mjs`, `tests/ui/seguridad.mjs`,
   `tests/lib/reauth-auto.mjs` (las suites anteriores se reautentican solas);
   `npm test -- --solo=ui/seguridad.mjs` corre una sola suite. El servidor de
@@ -459,7 +459,7 @@ Campana de notificaciones calculada al vuelo en `GET /api/notificaciones` (`src/
 
 - **Evidencia instrumental** en los análisis: tabla genérica `adjuntos` (`src/lib/server/adjuntos.ts`, catálogo en `src/lib/shared/adjuntos.ts`), reglas y endpoints en `src/lib/server/modules/samples/analisis-adjuntos.ts` (`/api/samples/analysis/<id>/adjuntos`, `/api/adjuntos/<id>/archivo`, `/api/adjuntos/<id>/anular`), interfaz `EvidenciaPanel.tsx` en la ranura `interactive` de `FormPage` (activa en solo lectura, antes de las firmas, que van en `tail`). Archivos en `<instance>/evidencias/analisis/<id>/<uuid>.<ext>`; SHA-256 verificado en cada descarga (`X-Integridad-Adjunto`). `EVIDENCIA_OBLIGATORIA_ANALISIS` (true): sin adjunto vigente `enviar-revision` → 409 `evidencia_requerida`. Las enmiendas heredan (filas con `heredado_de`, mismo archivo). `exigirAnalisisEditable` (analisis.ts) es la guarda común de editar y adjuntar.
 - **Pruebas**: `tests/lib/evidencia.mjs` (`pdfDePrueba`, `adjuntarEvidencia`); `reauth-auto.mjs` adjunta un PDF solo si `enviar-revision` responde `evidencia_requerida` (salvo `X-Sin-Evidencia-Auto: 1`). El servidor de prueba usa `EVIDENCIA_MAX_MB=25` y `FICOTOX_BACKUP_DIR=instance/test/backups`.
-- **Respaldo y restauración**: una sola implementación `src/lib/shared/respaldo.mjs` (servidor, `scripts/respaldar-ficotox.mjs`, `scripts/restaurar-ficotox.mjs`, `scripts/backup_ficotox.py`); `evaluarCadena` en `audit-chain.mjs` la comparten `verifyAuditChain` y la restauración. Pantalla **Administración › Respaldos** (`/administracion/respaldos`, `src/lib/server/modules/respaldos.ts`). El servidor escribe `<instance>/servidor.lock`. Procedimiento: `docs/RESPALDO_Y_RECUPERACION.md`. Actas en `backups/pruebas-restauracion/`.
+- **Respaldo y restauración**: una sola implementación `src/lib/shared/respaldo.mjs` (servidor, `scripts/respaldar-ficotox.mjs`, `scripts/restaurar-ficotox.mjs`, `scripts/backup_ficotox.py`); `evaluarCadena` en `audit-chain.mjs` la comparten `verifyAuditChain` y la restauración. La pantalla **Administración › Respaldos** se retiró (`/api/respaldos` 410, `/administracion/respaldos` redirige al Inicio, sin avisos de respaldo); queda solo la línea de comandos y `verificar-instalacion`. `alertasDeRespaldo` (actas con la verificación 1 fallida) se revisa con `GET /api/audit/verify`. El servidor escribe `<instance>/servidor.lock`. Procedimiento: `docs/RESPALDO_Y_RECUPERACION.md`. Actas en `backups/pruebas-restauracion/`.
 - Al cambiar el esquema de forma incompatible: subir `ESQUEMA_VERSION` en `respaldo.mjs`.
 
 ## 8 duodecies. Fase 11 — incidencias, no conformidades y acciones correctivas (rama `fase-11-no-conformidades`)
@@ -526,3 +526,11 @@ Lista consolidada y vigente: `docs/PENDIENTES.md`. Lo que sigue es el registro h
   revisor independiente (otro agente) → iterar hasta que apruebe → resumen final
   del estado de la plataforma**.
 - No commitear salvo que lo pida.
+
+### Administración minimalista (rama administracion-simple)
+
+- **Usuarios**: lista sencilla con estado en palabras (Activo, De baja, Bloqueado, Temporal, Acceso vencido), último acceso relativo, solicitud pendiente y accesos rápidos (lo que era Revisión de accesos); filtros Estado, Tipo de cuenta, Rol, Vigencia y Otros. Al pulsar una persona, `UsuarioVentana` (General, Roles, Autorizaciones). Menú ⋯: Editar datos, Restablecer contraseña, Desbloquear, Dar de baja / Reactivar.
+- **Roles**: lista (personas, Del sistema, Inactivo) y `RolVentana` con "Qué puede hacer" en palabras (`permisos-legibles.ts`), personas con el rol y el editor de permisos en la misma ventana ampliada. Menú ⋯: Editar permisos, Editar nombre y descripción, Activar / Desactivar (rol propio: solo Ver permisos).
+- La ventana centrada se comparte: `src/components/ui/VentanaCentrada.tsx` (Auditoría, Usuarios, Roles). Nunca se muestran letras de permisos, ids ni claves.
+- Revisión de accesos y Respaldos se retiraron de la interfaz; las reglas, los permisos, la segregación, las solicitudes y la bitácora no cambiaron.
+

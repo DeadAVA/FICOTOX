@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Dialog as RadixDialog } from "radix-ui";
-import { ArrowRight, CaretDown, CaretUp, ChatCenteredText, Quotes, X } from "@phosphor-icons/react";
+import { ArrowRight, ChatCenteredText, Quotes } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
-import { IconButton } from "@/components/ui/Button";
+import { VentanaCentrada, VentanaTitulo } from "@/components/ui/VentanaCentrada";
 import { cn } from "@/components/ui/cn";
 import { datosPrincipales, dayLabel, fechaYHora, haceCuanto, humanizeAuditEntry, timeLabel, type ContextoActividad, type HumanEntry } from "@/lib/client/audit-humanize";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
@@ -136,11 +135,7 @@ export function ListaActividades({ grupos, seleccion, onAbrir }: { grupos: Grupo
   );
 }
 
-/*
- * Ventana centrada con el detalle, sobre la pagina difuminada. Esc, la "×" o
- * pulsar fuera la cierran; ↑/↓ pasan a la actividad anterior o siguiente.
- * En pantallas angostas ocupa toda la pantalla.
- */
+/* Detalle en la ventana centrada compartida (VentanaCentrada). */
 export function ActividadDialog({ grupos, indice, onIndice, onCerrar }: { grupos: GrupoActividad[]; indice: number | null; onIndice: (indice: number) => void; onCerrar: () => void }) {
   const grupo = indice !== null ? grupos[indice] : undefined;
   const mover = (paso: number) => {
@@ -149,53 +144,9 @@ export function ActividadDialog({ grupos, indice, onIndice, onCerrar }: { grupos
     if (siguiente >= 0 && siguiente < grupos.length) onIndice(siguiente);
   };
   return (
-    <RadixDialog.Root open={!!grupo} onOpenChange={(open) => !open && onCerrar()}>
-      <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-deep/45 backdrop-blur-md data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out" />
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-stretch justify-center sm:items-center sm:p-6">
-          <RadixDialog.Content
-            aria-describedby={undefined}
-            onKeyDown={(event) => {
-              if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-              const target = event.target as HTMLElement;
-              if (target.closest("input, textarea, select")) return;
-              event.preventDefault();
-              mover(event.key === "ArrowDown" ? 1 : -1);
-            }}
-            className={cn(
-              "pointer-events-auto flex w-full flex-col overflow-hidden bg-surface shadow-panel outline-none",
-              "h-full sm:h-auto sm:max-h-[min(86dvh,760px)] sm:max-w-[600px] sm:rounded-panel",
-              "data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out",
-            )}
-          >
-            {grupo ? (
-              <>
-                <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-2.5 sm:px-5">
-                  <div className="flex items-center gap-1">
-                    <IconButton label="Actividad anterior" size="sm" onClick={() => mover(-1)} disabled={indice === 0}>
-                      <CaretUp size={14} weight="bold" />
-                    </IconButton>
-                    <IconButton label="Actividad siguiente" size="sm" onClick={() => mover(1)} disabled={indice === grupos.length - 1}>
-                      <CaretDown size={14} weight="bold" />
-                    </IconButton>
-                  </div>
-                  <RadixDialog.Close asChild>
-                    <IconButton label="Cerrar">
-                      <X size={16} weight="bold" />
-                    </IconButton>
-                  </RadixDialog.Close>
-                </div>
-                <div className="scroll-thin flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
-                  <DetalleActividad key={grupo.entradas[0].id} grupo={grupo} onIr={onCerrar} />
-                </div>
-              </>
-            ) : (
-              <RadixDialog.Title className="sr-only">Actividad</RadixDialog.Title>
-            )}
-          </RadixDialog.Content>
-        </div>
-      </RadixDialog.Portal>
-    </RadixDialog.Root>
+    <VentanaCentrada abierta={!!grupo} onCerrar={onCerrar} onMover={mover} puedeAnterior={indice !== null && indice > 0} puedeSiguiente={indice !== null && indice < grupos.length - 1} etiquetaAnterior="Actividad anterior" etiquetaSiguiente="Actividad siguiente">
+      {grupo ? <DetalleActividad key={grupo.entradas[0].id} grupo={grupo} onIr={onCerrar} /> : <VentanaTitulo className="sr-only">Actividad</VentanaTitulo>}
+    </VentanaCentrada>
   );
 }
 
@@ -240,10 +191,10 @@ function DetalleActividad({ grupo, onIr }: { grupo: GrupoActividad; onIr: () => 
       <header className="flex gap-3.5">
         <EntryIcon entry={entry} size="lg" />
         <div className="flex min-w-0 flex-col gap-1.5">
-          <RadixDialog.Title className="text-[19px] leading-[1.3] font-semibold tracking-[-0.01em] text-ink">
+          <VentanaTitulo>
             {entry.frase}
             {veces > 1 ? <span className="font-normal text-ink-3"> · {veces} veces</span> : null}
-          </RadixDialog.Title>
+          </VentanaTitulo>
           <p className="text-[13.5px] text-ink-2">
             {!entry.isSystem && entry.actor ? (
               <>
