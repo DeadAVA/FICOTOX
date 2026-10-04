@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarBlank, CheckCircle, FilePdf, PencilSimple, Prohibit, User, Wrench } from "@phosphor-icons/react";
+import { CalendarBlank, CheckCircle, FilePdf, LinkSimple, PencilSimple, Prohibit, Toolbox, User, Wrench } from "@phosphor-icons/react";
 import { MANTENIMIENTO_ESTADOS, MANTENIMIENTO_TIPOS, metaFor } from "@/components/features/inventory/meta";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
@@ -11,7 +11,7 @@ import { DatosLista, DatosRapidos, VentanaAcciones, VentanaCentrada, VentanaEnca
 import { API_BASE_URL } from "@/lib/client/api";
 import { openProtectedFile } from "@/lib/client/files";
 import { fmt } from "@/lib/client/format";
-import { origenDeMovimiento, esEntrada, IconoEquipo, IconoMovimiento, moverEn } from "./comun";
+import { ColumnasVentana, DatoLateral, origenDeMovimiento, esEntrada, IconoEquipo, IconoMantenimiento, IconoMovimiento, moverEn, TarjetaLateral } from "./comun";
 import type { ApiRecord } from "@/lib/client/types";
 import { formatearFecha, formatearFechaCorta, formatearFechaHora, hoyLocal } from "@/lib/shared/fechas";
 
@@ -31,11 +31,11 @@ export function MantenimientoVentana({ items, indice, onIndice, onCerrar, puedeE
     if (siguiente !== null) onIndice(siguiente);
   };
   return (
-    <VentanaCentrada abierta={!!m} onCerrar={onCerrar} onMover={mover} puedeAnterior={indice !== null && indice > 0} puedeSiguiente={indice !== null && indice < items.length - 1} etiquetaAnterior="Anterior" etiquetaSiguiente="Siguiente">
+    <VentanaCentrada amplia abierta={!!m} onCerrar={onCerrar} onMover={mover} puedeAnterior={indice !== null && indice > 0} puedeSiguiente={indice !== null && indice < items.length - 1} etiquetaAnterior="Anterior" etiquetaSiguiente="Siguiente">
       {m ? (
-        <div key={String(m.id)} className="flex flex-col gap-5" data-mantenimiento-ventana={String(m.id)}>
+        <div key={String(m.id)} className="flex flex-col gap-6" data-mantenimiento-ventana={String(m.id)}>
           <VentanaEncabezado
-            figura={<IconoEquipo grande tono={mantenimientoVencido(m) ? "bg-danger-soft text-danger" : "bg-brand-faint text-brand-strong"} />}
+            figura={<IconoMantenimiento tipo={m.tipo} vencido={mantenimientoVencido(m)} grande />}
             titulo={`${metaFor(MANTENIMIENTO_TIPOS, m.tipo).label} · ${String(m.equipo || "Equipo")}`}
             insignia={
               <>
@@ -55,42 +55,58 @@ export function MantenimientoVentana({ items, indice, onIndice, onCerrar, puedeE
               { icono: <User size={17} weight="duotone" />, etiqueta: "Responsable", valor: m.responsable ? String(m.responsable) : "—" },
             ]}
           />
-          <VentanaSeccion titulo="Detalle" i={1}>
-            <DatosLista
-              datos={[
-                { etiqueta: "Equipo", valor: String(m.equipo || "Equipo sin nombre") },
-                { etiqueta: "Tipo", valor: metaFor(MANTENIMIENTO_TIPOS, m.tipo).label },
-                { etiqueta: "Fecha programada", valor: formatearFecha(m.fecha_programada) },
-                m.fecha_realizado ? { etiqueta: "Fecha en que se realizó", valor: formatearFecha(m.fecha_realizado) } : null,
-                m.tecnico_proveedor ? { etiqueta: "Técnico o proveedor", valor: String(m.tecnico_proveedor) } : null,
-              ]}
-            />
-            {m.responsable || m.id_responsable ? <FiguraPersona id={m.id_responsable} nombre={m.responsable} size="md" conNombre subtitulo="Responsable" /> : null}
-          </VentanaSeccion>
-          {m.observaciones ? (
-            <VentanaSeccion titulo="Observaciones" i={2}>
-              <VentanaTarjeta>
-                <p className="whitespace-pre-line text-[14px] text-ink">{String(m.observaciones)}</p>
-              </VentanaTarjeta>
-            </VentanaSeccion>
-          ) : null}
-          {m.reporte_codigo ? (
-            <VentanaSeccion titulo="Reporte en PDF" i={3}>
-              <div>
-                <Button
-                  variant="secondary"
-                  icon={<FilePdf size={16} />}
-                  onClick={() => {
-                    const raw = String(m.reporte_pdf_url || "");
-                    const url = raw.startsWith("/") ? raw : `${API_BASE_URL}/documents/files/${raw.split("/").pop()}`;
-                    void openProtectedFile(url, token, String(m.reporte_codigo || "reporte"));
-                  }}
-                >
-                  Abrir reporte {String(m.reporte_codigo)}
-                </Button>
-              </div>
-            </VentanaSeccion>
-          ) : null}
+          <ColumnasVentana
+            principal={
+              <>
+                <VentanaSeccion titulo="Observaciones" i={1}>
+                  <VentanaTarjeta>
+                    <p className="whitespace-pre-line text-[14px] text-ink">{m.observaciones ? String(m.observaciones) : "Sin observaciones."}</p>
+                  </VentanaTarjeta>
+                </VentanaSeccion>
+                {m.reporte_codigo ? (
+                  <VentanaSeccion titulo="Reporte en PDF" i={2}>
+                    <div>
+                      <Button
+                        variant="secondary"
+                        icon={<FilePdf size={16} />}
+                        onClick={() => {
+                          const raw = String(m.reporte_pdf_url || "");
+                          const url = raw.startsWith("/") ? raw : `${API_BASE_URL}/documents/files/${raw.split("/").pop()}`;
+                          void openProtectedFile(url, token, String(m.reporte_codigo || "reporte"));
+                        }}
+                      >
+                        Abrir reporte {String(m.reporte_codigo)}
+                      </Button>
+                    </div>
+                  </VentanaSeccion>
+                ) : null}
+              </>
+            }
+            lateral={
+              <>
+                <TarjetaLateral icono={<Toolbox size={15} weight="duotone" />} titulo="Equipo" i={0}>
+                  <span className="flex items-center gap-3">
+                    <IconoEquipo nombre={m.equipo} />
+                    <span className="flex min-w-0 flex-col">
+                      <span className="break-words text-[14px] font-medium text-ink">{String(m.equipo || "Equipo sin nombre")}</span>
+                      {m.equipo_marca || m.equipo_modelo ? <span className="text-[12.5px] text-ink-3">{[m.equipo_marca, m.equipo_modelo].filter(Boolean).join(" · ")}</span> : null}
+                    </span>
+                  </span>
+                  <Link href={`/inventario/equipos?buscar=${encodeURIComponent(String(m.equipo || ""))}`} className="text-[13px] font-medium text-brand hover:underline">
+                    Ver el equipo
+                  </Link>
+                </TarjetaLateral>
+                <TarjetaLateral icono={<CalendarBlank size={15} weight="duotone" />} titulo="Fechas" tono={mantenimientoVencido(m) ? "danger" : "neutral"} i={1}>
+                  <DatoLateral etiqueta="Programado">{formatearFecha(m.fecha_programada)}</DatoLateral>
+                  <DatoLateral etiqueta="Realizado">{m.fecha_realizado ? formatearFecha(m.fecha_realizado) : "Todavía no"}</DatoLateral>
+                </TarjetaLateral>
+                <TarjetaLateral icono={<User size={15} weight="duotone" />} titulo="Quién lo atiende" i={2}>
+                  <DatoLateral etiqueta="Técnico o proveedor">{m.tecnico_proveedor ? String(m.tecnico_proveedor) : "Sin asignar"}</DatoLateral>
+                  {m.responsable || m.id_responsable ? <FiguraPersona id={m.id_responsable} nombre={m.responsable} size="md" conNombre subtitulo="Responsable" /> : null}
+                </TarjetaLateral>
+              </>
+            }
+          />
           {puedeEditar || (puedeCancelar && m.estado !== "cancelado") ? (
             <VentanaAcciones>
               {puedeEditar ? (
@@ -125,38 +141,44 @@ export function MovimientoVentana({ items, indice, onIndice, onCerrar }: { items
   const tipoInsumo = m?.tabla_origen === "reactivos" ? "Reactivo" : m?.tabla_origen === "consumibles" ? "Consumible" : "Insumo";
   const fichaInsumo = m ? (m.tabla_origen === "reactivos" ? `/inventario/reactivos?buscar=${encodeURIComponent(nombreInsumo(m))}` : m.tabla_origen === "consumibles" ? `/inventario/consumibles?buscar=${encodeURIComponent(nombreInsumo(m))}` : null) : null;
   return (
-    <VentanaCentrada abierta={!!m} onCerrar={onCerrar} onMover={mover} puedeAnterior={indice !== null && indice > 0} puedeSiguiente={indice !== null && indice < items.length - 1} etiquetaAnterior="Movimiento anterior" etiquetaSiguiente="Movimiento siguiente">
+    <VentanaCentrada amplia abierta={!!m} onCerrar={onCerrar} onMover={mover} puedeAnterior={indice !== null && indice > 0} puedeSiguiente={indice !== null && indice < items.length - 1} etiquetaAnterior="Movimiento anterior" etiquetaSiguiente="Movimiento siguiente">
       {m && origen ? (
-        <div key={String(m.id)} className="flex flex-col gap-5" data-movimiento-ventana={String(m.id)}>
+        <div key={String(m.id)} className="flex flex-col gap-6" data-movimiento-ventana={String(m.id)}>
           <VentanaEncabezado
             figura={<IconoMovimiento m={m} grande />}
             titulo={`${esEntrada(m) ? "Entrada" : "Salida"} de ${fmt(m.cantidad)} · ${nombreInsumo(m)}`}
             insignia={<Badge tone={esEntrada(m) ? "success" : "warning"} dot>{esEntrada(m) ? "Entrada" : "Salida"}</Badge>}
             subtitulo={`${tipoInsumo} · ${formatearFechaHora(m.fecha_hora)}`}
           />
-          <VentanaSeccion titulo="Detalle" i={1}>
-            <DatosLista
-              datos={[
-                { etiqueta: tipoInsumo, valor: fichaInsumo ? <Link href={fichaInsumo} className="text-brand hover:underline">{nombreInsumo(m)}</Link> : nombreInsumo(m) },
-                m.item_codigo && m.item_codigo !== m.item_nombre ? { etiqueta: "Código", valor: String(m.item_codigo) } : null,
-                { etiqueta: "Cantidad", valor: fmt(m.cantidad) },
-                { etiqueta: "Cuándo", valor: formatearFechaHora(m.fecha_hora) },
-                m.motivo ? { etiqueta: "Motivo", valor: String(m.motivo) } : null,
-              ]}
-            />
-          </VentanaSeccion>
-          <VentanaSeccion titulo="Registro de origen" i={2}>
-            <VentanaTarjeta>
-              {origen.href ? (
-                <Link href={origen.href} className="text-[14px] font-medium text-brand hover:underline">
-                  {origen.texto}
-                </Link>
-              ) : (
-                <p className="text-[14px] text-ink">{origen.texto}</p>
-              )}
-              <p className="mt-0.5 text-[12.5px] text-ink-3">{origen.href ? "Se descontó al capturar ese formato." : esEntrada(m) ? "Entrada registrada en el inventario." : "Movimiento registrado en el inventario."}</p>
-            </VentanaTarjeta>
-          </VentanaSeccion>
+          <ColumnasVentana
+            principal={
+              <VentanaSeccion titulo="Detalle" i={1}>
+                <VentanaTarjeta>
+                  <DatosLista
+                    datos={[
+                      { etiqueta: tipoInsumo, valor: fichaInsumo ? <Link href={fichaInsumo} className="text-brand hover:underline">{nombreInsumo(m)}</Link> : nombreInsumo(m) },
+                      m.item_codigo && m.item_codigo !== m.item_nombre ? { etiqueta: "Código", valor: String(m.item_codigo) } : null,
+                      { etiqueta: "Cantidad", valor: `${esEntrada(m) ? "+" : "−"}${fmt(m.cantidad)}` },
+                      { etiqueta: "Cuándo", valor: formatearFechaHora(m.fecha_hora) },
+                      m.motivo ? { etiqueta: "Motivo", valor: String(m.motivo) } : null,
+                    ]}
+                  />
+                </VentanaTarjeta>
+              </VentanaSeccion>
+            }
+            lateral={
+              <TarjetaLateral icono={<LinkSimple size={15} weight="duotone" />} titulo="Registro de origen" tono={esEntrada(m) ? "success" : "warning"} i={0}>
+                {origen.href ? (
+                  <Link href={origen.href} className="text-[14px] font-medium text-brand hover:underline">
+                    {origen.texto}
+                  </Link>
+                ) : (
+                  <p className="text-[14px] text-ink">{origen.texto}</p>
+                )}
+                <p className="text-[12.5px] text-ink-3">{origen.href ? "Se descontó al capturar ese formato." : esEntrada(m) ? "Entrada registrada en el inventario." : "Movimiento registrado en el inventario."}</p>
+              </TarjetaLateral>
+            }
+          />
         </div>
       ) : (
         <VentanaTitulo className="sr-only">Movimiento</VentanaTitulo>

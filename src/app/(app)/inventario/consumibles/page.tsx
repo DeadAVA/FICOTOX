@@ -37,7 +37,7 @@ function celdasConsumible(item: ApiRecord) {
   const ubicacion = item.ubicacion || item.localizacion;
   return [
     <span key="p" className={inactive ? "flex min-w-0 items-center gap-3 opacity-60" : "flex min-w-0 items-center gap-3"}>
-      <IconoConsumible />
+      <IconoConsumible producto={item.producto} />
       <span className="flex min-w-0 flex-col">
         <span className="text-[14.5px] leading-tight font-semibold text-ink">
           {String(item.producto || "—")}

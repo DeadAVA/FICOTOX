@@ -57,8 +57,9 @@ export function VentanaCentrada({
             }}
             className={cn(
               "pointer-events-auto flex w-full flex-col overflow-hidden bg-surface shadow-panel outline-none transition-[max-width] duration-300 ease-[var(--ease-spring)]",
-              "h-full sm:h-auto sm:max-h-[min(88dvh,820px)] sm:rounded-panel",
-              amplia ? "sm:max-w-[1040px]" : "sm:max-w-[620px]",
+              "h-full sm:h-auto sm:rounded-panel",
+              // Amplia: mas ancha y mas alta (editor de permisos, fichas de inventario).
+              amplia ? "sm:max-h-[min(92dvh,960px)] sm:max-w-[1080px]" : "sm:max-h-[min(88dvh,820px)] sm:max-w-[620px]",
               "data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out",
             )}
           >

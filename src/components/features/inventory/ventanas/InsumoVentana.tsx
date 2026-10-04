@@ -1,16 +1,16 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ArrowCounterClockwise, ArrowsClockwise, CalendarBlank, Gauge, PencilSimple, Tag, Trash, WarningCircle } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, ArrowsClockwise, Barcode, CalendarBlank, Gauge, MapPin, Package, PencilSimple, Tag, Trash, WarningCircle } from "@phosphor-icons/react";
 import { IncidenciasDelRegistro } from "@/components/features/calidad/IncidenciasDelRegistro";
 import { Button } from "@/components/ui/Button";
 import { Badge, StockMeter } from "@/components/ui/Primitives";
-import { DatosLista, DatosRapidos, VentanaAcciones, VentanaCentrada, VentanaEncabezado, VentanaSeccion, VentanaTarjeta, VentanaTitulo, type DatoRapido } from "@/components/ui/Ventana";
+import { DatosRapidos, VentanaAcciones, VentanaCentrada, VentanaEncabezado, VentanaSeccion, VentanaTarjeta, VentanaTitulo, type DatoRapido } from "@/components/ui/Ventana";
 import { fmt, parseNumberOrNull } from "@/lib/client/format";
 import { formatReactivoName, getReactivoExpiry, getReactivoLocation, getReactivoStockState, getReactivoTypeLabel } from "@/lib/client/reactivos";
 import type { ApiRecord } from "@/lib/client/types";
 import { formatearFecha, formatearFechaCorta, formatearFechaHora } from "@/lib/shared/fechas";
-import { caducidadDe, IconoCategoria, IconoConsumible, MovimientosRecientes, moverEn } from "./comun";
+import { caducidadDe, ColumnasVentana, DatoLateral, IconoCategoria, IconoConsumible, MovimientosRecientes, moverEn, TarjetaLateral } from "./comun";
 
 /*
  * Ventana de un reactivo o un consumible (Inventario): encabezado con icono de
@@ -38,7 +38,7 @@ export function InsumoVentana({ tipo, items, indice, onIndice, onCerrar, accione
     if (siguiente !== null) onIndice(siguiente);
   };
   return (
-    <VentanaCentrada abierta={!!item} onCerrar={onCerrar} onMover={mover} puedeAnterior={indice !== null && indice > 0} puedeSiguiente={indice !== null && indice < items.length - 1} etiquetaAnterior="Anterior" etiquetaSiguiente="Siguiente">
+    <VentanaCentrada amplia abierta={!!item} onCerrar={onCerrar} onMover={mover} puedeAnterior={indice !== null && indice > 0} puedeSiguiente={indice !== null && indice < items.length - 1} etiquetaAnterior="Anterior" etiquetaSiguiente="Siguiente">
       {item ? tipo === "reactivo" ? <FichaReactivo key={String(item.id)} item={item} acciones={acciones} /> : <FichaConsumible key={String(item.id)} item={item} acciones={acciones} /> : <VentanaTitulo className="sr-only">Detalle</VentanaTitulo>}
     </VentanaCentrada>
   );
@@ -84,6 +84,31 @@ function Baja({ item }: { item: ApiRecord }) {
   );
 }
 
+/* Existencia como protagonista: cantidad grande, barra con minimo y maximo, y si alcanza o no. */
+function TarjetaExistencia({ actual, maximo, minimo, unidad, baja, vacia, nota }: { actual: number | null; maximo: number | null; minimo: number | null; unidad: string; baja: boolean; vacia: boolean; nota: string }) {
+  const tono = vacia ? "text-danger" : baja ? "text-warning-text" : "text-ink";
+  return (
+    <VentanaSeccion titulo="Existencia" i={1}>
+      <VentanaTarjeta className="flex flex-col gap-3 px-5 py-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <p className={`tnum text-[30px] leading-none font-semibold tracking-[-0.02em] ${tono}`}>
+            {actual !== null ? fmt(actual) : "—"}
+            <span className="ml-1.5 text-[15px] font-medium text-ink-3">{unidad}</span>
+          </p>
+          <Badge tone={vacia ? "danger" : baja ? "warning" : "success"} dot>
+            {vacia ? "Sin existencia" : baja ? "Existencia baja" : "Existencia suficiente"}
+          </Badge>
+        </div>
+        {actual !== null ? <StockMeter size="lg" current={actual} max={maximo ?? undefined} min={minimo ?? undefined} unit={unidad} low={baja} label={nota} /> : <p className="text-[13.5px] text-ink-3">Todavía no se registra la cantidad.</p>}
+        <div className="flex flex-wrap gap-x-5 gap-y-1 text-[12.5px] text-ink-3">
+          {minimo ? <span>Mínimo: {fmt(minimo)} {unidad}</span> : null}
+          {maximo ? <span>Máximo: {fmt(maximo)} {unidad}</span> : null}
+        </div>
+      </VentanaTarjeta>
+    </VentanaSeccion>
+  );
+}
+
 function FichaReactivo({ item, acciones }: { item: ApiRecord; acciones: AccionesInsumo }) {
   const nombre = formatReactivoName(item);
   const stock = getReactivoStockState(item);
@@ -96,8 +121,9 @@ function FichaReactivo({ item, acciones }: { item: ApiRecord; acciones: Acciones
     { icono: <CalendarBlank size={17} weight="duotone" />, etiqueta: "Caducidad", valor: cad ? cad.texto : "Sin fecha", tono: cad?.tono || "brand", titulo: cad?.detalle || undefined },
     { icono: <Tag size={17} weight="duotone" />, etiqueta: "Lote", valor: item.lote ? String(item.lote) : "—" },
   ];
+  const ubicacion = getReactivoLocation(item);
   return (
-    <div className="flex flex-col gap-5" data-insumo-ventana={String(item.id)}>
+    <div className="flex flex-col gap-6" data-insumo-ventana={String(item.id)}>
       <VentanaEncabezado
         figura={<IconoCategoria categoria={item.tipo_reactivo || item.categoria} grande />}
         titulo={nombre}
@@ -105,37 +131,46 @@ function FichaReactivo({ item, acciones }: { item: ApiRecord; acciones: Acciones
           <>
             {inactivo ? <Badge tone="danger">Baja</Badge> : null}
             {cad?.tono === "danger" ? <Badge tone="danger">Vencido</Badge> : cad?.tono === "warning" ? <Badge tone="warning">Por vencer</Badge> : null}
-            {stock.empty ? <Badge tone="danger">Vacío</Badge> : stock.low ? <Badge tone="warning">Existencia baja</Badge> : null}
           </>
         }
         subtitulo={[getReactivoTypeLabel(item.tipo_reactivo || item.categoria), item.marca].filter(Boolean).join(" · ")}
       />
       <DatosRapidos datos={datos} />
       <Baja item={item} />
-      {stock.current !== null ? (
-        <VentanaSeccion titulo="Existencia" i={1}>
-          <StockMeter size="lg" current={stock.current} max={stock.max} min={stock.min} unit={unidad} low={stock.low} label={stock.min ? `Aviso de existencia baja al llegar a ${fmt(stock.min)} ${unidad}` : "Aviso de existencia baja al 20 % de la capacidad"} />
-        </VentanaSeccion>
-      ) : null}
-      <VentanaSeccion titulo="Identificación y resguardo" i={2}>
-        <DatosLista
-          datos={[
-            item.id_interno ? { etiqueta: "ID interno", valor: String(item.id_interno) } : null,
-            item.numero_cas || item.cas_number ? { etiqueta: "Número CAS", valor: String(item.numero_cas || item.cas_number) } : null,
-            item.catalogo || item.catalogo_parte_cas_lote ? { etiqueta: "Catálogo", valor: String(item.catalogo || item.catalogo_parte_cas_lote) } : null,
-            item.proveedor || item.vendor ? { etiqueta: "Proveedor", valor: String(item.proveedor || item.vendor) } : null,
-            { etiqueta: "Ubicación", valor: getReactivoLocation(item) },
-            cad ? { etiqueta: "Caducidad", valor: `${formatearFecha(getReactivoExpiry(item))}${cad.detalle ? ` · ${cad.detalle}` : ""}` } : null,
-            item.fecha_apertura ? { etiqueta: "Abierto el", valor: formatearFecha(item.fecha_apertura) } : null,
-          ]}
-        />
-      </VentanaSeccion>
-      <VentanaSeccion titulo="Movimientos recientes" i={3}>
-        <MovimientosRecientes tabla="reactivos" id={item.id} unidad={unidad} />
-      </VentanaSeccion>
-      <VentanaSeccion titulo="Incidencias" i={4}>
-        <IncidenciasDelRegistro entidad="reactivos" id={item.id} etiqueta={nombre} />
-      </VentanaSeccion>
+      <ColumnasVentana
+        principal={
+          <>
+            <TarjetaExistencia actual={stock.current} maximo={stock.max ?? null} minimo={stock.min ?? null} unidad={unidad} baja={stock.low} vacia={stock.empty} nota={stock.min ? `Aviso de existencia baja al llegar a ${fmt(stock.min)} ${unidad}` : "Aviso de existencia baja al 20 % de la capacidad"} />
+            <VentanaSeccion titulo="Movimientos recientes" i={2}>
+              <MovimientosRecientes tabla="reactivos" id={item.id} unidad={unidad} />
+            </VentanaSeccion>
+            <VentanaSeccion titulo="Incidencias" i={3}>
+              <IncidenciasDelRegistro entidad="reactivos" id={item.id} etiqueta={nombre} />
+            </VentanaSeccion>
+          </>
+        }
+        lateral={
+          <>
+            <TarjetaLateral icono={<Barcode size={15} weight="duotone" />} titulo="Identificación" i={0}>
+              <DatoLateral etiqueta="Tipo">{getReactivoTypeLabel(item.tipo_reactivo || item.categoria) || "—"}</DatoLateral>
+              {item.id_interno ? <DatoLateral etiqueta="ID interno">{String(item.id_interno)}</DatoLateral> : null}
+              {item.numero_cas || item.cas_number ? <DatoLateral etiqueta="Número CAS">{String(item.numero_cas || item.cas_number)}</DatoLateral> : null}
+              {item.catalogo || item.catalogo_parte_cas_lote ? <DatoLateral etiqueta="Catálogo">{String(item.catalogo || item.catalogo_parte_cas_lote)}</DatoLateral> : null}
+              {item.lote ? <DatoLateral etiqueta="Lote">{String(item.lote)}</DatoLateral> : null}
+              {item.proveedor || item.vendor ? <DatoLateral etiqueta="Proveedor">{String(item.proveedor || item.vendor)}</DatoLateral> : null}
+            </TarjetaLateral>
+            <TarjetaLateral icono={<MapPin size={15} weight="duotone" />} titulo="Dónde está" i={1}>
+              <DatoLateral etiqueta="Ubicación">{ubicacion || "Sin ubicación"}</DatoLateral>
+              {item.contenedor ? <DatoLateral etiqueta="Contenedor">{String(item.contenedor)}</DatoLateral> : null}
+            </TarjetaLateral>
+            <TarjetaLateral icono={<CalendarBlank size={15} weight="duotone" />} titulo="Fechas" tono={cad?.tono || "neutral"} i={2}>
+              <DatoLateral etiqueta="Caducidad">{cad ? `${formatearFecha(getReactivoExpiry(item))}${cad.detalle ? ` · ${cad.detalle}` : ""}` : "Sin fecha de caducidad"}</DatoLateral>
+              {item.fecha_apertura ? <DatoLateral etiqueta="Abierto el">{formatearFecha(item.fecha_apertura)}</DatoLateral> : null}
+              {item.fecha_ingreso ? <DatoLateral etiqueta="Ingresó el">{formatearFecha(item.fecha_ingreso)}</DatoLateral> : null}
+            </TarjetaLateral>
+          </>
+        }
+      />
       <Acciones item={item} acciones={acciones} />
     </div>
   );
@@ -154,43 +189,48 @@ function FichaConsumible({ item, acciones }: { item: ApiRecord; acciones: Accion
     { icono: <Tag size={17} weight="duotone" />, etiqueta: "Lote", valor: item.lote ? String(item.lote) : "—" },
   ];
   return (
-    <div className="flex flex-col gap-5" data-insumo-ventana={String(item.id)}>
+    <div className="flex flex-col gap-6" data-insumo-ventana={String(item.id)}>
       <VentanaEncabezado
-        figura={<IconoConsumible grande />}
+        figura={<IconoConsumible producto={item.producto} grande />}
         titulo={nombre}
-        insignia={
-          <>
-            {inactivo ? <Badge tone="danger">Baja</Badge> : null}
-            {piezas <= 0 ? <Badge tone="danger">Agotado</Badge> : piezas <= 5 ? <Badge tone="warning">Existencia baja</Badge> : null}
-          </>
-        }
+        insignia={inactivo ? <Badge tone="danger">Baja</Badge> : undefined}
         subtitulo={[item.marca, item.proveedor].filter(Boolean).join(" · ") || undefined}
       />
       <DatosRapidos datos={datos} />
       <Baja item={item} />
-      <VentanaSeccion titulo="Existencia" i={1}>
-        <StockMeter size="lg" current={piezas} max={maximo} min={5} unit="piezas" low={piezas <= 5} label="Aviso de existencia baja con 5 piezas o menos" />
-      </VentanaSeccion>
-      <VentanaSeccion titulo="Presentación y resguardo" i={2}>
-        <DatosLista
-          datos={[
-            item.catalogo_parte_cas ? { etiqueta: "Catálogo", valor: String(item.catalogo_parte_cas) } : null,
-            item.cantidad_por_pieza ? { etiqueta: "Cantidad por pieza", valor: fmt(item.cantidad_por_pieza) } : null,
-            item.tamano_capacidad ? { etiqueta: "Tamaño o capacidad", valor: String(item.tamano_capacidad) } : null,
-            item.contenedor ? { etiqueta: "Contenedor", valor: String(item.contenedor) } : null,
-            item.ubicacion || item.localizacion ? { etiqueta: "Ubicación", valor: String(item.ubicacion || item.localizacion) } : null,
-            item.fecha_ingreso ? { etiqueta: "Ingresó el", valor: formatearFechaCorta(item.fecha_ingreso) } : null,
-            item.stock_maximo ? { etiqueta: "Existencia máxima", valor: `${fmt(item.stock_maximo)} piezas` } : null,
-          ]}
-        />
-      </VentanaSeccion>
-      <VentanaSeccion titulo="Movimientos recientes" i={3}>
-        <MovimientosRecientes tabla="consumibles" id={item.id} unidad="piezas" />
-      </VentanaSeccion>
-      <VentanaSeccion titulo="Incidencias" i={4}>
-        <IncidenciasDelRegistro entidad="consumibles" id={item.id} etiqueta={nombre} />
-      </VentanaSeccion>
-      {inactivo && item.baja_en ? <p className="text-[12.5px] text-ink-3">Baja registrada el {formatearFechaHora(item.baja_en)}.</p> : null}
+      <ColumnasVentana
+        principal={
+          <>
+            <TarjetaExistencia actual={piezas} maximo={maximo || null} minimo={5} unidad="piezas" baja={piezas <= 5} vacia={piezas <= 0} nota="Aviso de existencia baja con 5 piezas o menos" />
+            <VentanaSeccion titulo="Movimientos recientes" i={2}>
+              <MovimientosRecientes tabla="consumibles" id={item.id} unidad="piezas" />
+            </VentanaSeccion>
+            <VentanaSeccion titulo="Incidencias" i={3}>
+              <IncidenciasDelRegistro entidad="consumibles" id={item.id} etiqueta={nombre} />
+            </VentanaSeccion>
+          </>
+        }
+        lateral={
+          <>
+            <TarjetaLateral icono={<Package size={15} weight="duotone" />} titulo="Presentación" i={0}>
+              {item.tamano_capacidad ? <DatoLateral etiqueta="Tamaño o capacidad">{String(item.tamano_capacidad)}</DatoLateral> : null}
+              {item.cantidad_por_pieza ? <DatoLateral etiqueta="Cantidad por pieza">{fmt(item.cantidad_por_pieza)}</DatoLateral> : null}
+              {item.contenedor ? <DatoLateral etiqueta="Contenedor">{String(item.contenedor)}</DatoLateral> : null}
+              {item.catalogo_parte_cas ? <DatoLateral etiqueta="Catálogo">{String(item.catalogo_parte_cas)}</DatoLateral> : null}
+              {item.marca ? <DatoLateral etiqueta="Marca">{String(item.marca)}</DatoLateral> : null}
+              {item.proveedor ? <DatoLateral etiqueta="Proveedor">{String(item.proveedor)}</DatoLateral> : null}
+            </TarjetaLateral>
+            <TarjetaLateral icono={<MapPin size={15} weight="duotone" />} titulo="Dónde está" i={1}>
+              <DatoLateral etiqueta="Ubicación">{String(item.ubicacion || item.localizacion || "Sin ubicación")}</DatoLateral>
+            </TarjetaLateral>
+            <TarjetaLateral icono={<CalendarBlank size={15} weight="duotone" />} titulo="Fechas" tono={cad?.tono || "neutral"} i={2}>
+              <DatoLateral etiqueta="Caducidad">{cad ? `${formatearFecha(item.caducidad)}${cad.detalle ? ` · ${cad.detalle}` : ""}` : "Sin fecha de caducidad"}</DatoLateral>
+              {item.fecha_ingreso ? <DatoLateral etiqueta="Ingresó el">{formatearFechaCorta(item.fecha_ingreso)}</DatoLateral> : null}
+              {inactivo && item.baja_en ? <DatoLateral etiqueta="Baja registrada">{formatearFechaHora(item.baja_en)}</DatoLateral> : null}
+            </TarjetaLateral>
+          </>
+        }
+      />
       <Acciones item={item} acciones={acciones} />
     </div>
   );

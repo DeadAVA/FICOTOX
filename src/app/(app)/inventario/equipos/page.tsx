@@ -204,7 +204,7 @@ function EquiposContent() {
     const inactive = Number(item.activo ?? 1) === 0;
     return [
       <span key="e" className={inactive ? "flex min-w-0 items-center gap-3 opacity-60" : "flex min-w-0 items-center gap-3"}>
-        <IconoEquipo />
+        <IconoEquipo nombre={item.nombre} />
         <span className="flex min-w-0 flex-col">
           <span className="text-[14.5px] leading-tight font-semibold text-ink">
             {String(item.nombre || "—")}

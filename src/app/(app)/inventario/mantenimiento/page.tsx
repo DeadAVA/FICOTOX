@@ -180,7 +180,7 @@ function MantenimientoContent() {
     const vencido = rules.vencido(item);
     return [
       <span key="e" className="flex min-w-0 items-center gap-3">
-        <IconoEquipo tono={vencido ? "bg-danger-soft text-danger" : "bg-brand-faint text-brand-strong"} />
+        <IconoEquipo nombre={item.equipo} tono={vencido ? "bg-danger-soft text-danger" : "bg-brand-faint text-brand-strong"} />
         <span className="flex min-w-0 flex-col">
           <span className="text-[14.5px] leading-tight font-semibold text-ink">{String(item.equipo || "Equipo sin nombre")}</span>
           <span className="text-[12.5px] text-ink-3">{item.tecnico_proveedor ? String(item.tecnico_proveedor) : [item.equipo_marca, item.equipo_modelo].filter(Boolean).join(" · ") || "Sin técnico asignado"}</span>

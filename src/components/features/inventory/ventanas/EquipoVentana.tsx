@@ -1,18 +1,18 @@
 "use client";
 
-import { ArrowCounterClockwise, BookOpen, CalendarCheck, PencilSimple, Pulse, Trash, Wrench } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, Barcode, BookOpen, CalendarCheck, MapPin, PencilSimple, Pulse, Ruler, Trash, UserCircle, Wrench } from "@phosphor-icons/react";
 import { IncidenciasDelRegistro } from "@/components/features/calidad/IncidenciasDelRegistro";
 import { MANTENIMIENTO_ESTADOS, MANTENIMIENTO_TIPOS, metaFor } from "@/components/features/inventory/meta";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { FiguraPersona } from "@/components/ui/FiguraPersona";
 import { Badge, Skeleton, type Tone } from "@/components/ui/Primitives";
-import { DatosLista, DatosRapidos, VentanaAcciones, VentanaCentrada, VentanaEncabezado, VentanaSeccion, VentanaTarjeta, VentanaTitulo } from "@/components/ui/Ventana";
+import { DatosRapidos, VentanaAcciones, VentanaCentrada, VentanaEncabezado, VentanaSeccion, VentanaTarjeta, VentanaTitulo } from "@/components/ui/Ventana";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { formatearFecha, formatearFechaCorta } from "@/lib/shared/fechas";
-import { caducidadDe, IconoEquipo, moverEn } from "./comun";
+import { caducidadDe, ColumnasVentana, DatoLateral, IconoEquipo, IconoMantenimiento, moverEn, TarjetaLateral } from "./comun";
 
 /*
  * Ventana de un equipo: estado, proxima calibracion y mantenimiento, datos,
@@ -52,7 +52,7 @@ export function EquipoVentana({ items, indice, onIndice, onCerrar, estadoDe, acc
     if (siguiente !== null) onIndice(siguiente);
   };
   return (
-    <VentanaCentrada abierta={!!item} onCerrar={onCerrar} onMover={mover} puedeAnterior={indice !== null && indice > 0} puedeSiguiente={indice !== null && indice < items.length - 1} etiquetaAnterior="Equipo anterior" etiquetaSiguiente="Equipo siguiente">
+    <VentanaCentrada amplia abierta={!!item} onCerrar={onCerrar} onMover={mover} puedeAnterior={indice !== null && indice > 0} puedeSiguiente={indice !== null && indice < items.length - 1} etiquetaAnterior="Equipo anterior" etiquetaSiguiente="Equipo siguiente">
       {item ? <FichaEquipo key={String(item.id)} item={item} estado={estadoDe(item)} acciones={acciones} /> : <VentanaTitulo className="sr-only">Equipo</VentanaTitulo>}
     </VentanaCentrada>
   );
@@ -63,11 +63,11 @@ function FichaEquipo({ item, estado, acciones }: { item: ApiRecord; estado: Esta
   const inactivo = Number(item.activo ?? 1) === 0;
   const cal = caducidadDe(item.fecha_prox_calibracion);
   const tipoProx = item.mantenimiento_tipo ? metaFor(MANTENIMIENTO_TIPOS, item.mantenimiento_tipo).label : null;
-  const historial = (mantenimientos || []).filter((m) => Number(m.id_equipo) === Number(item.id)).sort((a, b) => String(b.fecha_programada || "").localeCompare(String(a.fecha_programada || ""))).slice(0, 8);
+  const historial = (mantenimientos || []).filter((m) => Number(m.id_equipo) === Number(item.id)).sort((a, b) => String(b.fecha_programada || "").localeCompare(String(a.fecha_programada || ""))).slice(0, 10);
   return (
-    <div className="flex flex-col gap-5" data-equipo-ventana={String(item.id)}>
+    <div className="flex flex-col gap-6" data-equipo-ventana={String(item.id)}>
       <VentanaEncabezado
-        figura={<IconoEquipo grande />}
+        figura={<IconoEquipo nombre={item.nombre} grande />}
         titulo={String(item.nombre || "Equipo")}
         insignia={
           <>
@@ -98,54 +98,71 @@ function FichaEquipo({ item, estado, acciones }: { item: ApiRecord; estado: Esta
           <p className="text-[14px] text-ink">Pendiente: {estado.detail}</p>
         </VentanaTarjeta>
       ) : null}
-      <VentanaSeccion titulo="Datos del equipo" i={1}>
-        <DatosLista
-          datos={[
-            item.marca ? { etiqueta: "Marca", valor: String(item.marca) } : null,
-            item.modelo ? { etiqueta: "Modelo", valor: String(item.modelo) } : null,
-            item.numero_serie ? { etiqueta: "Número de serie", valor: String(item.numero_serie) } : null,
-            item.ubicacion ? { etiqueta: "Ubicación", valor: String(item.ubicacion) } : null,
-            item.clave_bitacora ? { etiqueta: "Clave de bitácora", valor: `${String(item.clave_bitacora)}${item.ultimo_folio_bitacora ? ` · último folio ${String(item.ultimo_folio_bitacora)}` : ""}` } : null,
-            cal ? { etiqueta: "Próxima calibración", valor: `${formatearFecha(item.fecha_prox_calibracion)}${cal.detalle ? ` · ${cal.detalle}` : ""}` } : null,
-            item.creado_en ? { etiqueta: "Registrado el", valor: formatearFecha(item.creado_en) } : null,
-          ]}
-        />
-      </VentanaSeccion>
-      <VentanaSeccion titulo="Responsable y personas autorizadas" i={2}>
-        {item.responsable || item.id_responsable ? <FiguraPersona id={item.id_responsable} nombre={item.responsable} size="md" conNombre subtitulo="Responsable del equipo" animado="siempre" /> : <p className="text-[13.5px] text-ink-3">Sin responsable asignado.</p>}
-        <p className="text-[12.5px] text-ink-3">Quién puede usar este equipo se registra en las autorizaciones FX-THF-AP de cada persona (Administración › Usuarios).</p>
-      </VentanaSeccion>
-      <VentanaSeccion titulo="Historial de mantenimientos" i={3}>
-        {!mantenimientos ? (
-          <Skeleton className="h-16 w-full" />
-        ) : historial.length ? (
-          <ul className="flex flex-col gap-2">
-            {historial.map((m, i) => {
-              const est = metaFor(MANTENIMIENTO_ESTADOS, m.estado);
-              const tipo = metaFor(MANTENIMIENTO_TIPOS, m.tipo);
-              return (
-                <li key={String(m.id)} className="entrada-escalonada flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[12px] bg-surface px-3.5 py-2.5 ring-1 ring-line" style={{ ["--i" as string]: i }}>
-                  <span className="text-[13.5px] font-medium text-ink">{tipo.label}</span>
-                  <span className="text-[13px] text-ink-3">
-                    {m.fecha_realizado ? `realizado el ${formatearFechaCorta(m.fecha_realizado)}` : `programado para el ${formatearFechaCorta(m.fecha_programada)}`}
-                    {m.tecnico_proveedor ? ` · ${String(m.tecnico_proveedor)}` : ""}
-                  </span>
-                  <span className="ml-auto">
-                    <Badge tone={est.tone} dot>
-                      {est.label}
-                    </Badge>
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="text-[13.5px] text-ink-3">Todavía no tiene mantenimientos registrados.</p>
-        )}
-      </VentanaSeccion>
-      <VentanaSeccion titulo="Incidencias" i={4}>
-        <IncidenciasDelRegistro entidad="equipos" id={item.id} etiqueta={String(item.nombre || "Equipo")} />
-      </VentanaSeccion>
+      <ColumnasVentana
+        principal={
+          <>
+            <VentanaSeccion titulo="Historial de mantenimientos" i={1}>
+              {!mantenimientos ? (
+                <Skeleton className="h-16 w-full" />
+              ) : historial.length ? (
+                <ol className="flex flex-col">
+                  {historial.map((m, i) => {
+                    const est = metaFor(MANTENIMIENTO_ESTADOS, m.estado);
+                    const tipo = metaFor(MANTENIMIENTO_TIPOS, m.tipo);
+                    return (
+                      <li key={String(m.id)} className="entrada-escalonada relative flex gap-3 pb-3 last:pb-0" style={{ ["--i" as string]: i }}>
+                        {i < historial.length - 1 ? <span aria-hidden="true" className="absolute top-10 bottom-0 left-5 w-0.5 bg-line" /> : null}
+                        <IconoMantenimiento tipo={m.tipo} vencido={m.estado === "vencido"} />
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-[12px] bg-surface px-3.5 py-2.5 ring-1 ring-line transition-shadow duration-200 hover:shadow-raised">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[14px] font-medium text-ink">{tipo.label}</span>
+                            <Badge tone={est.tone} dot>
+                              {est.label}
+                            </Badge>
+                          </div>
+                          <span className="text-[13px] text-ink-3">
+                            {m.fecha_realizado ? `Realizado el ${formatearFechaCorta(m.fecha_realizado)}` : `Programado para el ${formatearFechaCorta(m.fecha_programada)}`}
+                            {m.tecnico_proveedor ? ` · ${String(m.tecnico_proveedor)}` : ""}
+                          </span>
+                          {m.observaciones ? <span className="text-[12.5px] text-ink-2">{String(m.observaciones)}</span> : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              ) : (
+                <p className="text-[13.5px] text-ink-3">Todavía no tiene mantenimientos registrados.</p>
+              )}
+            </VentanaSeccion>
+            <VentanaSeccion titulo="Incidencias" i={2}>
+              <IncidenciasDelRegistro entidad="equipos" id={item.id} etiqueta={String(item.nombre || "Equipo")} />
+            </VentanaSeccion>
+          </>
+        }
+        lateral={
+          <>
+            <TarjetaLateral icono={<Barcode size={15} weight="duotone" />} titulo="Datos del equipo" i={0}>
+              {item.marca ? <DatoLateral etiqueta="Marca">{String(item.marca)}</DatoLateral> : null}
+              {item.modelo ? <DatoLateral etiqueta="Modelo">{String(item.modelo)}</DatoLateral> : null}
+              {item.numero_serie ? <DatoLateral etiqueta="Número de serie">{String(item.numero_serie)}</DatoLateral> : null}
+              {item.creado_en ? <DatoLateral etiqueta="Registrado el">{formatearFecha(item.creado_en)}</DatoLateral> : null}
+              {!item.marca && !item.modelo && !item.numero_serie ? <p className="text-[13.5px] text-ink-3">Sin marca, modelo ni número de serie registrados.</p> : null}
+            </TarjetaLateral>
+            <TarjetaLateral icono={<Ruler size={15} weight="duotone" />} titulo="Calibración" tono={cal?.tono || "neutral"} i={1}>
+              <DatoLateral etiqueta="Próxima calibración">{cal ? `${formatearFecha(item.fecha_prox_calibracion)}${cal.detalle ? ` · ${cal.detalle}` : ""}` : "Sin fecha programada"}</DatoLateral>
+              {item.mantenimiento_fecha ? <DatoLateral etiqueta="Próximo mantenimiento">{`${formatearFecha(item.mantenimiento_fecha)}${tipoProx ? ` · ${tipoProx.toLowerCase()}` : ""}`}</DatoLateral> : null}
+            </TarjetaLateral>
+            <TarjetaLateral icono={<MapPin size={15} weight="duotone" />} titulo="Dónde está y bitácora" i={2}>
+              <DatoLateral etiqueta="Ubicación">{item.ubicacion ? String(item.ubicacion) : "Sin ubicación"}</DatoLateral>
+              <DatoLateral etiqueta="Clave de bitácora">{item.clave_bitacora ? `${String(item.clave_bitacora)}${item.ultimo_folio_bitacora ? ` · último folio ${String(item.ultimo_folio_bitacora)}` : ""}` : "Sin clave"}</DatoLateral>
+            </TarjetaLateral>
+            <TarjetaLateral icono={<UserCircle size={15} weight="duotone" />} titulo="Responsable" i={3}>
+              {item.responsable || item.id_responsable ? <FiguraPersona id={item.id_responsable} nombre={item.responsable} size="md" conNombre subtitulo="Responsable del equipo" animado="siempre" /> : <p className="text-[13.5px] text-ink-3">Sin responsable asignado.</p>}
+              <p className="text-[12.5px] text-ink-3">Quién puede usarlo se registra en las autorizaciones FX-THF-AP de cada persona (Administración › Usuarios).</p>
+            </TarjetaLateral>
+          </>
+        }
+      />
       <VentanaAcciones>
         {acciones.puedeProgramar && !inactivo ? (
           <Button icon={<Wrench size={16} />} onClick={() => acciones.programar(item)}>

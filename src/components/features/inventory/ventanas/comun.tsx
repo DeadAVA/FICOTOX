@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowDownLeft, ArrowUpRight, Atom, Certificate, Columns, Drop, Flask, Package, TestTube, Cube } from "@phosphor-icons/react";
+import { ArrowDownLeft, ArrowUpRight, Atom, Bag, ChartLine, CheckSquare, Cylinder, Diamond, Disc, Drop, Eyedropper, Fire, FirstAid, Flask, Funnel, Gauge, HandPalm, Jar, Lightbulb, Microscope, Monitor, Package, Ruler, Scales, Scroll, SealCheck, ShieldCheck, Snowflake, Spinner, Syringe, Tag, TestTube, Thermometer, Toolbox, Tornado, Tray, Vibrate, Waves, Wind, Wrench } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
 import { cn } from "@/components/ui/cn";
 import { Skeleton } from "@/components/ui/Primitives";
@@ -20,42 +20,159 @@ import { diasEntre, formatearFechaCorta, formatearFechaHora, hoyLocal } from "@/
  * un insumo y el origen de un movimiento en palabras (con enlace).
  */
 
-/* Icono y color suave por categoria de reactivo. */
-const CATEGORIA: Record<string, { icono: (s: number) => ReactNode; clase: string }> = {
-  acidos: { icono: (s) => <Drop size={s} weight="duotone" />, clase: "bg-danger-soft text-danger" },
-  alcoholes_solventes: { icono: (s) => <Flask size={s} weight="duotone" />, clase: "bg-brand-soft text-brand-strong" },
-  compuestos_amonio: { icono: (s) => <Atom size={s} weight="duotone" />, clase: "bg-warning-soft text-warning-text" },
-  compuestos_sodio: { icono: (s) => <Atom size={s} weight="duotone" />, clase: "bg-success-soft text-success-text" },
-  estandares_preparados: { icono: (s) => <TestTube size={s} weight="duotone" />, clase: "bg-brand-faint text-brand" },
-  materiales_referencia: { icono: (s) => <Certificate size={s} weight="duotone" />, clase: "bg-success-soft text-success-text" },
-  columnas_cromatograficas: { icono: (s) => <Columns size={s} weight="duotone" />, clase: "bg-surface-3 text-ink-2" },
-  miscelaneos: { icono: (s) => <Package size={s} weight="duotone" />, clase: "bg-surface-3 text-ink-2" },
+/* Cuadro suave del icono: pequeño en listas, grande en la ventana. */
+function CuadroIcono({ grande, clase, children }: { grande: boolean; clase: string; children: ReactNode }) {
+  return (
+    <span aria-hidden="true" className={cn("flex shrink-0 items-center justify-center", grande ? "h-16 w-16 rounded-[18px]" : "h-10 w-10 rounded-[12px]", clase)}>
+      {children}
+    </span>
+  );
+}
+
+const T_PEQ = 21;
+const T_GDE = 32;
+
+/*
+ * Icono por categoria de reactivo, fiel a lo que es: acidos (gota corrosiva),
+ * alcoholes y solventes (inflamables), compuestos de amonio (molecula),
+ * compuestos de sodio (cristal), estandares preparados (gotero), materiales
+ * de referencia (sello), columnas cromatograficas (columna) y miscelaneos (matraz).
+ */
+const CATEGORIA: Record<string, { icono: (s: number) => ReactNode; clase: string; nombre: string }> = {
+  acidos: { icono: (s) => <Drop size={s} weight="duotone" />, clase: "bg-danger-soft text-danger", nombre: "Ácido" },
+  alcoholes_solventes: { icono: (s) => <Fire size={s} weight="duotone" />, clase: "bg-warning-soft text-warning-text", nombre: "Alcohol o solvente" },
+  compuestos_amonio: { icono: (s) => <Atom size={s} weight="duotone" />, clase: "bg-deep-2/10 text-deep-2", nombre: "Compuesto de amonio" },
+  compuestos_sodio: { icono: (s) => <Diamond size={s} weight="duotone" />, clase: "bg-success-soft text-success-text", nombre: "Compuesto de sodio" },
+  estandares_preparados: { icono: (s) => <Eyedropper size={s} weight="duotone" />, clase: "bg-brand-soft text-brand-strong", nombre: "Estándar preparado" },
+  materiales_referencia: { icono: (s) => <SealCheck size={s} weight="duotone" />, clase: "bg-success-soft text-success-text", nombre: "Material de referencia" },
+  columnas_cromatograficas: { icono: (s) => <Cylinder size={s} weight="duotone" />, clase: "bg-surface-3 text-ink-2", nombre: "Columna cromatográfica" },
+  miscelaneos: { icono: (s) => <Flask size={s} weight="duotone" />, clase: "bg-surface-3 text-ink-2", nombre: "Misceláneo" },
 };
 
 export function IconoCategoria({ categoria, grande = false }: { categoria?: unknown; grande?: boolean }) {
-  const meta = CATEGORIA[String(categoria || "")] || { icono: (s: number) => <Flask size={s} weight="duotone" />, clase: "bg-surface-3 text-ink-2" };
+  const meta = CATEGORIA[String(categoria || "")] || { icono: (s: number) => <Flask size={s} weight="duotone" />, clase: "bg-brand-faint text-brand-strong" };
   return (
-    <span aria-hidden="true" className={cn("flex shrink-0 items-center justify-center", grande ? "h-14 w-14 rounded-[16px]" : "h-10 w-10 rounded-[12px]", meta.clase)}>
-      {meta.icono(grande ? 28 : 20)}
-    </span>
+    <CuadroIcono grande={grande} clase={meta.clase}>
+      {meta.icono(grande ? T_GDE : T_PEQ)}
+    </CuadroIcono>
   );
 }
 
-/* Icono de un consumible (no tienen categoria): una caja suave. */
-export function IconoConsumible({ grande = false }: { grande?: boolean }) {
+/* Busca el primer patron que coincida con el nombre (sin acentos ni mayusculas). */
+function porNombre<T>(nombre: unknown, reglas: Array<[RegExp, T]>, omision: T): T {
+  const texto = String(nombre || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return reglas.find(([re]) => re.test(texto))?.[1] ?? omision;
+}
+
+type Figura = { icono: (s: number) => ReactNode; clase: string };
+
+/* Consumibles: el icono sale de lo que es el producto (guantes, tubos, puntas, filtros…). */
+const CONSUMIBLES: Array<[RegExp, Figura]> = [
+  [/guante/, { icono: (s) => <HandPalm size={s} weight="duotone" />, clase: "bg-brand-soft text-brand-strong" }],
+  [/bolsa|rpbi|residuo/, { icono: (s) => <Bag size={s} weight="duotone" />, clase: "bg-danger-soft text-danger" }],
+  [/tubo|falcon|vial|eppendorf|microtubo|criovial/, { icono: (s) => <TestTube size={s} weight="duotone" />, clase: "bg-brand-faint text-brand-strong" }],
+  [/punta|pipeta|gotero/, { icono: (s) => <Eyedropper size={s} weight="duotone" />, clase: "bg-brand-faint text-brand-strong" }],
+  [/filtro|membrana|acrodisco|cartucho|spe|sax/, { icono: (s) => <Funnel size={s} weight="duotone" />, clase: "bg-deep-2/10 text-deep-2" }],
+  [/jeringa|aguja/, { icono: (s) => <Syringe size={s} weight="duotone" />, clase: "bg-warning-soft text-warning-text" }],
+  [/papel|toalla|kimwipe|panuelo/, { icono: (s) => <Scroll size={s} weight="duotone" />, clase: "bg-surface-3 text-ink-2" }],
+  [/frasco|botella|garrafa|bote/, { icono: (s) => <Jar size={s} weight="duotone" />, clase: "bg-success-soft text-success-text" }],
+  [/caja|placa|charola|gradilla|petri/, { icono: (s) => <Tray size={s} weight="duotone" />, clase: "bg-surface-3 text-ink-2" }],
+  [/cubrebocas|mascarilla|bata|lente|cofia|careta/, { icono: (s) => <FirstAid size={s} weight="duotone" />, clase: "bg-danger-soft text-danger" }],
+  [/cinta|etiqueta|marcador/, { icono: (s) => <Tag size={s} weight="duotone" />, clase: "bg-warning-soft text-warning-text" }],
+];
+const CONSUMIBLE_OMISION: Figura = { icono: (s) => <Package size={s} weight="duotone" />, clase: "bg-brand-faint text-brand-strong" };
+
+export function IconoConsumible({ producto, grande = false }: { producto?: unknown; grande?: boolean }) {
+  const f = porNombre(producto, CONSUMIBLES, CONSUMIBLE_OMISION);
   return (
-    <span aria-hidden="true" className={cn("flex shrink-0 items-center justify-center bg-brand-faint text-brand-strong", grande ? "h-14 w-14 rounded-[16px]" : "h-10 w-10 rounded-[12px]")}>
-      <Package size={grande ? 28 : 20} weight="duotone" />
-    </span>
+    <CuadroIcono grande={grande} clase={f.clase}>
+      {f.icono(grande ? T_GDE : T_PEQ)}
+    </CuadroIcono>
   );
 }
 
-/* Icono de un equipo. */
-export function IconoEquipo({ grande = false, tono = "bg-brand-faint text-brand-strong" }: { grande?: boolean; tono?: string }) {
+/* Equipos: el icono sale del tipo de equipo (centrifuga, balanza, refrigerador, HPLC…). */
+const EQUIPOS: Array<[RegExp, (s: number) => ReactNode]> = [
+  [/centrifug/, (s) => <Disc size={s} weight="duotone" />],
+  [/balanza|bascula/, (s) => <Scales size={s} weight="duotone" />],
+  [/microscop|estereoscop/, (s) => <Microscope size={s} weight="duotone" />],
+  [/refriger|congel|ultracongel|liofiliz|cuarto frio/, (s) => <Snowflake size={s} weight="duotone" />],
+  [/horno|estufa|mufla|autoclave/, (s) => <Fire size={s} weight="duotone" />],
+  [/incubad|termometro|termociclador/, (s) => <Thermometer size={s} weight="duotone" />],
+  [/bano|bath/, (s) => <Waves size={s} weight="duotone" />],
+  [/hplc|uplc|cromatograf|lc.?ms|masas|gases/, (s) => <ChartLine size={s} weight="duotone" />],
+  [/espectro|fotometro|lector|fluorimetro|colorimetro/, (s) => <Lightbulb size={s} weight="duotone" />],
+  [/\bph\b|potenciometro|conductiv|medidor/, (s) => <Gauge size={s} weight="duotone" />],
+  [/vortex|agitador|shaker|mezclador/, (s) => <Tornado size={s} weight="duotone" />],
+  [/campana|extractor|flujo laminar/, (s) => <Wind size={s} weight="duotone" />],
+  [/pipeta|dispensador/, (s) => <Eyedropper size={s} weight="duotone" />],
+  [/rotavapor|evaporador|concentrador|nitrogeno/, (s) => <Drop size={s} weight="duotone" />],
+  [/sonicador|ultrason/, (s) => <Vibrate size={s} weight="duotone" />],
+  [/molino|licuadora|homogeniz|triturador|procesador/, (s) => <Spinner size={s} weight="duotone" />],
+  [/computadora|monitor|impresora/, (s) => <Monitor size={s} weight="duotone" />],
+];
+
+export function IconoEquipo({ nombre, grande = false, tono = "bg-brand-faint text-brand-strong" }: { nombre?: unknown; grande?: boolean; tono?: string }) {
+  const icono = porNombre(nombre, EQUIPOS, (s: number) => <Toolbox size={s} weight="duotone" />);
   return (
-    <span aria-hidden="true" className={cn("flex shrink-0 items-center justify-center", grande ? "h-14 w-14 rounded-[16px]" : "h-10 w-10 rounded-[12px]", tono)}>
-      <Cube size={grande ? 28 : 20} weight="duotone" />
-    </span>
+    <CuadroIcono grande={grande} clase={tono}>
+      {icono(grande ? T_GDE : T_PEQ)}
+    </CuadroIcono>
+  );
+}
+
+/* Mantenimiento: el icono dice que tipo es (calibracion, preventivo, correctivo, verificacion). */
+const MANTENIMIENTO: Record<string, (s: number) => ReactNode> = {
+  calibracion: (s) => <Ruler size={s} weight="duotone" />,
+  preventivo: (s) => <ShieldCheck size={s} weight="duotone" />,
+  correctivo: (s) => <Wrench size={s} weight="duotone" />,
+  verificacion: (s) => <CheckSquare size={s} weight="duotone" />,
+};
+
+export function IconoMantenimiento({ tipo, vencido = false, grande = false }: { tipo?: unknown; vencido?: boolean; grande?: boolean }) {
+  const icono = MANTENIMIENTO[String(tipo || "")] || ((s: number) => <Wrench size={s} weight="duotone" />);
+  return (
+    <CuadroIcono grande={grande} clase={vencido ? "bg-danger-soft text-danger" : "bg-brand-faint text-brand-strong"}>
+      {icono(grande ? T_GDE : T_PEQ)}
+    </CuadroIcono>
+  );
+}
+
+/* Dos columnas en la ventana amplia (principal y lateral); una sola si no cabe. */
+export function ColumnasVentana({ principal, lateral }: { principal: ReactNode; lateral: ReactNode }) {
+  return (
+    <div className="@container">
+      <div className="grid gap-6 @3xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+        <div className="flex min-w-0 flex-col gap-6">{principal}</div>
+        <div className="flex min-w-0 flex-col gap-4">{lateral}</div>
+      </div>
+    </div>
+  );
+}
+
+/* Tarjeta de la columna lateral: icono, titulo y contenido. */
+export function TarjetaLateral({ icono, titulo, children, tono = "neutral", i = 0 }: { icono: ReactNode; titulo: string; children: ReactNode; tono?: "neutral" | "warning" | "danger" | "success"; i?: number }) {
+  const fondo = { neutral: "bg-surface-2 ring-line", warning: "bg-warning-soft/50 ring-warning/20", danger: "bg-danger-soft/50 ring-danger/20", success: "bg-success-soft/50 ring-success/20" }[tono];
+  return (
+    <section className={cn("entrada-escalonada flex flex-col gap-2.5 rounded-[16px] px-4 py-3.5 ring-1 transition-shadow duration-200 hover:shadow-raised", fondo)} style={{ ["--i" as string]: i }}>
+      <h3 className="flex items-center gap-2 text-[13px] font-semibold text-ink-2">
+        <span aria-hidden="true" className="flex h-7 w-7 items-center justify-center rounded-[9px] bg-surface text-brand-strong shadow-card">
+          {icono}
+        </span>
+        {titulo}
+      </h3>
+      <div className="flex flex-col gap-2 text-[14px] text-ink">{children}</div>
+    </section>
+  );
+}
+
+/* Un dato de la columna lateral: etiqueta en gris y valor completo debajo. */
+export function DatoLateral({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col">
+      <span className="text-[12px] text-ink-3">{etiqueta}</span>
+      <span className="break-words text-[14px] text-ink">{children}</span>
+    </div>
   );
 }
 
@@ -99,9 +216,9 @@ export const esEntrada = (m: ApiRecord) => String(m.tipo || "").toLowerCase() ==
 export function IconoMovimiento({ m, grande = false }: { m: ApiRecord; grande?: boolean }) {
   const entrada = esEntrada(m);
   return (
-    <span aria-hidden="true" className={cn("flex shrink-0 items-center justify-center", grande ? "h-14 w-14 rounded-[16px]" : "h-10 w-10 rounded-[12px]", entrada ? "bg-success-soft text-success-text" : "bg-warning-soft text-warning-text")}>
-      {entrada ? <ArrowDownLeft size={grande ? 28 : 20} weight="bold" /> : <ArrowUpRight size={grande ? 28 : 20} weight="bold" />}
-    </span>
+    <CuadroIcono grande={grande} clase={entrada ? "bg-success-soft text-success-text" : "bg-warning-soft text-warning-text"}>
+      {entrada ? <ArrowDownLeft size={grande ? T_GDE : T_PEQ} weight="bold" /> : <ArrowUpRight size={grande ? T_GDE : T_PEQ} weight="bold" />}
+    </CuadroIcono>
   );
 }
 
