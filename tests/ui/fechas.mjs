@@ -45,10 +45,9 @@ try {
   // Lista y ficha: la misma fecha.
   await page.goto(`${BASE}/muestras/recepcion`);
   await page.getByPlaceholder("Buscar por folio, solicitante o ID interno").fill(idInterno);
-  // Lista en cuadricula: la fecha va corta ("7 sep 2026") y la completa en el title.
-  const fila = page.locator("[data-recepcion]").filter({ hasText: idInterno }).first();
+  const fila = page.locator("tbody tr").filter({ hasText: idInterno }).first();
   await fila.waitFor();
-  check("la lista muestra 07/09/2026 (no 06/09/2026)", (await fila.textContent()).includes("7 sep 2026") && (await fila.locator('[title="07/09/2026"]').count()) > 0, (await fila.textContent()).slice(0, 160));
+  check("la lista muestra 07/09/2026 (no 06/09/2026)", (await fila.textContent()).includes("07/09/2026"), (await fila.textContent()).slice(0, 160));
   await page.goto(`${BASE}/muestras/recepcion/${creada.id}`);
   await page.locator("#r-fecha").waitFor();
   const enFicha = await page.inputValue("#r-fecha");

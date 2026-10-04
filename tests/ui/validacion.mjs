@@ -192,7 +192,7 @@ try {
   // Quien no puede resolver (Técnico Auxiliar) no ve la franja.
   const pageMariana = await sesion(MARIANA, credenciales[MARIANA]);
   await pageMariana.goto(`${BASE}/muestras/recepcion`);
-  await pageMariana.locator("[data-recepcion]").first().waitFor();
+  await pageMariana.locator("tbody tr").first().waitFor();
   await pageMariana.waitForTimeout(800);
   check("la franja no aparece para quien no puede resolver", (await pageMariana.locator("[data-franja-pendientes]").count()) === 0);
   await pageMariana.context().close();
@@ -205,7 +205,7 @@ try {
   check("la franja «N solicitudes esperan tu autorización · Ver» aparece para quien puede resolver", /solicitud(es)? esperan? tu autorización/.test((await franja.textContent()) || ""));
   check("  … y enlaza a la bandeja filtrada por el módulo", (await franja.locator('a[href="/solicitudes?modulo=recepcion"]').count()) === 1);
   await pageRG.getByPlaceholder("Buscar por folio, solicitante o ID interno").fill(`VALC-${stamp}`);
-  const filaR3 = pageRG.locator("[data-recepcion]").filter({ hasText: `VALC-${stamp}` }).first();
+  const filaR3 = pageRG.locator("tbody tr").filter({ hasText: `VALC-${stamp}` }).first();
   await filaR3.waitFor();
   await filaR3.locator("button[data-status-flag]").click();
   const panel = pageRG.getByRole("dialog");

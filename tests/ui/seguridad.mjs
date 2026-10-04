@@ -94,7 +94,7 @@ try {
       await entrar(page, "qa@ficotox.local", QA_PWD);
       await page.goto(`${BASE}/muestras/recepcion`);
       await page.getByPlaceholder("Buscar por folio, solicitante o ID interno").fill(`SEGUI-A-${stamp}`);
-      const fila = page.locator("[data-recepcion]").filter({ hasText: `SEGUI-A-${stamp}` }).first();
+      const fila = page.locator("tbody tr").filter({ hasText: `SEGUI-A-${stamp}` }).first();
       await fila.waitFor();
       await fila.getByRole("button", { name: "Acciones" }).click();
       await page.getByRole("menuitem", { name: /Anular recepción/ }).click();

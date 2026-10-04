@@ -65,12 +65,12 @@ Atajos y ayudas:
 
 ### 3.1 Listas y ventana de detalle (todas las pantallas)
 
-Todas las listas (recepciones, procesamientos, extracciones, analisis, informes, inventario, movimientos, mantenimiento, incidencias y NC, por autorizar, por supervisar, usuarios y roles) se usan igual:
+Las listas de inventario, movimientos, mantenimiento, incidencias y NC, por autorizar, por supervisar, usuarios y roles se usan igual (las de Muestras e Informes conservan su tabla y su forma de uso):
 
 - **Buscar y filtrar**: el buscador y un solo boton **Filtros**. Dentro estan todos los filtros (interruptores agrupados, como Estado o Tipo), **Ordenar por** al final y **Limpiar filtros**. El boton muestra cuantos filtros hay activos.
 - **Lista**: columnas alineadas con encabezados discretos; cada dato siempre en su columna y "—" cuando no hay valor. Nada se corta: el texto largo pasa de linea. En pantallas angostas cada renglon se ve como tarjeta.
 - **Clic en un renglon**: abre una **ventana** al centro con lo principal del registro: datos rapidos, pestañas o secciones, las personas con su figura y las acciones que le tocan segun su estado y sus permisos. ↑/↓ pasan al registro anterior o siguiente; Esc, la × o un clic fuera la cierran.
-- **Abrir formato completo**: en recepciones, procesamientos, extracciones, analisis, informes y NC la ventana es una vista rapida; para capturar o editar todo, use **Abrir formato completo** (los formatos no cambiaron).
+- **Abrir formato completo** o **Abrir ficha completa**: en NC, incidencias y registros por supervisar la ventana es una vista rapida; para capturar o editar todo, abra el formato o la ficha (no cambiaron).
 - **Menu ⋯ del renglon**: solo las acciones que aplican (anular, reponer, asignar…); "Ver" y "Abrir" ya no estan porque el clic abre la ventana.
 - Excepcion: en la **Biblioteca**, el clic en un documento abre el visor, como siempre.
 

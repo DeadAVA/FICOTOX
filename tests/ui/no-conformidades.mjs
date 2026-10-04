@@ -83,7 +83,7 @@ try {
       check("Luis reporta desde la barra lateral con una foto (hoja rápida)", !!incidenciaId && adjuntos.length === 1 && adjuntos[0].tipo_evidencia === "foto", `${lista.length} ${adjuntos.length}`);
 
       await page.goto(`${BASE}/muestras/extraccion`);
-      const fila = page.locator("[data-extraccion]").filter({ hasText: c.idInt }).first();
+      const fila = page.locator("tr").filter({ hasText: c.idInt }).first();
       await fila.waitFor();
       await fila.getByRole("button", { name: /acciones/i }).click();
       await page.getByRole("menuitem", { name: /Reportar incidencia/ }).click();

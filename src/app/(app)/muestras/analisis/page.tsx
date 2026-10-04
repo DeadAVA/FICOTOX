@@ -2,43 +2,30 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
-import { ArrowCounterClockwise, Plus, Prohibit, TestTube } from "@phosphor-icons/react";
+import { Suspense, useState } from "react";
+import { ArrowCounterClockwise, ArrowSquareOut, PencilSimple, Plus, Prohibit, TestTube } from "@phosphor-icons/react";
 import { useMenuReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { FolioChip, StateBadge, SolicitudBadge, SupervisionBadge } from "@/components/features/samples/status";
-import { AnalisisVentana, folioAnalisis } from "@/components/features/samples/ventanas/AnalisisVentana";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
 import { useAnulacion } from "@/components/features/samples/useAnulacion";
 import { Button } from "@/components/ui/Button";
-import { FiguraPersona } from "@/components/ui/FiguraPersona";
-import { FilterMenu, type FilterGroup, type FilterToggle } from "@/components/ui/FilterMenu";
-import { IndicadorConteo, SinDato } from "@/components/ui/Insignias";
-import { ListaCuadricula, type ColumnaLista } from "@/components/ui/ListaCuadricula";
+import { FilterChips, FilterMenu, type FilterGroup, type FilterToggle } from "@/components/ui/FilterMenu";
 import { ActionMenu, type MenuItem } from "@/components/ui/Overlay";
 import { SearchInput, Toolbar } from "@/components/ui/PageHeader";
-import { Badge, Skeleton } from "@/components/ui/Primitives";
+import { Badge, EmptyState, ErrorState, Skeleton, TableSkeleton } from "@/components/ui/Primitives";
 import { FranjaPendientes } from "@/components/features/solicitudes/Solicitudes";
-import { cn } from "@/components/ui/cn";
+import { StatusCell } from "@/components/ui/StatusFlag";
+import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
-import { fmt } from "@/lib/client/format";
+import { fmt, fmtDate } from "@/lib/client/format";
 import { useDebouncedValue, useInitialParam, useParamChange } from "@/lib/client/hooks";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
-import { formatearFecha, formatearFechaCorta } from "@/lib/shared/fechas";
 import { ANALYSIS_METHODS, ANALYSIS_TYPES } from "@/lib/shared/sgc";
-
-/*
- * Analisis (patron lista -> ventana de detalle): lista alineada (folio y
- * analisis, muestras, origen, fecha, analista y estado), todos los filtros y
- * el orden dentro de "Filtros", y al pulsar un renglon la ventana de detalle
- * con sus acciones (enviar a revision, devolver, revisar, aprobar). La captura
- * sigue en el formato completo.
- */
 
 type EstadoFilter = "" | "pendiente" | "registrado" | "en_revision" | "revisado" | "aprobado" | "sustituido";
 const ESTADOS: string[] = ["pendiente", "registrado", "en_revision", "revisado", "aprobado", "sustituido"];
-type Orden = "reciente" | "fecha" | "folio";
 
 export default function AnalisisListPage() {
   return (
@@ -50,22 +37,11 @@ export default function AnalisisListPage() {
   );
 }
 
-const COLUMNAS: ColumnaLista[] = [
-  { clave: "folio", titulo: "Folio y análisis", ancho: "minmax(170px,1fr)" },
-  { clave: "muestras", titulo: "Muestras", ancho: "minmax(150px,1fr)" },
-  { clave: "origen", titulo: "Origen", ancho: "minmax(150px,0.9fr)" },
-  { clave: "fecha", titulo: "Fecha", ancho: "120px" },
-  { clave: "analista", titulo: "Analista", ancho: "minmax(170px,1fr)" },
-  { clave: "estado", titulo: "Estado", ancho: "minmax(140px,0.9fr)" },
-];
-
 function AnalisisList() {
   const { token, can } = useSession();
   const router = useRouter();
   const params = useSearchParams();
-  const recepcionParam = params.get("recepcion") || "";
-  const [soloRecepcion, setSoloRecepcion] = useState(true);
-  const recepcionId = soloRecepcion ? recepcionParam : "";
+  const recepcionId = params.get("recepcion") || "";
   const [search, setSearch] = useState("");
   /* ?filtro= llega desde los avisos del Inicio y el buscador ("Análisis por revisar o aprobar"). */
   const initialFilter = useInitialParam("filtro");
@@ -74,10 +50,9 @@ function AnalisisList() {
   const [showAnulados, setShowAnulados] = useState(false);
   const [mias, setMias] = useState(false);
   const [tipoFilter, setTipoFilter] = useState("");
-  const [orden, setOrden] = useState<Orden>("reciente");
-  const [abierta, setAbierta] = useState<number | null>(null);
   const debounced = useDebouncedValue(search);
-  const { anular, restaurar } = useAnulacion("analysis", folioAnalisis);
+  const folioA = (item: ApiRecord) => `A ${String(Number(item.folio_num || 0)).padStart(7, "0")}`;
+  const { anular, restaurar } = useAnulacion("analysis", folioA);
 
   const resource = useResource<ApiRecord[]>(
     "muestras",
@@ -92,15 +67,12 @@ function AnalisisList() {
     },
     { enabled: !!token, deps: [debounced, estado, showAnulados, recepcionId, mias] },
   );
-  const items = useMemo(() => {
-    const lista = (resource.data || []).filter((item) => !tipoFilter || item.tipo_analisis === tipoFilter);
-    if (orden === "fecha") return [...lista].sort((a, b) => String(b.fecha_analisis || "").localeCompare(String(a.fecha_analisis || "")));
-    if (orden === "folio") return [...lista].sort((a, b) => Number(b.folio_num || 0) - Number(a.folio_num || 0) || Number(b.version || 1) - Number(a.version || 1));
-    return lista;
-  }, [resource.data, tipoFilter, orden]);
+  const items = (resource.data || []).filter((item) => !tipoFilter || item.tipo_analisis === tipoFilter);
   const loaded = !!resource.data;
   const canCreate = can("ensayos", "C", { objeto: "analisis", borrador: true });
+  const canEdit = (item: ApiRecord) => can("ensayos", "E", { objeto: "analisis", borrador: item.estado === "registrado" });
   const canDelete = can("ensayos", "AN");
+  const count = (predicate: (item: ApiRecord) => boolean) => (resource.data ? resource.data.filter(predicate).length : null);
 
   const groups: FilterGroup[] = [
     {
@@ -125,21 +97,18 @@ function AnalisisList() {
       value: tipoFilter,
       defaultValue: "",
       onChange: setTipoFilter,
-      options: [{ value: "", label: "Cualquiera" }, ...ANALYSIS_TYPES.map((t) => ({ value: t.value, label: t.short || t.label }))],
+      options: [{ value: "", label: "Cualquiera" }, ...ANALYSIS_TYPES.map((t) => ({ value: t.value, label: t.short || t.label, count: count((i) => i.tipo_analisis === t.value) }))],
     },
   ];
-  const ordenar: FilterGroup[] = [{ key: "orden", label: "Ordenar por", value: orden, defaultValue: "reciente", showDefault: true, onChange: (v) => setOrden(v as Orden), options: [{ value: "reciente", label: "Más recientes" }, { value: "fecha", label: "Fecha del análisis" }, { value: "folio", label: "Folio" }] }];
-  const toggles: FilterToggle[] = [
-    { key: "mias", label: "Mis muestras", checked: mias, onChange: setMias },
-    { key: "anulados", label: "Mostrar anulados", checked: showAnulados, onChange: setShowAnulados },
-    // Desde la ficha de una recepcion (?recepcion=): solo sus analisis, mientras este encendido.
-    ...(recepcionParam ? [{ key: "recepcion", label: "Solo la recepción elegida", checked: soloRecepcion, onChange: setSoloRecepcion }] : []),
-  ];
+  const toggles: FilterToggle[] = [{ key: "mias", label: "Mis muestras", description: "Solo las muestras asignadas a ti o que registraste.", checked: mias, onChange: setMias }, { key: "anulados", label: "Mostrar anulados", checked: showAnulados, onChange: setShowAnulados }];
 
   const reportar = useMenuReportar();
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulado = item.estado === "anulado";
-    const list: MenuItem[] = [...reportar("muestras_analisis", item.id, folioAnalisis(item))];
+    const editable = canEdit(item) && !anulado && item.estado === "registrado";
+    const list: MenuItem[] = [{ label: "Abrir", description: item.estado === "aprobado" ? "Solo lectura: análisis aprobado" : "Ver resultados, controles y revisión", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/muestras/analisis/${item.id}`) }];
+    if (editable) list.push({ label: "Editar", description: "Corregir resultados antes de la revisión", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/analisis/${item.id}`) });
+    list.push(...reportar("muestras_analisis", item.id, folioA(item)));
     if (canDelete) {
       if (anulado) list.push({ label: "Restaurar análisis", description: "Vuelve a la lista con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => restaurar(item) });
       else list.push({ label: "Anular análisis…", description: "Queda en la bitácora con motivo", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => anular(item) });
@@ -160,73 +129,80 @@ function AnalisisList() {
         }
       >
         <SearchInput value={search} onChange={setSearch} placeholder="Buscar por folio, solicitante, ID o analista" className="w-full md:w-[340px]" />
-        <FilterMenu groups={groups} toggles={toggles} gruposFinales={ordenar} />
+        <FilterMenu groups={groups} toggles={toggles} />
+        <FilterChips groups={groups} toggles={toggles} />
+        {recepcionId ? <Badge tone="brand">Recepción #{recepcionId}</Badge> : null}
       </Toolbar>
 
-      <ListaCuadricula
-        etiqueta="Análisis"
-        columnas={COLUMNAS}
-        filas={loaded ? items : null}
-        error={resource.error}
-        onReintentar={resource.reload}
-        clave={(item) => String(item.id)}
-        onAbrir={(_, i) => setAbierta(i)}
-        activa={(_, i) => abierta === i}
-        celdas={(item) => {
-          const tipo = ANALYSIS_TYPES.find((t) => t.value === item.tipo_analisis);
-          const metodo = item.metodo === "otro" ? item.metodo_otro : ANALYSIS_METHODS.find((m) => m.value === item.metodo)?.label;
-          const anulado = item.estado === "anulado";
-          const noConformes = Number(item.no_conformes || 0);
-          return [
-            <span key="f" className={cn("flex flex-col items-start gap-1", anulado && "opacity-60")}>
-              <span className="flex flex-wrap items-center gap-1.5">
-                <FolioChip type="A" num={item.folio_num} />
-                {/* Las enmiendas conservan el folio con su version. */}
-                {Number(item.version || 1) > 1 ? <Badge tone="warning">v{String(item.version)}</Badge> : null}
-              </span>
-              <span className="text-[12.5px] text-ink-3">{[tipo?.short || tipo?.label || String(item.tipo_analisis || ""), metodo ? String(metodo) : null].filter(Boolean).join(" · ")}</span>
-            </span>,
-            <span key="m" className={cn("flex flex-col items-start gap-1", anulado && "opacity-60")}>
-              <span className="text-[13.5px] text-ink">{Number(item.muestras || 0) === 1 ? "1 muestra" : `${fmt(item.muestras || 0)} muestras`}</span>
-              {noConformes > 0 ? <IndicadorConteo tono="danger">{noConformes === 1 ? "1 no cumple" : `${fmt(noConformes)} no cumplen`}</IndicadorConteo> : null}
-              {item.recepcion_id_interno ? <span className="break-words text-[12px] text-ink-3">{String(item.recepcion_id_interno)}</span> : null}
-            </span>,
-            item.folio_recepcion_num || item.folio_extraccion_num ? (
-              <span key="o" className="flex flex-wrap items-center gap-1.5">
-                {item.folio_recepcion_num ? <FolioChip type="R" num={item.folio_recepcion_num} /> : null}
-                {item.folio_extraccion_num ? <FolioChip type={String(item.tipo_extraccion || "E-A")} num={item.folio_extraccion_num} /> : null}
-              </span>
-            ) : (
-              <SinDato key="o" />
-            ),
-            <span key="d" className="text-[13px] text-ink-2" title={formatearFecha(item.fecha_analisis)}>
-              {formatearFechaCorta(item.fecha_analisis)}
-            </span>,
-            item.analista_nombre ? <FiguraPersona key="q" nombre={item.analista_nombre} conNombre /> : <SinDato key="q" />,
-            <span key="e" className="flex flex-wrap items-center gap-1.5">
-              <StateBadge kind="analisis" status={item.estado} />
-              <SupervisionBadge estado={item.supervision_estado} />
-            </span>,
-          ];
-        }}
-        extremo={(item) => {
-          const menu = menuFor(item);
-          return (
-            <>
-              <span className="flex w-7 justify-center">
-                <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} entidad="muestras_analisis" />
-              </span>
-              <span className="w-9">{menu.length ? <ActionMenu items={menu} header={folioAnalisis(item)} /> : null}</span>
-            </>
-          );
-        }}
-        anchoExtremo="84px"
-        propsFila={(item) => ({ "data-analisis": String(item.id) })}
-        vacio={{ icono: <TestTube size={20} />, titulo: search ? "Sin coincidencias" : "Sin análisis", descripcion: search ? "Prueba con otro término." : "Registra el análisis a partir de una extracción.", accion: canCreate && !search ? <Button onClick={() => router.push("/muestras/analisis/nuevo")}>Nuevo análisis</Button> : undefined }}
-      />
-      {loaded && items.length ? <p className="tnum mt-2 px-1 text-[12px] text-ink-4">{items.length === 1 ? "1 análisis" : `${fmt(items.length)} análisis`}</p> : null}
-
-      <AnalisisVentana filas={items} indice={abierta} onIndice={setAbierta} onCerrar={() => setAbierta(null)} />
+      <TableShell footer={loaded ? `${fmt(items.length)} análisis` : undefined}>
+        {resource.error ? (
+          <ErrorState message={resource.error} onRetry={resource.reload} />
+        ) : !loaded ? (
+          <TableSkeleton cols={7} />
+        ) : !items.length ? (
+          <EmptyState icon={<TestTube size={20} />} title={search ? "Sin coincidencias" : "Sin análisis"} description={search ? "Prueba con otro término." : "Registra el análisis a partir de una extracción."} action={canCreate && !search ? <Button onClick={() => router.push("/muestras/analisis/nuevo")}>Nuevo análisis</Button> : undefined} />
+        ) : (
+          <Table>
+            <THead>
+              <tr>
+                <Th>Folio A</Th>
+                <Th>Análisis</Th>
+                <Th>Origen</Th>
+                <Th>Fecha</Th>
+                <Th>Muestras</Th>
+                <Th>Analista</Th>
+                <Th>Estado</Th>
+                <Th align="right" sticky />
+              </tr>
+            </THead>
+            <TBody>
+              {items.map((item) => {
+                const tipo = ANALYSIS_TYPES.find((t) => t.value === item.tipo_analisis);
+                const metodo = item.metodo === "otro" ? item.metodo_otro : ANALYSIS_METHODS.find((m) => m.value === item.metodo)?.label;
+                return (
+                  <Tr key={item.id} interactive onClick={() => router.push(`/muestras/analisis/${item.id}`)} className={item.estado === "anulado" ? "opacity-60" : undefined}>
+                    <Td>
+                      <span className="flex items-center gap-2">
+                        <FolioChip type="A" num={item.folio_num} />
+                        {/* Fase 6: las enmiendas conservan el folio con su version. */}
+                        {Number(item.version || 1) > 1 ? <Badge tone="warning">v{String(item.version)}</Badge> : null}
+                      </span>
+                    </Td>
+                    <Td className="max-w-[220px]">
+                      <CellPrimary title={tipo?.label || item.tipo_analisis} subtitle={metodo || "-"} />
+                    </Td>
+                    <Td>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {item.folio_recepcion_num ? <FolioChip type="R" num={item.folio_recepcion_num} /> : null}
+                        {item.folio_extraccion_num ? <FolioChip type={String(item.tipo_extraccion || "E-A")} num={item.folio_extraccion_num} /> : null}
+                      </div>
+                      {item.recepcion_id_interno ? <p className="mt-0.5 max-w-[220px] truncate text-[12px] text-ink-3">{item.recepcion_id_interno}</p> : null}
+                    </Td>
+                    <Td muted className="whitespace-nowrap">
+                      {fmtDate(item.fecha_analisis)}
+                    </Td>
+                    <Td>
+                      <span className="tnum">{fmt(item.muestras)}</span>
+                      {Number(item.no_conformes) > 0 ? <Badge tone="danger" className="ml-2">{fmt(item.no_conformes)} no conforme(s)</Badge> : null}
+                    </Td>
+                    <Td muted>{item.analista_nombre || "-"}</Td>
+                    <Td>
+                      <StatusCell>
+                        <StateBadge kind="analisis" status={item.estado} />
+                        <SupervisionBadge estado={item.supervision_estado} />
+                        <SolicitudBadge solicitud={item.solicitud_pendiente as ApiRecord | null} />
+                      </StatusCell>
+                    </Td>
+                    <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
+                      <ActionMenu items={menuFor(item)} header={`${folioA(item)} · ${tipo?.short || ""}`} />
+                    </Td>
+                  </Tr>
+                );
+              })}
+            </TBody>
+          </Table>
+        )}
+      </TableShell>
     </>
   );
 }

@@ -93,7 +93,7 @@ try {
 
       await page.goto(`${BASE}/muestras/analisis`);
       await page.getByPlaceholder(/Buscar/).first().fill(id);
-      const fila = page.locator("[data-analisis]").filter({ hasText: /Aprobado/ }).first();
+      const fila = page.locator("tbody tr").filter({ hasText: /Aprobado/ }).first();
       await fila.waitFor();
       await fila.getByRole("button", { name: "Acciones" }).click();
       await page.getByRole("menuitem", { name: /Anular/ }).click();
