@@ -30,3 +30,14 @@ export function useFiguraDe(avatar: unknown, seed: string): unknown {
   const defaults = useFigurasPorDefecto();
   return isAvatarKey(avatar) ? avatar : defaults.get(seed) || avatar;
 }
+
+/* Busca a una persona del directorio por id, correo o nombre (los registros guardan a veces solo el nombre). */
+export function useBuscarPersona(): (dato: { id?: unknown; email?: unknown; nombre?: unknown }) => ApiRecord | undefined {
+  const personas = useDirectorio();
+  return useMemo(() => {
+    const porId = new Map(personas.map((p) => [Number(p.id), p]));
+    const porEmail = new Map(personas.map((p) => [String(p.email || "").toLowerCase(), p]));
+    const porNombre = new Map(personas.map((p) => [String(p.nombre || "").trim().toLowerCase(), p]));
+    return (dato) => (dato.id !== undefined && dato.id !== null && porId.get(Number(dato.id))) || (dato.email ? porEmail.get(String(dato.email).toLowerCase()) : undefined) || (dato.nombre ? porNombre.get(String(dato.nombre).trim().toLowerCase()) : undefined);
+  }, [personas]);
+}
