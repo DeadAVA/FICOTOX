@@ -305,7 +305,7 @@ function ListaNc() {
         activa={(_, i) => abierta === i}
         celdas={(item) => [
           <span key="f" className="flex min-w-0 items-start gap-3">
-            <IconoCalidad clase="nc" />
+            <IconoCalidad clase="nc" origen={item.origen} clasificacion={item.clasificacion} />
             <span className="flex min-w-0 flex-col gap-1">
               <FolioChip type="NC" num={item.folio_num} />
               <span className="text-[12.5px] text-ink-3">{ORIGENES_NC.find((o) => o.value === item.origen)?.label || ""}</span>

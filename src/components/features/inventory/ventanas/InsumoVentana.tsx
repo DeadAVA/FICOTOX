@@ -5,12 +5,12 @@ import { ArrowCounterClockwise, ArrowsClockwise, Barcode, CalendarBlank, Gauge, 
 import { IncidenciasDelRegistro } from "@/components/features/calidad/IncidenciasDelRegistro";
 import { Button } from "@/components/ui/Button";
 import { Badge, StockMeter } from "@/components/ui/Primitives";
-import { DatosRapidos, VentanaAcciones, VentanaCentrada, VentanaEncabezado, VentanaSeccion, VentanaTarjeta, VentanaTitulo, type DatoRapido } from "@/components/ui/Ventana";
+import { ColumnasVentana, DatoLateral, DatosRapidos, TarjetaLateral, VentanaAcciones, VentanaCentrada, VentanaEncabezado, VentanaSeccion, VentanaTarjeta, VentanaTitulo, type DatoRapido } from "@/components/ui/Ventana";
 import { fmt, parseNumberOrNull } from "@/lib/client/format";
 import { formatReactivoName, getReactivoExpiry, getReactivoLocation, getReactivoStockState, getReactivoTypeLabel } from "@/lib/client/reactivos";
 import type { ApiRecord } from "@/lib/client/types";
 import { formatearFecha, formatearFechaCorta, formatearFechaHora } from "@/lib/shared/fechas";
-import { caducidadDe, ColumnasVentana, DatoLateral, IconoCategoria, IconoConsumible, MovimientosRecientes, moverEn, TarjetaLateral } from "./comun";
+import { caducidadDe, IconoCategoria, IconoConsumible, MovimientosRecientes, moverEn } from "./comun";
 
 /*
  * Ventana de un reactivo o un consumible (Inventario): encabezado con icono de

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ArrowClockwise, ArrowCounterClockwise, Archive, ChatCircleDots, CheckCircle, Database, DownloadSimple, Eye, Gear, LockKey, Package, PaperPlaneTilt, Paperclip, PencilSimple, Plus, Printer, Prohibit, SealCheck, ShieldCheck, ShieldWarning, SignIn, UploadSimple, UserSwitch, Warning, XCircle } from "@phosphor-icons/react";
+import { ArrowClockwise, ArrowCounterClockwise, ArrowRight, ArrowsClockwise, ArrowUUpLeft, Archive, BookOpenText, Books, CalendarBlank, Certificate, ChartLine, ChatCircleDots, CheckCircle, ClockCounterClockwise, ClockCountdown, Database, DownloadSimple, Eye, FileText, Flask, FolderOpen, Gear, HandPalm, Handshake, Hash, IdentificationBadge, Key, Lightbulb, ListChecks, LockKey, LockOpen, Megaphone, Package, Pause, PaperPlaneTilt, Paperclip, PencilLine, PencilSimple, Play, Plus, Printer, Prohibit, Scales, SealCheck, SealWarning, ShieldCheck, ShieldWarning, Signature, SignIn, SignOut, Tag, TestTube, ThumbsUp, Toolbox, Trash, UploadSimple, UserMinus, UsersThree, UserSwitch, Warning, WarningDiamond, Wrench, XCircle } from "@phosphor-icons/react";
 import { cn } from "@/components/ui/cn";
 import type { HumanEntry } from "@/lib/client/audit-humanize";
 
@@ -79,6 +79,55 @@ const ICONO_ACCION: Record<string, ReactNode> = {
   restaurar_respaldo: <Database weight="bold" />,
   migrar: <Gear weight="bold" />,
   solicitar: <ChatCircleDots weight="bold" />,
+  aprobar_solicitud: <CheckCircle weight="bold" />,
+  rechazar_solicitud: <XCircle weight="bold" />,
+  cancelar_solicitud: <Prohibit weight="bold" />,
+  vencer_solicitud: <ClockCountdown weight="bold" />,
+  proponer: <Lightbulb weight="bold" />,
+  enmendar: <PencilLine weight="bold" />,
+  requiere_enmienda: <PencilLine weight="bold" />,
+  reportar: <Megaphone weight="bold" />,
+  comunicar: <Megaphone weight="bold" />,
+  visto_bueno: <ThumbsUp weight="bold" />,
+  confirmar_firma: <Signature weight="bold" />,
+  confirmar_lectura: <BookOpenText weight="bold" />,
+  confirmar_envio: <PaperPlaneTilt weight="bold" />,
+  publicar: <Megaphone weight="bold" />,
+  entregar: <Handshake weight="bold" />,
+  verificar: <ListChecks weight="bold" />,
+  implementar: <ListChecks weight="bold" />,
+  cerrar_sin_nc: <CheckCircle weight="bold" />,
+  reanudar: <Play weight="bold" />,
+  suspender: <Pause weight="bold" />,
+  retener: <HandPalm weight="bold" />,
+  liberar_retencion: <ShieldCheck weight="bold" />,
+  eliminar: <Trash weight="bold" />,
+  devolver: <ArrowUUpLeft weight="bold" />,
+  regresar_supervision: <ArrowUUpLeft weight="bold" />,
+  sustituir: <ArrowsClockwise weight="bold" />,
+  escalar: <SealWarning weight="bold" />,
+  cancelar: <Prohibit weight="bold" />,
+  reabrir: <FolderOpen weight="bold" />,
+  evaluar: <Scales weight="bold" />,
+  avanzar: <ArrowRight weight="bold" />,
+  reasignar: <UserSwitch weight="bold" />,
+  acotar_rol: <UserSwitch weight="bold" />,
+  revocar_rol: <UserMinus weight="bold" />,
+  vencer_rol: <ClockCountdown weight="bold" />,
+  otorgar_autorizacion: <Certificate weight="bold" />,
+  revocar_autorizacion: <Certificate weight="bold" />,
+  vencer_autorizacion: <ClockCountdown weight="bold" />,
+  desbloquear: <LockOpen weight="bold" />,
+  cambiar_password: <Key weight="bold" />,
+  restablecer_password: <Key weight="bold" />,
+  cerrar_sesiones: <SignOut weight="bold" />,
+  cambiar_folio: <Hash weight="bold" />,
+  cambiar_vigencia: <CalendarBlank weight="bold" />,
+  cambiar_cargo: <IdentificationBadge weight="bold" />,
+  asignar_muestra: <TestTube weight="bold" />,
+  revocar_asignacion: <TestTube weight="bold" />,
+  afectar: <Flask weight="bold" />,
+  categoria: <Tag weight="bold" />,
 };
 
 const ICONO_CATEGORIA: Record<Categoria, ReactNode> = {
@@ -94,11 +143,46 @@ const ICONO_CATEGORIA: Record<Categoria, ReactNode> = {
 /* Icono redondo y suave de la actividad, con el color de su tipo. */
 export function EntryIcon({ entry, size = "md" }: { entry: HumanEntry; size?: "sm" | "md" | "lg" }) {
   const categoria = categoriaDe(entry);
-  const dim = { sm: "h-8 w-8 text-[14px]", md: "h-9 w-9 text-[15px]", lg: "h-12 w-12 text-[20px]" }[size];
+  const dim = { sm: "h-9 w-9 text-[16px]", md: "h-10 w-10 text-[17px]", lg: "h-16 w-16 text-[28px]" }[size];
   const alerta = entry.verb === "alerta_integridad" || entry.verb === "login_fallido";
   return (
     <span aria-hidden="true" className={cn("flex shrink-0 items-center justify-center rounded-full [&>svg]:h-[1em] [&>svg]:w-[1em]", dim, alerta ? "bg-danger-soft text-danger" : TONO[categoria])}>
       {ICONO_ACCION[entry.verb] || ICONO_CATEGORIA[categoria]}
+    </span>
+  );
+}
+
+/* Icono del area donde ocurrio la actividad (muestras, inventario, calidad, cuentas…). */
+const ICONO_AREA: Record<string, ReactNode> = {
+  muestras_recepcion: <TestTube weight="duotone" />,
+  muestras_procesamiento: <Flask weight="duotone" />,
+  muestras_extraccion: <Flask weight="duotone" />,
+  muestras_analisis: <ChartLine weight="duotone" />,
+  informes: <FileText weight="duotone" />,
+  documentos_sgc: <Books weight="duotone" />,
+  biblioteca_documentos: <Books weight="duotone" />,
+  biblioteca_categorias: <Books weight="duotone" />,
+  reactivos: <Flask weight="duotone" />,
+  consumibles: <Package weight="duotone" />,
+  equipos: <Toolbox weight="duotone" />,
+  mantenimientos: <Wrench weight="duotone" />,
+  reportes_mantenimiento: <Wrench weight="duotone" />,
+  usuarios: <UsersThree weight="duotone" />,
+  roles: <IdentificationBadge weight="duotone" />,
+  sesion: <SignIn weight="duotone" />,
+  respaldos: <Database weight="duotone" />,
+  incidencias: <WarningDiamond weight="duotone" />,
+  no_conformidades: <SealWarning weight="duotone" />,
+  acciones_correctivas: <ListChecks weight="duotone" />,
+  suspensiones: <Pause weight="duotone" />,
+  esquema: <Gear weight="duotone" />,
+  auditoria: <ClockCounterClockwise weight="duotone" />,
+};
+
+export function IconoArea({ entidad, className }: { entidad?: string; className?: string }) {
+  return (
+    <span aria-hidden="true" className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-surface text-[18px] text-brand-strong shadow-card [&>svg]:h-[1em] [&>svg]:w-[1em]", className)}>
+      {ICONO_AREA[String(entidad || "")] || <Gear weight="duotone" />}
     </span>
   );
 }

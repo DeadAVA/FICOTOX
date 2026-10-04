@@ -2,15 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, ChatCenteredText, Quotes } from "@phosphor-icons/react";
+import { ArrowRight, CalendarBlank, ChatCenteredText, MapPin, Quotes, User } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
 import { VentanaCentrada, VentanaTitulo } from "@/components/ui/VentanaCentrada";
-import { VentanaEncabezado, VentanaSeccion } from "@/components/ui/Ventana";
+import { ColumnasVentana, DatoLateral, TarjetaLateral, VentanaEncabezado, VentanaSeccion } from "@/components/ui/Ventana";
+import { FiguraPersona } from "@/components/ui/FiguraPersona";
 import { cn } from "@/components/ui/cn";
 import { datosPrincipales, dayLabel, fechaYHora, haceCuanto, humanizeAuditEntry, timeLabel, type ContextoActividad, type HumanEntry } from "@/lib/client/audit-humanize";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import type { ApiRecord } from "@/lib/client/types";
-import { EntryIcon } from "./categorias";
+import { EntryIcon, IconoArea } from "./categorias";
 
 /*
  * Lista de actividades de la bitacora y su detalle, iguales en Calidad ›
@@ -145,7 +146,7 @@ export function ActividadDialog({ grupos, indice, onIndice, onCerrar }: { grupos
     if (siguiente >= 0 && siguiente < grupos.length) onIndice(siguiente);
   };
   return (
-    <VentanaCentrada abierta={!!grupo} onCerrar={onCerrar} onMover={mover} puedeAnterior={indice !== null && indice > 0} puedeSiguiente={indice !== null && indice < grupos.length - 1} etiquetaAnterior="Actividad anterior" etiquetaSiguiente="Actividad siguiente">
+    <VentanaCentrada media abierta={!!grupo} onCerrar={onCerrar} onMover={mover} puedeAnterior={indice !== null && indice > 0} puedeSiguiente={indice !== null && indice < grupos.length - 1} etiquetaAnterior="Actividad anterior" etiquetaSiguiente="Actividad siguiente">
       {grupo ? <DetalleActividad key={grupo.entradas[0].id} grupo={grupo} onIr={onCerrar} /> : <VentanaTitulo className="sr-only">Actividad</VentanaTitulo>}
     </VentanaCentrada>
   );
@@ -212,58 +213,81 @@ function DetalleActividad({ grupo, onIr }: { grupo: GrupoActividad; onIr: () => 
         }
       />
 
-      <Seccion titulo="Qué pasó" i={1}>
-        <p className="text-[14.5px] leading-[1.55] text-ink">{entry.quePaso}</p>
-        {veces > 1 ? (
-          <p className="text-[13.5px] text-ink-2">
-            Lo hizo {veces} veces seguidas, a las {grupo.entradas.map((e) => timeLabel(e.when)).reverse().join(", ").replace(/, ([^,]*)$/, " y $1")}.
-          </p>
-        ) : null}
-      </Seccion>
+      <ColumnasVentana
+        principal={
+          <>
+            <Seccion titulo="Qué pasó" i={1}>
+              <p className="text-[14.5px] leading-[1.55] text-ink">{entry.quePaso}</p>
+              {veces > 1 ? (
+                <p className="text-[13.5px] text-ink-2">
+                  Lo hizo {veces} veces seguidas, a las {grupo.entradas.map((e) => timeLabel(e.when)).reverse().join(", ").replace(/, ([^,]*)$/, " y $1")}.
+                </p>
+              ) : null}
+            </Seccion>
 
-      {entry.cambios.length ? (
-        <Seccion titulo="Qué cambió" i={2}>
-          <ul className="flex flex-col gap-1.5 text-[14px] leading-[1.5] text-ink">
-            {entry.cambios.map((frase) => (
-              <li key={frase} className="flex gap-2">
-                <span aria-hidden="true" className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-brand/60" />
-                <span>{frase}</span>
-              </li>
-            ))}
-          </ul>
-        </Seccion>
-      ) : principales.length ? (
-        <Seccion titulo="Qué cambió" i={3}>
-          <p className="text-[14px] text-ink">Se registró con estos datos principales:</p>
-          <dl className="grid gap-x-4 gap-y-1.5 rounded-[12px] bg-surface-2 px-3.5 py-3 text-[13.5px] ring-1 ring-line sm:grid-cols-[max-content_minmax(0,1fr)]">
-            {principales.map((dato) => (
-              <div key={dato.etiqueta} className="contents">
-                <dt className="text-ink-3">{dato.etiqueta}</dt>
-                <dd className="text-ink">{dato.valor}</dd>
-              </div>
-            ))}
-          </dl>
-        </Seccion>
-      ) : null}
+            {entry.cambios.length ? (
+              <Seccion titulo="Qué cambió" i={2}>
+                <ul className="flex flex-col gap-1.5 text-[14px] leading-[1.5] text-ink">
+                  {entry.cambios.map((frase) => (
+                    <li key={frase} className="flex gap-2">
+                      <span aria-hidden="true" className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-brand/60" />
+                      <span>{frase}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Seccion>
+            ) : principales.length ? (
+              <Seccion titulo="Qué cambió" i={3}>
+                <p className="text-[14px] text-ink">Se registró con estos datos principales:</p>
+                <dl className="grid gap-x-4 gap-y-1.5 rounded-[12px] bg-surface-2 px-3.5 py-3 text-[13.5px] ring-1 ring-line sm:grid-cols-[max-content_minmax(0,1fr)]">
+                  {principales.map((dato) => (
+                    <div key={dato.etiqueta} className="contents">
+                      <dt className="text-ink-3">{dato.etiqueta}</dt>
+                      <dd className="text-ink">{dato.valor}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </Seccion>
+            ) : null}
 
-      {motivos.length ? (
-        <Seccion titulo="Motivo" i={4}>
-          {motivos.map((motivo) => (
-            <blockquote key={motivo} className="flex gap-2.5 rounded-[12px] bg-warning-soft/70 px-3.5 py-3 text-[14.5px] leading-[1.5] text-ink ring-1 ring-warning/15">
-              <Quotes size={16} weight="fill" className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
-              <p className="whitespace-pre-line">{motivo}</p>
-            </blockquote>
-          ))}
-        </Seccion>
-      ) : null}
-
-      {entry.href ? (
-        <div>
-          <Link href={entry.href} onClick={onIr} className="press inline-flex h-10 items-center gap-2 rounded-full bg-brand px-4 text-[14px] font-medium text-white shadow-card hover:bg-brand-strong focus-visible:shadow-[var(--shadow-focus)] focus-visible:outline-none">
-            Ver el registro <ArrowRight size={15} weight="bold" />
-          </Link>
-        </div>
-      ) : null}
+            {motivos.length ? (
+              <Seccion titulo="Motivo" i={4}>
+                {motivos.map((motivo) => (
+                  <blockquote key={motivo} className="flex gap-2.5 rounded-[12px] bg-warning-soft/70 px-3.5 py-3 text-[14.5px] leading-[1.5] text-ink ring-1 ring-warning/15">
+                    <Quotes size={16} weight="fill" className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
+                    <p className="whitespace-pre-line">{motivo}</p>
+                  </blockquote>
+                ))}
+              </Seccion>
+            ) : null}
+          </>
+        }
+        lateral={
+          <>
+            <TarjetaLateral icono={<User size={15} weight="duotone" />} titulo="Quién" i={0}>
+              {!entry.isSystem && entry.actor ? <FiguraPersona nombre={entry.actor} size="md" conNombre subtitulo={entry.cargo || undefined} /> : <p className="text-[14px] text-ink">La plataforma, por su cuenta</p>}
+            </TarjetaLateral>
+            <TarjetaLateral icono={<CalendarBlank size={15} weight="duotone" />} titulo="Cuándo" i={1}>
+              <DatoLateral etiqueta="Fecha y hora">{fechaYHora(entry.when)}</DatoLateral>
+              <span className="text-[12.5px] text-ink-3">{haceCuanto(entry.when)}</span>
+            </TarjetaLateral>
+            <TarjetaLateral icono={<MapPin size={15} weight="duotone" />} titulo="Dónde" i={2}>
+              <span className="flex items-center gap-3">
+                <IconoArea entidad={entry.entidad} />
+                <span className="flex min-w-0 flex-col">
+                  <span className="text-[14px] font-medium text-ink">{entry.area}</span>
+                  {entry.reference ? <span className="break-words text-[12.5px] text-ink-3">{entry.reference}</span> : null}
+                </span>
+              </span>
+              {entry.href ? (
+                <Link href={entry.href} onClick={onIr} className="press mt-1 inline-flex h-9 w-fit items-center gap-2 rounded-full bg-brand px-4 text-[13.5px] font-medium text-white shadow-card hover:bg-brand-strong focus-visible:shadow-[var(--shadow-focus)] focus-visible:outline-none">
+                  Ver el registro <ArrowRight size={14} weight="bold" />
+                </Link>
+              ) : null}
+            </TarjetaLateral>
+          </>
+        }
+      />
     </article>
   );
 }

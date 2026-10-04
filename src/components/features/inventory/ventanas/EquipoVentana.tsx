@@ -7,12 +7,12 @@ import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { FiguraPersona } from "@/components/ui/FiguraPersona";
 import { Badge, Skeleton, type Tone } from "@/components/ui/Primitives";
-import { DatosRapidos, VentanaAcciones, VentanaCentrada, VentanaEncabezado, VentanaSeccion, VentanaTarjeta, VentanaTitulo } from "@/components/ui/Ventana";
+import { ColumnasVentana, DatoLateral, DatosRapidos, TarjetaLateral, VentanaAcciones, VentanaCentrada, VentanaEncabezado, VentanaSeccion, VentanaTarjeta, VentanaTitulo } from "@/components/ui/Ventana";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { formatearFecha, formatearFechaCorta } from "@/lib/shared/fechas";
-import { caducidadDe, ColumnasVentana, DatoLateral, IconoEquipo, IconoMantenimiento, moverEn, TarjetaLateral } from "./comun";
+import { caducidadDe, IconoEquipo, IconoMantenimiento, moverEn } from "./comun";
 
 /*
  * Ventana de un equipo: estado, proxima calibracion y mantenimiento, datos,

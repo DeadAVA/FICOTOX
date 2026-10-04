@@ -138,44 +138,6 @@ export function IconoMantenimiento({ tipo, vencido = false, grande = false }: { 
   );
 }
 
-/* Dos columnas en la ventana amplia (principal y lateral); una sola si no cabe. */
-export function ColumnasVentana({ principal, lateral }: { principal: ReactNode; lateral: ReactNode }) {
-  return (
-    <div className="@container">
-      <div className="grid gap-6 @3xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
-        <div className="flex min-w-0 flex-col gap-6">{principal}</div>
-        <div className="flex min-w-0 flex-col gap-4">{lateral}</div>
-      </div>
-    </div>
-  );
-}
-
-/* Tarjeta de la columna lateral: icono, titulo y contenido. */
-export function TarjetaLateral({ icono, titulo, children, tono = "neutral", i = 0 }: { icono: ReactNode; titulo: string; children: ReactNode; tono?: "neutral" | "warning" | "danger" | "success"; i?: number }) {
-  const fondo = { neutral: "bg-surface-2 ring-line", warning: "bg-warning-soft/50 ring-warning/20", danger: "bg-danger-soft/50 ring-danger/20", success: "bg-success-soft/50 ring-success/20" }[tono];
-  return (
-    <section className={cn("entrada-escalonada flex flex-col gap-2.5 rounded-[16px] px-4 py-3.5 ring-1 transition-shadow duration-200 hover:shadow-raised", fondo)} style={{ ["--i" as string]: i }}>
-      <h3 className="flex items-center gap-2 text-[13px] font-semibold text-ink-2">
-        <span aria-hidden="true" className="flex h-7 w-7 items-center justify-center rounded-[9px] bg-surface text-brand-strong shadow-card">
-          {icono}
-        </span>
-        {titulo}
-      </h3>
-      <div className="flex flex-col gap-2 text-[14px] text-ink">{children}</div>
-    </section>
-  );
-}
-
-/* Un dato de la columna lateral: etiqueta en gris y valor completo debajo. */
-export function DatoLateral({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
-  return (
-    <div className="flex min-w-0 flex-col">
-      <span className="text-[12px] text-ink-3">{etiqueta}</span>
-      <span className="break-words text-[14px] text-ink">{children}</span>
-    </div>
-  );
-}
-
 /* Caducidad en palabras y color: rojo si vencio, ambar si faltan 30 dias o menos. */
 export function caducidadDe(value: unknown): { texto: string; detalle: string | null; tono: "danger" | "warning" | null } | null {
   if (!value || String(value).trim() === "-") return null;

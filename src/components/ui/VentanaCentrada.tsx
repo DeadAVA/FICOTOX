@@ -22,6 +22,7 @@ export function VentanaCentrada({
   puedeAnterior = false,
   puedeSiguiente = false,
   amplia = false,
+  media = false,
   etiquetaAnterior = "Anterior",
   etiquetaSiguiente = "Siguiente",
   barra,
@@ -35,6 +36,8 @@ export function VentanaCentrada({
   puedeSiguiente?: boolean;
   /* Mas ancha (p. ej. el editor de permisos). */
   amplia?: boolean;
+  /* Media: entre la normal y la amplia (detalle de una actividad). */
+  media?: boolean;
   etiquetaAnterior?: string;
   etiquetaSiguiente?: string;
   /* Contenido extra en la barra superior (junto a las flechas). */
@@ -59,7 +62,7 @@ export function VentanaCentrada({
               "pointer-events-auto flex w-full flex-col overflow-hidden bg-surface shadow-panel outline-none transition-[max-width] duration-300 ease-[var(--ease-spring)]",
               "h-full sm:h-auto sm:rounded-panel",
               // Amplia: mas ancha y mas alta (editor de permisos, fichas de inventario).
-              amplia ? "sm:max-h-[min(92dvh,960px)] sm:max-w-[1080px]" : "sm:max-h-[min(88dvh,820px)] sm:max-w-[620px]",
+              amplia ? "sm:max-h-[min(92dvh,960px)] sm:max-w-[1080px]" : media ? "sm:max-h-[min(90dvh,900px)] sm:max-w-[880px]" : "sm:max-h-[min(88dvh,820px)] sm:max-w-[620px]",
               "data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out",
             )}
           >
