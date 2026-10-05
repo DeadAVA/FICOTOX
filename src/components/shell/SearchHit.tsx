@@ -32,13 +32,13 @@ const ICON_TONE: Partial<Record<SearchKind, string>> = {
 export function SearchHitRow({ hit, selectedStyle = false, className }: { hit: SearchHit; selectedStyle?: boolean; className?: string }) {
   return (
     <div className={cn("flex cursor-pointer items-center gap-3 px-2.5 py-2 text-[14px]", className)}>
-      <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-surface-3 text-ink-2 transition-colors", ICON_TONE[hit.kind], selectedStyle && "group-data-[selected=true]:bg-white/20 group-data-[selected=true]:text-white")}>{KIND_ICON[hit.kind]}</span>
+      <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-surface-3 text-ink-2 transition-colors", ICON_TONE[hit.kind], selectedStyle && "group-data-[selected=true]:bg-on-accent/15 group-data-[selected=true]:text-on-accent")}>{KIND_ICON[hit.kind]}</span>
       <span className="flex min-w-0 flex-1 flex-col leading-tight">
         <span className={cn("truncate font-medium", hit.mono && "code")}>{hit.label}</span>
-        {hit.sub ? <span className={cn("truncate text-[12.5px] text-ink-3", selectedStyle && "group-data-[selected=true]:text-white/80")}>{hit.sub}</span> : null}
+        {hit.sub ? <span className={cn("truncate text-[12.5px] text-ink-3", selectedStyle && "group-data-[selected=true]:text-on-accent/80")}>{hit.sub}</span> : null}
       </span>
-      {hit.tag && (hit.kind === "muestra" || hit.kind === "reciente") ? <span className={cn("hidden shrink-0 rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-medium text-ink-3 sm:inline", selectedStyle && "group-data-[selected=true]:bg-white/20 group-data-[selected=true]:text-white")}>{hit.tag}</span> : null}
-      <span className={cn("hidden shrink-0 text-[11px] text-ink-4 opacity-0 transition-opacity sm:inline", selectedStyle && "group-data-[selected=true]:text-white/80 group-data-[selected=true]:opacity-100")} aria-hidden="true">
+      {hit.tag && (hit.kind === "muestra" || hit.kind === "reciente") ? <span className={cn("hidden shrink-0 rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-medium text-ink-3 sm:inline", selectedStyle && "group-data-[selected=true]:bg-on-accent/15 group-data-[selected=true]:text-on-accent")}>{hit.tag}</span> : null}
+      <span className={cn("hidden shrink-0 text-[11px] text-ink-4 opacity-0 transition-opacity sm:inline", selectedStyle && "group-data-[selected=true]:text-on-accent/80 group-data-[selected=true]:opacity-100")} aria-hidden="true">
         ↵
       </span>
     </div>
@@ -59,7 +59,7 @@ export function SearchScopes({ value, onChange, className }: { value: SearchScop
             aria-checked={active}
             onPointerDown={(event) => event.preventDefault()}
             onClick={() => onChange(scope.value)}
-            className={cn("press h-7 rounded-full px-2.5 text-[12px] font-medium transition-colors", active ? "bg-ink text-white" : "bg-surface-3/80 text-ink-2 hover:bg-surface-3 hover:text-ink")}
+            className={cn("press h-7 rounded-full px-2.5 text-[12px] font-medium transition-colors", active ? "bg-ink text-surface" : "bg-surface-3/80 text-ink-2 hover:bg-surface-3 hover:text-ink")}
           >
             {scope.label}
           </button>

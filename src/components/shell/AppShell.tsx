@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useAlternarTema } from "@/components/ui/SelectorTema";
 import { Dialog as RadixDialog } from "radix-ui";
 import { ArrowsLeftRight, CaretRight, ClockCounterClockwise, Cube, FileText, Flask, House, List, MagnifyingGlass, Package, Question, SealCheck, ShieldCheck, SidebarSimple, SignOut, TestTube, UserCircle, Users, WarningDiamond, Wrench, X } from "@phosphor-icons/react";
 import { reportarIncidencia, ReportarIncidenciaHost, usePuedeReportar } from "@/components/features/calidad/ReportarIncidencia";
@@ -169,7 +170,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </a>
 
       {/* Barra lateral de escritorio */}
-      <aside className={cn("sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line/70 bg-[#f7f8fa] transition-[width] duration-300 ease-[var(--ease-spring)] lg:flex", collapsed ? "w-[68px]" : "w-[240px]")} aria-label="Navegación principal">
+      <aside className={cn("sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line/70 bg-sidebar transition-[width] duration-300 ease-[var(--ease-spring)] lg:flex", collapsed ? "w-[68px]" : "w-[240px]")} aria-label="Navegación principal">
         <SidebarContent {...sidebarProps} collapsed={collapsed} />
       </aside>
 
@@ -219,6 +220,8 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
   const [expanded, setExpanded] = useState<string[]>(() => (typeof window === "undefined" ? [] : readExpanded()));
   // Contadores de lo que la persona puede resolver: "Por autorizar" y "Por supervisar".
   const pendientes = usePendientesPorResolver();
+  // Acceso rapido de apariencia en el menu de la cuenta (Claro <-> Oscuro).
+  const tema = useAlternarTema();
   const contador: Record<string, number> = { "/solicitudes": pendientes.solicitudes.length, "/supervision": pendientes.supervision.length };
 
   const toggleExpanded = (label: string, active: boolean) => {
@@ -292,10 +295,10 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
                 className={cn(
                   "press group/item flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-[9px] text-[13.5px]",
                   collapsed ? "justify-center px-0" : "px-2.5",
-                  leafActive ? "bg-brand font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" : active ? "font-semibold text-ink hover:bg-surface-3/80" : "font-medium text-ink-2 hover:bg-surface-3/80 hover:text-ink",
+                  leafActive ? "bg-brand font-medium text-on-accent shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" : active ? "font-semibold text-ink hover:bg-surface-3/80" : "font-medium text-ink-2 hover:bg-surface-3/80 hover:text-ink",
                 )}
               >
-                <span className={cn("shrink-0 transition-colors", leafActive ? "text-white" : active ? "text-brand" : "text-ink-3 group-hover/item:text-ink-2")}>{ICONS[item.icon]}</span>
+                <span className={cn("shrink-0 transition-colors", leafActive ? "text-on-accent" : active ? "text-brand" : "text-ink-3 group-hover/item:text-ink-2")}>{ICONS[item.icon]}</span>
                 {!collapsed ? <span className="truncate">{item.label}</span> : null}
               </Link>
             );
@@ -336,12 +339,12 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
                               href={child.href}
                               tabIndex={open ? 0 : -1}
                               aria-current={childActive ? "page" : undefined}
-                              className={cn("press flex h-8 items-center gap-2 rounded-[7px] px-2.5 text-[13px] transition-colors", childActive ? "bg-brand font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" : "text-ink-2 hover:bg-surface-3/80 hover:text-ink")}
+                              className={cn("press flex h-8 items-center gap-2 rounded-[7px] px-2.5 text-[13px] transition-colors", childActive ? "bg-brand font-medium text-on-accent shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" : "text-ink-2 hover:bg-surface-3/80 hover:text-ink")}
                             >
-                              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full transition-colors", childActive ? "bg-white" : "bg-line-strong")} aria-hidden="true" />
+                              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full transition-colors", childActive ? "bg-on-accent" : "bg-line-strong")} aria-hidden="true" />
                               <span className="truncate">{child.label}</span>
                               {contador[child.href] ? (
-                                <span className={cn("tnum ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold", childActive ? "bg-white/90 text-brand-strong" : "bg-warning text-white")} aria-label={`${contador[child.href]} pendientes`} data-contador={child.href}>
+                                <span className={cn("tnum ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold", childActive ? "bg-surface/90 text-brand-strong" : "bg-warning text-on-accent")} aria-label={`${contador[child.href]} pendientes`} data-contador={child.href}>
                                   {contador[child.href]}
                                 </span>
                               ) : null}
@@ -407,6 +410,7 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
           }
           items={[
             { label: "Mi cuenta", icon: <UserCircle size={16} />, onSelect: onAccount },
+            { label: tema.etiqueta, icon: tema.icono, onSelect: tema.alternar },
             { label: "Cerrar sesión", icon: <SignOut size={16} />, onSelect: onLogout, tone: "danger", separatorBefore: true },
           ]}
         />

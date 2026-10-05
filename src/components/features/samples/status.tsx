@@ -36,10 +36,10 @@ export function StateBadge({ kind, status }: { kind: "analisis" | "informe" | "d
 const CHIP_TONES: Record<string, string> = {
   R: "bg-brand-soft text-brand-strong",
   P: "bg-warning-soft text-warning-text",
-  "E-A": "bg-[#e9e4f8] text-[#5b3fa6]",
-  "E-D": "bg-bloom-soft text-[#8a3b2a]",
+  "E-A": "bg-violet-soft text-violet-text",
+  "E-D": "bg-bloom-soft text-bloom-text",
   A: "bg-success-soft text-success-text",
-  IR: "bg-ink text-white",
+  IR: "bg-ink text-surface",
 };
 
 /* Chip de folio: letra de etapa + numero con siete digitos. Cada tipo tiene su color. */

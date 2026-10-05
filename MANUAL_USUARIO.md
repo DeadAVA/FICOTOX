@@ -45,6 +45,8 @@ Las entradas con ▸ se despliegan: al hacer clic en el nombre se abre la seccio
 
 En la cabecera de la barra hay un icono de **busqueda** y el boton para contraer la barra a solo iconos (el sistema lo recuerda); abajo, su avatar y su nombre con el menu **Mi cuenta** y **Cerrar sesion**.
 
+**Apariencia**: en **Mi cuenta › Apariencia** elija **Claro**, **Oscuro** o **Automatico** (sigue la configuracion de su sistema; es la opcion por omision). Tambien puede alternar entre claro y oscuro desde el menu de la cuenta (icono de sol o luna). La preferencia lo sigue en cualquier computadora y no se registra en la bitacora. Lo que se imprime (etiquetas, informes, NC) siempre sale en claro, y las firmas se ven sobre fondo claro. En el visor de la Biblioteca, el boton de luna (**Lectura nocturna**) oscurece las paginas del PDF para leer de noche, sin cambiar el documento.
+
 **Mi cuenta** muestra su nombre, correo y sus roles vigentes, y permite elegir su **avatar** entre las 18 ilustraciones del catalogo (criaturas y objetos del laboratorio). Si no elige uno, el sistema le asigna uno a partir de su correo. El cambio queda registrado en la bitacora. En dispositivos moviles la barra se abre con el boton de menu (tres lineas).
 
 Atajos y ayudas:

@@ -74,7 +74,7 @@ export function FlujoLaboratorio({ muestras, total, puedeCrear, className }: { m
               </span>
               <p className="text-[14.5px] font-semibold text-ink">Sin muestras en curso</p>
               {puedeCrear ? (
-                <Link href="/muestras/recepcion/nueva" className="press mt-1 inline-flex h-9 items-center gap-1.5 rounded-full bg-brand px-4 text-[13.5px] font-medium text-white shadow-card hover:bg-brand-strong">
+                <Link href="/muestras/recepcion/nueva" className="press mt-1 inline-flex h-9 items-center gap-1.5 rounded-full bg-brand px-4 text-[13.5px] font-medium text-on-accent shadow-card hover:bg-brand-strong">
                   <Plus size={14} weight="bold" /> Nueva recepción
                 </Link>
               ) : null}
@@ -129,7 +129,7 @@ function Etapa({ i, clave, label, muestras, ultima }: { i: number; clave: EtapaF
         <span aria-hidden="true" className={cn("relative flex h-9 w-9 items-center justify-center rounded-full text-[18px] sm:h-11 sm:w-11 sm:text-[21px] transition-[transform,box-shadow] duration-200 ease-[var(--ease-spring)] group-hover:-translate-y-0.5 group-hover:shadow-raised motion-reduce:group-hover:translate-y-0 [&>svg]:h-[1em] [&>svg]:w-[1em]", hay ? "bg-brand-soft text-brand-strong" : "bg-surface-2 text-ink-4 ring-1 ring-line")}>
           {ICONO[clave]}
           {muestras ? (
-            <span className={cn("absolute -top-1.5 -right-2 flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11.5px] font-semibold ring-2 ring-surface animate-pop-in motion-reduce:animate-none", hay ? "bg-brand text-white" : "bg-surface-3 text-ink-3")} style={{ animationDelay: `${i * 70}ms` }}>
+            <span className={cn("absolute -top-1.5 -right-2 flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11.5px] font-semibold ring-2 ring-surface animate-pop-in motion-reduce:animate-none", hay ? "bg-brand text-on-accent" : "bg-surface-3 text-ink-3")} style={{ animationDelay: `${i * 70}ms` }}>
               <Conteo valor={n} />
             </span>
           ) : (
@@ -141,7 +141,7 @@ function Etapa({ i, clave, label, muestras, ultima }: { i: number; clave: EtapaF
 
       {flotante && muestras ? (
         <div className={cn("absolute top-full z-20 w-60 pt-1.5", i < 2 ? "left-0" : i > 4 ? "right-0" : "left-1/2 -translate-x-1/2")}>
-        <div className="rounded-[16px] bg-white/95 p-2 text-left shadow-panel ring-1 ring-line backdrop-blur-xl animate-pop-in motion-reduce:animate-none">
+        <div className="rounded-[16px] bg-surface/95 p-2 text-left shadow-panel ring-1 ring-line backdrop-blur-xl animate-pop-in motion-reduce:animate-none">
           <p className="px-2 pt-1 pb-1.5 text-[12px] font-semibold text-ink-3">
             {label} · {n}
           </p>

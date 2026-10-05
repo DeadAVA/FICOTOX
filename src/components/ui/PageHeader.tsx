@@ -124,7 +124,7 @@ export function SearchInput({ value, onChange, placeholder, className, autoFocus
       trailing={
         value ? (
           <button type="button" aria-label="Limpiar búsqueda" onClick={() => onChange("")} className="press flex h-6 w-6 items-center justify-center rounded-full text-ink-3 hover:bg-surface-3 hover:text-ink">
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-ink-4 text-white">
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-ink-4 text-on-accent">
               <X size={10} weight="bold" />
             </span>
           </button>

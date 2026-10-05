@@ -64,7 +64,7 @@ export function Campana({ compacta = false }: { compacta?: boolean }) {
         <button type="button" aria-label="Notificaciones" className={cn("press relative inline-flex items-center justify-center text-ink-3 hover:bg-surface-3 hover:text-ink", compacta ? "h-9 w-full rounded-[9px]" : "h-8 w-8 rounded-[8px]")}>
           <Bell size={compacta ? 18 : 17} />
           {items.length ? (
-            <span data-campana-contador className="tnum absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-danger px-1 text-center text-[10px] font-semibold leading-[16px] text-white">
+            <span data-campana-contador className="tnum absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-danger px-1 text-center text-[10px] font-semibold leading-[16px] text-on-accent">
               {items.length > 99 ? "99+" : items.length}
             </span>
           ) : null}

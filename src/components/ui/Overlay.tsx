@@ -345,13 +345,13 @@ export function Dropdown({ trigger, items, align = "end", label, header }: { tri
                   onSelect={() => item.onSelect?.()}
                   className={cn(
                     "group flex cursor-pointer select-none items-center gap-3 rounded-[9px] px-2 py-1.5 text-[13.5px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
-                    tone === "danger" ? "text-danger data-[highlighted]:bg-danger data-[highlighted]:text-white" : "text-ink data-[highlighted]:bg-brand data-[highlighted]:text-white",
+                    tone === "danger" ? "text-danger data-[highlighted]:bg-danger data-[highlighted]:text-on-accent" : "text-ink data-[highlighted]:bg-brand data-[highlighted]:text-on-accent",
                   )}
                 >
-                  {item.icon ? <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] transition-colors group-data-[highlighted]:bg-white/20 group-data-[highlighted]:text-white", ITEM_ICON_TONE[tone])}>{item.icon}</span> : null}
+                  {item.icon ? <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] transition-colors group-data-[highlighted]:bg-on-accent/15 group-data-[highlighted]:text-on-accent", ITEM_ICON_TONE[tone])}>{item.icon}</span> : null}
                   <span className="flex min-w-0 flex-col leading-tight">
                     <span className="truncate font-medium">{item.label}</span>
-                    {item.description ? <span className="truncate text-[11.5px] text-ink-3 group-data-[highlighted]:text-white/80">{item.description}</span> : null}
+                    {item.description ? <span className="truncate text-[11.5px] text-ink-3 group-data-[highlighted]:text-on-accent/80">{item.description}</span> : null}
                   </span>
                 </RadixDropdown.Item>
               </div>

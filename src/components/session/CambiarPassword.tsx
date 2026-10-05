@@ -79,7 +79,7 @@ export function FormCambiarPassword({ onDone, submitLabel = "Cambiar contraseña
 export function CambioPasswordObligatorio() {
   const { user, logout } = useSession();
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-[#fbfbfd] px-6 py-12">
+    <main className="flex min-h-dvh items-center justify-center bg-canvas-2 px-6 py-12">
       <section className="w-full max-w-[400px]" aria-labelledby="cambio-titulo">
         <div className="flex flex-col items-center text-center">
           <BrandMark size={52} />

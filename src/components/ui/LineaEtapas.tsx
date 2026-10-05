@@ -67,7 +67,7 @@ function Marca({ indice, hecha, actual }: { indice: number; hecha: boolean; actu
       aria-hidden="true"
       className={cn(
         "relative z-[1] flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold ring-4 ring-surface transition-colors duration-300",
-        hecha ? "bg-brand text-white" : actual ? "bg-brand-soft text-brand-strong shadow-[0_0_0_2px_var(--color-brand)]" : "bg-surface-3 text-ink-4",
+        hecha ? "bg-brand text-on-accent" : actual ? "bg-brand-soft text-brand-strong shadow-[0_0_0_2px_var(--color-brand)]" : "bg-surface-3 text-ink-4",
       )}
     >
       {hecha ? <Check size={13} weight="bold" /> : indice + 1}

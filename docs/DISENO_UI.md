@@ -33,6 +33,33 @@ El laboratorio observa microalgas al microscopio y mide sus toxinas. La marca es
 
 Un solo acento. Sombras teñidas con la tinta (`rgba(16,32,43,…)`), nunca negro puro; las tarjetas no llevan borde, llevan un anillo de 1 px al 4 % dentro de la sombra (`shadow-card`).
 
+### Color (modo oscuro)
+
+Los **mismos tokens** con otros valores, en `:root[data-theme="dark"]` dentro de `@media screen` (`src/app/globals.css`); ningún componente duplica estilos por tema. Lienzo gris muy oscuro con tinte azulado (sin negro puro), superficies un poco más claras para dar profundidad, bordes suaves y sombras cambiadas por anillos tonales.
+
+| Token | Oscuro | Nota |
+| --- | --- | --- |
+| `canvas` / `sidebar` | `#0D141A` / `#10181F` | lienzo y barra lateral |
+| `surface` / `surface-2` / `surface-3` | `#151E26` / `#1A242D` / `#233039` | elevación tonal |
+| `line` / `line-strong` | `#25323C` / `#364652` | bordes suaves |
+| `ink` … `ink-4` | `#E6EDF2` / `#BCCAD3` / `#94A5B1` / `#75868F` | texto (AA sobre `surface`) |
+| `brand` / `brand-strong` | `#4CB8D3` / `#7CCDE1` | acento océano aclarado (AA como texto) |
+| `brand-soft` / `brand-faint` | `#14384A` / `#112933` | fondos tenues |
+| `success` / `warning` / `danger` (+ `-soft`, `-text`) | `#4FC38C` / `#E2A93F` / `#F0766C` | insignias: fondo tenue y texto claro del mismo tono |
+| `on-accent` | `#061A22` (claro: `#FFFFFF`) | texto sobre rellenos de color (botón primario, contadores, renglón resaltado) |
+| `deep-2` | `#8CCFE0` | tono de icono/texto; `deep` sigue oscuro para las capas |
+| `papel` / `tinta` | `#FFFFFF` / `#0B1F2A` en ambos temas | firmas, páginas de PDF, hojas de etiquetas |
+
+Reglas: nunca `bg-white`/`text-white`/hex en componentes; texto sobre relleno de acento con `text-on-accent`, sobre `bg-ink` con `text-surface`; los tooltips (`material-dark`) quedan oscuros en ambos temas con texto blanco. Toasts con los tokens (`--normal-bg` de sonner).
+
+**Preferencia**: Claro, Oscuro o Automático (por omisión). Se guarda en la cuenta (`usuarios.tema`, migración 14; `PUT /api/auth/me/tema`, sin bitácora) y en el navegador (`ficotox-tema`). `SCRIPT_TEMA` (`src/lib/shared/tema.ts`) va en línea en el `<head>` y pone `data-theme` antes del primer pintado (sin destello); `color-scheme` y `meta theme-color` siguen al tema. Al cambiar, la clase `tema-transicion` anima todos los colores juntos en 200 ms (nada con movimiento reducido). Se cambia en **Mi cuenta › Apariencia** (`SelectorTema`, tres tarjetas con mini vista previa) o con el sol/luna del menú de la cuenta (Claro ↔ Oscuro). El acceso usa el tema del navegador o del sistema.
+
+**Impresión y PDF**: el tema oscuro solo existe en `@media screen`; al imprimir rigen los tokens claros (etiquetas, informes, NC, vistas imprimibles). Los PDF del servidor no cambian.
+
+**Firmas**: el lienzo y la vista de una firma van sobre `bg-papel` con tinta oscura fija; la imagen guardada no depende del tema.
+
+**Visor de la Biblioteca**: la interfaz sigue el tema; las páginas del PDF se ven blancas (`bg-papel`) sobre el fondo oscuro, con el botón **Lectura nocturna** (luna) que invierte suavemente las páginas solo en pantalla. docx, xlsx, txt y md usan los tokens. Imágenes y evidencias se muestran sin alterar.
+
 ### Tipografía
 
 Una sola familia: **la del sistema** (`-apple-system` → SF Pro en Apple; **Inter** como respaldo cargado con `next/font` para Windows/Linux). Monoespaciada del sistema (`SF Mono`/Menlo, Geist Mono de respaldo) para folios, lotes, CAS y claves.

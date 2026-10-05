@@ -53,7 +53,7 @@ async function issueSession(s: Session, row: Row): Promise<Response> {
 /* Usuario, roles vigentes, cuenta y permisos efectivos { modulo: { accion: alcance } }. */
 async function perfilSesion(s: Session, user: CurrentUser) {
   const auth = await cargarAutorizacion(s, user, { permitirCambioPendiente: true });
-  const row = await s.queryOne<{ nombre: string; email: string; avatar: string | null }>("SELECT nombre, email, avatar FROM usuarios WHERE id = :id", { id: auth.userId });
+  const row = await s.queryOne<{ nombre: string; email: string; avatar: string | null; tema: string | null }>("SELECT nombre, email, avatar, tema FROM usuarios WHERE id = :id", { id: auth.userId });
   const roles = auth.roles.map((r) => ({ id: r.id, nombre: r.nombre, clave: r.clave, vigente_desde: r.vigente_desde, vigente_hasta: r.vigente_hasta ?? null, permisos: mapaPermisos(expandirPermisos(r.filas)) }));
   return {
     user: {
@@ -61,6 +61,7 @@ async function perfilSesion(s: Session, user: CurrentUser) {
       nombre: row?.nombre ?? user.nombre,
       email: row?.email ?? user.email,
       avatar: row?.avatar ?? null,
+      tema: TEMAS.has(String(row?.tema)) ? String(row?.tema) : "auto",
       roles: roles.map((r) => r.nombre),
       tipo_cuenta: auth.cuenta.tipo_cuenta,
       vigente_hasta: auth.cuenta.vigente_hasta,
@@ -182,6 +183,24 @@ export async function personal({ request, s }: RouteContext): Promise<Response> 
     };
   });
   return json({ items });
+}
+
+const TEMAS = new Set(["claro", "oscuro", "auto"]);
+
+/*
+ * Apariencia (Claro, Oscuro o Automatico) de la propia cuenta, para que la
+ * siga en cualquier computadora. Es una preferencia visual: no se registra en
+ * la bitacora.
+ */
+export async function updateMyTema({ request, s }: RouteContext): Promise<Response> {
+  const user = await requireUser(request);
+  await cargarAutorizacion(s, user, { permitirCambioPendiente: true });
+  const payload = await readJson(request);
+  const tema = String(payload.tema || "");
+  if (!TEMAS.has(tema)) return json({ message: "Apariencia no reconocida" }, 400);
+  await s.execute("UPDATE usuarios SET tema = :tema WHERE id = :id", { tema, id: Number(user.sub) });
+  await s.commit();
+  return json({ message: "Apariencia guardada", tema });
 }
 
 /* La persona elige su avatar del catalogo (o vuelve al de omision con null). Queda en la bitacora. */

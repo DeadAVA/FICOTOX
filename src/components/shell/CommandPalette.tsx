@@ -77,7 +77,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               {groups.map((group) => (
                 <Command.Group key={group.kind} heading={group.title} className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-ink-3">
                   {group.hits.map((hit) => (
-                    <Command.Item key={`${group.kind}-${hit.id}`} value={`${group.kind}-${hit.id}`} onSelect={() => go(hit)} className="group rounded-[10px] outline-none data-[selected=true]:bg-brand data-[selected=true]:text-white">
+                    <Command.Item key={`${group.kind}-${hit.id}`} value={`${group.kind}-${hit.id}`} onSelect={() => go(hit)} className="group rounded-[10px] outline-none data-[selected=true]:bg-brand data-[selected=true]:text-on-accent">
                       <SearchHitRow hit={hit} selectedStyle />
                     </Command.Item>
                   ))}

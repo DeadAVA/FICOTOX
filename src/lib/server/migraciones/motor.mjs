@@ -32,8 +32,9 @@ import * as m0010 from "./0010_adjuntos.mjs";
 import * as m0011 from "./0011_calidad.mjs";
 import * as m0012 from "./0012_firmas_tokens.mjs";
 import * as m0013 from "./0013_biblioteca.mjs";
+import * as m0014 from "./0014_tema.mjs";
 
-export const MIGRACIONES = [m0009, m0010, m0011, m0012, m0013].sort((a, b) => a.version - b.version);
+export const MIGRACIONES = [m0009, m0010, m0011, m0012, m0013, m0014].sort((a, b) => a.version - b.version);
 export const VERSION_ACTUAL = MIGRACIONES[MIGRACIONES.length - 1].version;
 /* Versiones que pueden quedar como linea base de una base anterior (las del sistema sin migraciones). */
 export const VERSIONES_BASELINE = [11, 10, 9];

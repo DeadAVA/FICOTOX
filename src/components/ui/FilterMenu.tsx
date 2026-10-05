@@ -124,7 +124,7 @@ export function FilterMenu({ groups = [], toggles = [], children, className, lab
         <button type="button" className={cn("press inline-flex h-10 items-center gap-2 rounded-full bg-surface px-3.5 text-[13px] font-medium text-ink-2 shadow-card hover:text-ink data-[state=open]:bg-surface-3 data-[state=open]:text-ink", active > 0 && "text-ink", className)} aria-label={active ? `${label} (${active} activos)` : label}>
           <SlidersHorizontal size={16} />
           {label}
-          {active > 0 ? <span className="tnum flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-white">{active}</span> : null}
+          {active > 0 ? <span className="tnum flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-on-accent">{active}</span> : null}
         </button>
       </RadixPopover.Trigger>
       <RadixPopover.Portal>

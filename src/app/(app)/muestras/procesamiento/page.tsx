@@ -116,7 +116,7 @@ function ProcesamientoList() {
       <Toolbar
         end={
           canCreate ? (
-            <Link href="/muestras/procesamiento/nuevo" className="press inline-flex h-9 items-center gap-2 rounded-[9px] bg-brand px-3.5 text-[13.5px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] hover:bg-brand-strong">
+            <Link href="/muestras/procesamiento/nuevo" className="press inline-flex h-9 items-center gap-2 rounded-[9px] bg-brand px-3.5 text-[13.5px] font-medium text-on-accent shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] hover:bg-brand-strong">
               <Plus size={16} weight="bold" /> Nuevo procesamiento
             </Link>
           ) : null

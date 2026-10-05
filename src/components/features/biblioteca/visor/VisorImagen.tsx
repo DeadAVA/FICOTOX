@@ -85,7 +85,7 @@ export function VisorImagen({ versionId, extension, titulo }: { versionId: numbe
         ) : (
           <div className="flex min-h-full min-w-max items-center justify-center p-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={url} alt={titulo} onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} style={natural ? { width: natural.w * escala, height: natural.h * escala } : undefined} className="max-w-none bg-white shadow-card" draggable={false} />
+            <img src={url} alt={titulo} onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} style={natural ? { width: natural.w * escala, height: natural.h * escala } : undefined} className="max-w-none bg-papel shadow-card" draggable={false} />
           </div>
         )}
       </div>

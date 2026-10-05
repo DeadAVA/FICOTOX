@@ -15,8 +15,8 @@ const TONES: Record<Tone, string> = {
   success: "bg-success-soft text-success-text",
   warning: "bg-warning-soft text-warning-text",
   danger: "bg-danger-soft text-danger-text",
-  bloom: "bg-bloom-soft text-[#9a4a1f]",
-  ink: "bg-ink text-white",
+  bloom: "bg-bloom-soft text-bloom-text",
+  ink: "bg-ink text-surface",
 };
 
 export function Badge({ tone = "neutral", dot, className, children }: { tone?: Tone; dot?: boolean; className?: string; children: ReactNode }) {

@@ -103,7 +103,7 @@ function FichaSupervision({ item, acciones, onIr }: { item: ElementoSupervision;
             </Button>
           </>
         ) : href ? (
-          <Link href={href} onClick={onIr} className="press inline-flex h-9 items-center gap-1.5 rounded-[9px] bg-brand px-3.5 text-[13.5px] font-medium text-white hover:bg-brand-strong">
+          <Link href={href} onClick={onIr} className="press inline-flex h-9 items-center gap-1.5 rounded-[9px] bg-brand px-3.5 text-[13.5px] font-medium text-on-accent hover:bg-brand-strong">
             <PencilSimple size={15} /> Corregir
           </Link>
         ) : null}

@@ -12,6 +12,8 @@ export interface SessionUser {
   roles?: string[];
   /* Clave del catalogo de avatares; null = el que se deriva del correo. */
   avatar?: string | null;
+  /* Apariencia elegida (claro, oscuro o auto). */
+  tema?: "claro" | "oscuro" | "auto";
   /* Fase 2: cuenta, cargo predeterminado y estado de la contrasena. */
   tipo_cuenta?: "permanente" | "temporal";
   vigente_hasta?: string | null;

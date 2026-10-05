@@ -279,7 +279,7 @@ function Calendario({ valor, min, max, onElegir, onCerrar }: { valor: string; mi
                     aria-label={`${Number(iso.slice(8))} de ${MESES[mes - 1]} de ${anio}`}
                     onClick={() => !fuera(iso) && onElegir(iso)}
                     onFocus={() => setFoco(iso)}
-                    className={cn(boton, "mx-auto", iso === valor ? "bg-brand text-white" : iso === hoy ? "font-semibold text-brand hover:bg-surface-3" : "text-ink hover:bg-surface-3", fuera(iso) && "cursor-not-allowed text-ink-4 hover:bg-transparent")}
+                    className={cn(boton, "mx-auto", iso === valor ? "bg-brand text-on-accent" : iso === hoy ? "font-semibold text-brand hover:bg-surface-3" : "text-ink hover:bg-surface-3", fuera(iso) && "cursor-not-allowed text-ink-4 hover:bg-transparent")}
                   >
                     {Number(iso.slice(8))}
                   </button>

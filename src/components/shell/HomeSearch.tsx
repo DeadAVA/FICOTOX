@@ -102,7 +102,7 @@ export function HomeSearch({ className, handle }: { className?: string; handle?:
           />
         </div>
         {/* mousedown sin preventDefault quitaría el foco al input (y el onBlur cerraría la lista antes del clic). */}
-        <div onMouseDown={(event) => event.preventDefault()} className={cn("absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[20px] bg-white/95 text-left shadow-panel backdrop-blur-2xl", open ? "animate-materialize" : "hidden")}>
+        <div onMouseDown={(event) => event.preventDefault()} className={cn("absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[20px] bg-surface/95 text-left shadow-panel backdrop-blur-2xl", open ? "animate-materialize" : "hidden")}>
           <div className="flex items-center justify-between gap-3 px-3 pt-2.5 pb-1.5">
             <SearchScopes value={scope} onChange={setScope} />
             <span className="hidden text-[11.5px] text-ink-4 sm:inline">
@@ -117,7 +117,7 @@ export function HomeSearch({ className, handle }: { className?: string; handle?:
             {groups.map((group) => (
               <Command.Group key={group.kind} heading={group.title} className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-ink-3">
                 {group.hits.map((hit) => (
-                  <Command.Item key={`${group.kind}-${hit.id}`} value={`${group.kind}-${hit.id}`} onSelect={() => go(hit)} className="group rounded-[10px] outline-none data-[selected=true]:bg-brand data-[selected=true]:text-white">
+                  <Command.Item key={`${group.kind}-${hit.id}`} value={`${group.kind}-${hit.id}`} onSelect={() => go(hit)} className="group rounded-[10px] outline-none data-[selected=true]:bg-brand data-[selected=true]:text-on-accent">
                     <SearchHitRow hit={hit} selectedStyle />
                   </Command.Item>
                 ))}

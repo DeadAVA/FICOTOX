@@ -57,10 +57,10 @@ export default function LoginPage() {
     }
   };
 
-  const fieldClass = "h-12 rounded-[12px] border-line bg-white text-[15px] shadow-[0_1px_2px_rgba(16,32,43,0.04)] hover:border-line-strong focus:bg-white";
+  const fieldClass = "h-12 rounded-[12px] border-line bg-surface text-[15px] shadow-[0_1px_2px_rgba(16,32,43,0.04)] hover:border-line-strong focus:bg-surface";
 
   return (
-    <main className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-[#fbfbfd] px-6 py-12 text-ink">
+    <main className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-canvas-2 px-6 py-12 text-ink">
       <div className="light-field" aria-hidden="true" />
 
       <section className="stagger relative flex w-full max-w-[380px] flex-col items-center" aria-labelledby="login-title">

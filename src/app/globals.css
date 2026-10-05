@@ -45,6 +45,22 @@
   --color-bloom: #d0672f;
   --color-bloom-soft: #fbe9dd;
 
+  /* Superficies especiales: barra lateral y lienzo claro del acceso */
+  --color-sidebar: #f7f8fa;
+  --color-canvas-2: #fbfbfd;
+  /* Texto sobre un relleno de color (botón primario, insignia roja, renglón resaltado) */
+  --color-on-accent: #ffffff;
+  /* Pasos de hover de los botones */
+  --color-brand-soft-hover: #cfe5ec;
+  --color-danger-strong: #b03931;
+  /* Tonos de apoyo (E-A, salidas) */
+  --color-violet-soft: #e9e4f8;
+  --color-violet-text: #5b3fa6;
+  --color-bloom-text: #9a4a1f;
+  /* Papel y tinta: NO cambian con el tema (firmas, hojas de etiquetas, páginas de PDF) */
+  --color-papel: #ffffff;
+  --color-tinta: #0b1f2a;
+
   /* Fondos profundos (login, tooltips) */
   --color-deep: #081a24;
   --color-deep-2: #0c3a4a;
@@ -146,6 +162,85 @@
 @layer base {
   :root {
     color-scheme: light;
+  }
+
+  /*
+   * Tema oscuro: los MISMOS tokens con otros valores (ver docs/DISENO_UI.md).
+   * Lienzo gris muy oscuro con tinte azulado (sin negro puro), superficies un
+   * poco más claras, bordes suaves y sombras cambiadas por bordes tonales.
+   * Acento y estados aclarados para contraste AA sobre las superficies; los
+   * rellenos de color llevan texto oscuro (--color-on-accent). Solo en
+   * pantalla: al imprimir rige siempre el tema claro.
+   */
+  @media screen {
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+
+      --color-canvas: #0d141a;
+      --color-canvas-2: #0d141a;
+      --color-sidebar: #10181f;
+      --color-surface: #151e26;
+      --color-surface-2: #1a242d;
+      --color-surface-3: #233039;
+      --color-line: #25323c;
+      --color-line-strong: #364652;
+
+      --color-ink: #e6edf2;
+      --color-ink-2: #bccad3;
+      --color-ink-3: #94a5b1;
+      --color-ink-4: #75868f;
+
+      --color-brand: #4cb8d3;
+      --color-brand-strong: #7ccde1;
+      --color-brand-soft: #14384a;
+      --color-brand-faint: #112933;
+      --color-brand-bright: #63c6de;
+      --color-brand-soft-hover: #1a4659;
+      --color-on-accent: #061a22;
+
+      --color-success: #4fc38c;
+      --color-success-soft: #12301f;
+      --color-success-text: #82dcae;
+      --color-warning: #e2a93f;
+      --color-warning-soft: #33280f;
+      --color-warning-text: #f1c470;
+      --color-danger: #f0766c;
+      --color-danger-soft: #3a1b1a;
+      --color-danger-text: #ff9f96;
+      --color-danger-strong: #ff9389;
+      --color-bloom: #ec8d5f;
+      --color-bloom-soft: #3a2316;
+      --color-bloom-text: #f5ae86;
+      --color-violet-soft: #29223f;
+      --color-violet-text: #c6b5f6;
+
+      /* deep sigue oscuro (fondos de capas); deep-2 se usa como tono de texto e icono */
+      --color-deep: #02080c;
+      --color-deep-2: #8ccfe0;
+
+      --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.05);
+      --shadow-raised: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 28px -14px rgba(0, 0, 0, 0.7);
+      --shadow-panel: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 64px -20px rgba(0, 0, 0, 0.75);
+      --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 16px 40px -16px rgba(0, 0, 0, 0.7);
+      --shadow-focus: 0 0 0 4px rgba(76, 184, 211, 0.3);
+    }
+  }
+
+  /* Al cambiar de tema: todos los colores a la vez en ~200 ms (sin animación con movimiento reducido). */
+  @media (prefers-reduced-motion: no-preference) {
+    :root.tema-transicion,
+    :root.tema-transicion *,
+    :root.tema-transicion *::before,
+    :root.tema-transicion *::after {
+      transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease, fill 200ms ease, stroke 200ms ease, box-shadow 200ms ease !important;
+    }
+  }
+
+  /* Impresión: siempre en claro. */
+  @media print {
+    :root {
+      color-scheme: light;
+    }
   }
 
   html {
@@ -397,6 +492,23 @@
     -webkit-backdrop-filter: blur(28px) saturate(160%);
     backdrop-filter: blur(28px) saturate(160%);
   }
+  @media screen {
+    :root[data-theme="dark"] .material {
+      background: rgba(21, 30, 38, 0.74);
+    }
+    :root[data-theme="dark"] .material-thick {
+      background: rgba(26, 36, 45, 0.84);
+    }
+    :root[data-theme="dark"] .material-dark {
+      background: rgba(44, 58, 70, 0.94);
+    }
+    :root[data-theme="dark"] .edge-light {
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), var(--shadow-card);
+    }
+    :root[data-theme="dark"] .scroll-edge-b::after {
+      background: linear-gradient(to bottom, rgba(13, 20, 26, 0.9), rgba(13, 20, 26, 0));
+    }
+  }
   .material-dark {
     background: rgba(16, 32, 43, 0.82);
     -webkit-backdrop-filter: blur(24px) saturate(160%);
@@ -409,7 +521,7 @@
       backdrop-filter: none;
     }
     .material-dark {
-      background: var(--color-ink);
+      background: #10202b;
       -webkit-backdrop-filter: none;
       backdrop-filter: none;
     }
@@ -525,4 +637,14 @@
   .inset-group > * + * {
     border-top: 1px solid var(--color-line);
   }
+}
+
+/* Avisos (sonner) con los tokens del tema. */
+html [data-sonner-toaster][data-sonner-theme] {
+  --normal-bg: var(--color-surface);
+  --normal-border: var(--color-line);
+  --normal-text: var(--color-ink);
+}
+html [data-sonner-toaster][data-sonner-theme] [data-description] {
+  color: var(--color-ink-3);
 }

@@ -64,7 +64,7 @@ export function AccesosRapidos({ accesos, className }: { accesos: Acceso[]; clas
               </span>
               <span className="text-[13.5px] leading-tight font-medium text-ink">{a.label}</span>
               {a.pendientes ? (
-                <span aria-hidden="true" className="tnum absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[11px] font-semibold text-white ring-2 ring-canvas animate-pop-in motion-reduce:animate-none">
+                <span aria-hidden="true" className="tnum absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[11px] font-semibold text-on-accent ring-2 ring-canvas animate-pop-in motion-reduce:animate-none">
                   {a.pendientes > 99 ? "99+" : a.pendientes}
                 </span>
               ) : null}

@@ -816,7 +816,7 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
               <div className="inline-flex rounded-full bg-surface-3 p-0.5" role="radiogroup" aria-label={row.requisito}>
                 {(["C", "NC", "NA"] as const).map((status) => {
                   const active = row.estado === status;
-                  const tone = status === "C" ? "bg-success text-white" : status === "NC" ? "bg-danger text-white" : "bg-surface text-ink shadow-card";
+                  const tone = status === "C" ? "bg-success text-on-accent" : status === "NC" ? "bg-danger text-on-accent" : "bg-surface text-ink shadow-card";
                   return (
                     <button key={status} type="button" role="radio" aria-checked={active} onClick={() => patch({ inspeccion: form.inspeccion.map((entry) => (entry.requisito === row.requisito ? { ...entry, estado: active ? "" : status } : entry)) })} className={`press h-7 min-w-11 rounded-full px-2.5 text-[12.5px] font-medium transition-colors ${active ? tone : "text-ink-3 hover:text-ink"}`}>
                       {status}

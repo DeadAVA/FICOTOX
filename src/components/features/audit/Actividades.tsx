@@ -280,7 +280,7 @@ function DetalleActividad({ grupo, onIr }: { grupo: GrupoActividad; onIr: () => 
                 </span>
               </span>
               {entry.href ? (
-                <Link href={entry.href} onClick={onIr} className="press mt-1 inline-flex h-9 w-fit items-center gap-2 rounded-full bg-brand px-4 text-[13.5px] font-medium text-white shadow-card hover:bg-brand-strong focus-visible:shadow-[var(--shadow-focus)] focus-visible:outline-none">
+                <Link href={entry.href} onClick={onIr} className="press mt-1 inline-flex h-9 w-fit items-center gap-2 rounded-full bg-brand px-4 text-[13.5px] font-medium text-on-accent shadow-card hover:bg-brand-strong focus-visible:shadow-[var(--shadow-focus)] focus-visible:outline-none">
                   Ver el registro <ArrowRight size={14} weight="bold" />
                 </Link>
               ) : null}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { CaretLeft, CaretRight, ListBullets, MagnifyingGlass, MagnifyingGlassMinus, MagnifyingGlassPlus, SidebarSimple, SquaresFour, X } from "@phosphor-icons/react";
+import { CaretLeft, CaretRight, ListBullets, MagnifyingGlass, MagnifyingGlassMinus, MagnifyingGlassPlus, MoonStars, SidebarSimple, SquaresFour, X } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
 import { IconButton } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
@@ -41,6 +41,11 @@ const ESTILOS = `
 .visor-textlayer ::selection { background: color-mix(in srgb, var(--color-brand) 30%, transparent); color: transparent; }
 .visor-textlayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: 0; cursor: default; user-select: none; }
 .visor-resaltado { background: color-mix(in srgb, var(--color-warning) 45%, transparent); color: transparent; border-radius: 2px; }
+/* Lectura nocturna: solo en pantalla invierte suavemente la pagina (no cambia el documento ni lo impreso). */
+.visor-nocturna [data-pagina] { filter: invert(0.88) hue-rotate(180deg) contrast(0.95); }
+[data-pagina] { transition: filter 260ms ease; }
+@media print { .visor-nocturna [data-pagina] { filter: none; } }
+@media (prefers-reduced-motion: reduce) { [data-pagina] { transition: none; } }
 .visor-resaltado-actual { background: color-mix(in srgb, var(--color-bloom) 60%, transparent); box-shadow: 0 0 0 1px var(--color-bloom); }
 `;
 
@@ -151,7 +156,7 @@ function PaginaPdf({ pdf, n, escala, base, cerca, consulta, actualK, onMarcas }:
   }, [consulta, dibujada, actualK, n, onMarcas]);
 
   return (
-    <div data-pagina={n} className="relative mx-auto bg-white shadow-[0_1px_3px_rgba(16,32,43,0.18),0_8px_24px_-12px_rgba(16,32,43,0.25)]" style={{ width: w, height: h }}>
+    <div data-pagina={n} className="relative mx-auto bg-papel shadow-[0_1px_3px_rgba(16,32,43,0.18),0_8px_24px_-12px_rgba(16,32,43,0.25)]" style={{ width: w, height: h }}>
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-hidden="true" />
       <div ref={capaRef} className="visor-textlayer" />
       {dibujada === null ? <span className="absolute inset-0 flex items-center justify-center text-[12px] text-ink-4">Página {n}</span> : null}
@@ -197,7 +202,7 @@ function Miniatura({ pdf, n, activa, onIr }: { pdf: PdfDocumento; n: number; act
   }, [activa]);
   return (
     <button ref={ref} type="button" onClick={() => onIr(n)} aria-label={`Ir a la página ${n}`} aria-current={activa ? "page" : undefined} className={cn("press flex w-full flex-col items-center gap-1 rounded-[10px] p-1.5 text-[11.5px]", activa ? "bg-brand-faint text-brand-strong" : "text-ink-3 hover:bg-surface-3")}>
-      <span className={cn("block w-full overflow-hidden rounded-[4px] bg-white ring-1", activa ? "ring-2 ring-brand" : "ring-line")} style={{ aspectRatio: "0.77" }}>
+      <span className={cn("block w-full overflow-hidden rounded-[4px] bg-papel ring-1", activa ? "ring-2 ring-brand" : "ring-line")} style={{ aspectRatio: "0.77" }}>
         {/* eslint-disable-next-line @next/next/no-img-element -- miniatura generada en el navegador (data URL) */}
         {url ? <img src={url} alt="" className="h-full w-full object-contain" /> : null}
       </span>
@@ -246,6 +251,8 @@ export function VisorPdf({ versionId, docId, conTexto, compacto }: { versionId: 
   const [consulta, setConsulta] = useState("");
   const [coincidencias, setCoincidencias] = useState<Coincidencia[]>([]);
   const [actual, setActual] = useState(0);
+  // Lectura nocturna (opcional, no se guarda en el documento).
+  const [nocturna, setNocturna] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const buscarRef = useRef<HTMLInputElement | null>(null);
   const textos = useRef<Map<number, string[]>>(new Map());
@@ -581,6 +588,9 @@ export function VisorPdf({ versionId, docId, conTexto, compacto }: { versionId: 
           <span data-testid="visor-zoom" className="tnum hidden min-w-[3.2rem] text-right text-[12px] text-ink-3 sm:inline">
             {porcentaje} %
           </span>
+          <IconButton label={nocturna ? "Quitar lectura nocturna" : "Lectura nocturna"} onClick={() => setNocturna((v) => !v)} aria-pressed={nocturna} className={nocturna ? "bg-brand-soft text-brand-strong" : undefined}>
+            <MoonStars size={17} weight={nocturna ? "fill" : "regular"} />
+          </IconButton>
         </div>
         <div className="ml-auto flex items-center gap-1">
           {buscando ? (
@@ -666,7 +676,7 @@ export function VisorPdf({ versionId, docId, conTexto, compacto }: { versionId: 
             </div>
           </aside>
         ) : null}
-        <div ref={scrollRef} tabIndex={0} aria-label="Páginas del PDF" className="scroll-thin relative min-h-0 flex-1 overflow-auto bg-surface-3/70 outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--color-brand)]">
+        <div ref={scrollRef} tabIndex={0} aria-label="Páginas del PDF" className={cn("scroll-thin relative min-h-0 flex-1 overflow-auto bg-surface-3/70 outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--color-brand)]", nocturna && "visor-nocturna")}>
           {!pdf ? (
             <div className="mx-auto flex max-w-[720px] flex-col gap-4 p-6">
               <Skeleton className="h-[480px] w-full" />

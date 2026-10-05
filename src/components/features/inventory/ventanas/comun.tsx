@@ -188,7 +188,7 @@ export function IconoMovimientoInsumo({ m, grande = false }: { m: ApiRecord; gra
       <CuadroIcono grande={grande} clase={figura.clase}>
         {figura.icono(grande ? T_GDE : T_PEQ)}
       </CuadroIcono>
-      <span className={cn("absolute -right-1 -bottom-1 flex items-center justify-center rounded-full ring-2 ring-surface", grande ? "h-7 w-7" : "h-5 w-5", entrada ? "bg-success text-white" : "bg-warning text-white")}>
+      <span className={cn("absolute -right-1 -bottom-1 flex items-center justify-center rounded-full ring-2 ring-surface", grande ? "h-7 w-7" : "h-5 w-5", entrada ? "bg-success text-on-accent" : "bg-warning text-on-accent")}>
         {entrada ? <ArrowDown size={grande ? 15 : 11} weight="bold" /> : <ArrowUp size={grande ? 15 : 11} weight="bold" />}
       </span>
     </span>

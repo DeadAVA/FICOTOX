@@ -7,6 +7,7 @@ import { AvatarArt, AVATARS, resolveAvatarKey } from "@/components/ui/AvatarArt"
 import { useFiguraDe } from "@/components/ui/Figura";
 import { isAvatarKey } from "@/lib/shared/avatars";
 import { AvatarPicker } from "@/components/ui/AvatarPicker";
+import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Button } from "@/components/ui/Button";
 import { Sheet, useConfirm } from "@/components/ui/Overlay";
 import { Field, Select } from "@/components/ui/Field";
@@ -180,6 +181,13 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
           <Button variant="secondary" icon={<SignOut size={16} />} onClick={cerrarTodas}>
             Cerrar sesión en todos los dispositivos
           </Button>
+        </section>
+        <section className="flex flex-col gap-3">
+          <div>
+            <h3 className="title-3 text-ink">Apariencia</h3>
+            <p className="text-[13px] text-ink-3">Claro, oscuro o automático (como tu sistema). Te sigue en cualquier computadora.</p>
+          </div>
+          <SelectorTema />
         </section>
         <section className="flex flex-col gap-3">
           <div>
