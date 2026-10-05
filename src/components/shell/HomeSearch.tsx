@@ -28,7 +28,6 @@ export function HomeSearch({ className, handle }: { className?: string; handle?:
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const open = focused && (query.trim().length > 0 || groups.length > 0);
-  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
 
   useImperativeHandle(handle, () => ({
     ask: (value: string) => {
@@ -101,10 +100,6 @@ export function HomeSearch({ className, handle }: { className?: string; handle?:
             aria-label="Buscar en FICOTOX"
             className="h-[62px] flex-1 bg-transparent text-[17px] text-ink outline-none placeholder:text-ink-4 sm:text-[18px]"
           />
-          <span className="hidden items-center gap-0.5 sm:flex">
-            <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
-            <Kbd>K</Kbd>
-          </span>
         </div>
         {/* mousedown sin preventDefault quitaría el foco al input (y el onBlur cerraría la lista antes del clic). */}
         <div onMouseDown={(event) => event.preventDefault()} className={cn("absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[20px] bg-white/95 text-left shadow-panel backdrop-blur-2xl", open ? "animate-materialize" : "hidden")}>

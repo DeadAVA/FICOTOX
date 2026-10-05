@@ -19,7 +19,8 @@ import { StatusCell } from "@/components/ui/StatusFlag";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { fmt, fmtDate } from "@/lib/client/format";
-import { useDebouncedValue } from "@/lib/client/hooks";
+import { useDebouncedValue, useInitialParam } from "@/lib/client/hooks";
+import { ETAPAS_FLUJO, esEtapaFlujo, type EtapaFlujo } from "@/lib/client/flujo";
 import { formatSampleFolio, getSampleTypeSummary, normalizeSampleStatus } from "@/lib/client/samples";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
@@ -52,7 +53,10 @@ function RecepcionList() {
   const [etapa, setEtapa] = useState<EtapaFilter>("");
   const [decision, setDecision] = useState<DecisionFilter>("");
   const [analisis, setAnalisis] = useState("");
-  const [mias, setMias] = useState(false);
+  const [mias, setMias] = useState(useInitialParam("mias") === "1");
+  // Desde el Inicio: ?flujo=<etapa> muestra solo las recepciones en esa etapa del flujo.
+  const flujoInicial = useInitialParam("flujo");
+  const [flujo, setFlujo] = useState<EtapaFlujo | "">(esEtapaFlujo(flujoInicial) ? flujoInicial : "");
   const debounced = useDebouncedValue(search);
   const { anular, restaurar } = useAnulacion("reception", formatSampleFolio);
 
@@ -65,6 +69,14 @@ function RecepcionList() {
     { enabled: !!token, deps: [debounced, showAnuladas, mias] },
   );
   const items = resource.data;
+  const enFlujo = useResource<Map<number, string>>(
+    "muestras",
+    async () => {
+      const data = await getJsonAuth(`${API_BASE_URL}/inicio/en-curso`, token);
+      return new Map(((data.items || []) as ApiRecord[]).map((r) => [Number(r.id), String(r.etapa_flujo || "")]));
+    },
+    { enabled: !!token && !!flujo, deps: [flujo] },
+  );
 
   const canCreate = can("muestras", "C", { objeto: "recepcion", borrador: true });
   const canEdit = (item: ApiRecord) => can("muestras", "E", { objeto: "recepcion", borrador: String(item.estado || "registrada") === "registrada" });
@@ -79,13 +91,14 @@ function RecepcionList() {
     return list.filter((item) => {
       const estado = normalizeSampleStatus(item.estado);
       if (etapa && estado !== etapa) return false;
+      if (flujo && enFlujo.data && enFlujo.data.get(Number(item.id)) !== flujo) return false;
       const dec = String(item.decision_aceptacion || "");
       if (decision === "pendiente" && dec) return false;
       if (decision && decision !== "pendiente" && dec !== decision) return false;
       if (analisis && !tiposDe(item).includes(analisis)) return false;
       return true;
     });
-  }, [items, etapa, decision, analisis]);
+  }, [items, etapa, decision, analisis, flujo, enFlujo.data]);
 
   const groups: FilterGroup[] = [
     {
@@ -98,6 +111,14 @@ function RecepcionList() {
         { value: "", label: "Todas", count: items ? items.length : null },
         ...RECEPTION_STATE_ORDER.map((estado) => ({ value: estado, label: SAMPLE_STATES[estado]?.label || estado, count: count((i) => normalizeSampleStatus(i.estado) === estado) })),
       ],
+    },
+    {
+      key: "flujo",
+      label: "Etapa del flujo",
+      value: flujo,
+      defaultValue: "",
+      onChange: (v) => setFlujo(esEtapaFlujo(v) ? v : ""),
+      options: [{ value: "", label: "Cualquiera" }, ...ETAPAS_FLUJO.map((e) => ({ value: e.clave, label: e.label }))],
     },
     {
       key: "decision",

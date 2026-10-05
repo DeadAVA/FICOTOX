@@ -18,7 +18,7 @@ import { SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, StockMeter, TableSkeleton } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
 import { deadlineTone, fmt } from "@/lib/client/format";
-import { useDebouncedValue, useInitialParam, useOpenState, useParamChange, useUrlTrigger } from "@/lib/client/hooks";
+import { useDebouncedValue, useInitialParam, useOpenState, useParamChange, useUrlTrigger, useAbrirDesdeUrl } from "@/lib/client/hooks";
 import { formatReactivoName, getReactivoExpiry, getReactivoLocation, getReactivoStockInfo, getReactivoStockState, getReactivoTypeLabel, isReactivoLow } from "@/lib/client/reactivos";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
@@ -124,6 +124,7 @@ function ReactivosContent() {
     }
     return [...list].sort((a, b) => nombre(a).localeCompare(nombre(b), "es"));
   }, [items, filter, orden]);
+  useAbrirDesdeUrl(items ? visible : null, setAbierta);
 
   const editReactivo = async (id: number) => {
     try {

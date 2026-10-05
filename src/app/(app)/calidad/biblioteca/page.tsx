@@ -21,7 +21,7 @@ import { ActionMenu, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, Skeleton } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
-import { useDebouncedValue } from "@/lib/client/hooks";
+import { useDebouncedValue, useInitialParam } from "@/lib/client/hooks";
 import { invalidate, useResource } from "@/lib/client/store";
 import { fmtBytes } from "@/lib/shared/adjuntos";
 import { BIBLIOTECA_MAX_MB_DEFAULT, MOTIVO_MIN_BIBLIOTECA, TIPOS_ARCHIVO } from "@/lib/shared/biblioteca";
@@ -82,6 +82,8 @@ function Biblioteca() {
   const [orden, setOrden] = useState<Orden>("recientes");
   const [vista, setVistaState] = useState<Vista>(() => (typeof window === "undefined" ? "cuadricula" : leerVista()));
   const [subir, setSubir] = useState(false);
+  // Desde el Inicio (acceso rapido "Subir documento"): ?subir=1 abre el formulario en cuanto se sabe si la persona puede subir.
+  const [pedidoSubir, setPedidoSubir] = useState(useInitialParam("subir") === "1");
   const [version, setVersion] = useState<DocBiblioteca | null>(null);
   const [editar, setEditar] = useState<number | null>(null);
   const [categoriasAbierta, setCategoriasAbierta] = useState(false);
@@ -113,6 +115,14 @@ function Biblioteca() {
   const categorias = data?.categorias || [];
   const puede = data?.puede || { subir: false, administrar: false, archivar: false };
   const maxMb = data?.max_mb || BIBLIOTECA_MAX_MB_DEFAULT;
+
+  useEffect(() => {
+    if (!pedidoSubir || !data) return;
+    void Promise.resolve().then(() => {
+      if (puede.subir) setSubir(true);
+      setPedidoSubir(false);
+    });
+  }, [pedidoSubir, data, puede.subir]);
 
   // Roles para la visibilidad: solo si la persona puede leer el catalogo (si no, solo "todos").
   useEffect(() => {

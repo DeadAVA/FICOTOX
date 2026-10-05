@@ -21,7 +21,7 @@ import { Avatar, Badge } from "@/components/ui/Primitives";
 import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
 import { fmt, normalizeText } from "@/lib/client/format";
-import { useOpenState } from "@/lib/client/hooks";
+import { useOpenState, useUrlTrigger } from "@/lib/client/hooks";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { formatearFecha, formatearFechaHora, formatearHora, hoyLocal, sumarDias } from "@/lib/shared/fechas";
@@ -190,6 +190,10 @@ function UsuariosContent() {
   // usuarios:G administra cuentas y roles; con alcance "propio" la lista solo trae la cuenta propia.
   const canAdmin = can("usuarios", "G");
   const propio = alcance("usuarios", "V") === "propio";
+  // Desde el Inicio (acceso rapido "Nuevo usuario"): ?nuevo=1 abre el formulario.
+  useUrlTrigger("nuevo", () => {
+    if (canAdmin && !propio) modal.open(null);
+  });
 
   const menuFor = (item: ApiRecord): MenuItem[] => {
     if (!canAdmin) return [];

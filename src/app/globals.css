@@ -262,6 +262,33 @@
     }
   }
 
+  /* Trazo que se dibuja solo (marca de "Todo al día"): --largo es la longitud del trazo, --retraso su espera. */
+  @keyframes trazo {
+    from { stroke-dashoffset: var(--largo, 48); }
+    to { stroke-dashoffset: 0; }
+  }
+  .trazo-dibujado {
+    stroke-dasharray: var(--largo, 48);
+    animation: trazo 760ms var(--ease-spring) both;
+    animation-delay: var(--retraso, 0ms);
+  }
+  /* Linea de progreso que se dibuja de izquierda a derecha (flujo del laboratorio), escalonada con --i. */
+  @keyframes linea-crece {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+  }
+  .linea-crece {
+    transform-origin: left center;
+    animation: linea-crece 620ms var(--ease-fluid) both;
+    animation-delay: calc(var(--i, 0) * 110ms);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .trazo-dibujado,
+    .linea-crece {
+      animation: none;
+    }
+  }
+
   .tnum {
     font-variant-numeric: tabular-nums;
   }

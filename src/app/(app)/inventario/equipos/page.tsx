@@ -21,7 +21,7 @@ import { Badge, TableSkeleton, type Tone } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
 import { deadlineTone, fmt, fmtDate } from "@/lib/client/format";
 import { formatearFechaCorta } from "@/lib/shared/fechas";
-import { useDebouncedValue, useInitialParam, useOpenState, useParamChange, useUrlTrigger } from "@/lib/client/hooks";
+import { useDebouncedValue, useInitialParam, useOpenState, useParamChange, useUrlTrigger, useAbrirDesdeUrl } from "@/lib/client/hooks";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 
@@ -110,6 +110,7 @@ function EquiposContent() {
     if (orden === "mantenimiento") return [...list].sort((a, b) => String(a.mantenimiento_fecha || "9999").localeCompare(String(b.mantenimiento_fecha || "9999")));
     return [...list].sort((a, b) => String(a.nombre || "").localeCompare(String(b.nombre || ""), "es"));
   }, [items, filter, orden]);
+  useAbrirDesdeUrl(items ? visible : null, setAbierta);
 
   const editEquipo = async (id: number) => {
     try {

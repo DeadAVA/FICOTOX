@@ -68,3 +68,29 @@ export function useOpenState<T = null>() {
   const close = useCallback(() => setState((prev) => ({ ...prev, isOpen: false })), []);
   return { isOpen: state.isOpen, key: state.key, payload: state.payload, open, close };
 }
+
+/*
+ * ?abrir=<id>: abre la ventana de detalle de ese registro en cuanto la lista
+ * termina de cargar (lo usa el Inicio para que cada pendiente abra la misma
+ * ventana que su lista). Luego se limpia de la direccion.
+ */
+export function useAbrirDesdeUrl<T extends { id?: unknown }>(filas: T[] | null | undefined, abrir: (indice: number) => void): void {
+  const params = useSearchParams();
+  const router = useRouter();
+  const valor = params.get("abrir");
+  const abrirRef = useRef(abrir);
+  useEffect(() => {
+    abrirRef.current = abrir;
+  });
+  useEffect(() => {
+    if (!valor || !filas) return;
+    const indice = filas.findIndex((fila) => String(fila.id) === valor);
+    void Promise.resolve().then(() => {
+      if (indice >= 0) abrirRef.current(indice);
+      const next = new URLSearchParams(params.toString());
+      next.delete("abrir");
+      const query = next.toString();
+      router.replace(query ? `?${query}` : window.location.pathname, { scroll: false });
+    });
+  }, [valor, filas, params, router]);
+}

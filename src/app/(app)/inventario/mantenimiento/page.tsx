@@ -18,7 +18,7 @@ import { Badge, TableSkeleton } from "@/components/ui/Primitives";
 import { ReportesMantenimiento } from "@/components/features/inventory/ReportesMantenimiento";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
 import { fmt, todayIso } from "@/lib/client/format";
-import { useDebouncedValue, useInitialParam, useOpenState, useParamChange, useUrlTrigger } from "@/lib/client/hooks";
+import { useDebouncedValue, useInitialParam, useOpenState, useParamChange, useUrlTrigger, useAbrirDesdeUrl } from "@/lib/client/hooks";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { formatearFechaCorta, sumarDias } from "@/lib/shared/fechas";
@@ -98,6 +98,7 @@ function MantenimientoContent() {
     if (orden === "equipo") return [...list].sort((a, b) => String(a.equipo || "").localeCompare(String(b.equipo || ""), "es"));
     return [...list].sort((a, b) => String(a.fecha_programada || "").localeCompare(String(b.fecha_programada || "")));
   }, [items, estado, rules, orden]);
+  useAbrirDesdeUrl(items ? visible : null, setAbierta);
 
   const editItem = async (id: number) => {
     try {
