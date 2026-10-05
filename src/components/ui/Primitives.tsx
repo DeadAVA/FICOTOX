@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type HTMLAttributes, type ReactNode } from "react";
 import { useFiguraDe } from "./Figura";
+import { urlFoto, useFotoDe, useFotoUrl } from "./FotoPerfil";
 import { AvatarArt } from "./AvatarArt";
 import { cn } from "./cn";
 
@@ -98,14 +99,25 @@ export function Kbd({ children }: { children: ReactNode }) {
 }
 
 /*
- * Avatar: una ilustracion del catalogo (`AvatarArt`). Si la persona no ha
- * elegido, se deriva del correo para que siempre le toque la misma.
+ * Avatar de una persona: su foto propia si eligio "Foto" y tiene una (128 px
+ * en listas, 512 en tamaños grandes; circular, con el mismo borde que las
+ * figuras y una aparicion suave); si no, o si la foto falla, su figura del
+ * catalogo (`AvatarArt`): la elegida o, si no eligio, la que le toca siempre.
  */
-export function Avatar({ name, email, avatar, size = "md", className, animado }: { name?: unknown; email?: unknown; avatar?: unknown; size?: "xs" | "sm" | "md" | "lg" | "xl"; className?: string; animado?: "siempre" | "al-pasar" | false }) {
+export function Avatar({ id, name, email, avatar, size = "md", className, animado }: { id?: unknown; name?: unknown; email?: unknown; avatar?: unknown; size?: "xs" | "sm" | "md" | "lg" | "xl"; className?: string; animado?: "siempre" | "al-pasar" | false }) {
   const px = { xs: 24, sm: 28, md: 36, lg: 48, xl: 72 }[size];
   const seed = String(email || name || "?").trim().toLowerCase();
   // La misma figura que en Mi cuenta: la elegida o, si no eligio, una distinta a la de los demas (directorio), siempre la misma.
   const figura = useFiguraDe(avatar, seed);
+  const foto = useFotoDe({ id, email, nombre: name });
+  const url = useFotoUrl(foto ? urlFoto(foto.id, foto.version, size === "xl" ? 512 : 128) : null);
+  const [fallida, setFallida] = useState<string | null>(null);
+  if (url && fallida !== url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- blob: de la foto pedida con sesion
+      <img src={url} alt={String(name || email || "Foto de perfil")} width={px} height={px} onError={() => setFallida(url)} className={cn("foto-perfil shrink-0 rounded-full bg-surface-3 object-cover shadow-[0_1px_2px_rgba(16,32,43,0.18)]", className)} style={{ width: px, height: px }} />
+    );
+  }
   return <AvatarArt avatar={figura} seed={seed} size={px} animado={animado} className={cn("rounded-full shadow-[0_1px_2px_rgba(16,32,43,0.18)]", className)} />;
 }
 

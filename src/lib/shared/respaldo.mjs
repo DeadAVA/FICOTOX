@@ -71,7 +71,8 @@ export const TABLAS_PRINCIPALES = [
 
 /* Carpetas de la instancia con archivos que se respaldan. */
 // Fase 11: "calidad" (PDF "Registro de no conformidad"). Biblioteca: "biblioteca" (versiones de los documentos).
-export const CARPETAS_ARCHIVOS = ["informes", "evidencias", "documentos_sgc", "biblioteca", "maintenance_reports", "calidad"];
+// Fotos de perfil: "avatares" (opcional; si no hay fotos, la carpeta no existe y no pasa nada).
+export const CARPETAS_ARCHIVOS = ["informes", "evidencias", "documentos_sgc", "biblioteca", "maintenance_reports", "calidad", "avatares"];
 
 export const ARCHIVO_LLAVE = path.join(/*turbopackIgnore: true*/ "llave", "llave-bitacora.txt");
 export const CARPETA_ACTAS = "pruebas-restauracion";

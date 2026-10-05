@@ -3,7 +3,7 @@
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowCounterClockwise, Certificate, Copy, Key, LockOpen, PencilSimple, Plus, Trash, Users } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, Certificate, Copy, ImageBroken, Key, LockOpen, PencilSimple, Plus, Trash, Users } from "@phosphor-icons/react";
 import { UserSheet } from "@/components/features/admin/AdminSheets";
 import { EtiquetaRol } from "@/components/features/admin/iconos";
 import { ListaCuadricula, type ColumnaLista } from "@/components/ui/ListaCuadricula";
@@ -137,6 +137,19 @@ function UsuariosContent() {
     }
   };
 
+  // Quitar la foto de perfil de otra persona (por ejemplo, si es inapropiada), con motivo; no se sube una por ella.
+  const quitarFoto = async (item: ApiRecord) => {
+    const motivo = await prompt({ title: `Quitar la foto de perfil de ${item.nombre || item.email}`, description: "La foto se borra y vuelve a verse su figura. Queda en la bitácora con el motivo.", label: "Motivo", minLength: 5, confirmLabel: "Quitar foto", tone: "danger" });
+    if (!motivo) return;
+    try {
+      await sendJsonAuth("DELETE", `${API_BASE_URL}/admin/usuarios/${item.id}/foto`, token, { motivo });
+      toast.success("Foto de perfil quitada");
+      invalidate("usuarios", "cuentas-activas");
+    } catch (err) {
+      vAccion.errorServidor(err);
+    }
+  };
+
   // Reactivar: la aprueba un segundo usuario (como al marcarla activa en la edición).
   const reactivar = async (item: ApiRecord) => {
     const motivo = await prompt({ critico: true, title: `Reactivar a ${item.nombre || item.email}`, description: "La cuenta vuelve a poder entrar cuando otra persona autorizada apruebe la solicitud.", confirmLabel: "Pedir reactivación" });
@@ -201,6 +214,7 @@ function UsuariosContent() {
     const list: MenuItem[] = [{ label: "Editar datos", icon: <PencilSimple size={16} weight="duotone" />, tone: "brand", onSelect: () => editUser(Number(item.id)) }];
     if (!yo && item.activo) list.push({ label: "Restablecer contraseña…", icon: <Key size={16} weight="duotone" />, onSelect: () => restablecer(item) });
     if (item.bloqueado_hasta) list.push({ label: "Desbloquear…", icon: <LockOpen size={16} weight="duotone" />, onSelect: () => desbloquear(item) });
+    if (!yo && Number(item.tiene_foto)) list.push({ label: "Quitar foto de perfil…", icon: <ImageBroken size={16} weight="duotone" />, onSelect: () => quitarFoto(item) });
     if (!yo && item.activo) list.push({ label: "Dar de baja…", icon: <Trash size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: () => darDeBaja(item) });
     if (!yo && !item.activo) list.push({ label: "Reactivar…", icon: <ArrowCounterClockwise size={16} weight="duotone" />, separatorBefore: true, onSelect: () => reactivar(item) });
     return list;

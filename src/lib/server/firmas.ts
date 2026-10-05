@@ -16,6 +16,7 @@
  * - Un nombre escrito sin cuenta (clientes anteriores de la API) se conserva
  *   como texto, sin usuario_id; la interfaz siempre elige cuentas.
  */
+import { versionFoto } from "./modules/fotos";
 import { createHash, randomBytes } from "node:crypto";
 import { requireUser, userIdFromClaims, type CurrentUser } from "./auth";
 import { registrarAuditoria } from "./audit";
@@ -167,10 +168,10 @@ export async function guardarFirmantes(s: Session, tabla: string, id: number, da
 /* GET /api/cuentas/activas: cuentas activas para elegir firmantes o asignar muestras (nombre, correo y cargo). */
 export async function listarCuentasActivas({ request, s }: RouteContext): Promise<Response> {
   await requireUser(request);
-  const filas = await s.query<Row>("SELECT id, nombre, email, avatar FROM usuarios WHERE COALESCE(activo, 1) = 1 ORDER BY nombre, email");
+  const filas = await s.query<Row>("SELECT id, nombre, email, avatar, foto, usa_foto FROM usuarios WHERE COALESCE(activo, 1) = 1 ORDER BY nombre, email");
   const items = [];
-  // La figura de perfil elegida (o null): la interfaz muestra a cada persona con su figura.
-  for (const f of filas) items.push({ id: Number(f.id), nombre: f.nombre || f.email, email: f.email, avatar: f.avatar ?? null, cargo: await cargoDe(s, Number(f.id)) });
+  // La figura de perfil elegida (o null) y, si la persona eligio mostrarla, la version de su foto: la interfaz muestra a cada quien asi.
+  for (const f of filas) items.push({ id: Number(f.id), nombre: f.nombre || f.email, email: f.email, avatar: f.avatar ?? null, foto: Number(f.usa_foto) && f.foto ? versionFoto(f.foto) : null, cargo: await cargoDe(s, Number(f.id)) });
   return json({ items });
 }
 

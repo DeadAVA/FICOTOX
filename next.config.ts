@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
   // Salida autocontenida (.next/standalone) para desplegar solo con Node.js.
   output: "standalone",
   // Modulos nativos / con requires dinamicos que no deben empaquetarse.
-  serverExternalPackages: ["better-sqlite3", "mysql2"],
+  serverExternalPackages: ["better-sqlite3", "mysql2", "sharp"],
   // El frontend legado llamaba rutas como /api/consumables/ (con barra final).
   // Se reescriben internamente (sin redirect, para no perder el cuerpo de los POST).
   skipTrailingSlashRedirect: true,

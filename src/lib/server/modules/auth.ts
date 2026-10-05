@@ -1,4 +1,5 @@
 import { isAvatarKey } from "../../shared/avatars";
+import { versionFoto } from "./fotos";
 import { createAccessToken, requireUser, type CurrentUser } from "../auth";
 import { registrarAuditoria } from "../audit";
 import { getConfig } from "../config";
@@ -53,7 +54,7 @@ async function issueSession(s: Session, row: Row): Promise<Response> {
 /* Usuario, roles vigentes, cuenta y permisos efectivos { modulo: { accion: alcance } }. */
 async function perfilSesion(s: Session, user: CurrentUser) {
   const auth = await cargarAutorizacion(s, user, { permitirCambioPendiente: true });
-  const row = await s.queryOne<{ nombre: string; email: string; avatar: string | null; tema: string | null }>("SELECT nombre, email, avatar, tema FROM usuarios WHERE id = :id", { id: auth.userId });
+  const row = await s.queryOne<{ nombre: string; email: string; avatar: string | null; tema: string | null; foto: string | null; usa_foto: number | null }>("SELECT nombre, email, avatar, tema, foto, usa_foto FROM usuarios WHERE id = :id", { id: auth.userId });
   const roles = auth.roles.map((r) => ({ id: r.id, nombre: r.nombre, clave: r.clave, vigente_desde: r.vigente_desde, vigente_hasta: r.vigente_hasta ?? null, permisos: mapaPermisos(expandirPermisos(r.filas)) }));
   return {
     user: {
@@ -62,6 +63,9 @@ async function perfilSesion(s: Session, user: CurrentUser) {
       email: row?.email ?? user.email,
       avatar: row?.avatar ?? null,
       tema: TEMAS.has(String(row?.tema)) ? String(row?.tema) : "auto",
+      // Foto de perfil: version de la guardada (aunque se muestre la figura) y si se muestra.
+      foto: versionFoto(row?.foto),
+      usa_foto: !!Number(row?.usa_foto) && !!row?.foto,
       roles: roles.map((r) => r.nombre),
       tipo_cuenta: auth.cuenta.tipo_cuenta,
       vigente_hasta: auth.cuenta.vigente_hasta,

@@ -384,6 +384,20 @@
     }
   }
 
+  /* Foto de perfil: aparece suave (sin movimiento con movimiento reducido). */
+  @keyframes foto-aparece {
+    from { opacity: 0; transform: scale(0.94); }
+    to { opacity: 1; transform: none; }
+  }
+  .foto-perfil {
+    animation: foto-aparece 320ms var(--ease-spring) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .foto-perfil {
+      animation: none;
+    }
+  }
+
   .tnum {
     font-variant-numeric: tabular-nums;
   }

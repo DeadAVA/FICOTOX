@@ -215,7 +215,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 type VisibleItem = NavItem & { children: NavChild[] };
 
-function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAccount, onClose, onReportar, isMac, user, onLogout }: { items: VisibleItem[]; pathname: string; collapsed: boolean; onSearch: () => void; onToggle: () => void; onAccount: () => void; onClose?: () => void; onReportar?: () => void; isMac: boolean; user: { nombre?: string; email?: string; roles?: string[]; avatar?: string | null } | null; onLogout: () => void }) {
+function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAccount, onClose, onReportar, isMac, user, onLogout }: { items: VisibleItem[]; pathname: string; collapsed: boolean; onSearch: () => void; onToggle: () => void; onAccount: () => void; onClose?: () => void; onReportar?: () => void; isMac: boolean; user: { id?: number; nombre?: string; email?: string; roles?: string[]; avatar?: string | null } | null; onLogout: () => void }) {
   // El shell solo se monta ya autenticado (en el cliente), así que leer localStorage al iniciar no desajusta la hidratación.
   const [expanded, setExpanded] = useState<string[]>(() => (typeof window === "undefined" ? [] : readExpanded()));
   // Contadores de lo que la persona puede resolver: "Por autorizar" y "Por supervisar".
@@ -399,7 +399,7 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
           align="start"
           trigger={
             <button type="button" className={cn("press flex w-full items-center gap-2.5 rounded-[10px] py-1.5 text-left hover:bg-surface-3/80", collapsed ? "justify-center px-0" : "px-2")} aria-label="Menú de usuario">
-              <Avatar name={user?.nombre} email={user?.email} avatar={user?.avatar} size="md" />
+              <Avatar id={user?.id} name={user?.nombre} email={user?.email} avatar={user?.avatar} size="md" />
               {!collapsed ? (
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-[13.5px] font-medium text-ink">{user?.nombre || user?.email}</span>

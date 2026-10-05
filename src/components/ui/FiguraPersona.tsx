@@ -14,7 +14,7 @@ export function FiguraPersona({ id, email, nombre, size = "sm", conNombre = fals
   const buscar = useBuscarPersona();
   const p = buscar({ id, email, nombre });
   const nombreVisible = String(p?.nombre || nombre || email || "");
-  const figura = <Avatar name={nombreVisible} email={p?.email || email} avatar={p?.avatar} size={size} animado={animado} className={conNombre ? undefined : cn("ring-2 ring-surface", className)} />;
+  const figura = <Avatar id={p?.id ?? id} name={nombreVisible} email={p?.email || email} avatar={p?.avatar} size={size} animado={animado} className={conNombre ? undefined : cn("ring-2 ring-surface", className)} />;
   if (!conNombre) return <span title={nombreVisible || undefined}>{figura}</span>;
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-2", className)}>

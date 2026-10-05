@@ -12,6 +12,9 @@ export interface SessionUser {
   roles?: string[];
   /* Clave del catalogo de avatares; null = el que se deriva del correo. */
   avatar?: string | null;
+  /* Foto de perfil: version de la guardada (null si no tiene) y si se muestra en lugar de la figura. */
+  foto?: string | null;
+  usa_foto?: boolean;
   /* Apariencia elegida (claro, oscuro o auto). */
   tema?: "claro" | "oscuro" | "auto";
   /* Fase 2: cuenta, cargo predeterminado y estado de la contrasena. */

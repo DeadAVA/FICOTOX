@@ -224,6 +224,7 @@ const USUARIO_SELECT = `
   SELECT u.id, u.nombre, u.email, u.activo, u.departamento, u.avatar,
          u.creado_en, u.ultimo_acceso,
          CASE WHEN u.password_hash IS NULL THEN 0 ELSE 1 END AS tiene_password,
+         CASE WHEN u.foto IS NULL THEN 0 ELSE 1 END AS tiene_foto,
          u.tipo_cuenta, u.vigente_desde, u.vigente_hasta, u.supervisor_id, sup.nombre AS supervisor_nombre,
          u.motivo_ultimo_cambio, u.bloqueado_hasta, u.debe_cambiar_password, u.cargo_predeterminado
   FROM usuarios u

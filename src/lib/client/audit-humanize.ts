@@ -302,7 +302,7 @@ const FIELD: Record<string, string> = {
   debe_cambiar_password: "la obligación de cambiar la contraseña",
   bloqueado_hasta: "el bloqueo",
   cargo_predeterminado: "el cargo predeterminado",
-  avatar: "la foto de perfil",
+  avatar: "la figura de perfil",
   permisos: "los permisos",
   // Calidad
   fecha_hora_ocurrencia: "la fecha en que ocurrió",
@@ -722,7 +722,11 @@ function redactar(record: ApiRecord, actor: string, sistema: boolean): Partes {
     case "editar": {
       const claves = Object.keys(cambios).filter((k) => k !== "_detalle" && FIELD[k]);
       if (d.contrasena) return { accion: `cambió la contraseña ${de(O)}`, quePaso: `${quien} cambió la contraseña ${de(O)}.` };
-      if (d.avatar) return { accion: "cambió su foto de perfil", quePaso: `${quien} cambió su foto de perfil.` };
+      if (d.avatar) return { accion: "cambió su figura de perfil", quePaso: `${quien} cambió su figura de perfil.` };
+      // Foto de perfil propia: subir, quitar la propia o que otra persona (usuarios:G) la quite, con motivo.
+      if (d.foto_perfil === "cambiada") return { accion: "cambió su foto de perfil", quePaso: `${quien} cambió su foto de perfil.` };
+      if (d.foto_perfil === "quitada") return { accion: "quitó su foto de perfil", quePaso: `${quien} quitó su foto de perfil.` };
+      if (d.foto_perfil === "quitada_por_otro") return { accion: `quitó la foto de perfil de ${ref || "otra persona"}`, quePaso: `${quien} quitó la foto de perfil de ${ref || "otra persona"}.` };
       if (estado && claves.length === 1) {
         const nuevo = valorLegible("estado", estado.despues, entidad) || "otro estado";
         return { accion: `cambió el estado ${de(O)} a ${nuevo}`, quePaso: `${quien} cambió el estado ${de(O)} a «${nuevo}».` };
