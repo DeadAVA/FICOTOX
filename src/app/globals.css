@@ -603,7 +603,7 @@
 
   /*
    * Pantalla de acceso (PantallaAcceso): panel océano con degradado de la
-   * paleta, olas, microalgas y parallax; la tarjeta del formulario con la
+   * paleta, olas y microalgas con movimiento propio; la tarjeta del formulario con la
    * superficie de la app. Entrada escalonada: fondo, logo, título y campos.
    */
   .acceso-panel {
@@ -618,10 +618,6 @@
         radial-gradient(120% 80% at 20% 10%, rgba(52, 167, 196, 0.22), transparent 60%),
         linear-gradient(160deg, #0d4a5c 0%, #0a3747 45%, #072733 78%, #051a23 100%);
     }
-  }
-  .acceso-capa {
-    transform: translate3d(calc(var(--px, 0) * var(--prof, 0) * 1px), calc(var(--py, 0) * var(--prof, 0) * 1px), 0);
-    transition: transform 900ms var(--ease-fluid);
   }
   @keyframes acceso-logo-entra {
     from { opacity: 0; transform: translateY(14px) scale(0.86); }
@@ -683,10 +679,6 @@
   @media (prefers-reduced-motion: reduce) {
     .acceso-panel, .acceso-logo, .acceso-entra, .acceso-fondo-entra, .acceso-ola, .acceso-tarjeta, .acceso-tarjeta.acceso-niega, .acceso-ojo {
       animation: none;
-    }
-    .acceso-capa {
-      transform: none;
-      transition: none;
     }
     .acceso-tarjeta-sale, .acceso-panel-sale .acceso-logo {
       transition: none;

@@ -9,41 +9,19 @@ import { cn } from "@/components/ui/cn";
  * En ancha, dos zonas: a la izquierda (55 %) el panel océano con la identidad
  * del laboratorio —olas lentas abajo, microalgas y diatomeas a la deriva con
  * poca opacidad (canvas ligero, requestAnimationFrame, pausado con la pestaña
- * oculta) y un parallax minimo al mover el mouse—; a la derecha, el
+ * oculta), todo con su propio movimiento (no sigue al mouse)—; a la derecha, el
  * formulario sobre una tarjeta limpia. En angosta, el panel es una franja
  * superior con el logo y la animacion. Con prefers-reduced-motion: fondo
- * estatico, sin particulas ni parallax. Todo local (sin recursos externos).
+ * estatico, sin particulas. Todo local (sin recursos externos).
  */
 
 export function PantallaAcceso({ children, saliendo = false }: { children: ReactNode; saliendo?: boolean }) {
-  const panel = useRef<HTMLDivElement | null>(null);
-
-  // Parallax minimo: el mouse mueve un poco las capas (variables --px y --py de -1 a 1).
-  useEffect(() => {
-    const el = panel.current;
-    if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    let marco = 0;
-    const mover = (e: PointerEvent) => {
-      cancelAnimationFrame(marco);
-      marco = requestAnimationFrame(() => {
-        const r = el.getBoundingClientRect();
-        el.style.setProperty("--px", (((e.clientX - r.left) / r.width) * 2 - 1).toFixed(3));
-        el.style.setProperty("--py", (((e.clientY - r.top) / r.height) * 2 - 1).toFixed(3));
-      });
-    };
-    window.addEventListener("pointermove", mover, { passive: true });
-    return () => {
-      cancelAnimationFrame(marco);
-      window.removeEventListener("pointermove", mover);
-    };
-  }, []);
-
   return (
     <main className="acceso flex min-h-dvh flex-col bg-canvas text-ink lg:flex-row">
-      <div ref={panel} className={cn("acceso-panel relative isolate flex h-[210px] shrink-0 flex-col items-center justify-center overflow-hidden text-white sm:h-[240px] lg:h-auto lg:w-[55%]", saliendo && "acceso-panel-sale")}>
+      <div className={cn("acceso-panel relative isolate flex h-[210px] shrink-0 flex-col items-center justify-center overflow-hidden text-white sm:h-[240px] lg:h-auto lg:w-[55%]", saliendo && "acceso-panel-sale")}>
         <Microalgas />
         <Olas />
-        <div className="acceso-capa relative z-10 flex flex-col items-center px-6 text-center" style={{ ["--prof" as string]: 6 }}>
+        <div className="relative z-10 flex flex-col items-center px-6 text-center">
           <div className="acceso-logo">
             <BrandMark animated className="h-[68px] w-[68px] drop-shadow-[0_16px_28px_rgba(0,20,30,0.35)] sm:h-[84px] sm:w-[84px] lg:h-[120px] lg:w-[120px]" size={120} inverted />
           </div>
@@ -68,7 +46,7 @@ export function PantallaAcceso({ children, saliendo = false }: { children: React
 function Olas() {
   const ola = "M0 40 Q 75 10 150 40 T 300 40 T 450 40 T 600 40 T 750 40 T 900 40 T 1050 40 T 1200 40 V 120 H 0 Z";
   return (
-    <div aria-hidden="true" className="acceso-capa pointer-events-none absolute inset-x-0 bottom-0 h-[38%] min-h-[90px]" style={{ ["--prof" as string]: 3 }}>
+    <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-[38%] min-h-[90px]">
       <svg className="acceso-ola absolute bottom-0 left-0 h-full w-[200%]" viewBox="0 0 1200 120" preserveAspectRatio="none" style={{ ["--dur" as string]: "26s" }}>
         <path d={ola} fill="currentColor" className="text-white/[0.07]" />
       </svg>
@@ -195,7 +173,7 @@ function Microalgas() {
       document.removeEventListener("visibilitychange", iniciar);
     };
   }, []);
-  return <canvas ref={ref} aria-hidden="true" className="acceso-capa acceso-fondo-entra pointer-events-none absolute inset-0 h-full w-full" style={{ ["--prof" as string]: 12 }} />;
+  return <canvas ref={ref} aria-hidden="true" className="acceso-fondo-entra pointer-events-none absolute inset-0 h-full w-full" />;
 }
 
 /* Tarjeta del formulario (derecha): superficie de la app, con entrada, negacion (al fallar) y salida. */
