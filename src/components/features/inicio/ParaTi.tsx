@@ -21,7 +21,8 @@ import type { Pendiente, PendienteItem } from "./tipos";
  * ficha) y "Ver todos" lleva a la lista filtrada.
  */
 
-const CORTO: Record<string, { label: string; icono: ReactNode }> = {
+/* Etiqueta corta e icono de cada tipo de pendiente (Para ti y campana). */
+export const CORTO: Record<string, { label: string; icono: ReactNode }> = {
   bitacora_alterada: { label: "Cambio no autorizado", icono: <ShieldWarning weight="duotone" /> },
   por_supervisar: { label: "Por supervisar", icono: <Eye weight="duotone" /> },
   por_autorizar: { label: "Por autorizar", icono: <Stamp weight="duotone" /> },
@@ -46,7 +47,7 @@ const CORTO: Record<string, { label: string; icono: ReactNode }> = {
   autorizaciones_vencen: { label: "Autorizaciones por vencer", icono: <Certificate weight="duotone" /> },
 };
 
-const TONO = {
+export const TONO = {
   danger: { circulo: "bg-danger-soft text-danger", anillo: "ring-danger/25", numero: "text-danger" },
   warning: { circulo: "bg-warning-soft text-warning-text", anillo: "ring-warning/25", numero: "text-ink" },
   info: { circulo: "bg-brand-soft text-brand-strong", anillo: "ring-brand/20", numero: "text-ink" },
@@ -57,7 +58,7 @@ const PESO = { danger: 0, warning: 1, info: 2 } as const;
 export const ordenarPendientes = (lista: Pendiente[]) => [...lista].filter((p) => p.count > 0).sort((a, b) => PESO[a.tone] - PESO[b.tone]);
 
 /* Ventana que abre cada elemento: incidencias y NC con la ventana de Calidad; lo demas, su lista o su ficha. */
-const ventanaDe = (href: string): { tipo: "incidencia" | "nc"; id: number } | null => {
+export const ventanaDe = (href: string): { tipo: "incidencia" | "nc"; id: number } | null => {
   const inc = href.match(/^\/calidad\/incidencias\/(\d+)/);
   if (inc) return { tipo: "incidencia", id: Number(inc[1]) };
   const nc = href.match(/^\/calidad\/nc\/(\d+)/);

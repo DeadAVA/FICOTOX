@@ -1,5 +1,6 @@
 "use client";
 
+import { useAbrirDesdeUrl } from "@/lib/client/hooks";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { CheckCircle, Prohibit, Stamp, XCircle } from "@phosphor-icons/react";
@@ -104,6 +105,8 @@ function Bandeja() {
   // La ventana recorre las tres listas en orden (↑/↓).
   const secuencia = useMemo(() => [...porAutorizar, ...mias, ...(historial ? resto : [])], [porAutorizar, mias, resto, historial]);
   const abrir = (item: ApiRecord) => setAbierta(secuencia.indexOf(item));
+  // Desde la campana o el Inicio: ?abrir=<id> abre esa solicitud.
+  useAbrirDesdeUrl(resource.data ? secuencia : null, setAbierta);
 
   const menuFor = (item: ApiRecord): MenuItem[] => {
     if (String(item.estado) !== "pendiente") return [];

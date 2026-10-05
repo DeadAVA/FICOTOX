@@ -167,7 +167,7 @@ export async function contarPorSupervisar(s: Session, userId: number): Promise<R
   const out: Row[] = [];
   for (const tabla of Object.keys(SUPERVISABLES) as TablaSupervisable[]) {
     const filas = await s.query<Row>(`SELECT * FROM ${tabla} WHERE requiere_supervision = 1 AND supervision_estado = 'pendiente' AND supervisor_id = :yo ORDER BY supervision_solicitada_en ASC LIMIT 20`, { yo: userId });
-    for (const fila of filas) out.push({ tabla, id: Number(fila.id), tipo: SUPERVISABLES[tabla].etiqueta, referencia: referenciaDe(tabla, fila), href: SUPERVISABLES[tabla].href(Number(fila.id)) });
+    for (const fila of filas) out.push({ tabla, id: Number(fila.id), tipo: SUPERVISABLES[tabla].etiqueta, referencia: referenciaDe(tabla, fila), href: SUPERVISABLES[tabla].href(Number(fila.id)), solicitada_en: fila.supervision_solicitada_en ?? null, solicitada_por: fila.supervision_solicitada_por ?? null });
   }
   return out;
 }

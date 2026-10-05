@@ -1,17 +1,10 @@
 import { requireUser } from "../auth";
-import { avisosCalidad } from "./calidad/tablero";
-import { alertaBitacoraAbierta } from "./audit";
-import { type Row } from "../db";
+import { pendientesDe } from "../pendientes";
 import { json, type RouteContext } from "../http";
 import { cargarAutorizacion, permisoDe, requirePermission, soloEstado } from "../rbac";
 import type { Accion, ContextoAlcance, Modulo } from "../../shared/permisos";
-import { contarPorSupervisar } from "../supervision";
-import { porAutorizarDe } from "../solicitudes";
-import { autorizacionesPorVencer, permisoAdministrar } from "../autorizaciones";
-import { ACCIONES_CRITICAS } from "../../shared/acciones-criticas";
-import { vencimientosProximos } from "./admin";
 
-import { diasDesde, formatearFecha, hoyLocal, sumarDias } from "../../shared/fechas";
+import { diasDesde, formatearFecha } from "../../shared/fechas";
 import { esCoordinacion, filtroAsignadas, soloAsignado } from "../asignaciones";
 
 /*
@@ -254,183 +247,17 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
   return json({ items, resumen, total });
 }
 
-/* ---------- Avisos con detalle ---------- */
+/* ---------- Avisos con detalle ("Para ti") ---------- */
 
-interface AvisoItem {
-  label: string;
-  sub: string | null;
-  href: string;
-  /* Persona relacionada (quien lo pidio, quien lo asigno, a quien vence): su figura en la vista previa. */
-  persona_id?: number | null;
-  persona?: string | null;
-}
-
-interface Aviso {
-  key: string;
-  label: string;
-  tone: "danger" | "warning" | "info";
-  count: number;
-  href: string;
-  items: AvisoItem[];
-}
-
-/* Modulo cuyo permiso de ver habilita cada aviso (el Inicio lo ve toda persona activa). */
-const MODULO_AVISO: Record<string, Modulo> = {
-  mant_vencidos: "equipos",
-  mant_proximos: "equipos",
-  equipos_cal: "equipos",
-  reactivos_bajos: "inventario",
-  reactivos_caducan: "inventario",
-  consumibles_bajos: "inventario",
-  analisis_pendientes: "ensayos",
-  informes_revision: "informes",
-  informes_entrega: "informes",
-  informes_enmienda: "informes",
-};
-
+/*
+ * Los pendientes de la persona agrupados, con su cuenta y los primeros seis
+ * elementos. Salen de la misma fuente que la campana (src/lib/server/pendientes.ts),
+ * asi que ningun pendiente aparece en uno y falta en el otro.
+ */
 export async function inicioAvisos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const auth = await cargarAutorizacion(s, user);
-
-  // Dia local del laboratorio como parametro (date('now')/CURDATE() darian el dia UTC del servidor).
-  const today = ":hoy";
-  const in30 = ":en30";
-  const fechas = { hoy: hoyLocal(), en30: sumarDias(hoyLocal(), 30) };
-  const nombreReactivo = "COALESCE(NULLIF(producto, ''), NULLIF(nombre, ''), NULLIF(item_name, ''), 'Reactivo')";
-
-  /* Cada aviso: la cuenta completa (COUNT) y solo los primeros seis elementos para el detalle. */
-  const MAX_ITEMS = 6;
-  const fetch = async (from: string, select: string, order: string): Promise<{ count: number; rows: Row[] }> => {
-    const [count, rows] = await Promise.all([s.scalar(`SELECT COUNT(*) ${from}`, fechas), s.query(`SELECT ${select} ${from} ORDER BY ${order} LIMIT ${MAX_ITEMS}`, fechas)]);
-    return { count: Number(count || 0), rows };
-  };
-  const [mantVencidos, mantProximos, equiposCal, reactivosBajos, consumiblesBajos, analisisPendientes, informesRevision, informesEntrega, informesEnmienda, reactivosCaducan] = await Promise.all([
-    fetch(`FROM mantenimientos mt LEFT JOIN equipos e ON e.id = mt.id_equipo WHERE mt.estado = 'vencido' OR (mt.fecha_programada < ${today} AND mt.estado IN ('programado', 'en_proceso'))`, "mt.id, mt.tipo, mt.fecha_programada, e.nombre AS equipo, e.clave_bitacora", "mt.fecha_programada ASC"),
-    fetch(`FROM mantenimientos mt LEFT JOIN equipos e ON e.id = mt.id_equipo WHERE mt.fecha_programada BETWEEN ${today} AND ${in30} AND mt.estado IN ('programado', 'en_proceso')`, "mt.id, mt.tipo, mt.fecha_programada, e.nombre AS equipo, e.clave_bitacora", "mt.fecha_programada ASC"),
-    fetch(`FROM equipos WHERE COALESCE(activo, 1) = 1 AND (estado IN ('calibracion_pendiente', 'fuera_servicio') OR (fecha_prox_calibracion IS NOT NULL AND fecha_prox_calibracion < ${today}))`, "id, nombre, clave_bitacora, estado, fecha_prox_calibracion", "fecha_prox_calibracion ASC"),
-    fetch(
-      `FROM reactivos WHERE COALESCE(activo, 1) = 1 AND cantidad_actual IS NOT NULL AND (cantidad_actual <= 0 OR (COALESCE(stock_minimo, 0) > 0 AND cantidad_actual <= stock_minimo) OR (COALESCE(stock_minimo, 0) <= 0 AND COALESCE(stock_maximo, 0) > 0 AND cantidad_actual <= stock_maximo * 0.2))`,
-      `id, ${nombreReactivo} AS nombre, cantidad_actual, unidad, stock_minimo, stock_maximo`,
-      "cantidad_actual ASC",
-    ),
-    fetch("FROM consumibles WHERE COALESCE(activo, 1) = 1 AND COALESCE(piezas, 0) <= 5", "id, producto, piezas", "piezas ASC"),
-    fetch("FROM muestras_analisis a LEFT JOIN muestras_recepcion r ON r.id = a.recepcion_id WHERE a.estado IN ('en_revision', 'revisado')", "a.id, a.folio_num, a.estado, a.tipo_analisis, r.solicitante", "a.id ASC"),
-    fetch("FROM informes WHERE estado IN ('borrador', 'en_revision')", "id, folio_num, version, estado, cliente_json", "id ASC"),
-    fetch("FROM informes WHERE estado IN ('autorizado', 'liberado') AND COALESCE(requiere_enmienda, 0) = 0", "id, folio_num, version, estado, cliente_json", "id ASC"),
-    // Fase 6: informes con un analisis enmendado despues: no se liberan ni envian hasta su enmienda.
-    fetch("FROM informes WHERE COALESCE(requiere_enmienda, 0) = 1 AND estado IN ('autorizado', 'liberado', 'enviado')", "id, folio_num, version, estado, cliente_json, requiere_enmienda_motivo", "id ASC"),
-    // Caducidad vencida o en los proximos 30 dias (la misma regla que el filtro "Por vencer o vencidos" de Reactivos).
-    fetch(`FROM reactivos WHERE COALESCE(activo, 1) = 1 AND caducidad LIKE '____-__-__%' AND SUBSTR(caducidad, 1, 10) <= ${in30}`, `id, ${nombreReactivo} AS nombre, caducidad`, "caducidad ASC"),
-  ]);
-
-  const cliente = (row: Row) => {
-    const value = safeJson<{ nombre?: string }>(row.cliente_json, {});
-    return value.nombre || null;
-  };
-  const TIPO_MANT: Record<string, string> = { preventivo: "Preventivo", correctivo: "Correctivo", calibracion: "Calibración", verificacion: "Verificación" };
-  const build = (key: string, label: string, tone: Aviso["tone"], href: string, data: { count: number; rows: Row[] }, map: (row: Row) => AvisoItem): Aviso => ({ key, label, tone, count: data.count, href, items: data.rows.map(map) });
-
-  const avisos: Aviso[] = [
-    build("mant_vencidos", "Mantenimientos vencidos", "danger", "/inventario/mantenimiento?filtro=vencido", mantVencidos, (m) => ({ label: String(m.equipo || "Equipo"), sub: `${TIPO_MANT[String(m.tipo)] || m.tipo || "Mantenimiento"} · programado ${fmtDate(m.fecha_programada)}`, href: `/inventario/mantenimiento?filtro=vencido&abrir=${m.id}` })),
-    build("equipos_cal", "Equipos con alerta de calibración", "warning", "/inventario/equipos?filtro=calibracion", equiposCal, (e) => ({ label: String(e.nombre || "Equipo"), sub: String(e.estado) === "fuera_servicio" ? "Fuera de servicio" : e.fecha_prox_calibracion ? `Calibración vencida el ${fmtDate(e.fecha_prox_calibracion)}` : "Calibración pendiente", href: `/inventario/equipos?abrir=${e.id}` })),
-    build("reactivos_bajos", "Reactivos con stock bajo", "warning", "/inventario/reactivos?filtro=bajo", reactivosBajos, (r) => ({ label: String(r.nombre), sub: Number(r.cantidad_actual) <= 0 ? "Agotado" : `Quedan ${Number(r.cantidad_actual)} ${r.unidad || ""}`.trim(), href: `/inventario/reactivos?abrir=${r.id}` })),
-    build("reactivos_caducan", "Reactivos por caducar", reactivosCaducan.rows.some((r) => String(r.caducidad).slice(0, 10) < fechas.hoy) ? "danger" : "warning", "/inventario/reactivos?filtro=vencer", reactivosCaducan, (r) => ({ label: String(r.nombre), sub: String(r.caducidad).slice(0, 10) < fechas.hoy ? `Caducó el ${fmtDate(r.caducidad)}` : `Caduca el ${fmtDate(r.caducidad)}`, href: `/inventario/reactivos?abrir=${r.id}` })),
-    build("consumibles_bajos", "Consumibles con 5 piezas o menos", "warning", "/inventario/consumibles?filtro=bajo", consumiblesBajos, (c) => ({ label: String(c.producto || "Consumible"), sub: Number(c.piezas) <= 0 ? "Agotado" : `${Number(c.piezas)} pieza${Number(c.piezas) === 1 ? "" : "s"}`, href: `/inventario/consumibles?abrir=${c.id}` })),
-    build("analisis_pendientes", "Análisis esperando revisión o aprobación", "info", "/muestras/analisis?filtro=pendiente", analisisPendientes, (a) => ({ label: `A ${pad(a.folio_num)}`, sub: `${String(a.estado) === "revisado" ? "Falta aprobar" : "Enviado, falta revisar"}${a.solicitante ? ` · ${a.solicitante}` : ""}`, href: `/muestras/analisis/${a.id}` })),
-    build("informes_revision", "Informes por revisar o autorizar", "info", "/informes?filtro=pendiente", informesRevision, (i) => ({ label: `IR ${pad(i.folio_num)}${Number(i.version || 1) > 1 ? ` v${i.version}` : ""}`, sub: `${String(i.estado) === "en_revision" ? "Falta autorizar" : "Borrador, falta revisar"}${cliente(i) ? ` · ${cliente(i)}` : ""}`, href: `/informes/${i.id}` })),
-    build("informes_entrega", "Informes por liberar o enviar", "info", "/informes?filtro=autorizado", informesEntrega, (i) => ({ label: `IR ${pad(i.folio_num)}${Number(i.version || 1) > 1 ? ` v${i.version}` : ""}`, sub: `${String(i.estado) === "liberado" ? "Falta enviar" : "Falta liberar"}${cliente(i) ? ` · ${cliente(i)}` : ""}`, href: `/informes/${i.id}` })),
-    build("informes_enmienda", "Informes que requieren enmienda", "danger", "/informes?filtro=requiere_enmienda", informesEnmienda, (i) => ({ label: `IR ${pad(i.folio_num)}${Number(i.version || 1) > 1 ? ` v${i.version}` : ""}`, sub: String(i.requiere_enmienda_motivo || "Un análisis incluido se enmendó"), href: `/informes/${i.id}` })),
-    build("mant_proximos", "Mantenimientos en los próximos 30 días", "info", "/inventario/mantenimiento?filtro=proximo", mantProximos, (m) => ({ label: String(m.equipo || "Equipo"), sub: `${TIPO_MANT[String(m.tipo)] || m.tipo || "Mantenimiento"} · ${fmtDate(m.fecha_programada)}`, href: "/inventario/mantenimiento?filtro=proximo" })),
-  ].filter((a) => a.count > 0 && !!permisoDe(auth, MODULO_AVISO[a.key], "V"));
-
-  // Biblioteca: los avisos del flujo de control documental (documentos por leer, revisar o aprobar) se retiraron.
-  // Fase 3: solicitudes de autorizacion que puedo aprobar como segundo usuario.
-  const porAutorizar = await porAutorizarDe(s, auth);
-  if (porAutorizar.length) {
-    avisos.unshift({
-      key: "por_autorizar",
-      label: "Por autorizar",
-      tone: "warning",
-      count: porAutorizar.length,
-      href: "/solicitudes",
-      items: porAutorizar.slice(0, MAX_ITEMS).map((sol) => ({ label: `${ACCIONES_CRITICAS[sol.tipo]?.etiqueta || sol.tipo} · ${sol.referencia || ""}`.trim(), sub: `Solicitud #${sol.id} · vence ${fmtDate(sol.vence_en)}`, href: "/solicitudes", persona_id: Number(sol.solicitado_por) || null })),
-    });
-  }
-  // Fase 2: lo que me toca supervisar y los accesos que vencen pronto.
-  const porSupervisar = await contarPorSupervisar(s, auth.userId);
-  if (porSupervisar.length) {
-    avisos.unshift({ key: "por_supervisar", label: "Por supervisar", tone: "warning", count: porSupervisar.length, href: "/supervision", items: porSupervisar.slice(0, MAX_ITEMS).map((r) => ({ label: `${r.tipo} ${r.referencia}`, sub: "Pendiente de tu visto bueno", href: String(r.href) })) });
-  }
-  // Muestras que me asignaron en los ultimos 7 dias y siguen abiertas.
-  if (permisoDe(auth, "muestras", "V")) {
-    const desde = `${sumarDias(hoyLocal(), -7)} 00:00:00`;
-    const asignadas = await s.query(
-      `SELECT r.id, r.folio_num, r.id_interno, r.solicitante, a.asignado_en, a.asignado_por, u.nombre AS asignador FROM asignaciones_muestra a
-       INNER JOIN muestras_recepcion r ON r.id = a.recepcion_id LEFT JOIN usuarios u ON u.id = a.asignado_por
-       WHERE a.usuario_id = :yo AND a.revocado_en IS NULL AND a.asignado_en >= :desde AND r.estado NOT IN ('cerrada', 'anulada', 'rechazada')
-       ORDER BY a.asignado_en DESC`,
-      { yo: auth.userId, desde },
-    );
-    if (asignadas.length) {
-      avisos.push({
-        key: "muestras_asignadas",
-        label: "Muestras asignadas",
-        tone: "info",
-        count: asignadas.length,
-        href: "/muestras/recepcion?mias=1",
-        items: asignadas.slice(0, MAX_ITEMS).map((r) => ({ label: `R ${pad(r.folio_num)}`, sub: [r.id_interno, r.asignador ? `te la asignó ${String(r.asignador).split(" ")[0]}` : null].filter(Boolean).join(" · ") || null, href: `/muestras/recepcion/${r.id}`, persona_id: Number(r.asignado_por) || null, persona: (r.asignador as string | null) ?? null })),
-      });
-    }
-  }
-
-  const administra = !!permisoDe(auth, "usuarios", "G");
-  const vencen = administra ? await vencimientosProximos(s, 7) : await vencimientosProximos(s, 7, auth.userId);
-  if (vencen.length) {
-    avisos.push({
-      key: "accesos_vencen",
-      label: administra ? "Accesos que vencen en 7 días" : "Accesos de tus supervisados que vencen en 7 días",
-      tone: "warning",
-      count: vencen.length,
-      // Revision de accesos se integro en Usuarios: el aviso abre la lista con el filtro de vencimientos.
-      href: administra ? "/administracion/usuarios?vigencia=vence7" : "/supervision",
-      items: vencen.slice(0, MAX_ITEMS).map((v) => ({ label: String(v.nombre || v.email), sub: `${v.rol ? `Rol ${v.rol}` : "Cuenta"} vence el ${fmtDate(v.vigente_hasta)}`, href: administra ? `/administracion/usuarios?vigencia=vence7&abrir=${v.id}` : "/supervision", persona_id: Number(v.id) || null, persona: String(v.nombre || v.email || "") })),
-    });
-  }
-
-  // Fase 4: autorizaciones FX-THF-AP que vencen en 30 dias (las propias y, para quien las administra, las de todo el personal).
-  const porVencer = await autorizacionesPorVencer(s, auth, 30);
-  if (porVencer.length) {
-    const administraAut = !!permisoAdministrar(auth);
-    avisos.push({
-      key: "autorizaciones_vencen",
-      label: "Autorizaciones por vencer (30 días)",
-      tone: "warning",
-      count: porVencer.length,
-      // Fase 5: a quien no las administra lo lleva a Mi cuenta › Mis autorizaciones.
-      href: administraAut ? "/administracion/usuarios" : "/#mis-autorizaciones",
-      items: porVencer.slice(0, MAX_ITEMS).map((a) => ({ label: a.propia ? `Tu autorización: ${a.etiqueta}` : `${a.persona} · ${a.etiqueta}`, sub: `Vence el ${fmtDate(a.vigente_hasta)}`, href: administraAut ? `/administracion/usuarios?abrir=${a.usuario_id}` : "/#mis-autorizaciones", persona_id: Number(a.usuario_id) || null, persona: a.persona })),
-    });
-  }
-
-  // Fase 11: calidad (incidencias por evaluar, mis acciones, verificaciones, retenciones y suspensiones).
-  const calidad = await avisosCalidad(s, auth);
-  const grupos: Array<[string, string, Aviso["tone"], string, string[]]> = [
-    ["calidad_incidencias", "Incidencias por evaluar", "warning", "/calidad/incidencias?filtro=por_evaluar", ["incidencia_por_evaluar"]],
-    ["calidad_acciones", "Mis acciones correctivas", "info", "/calidad/incidencias?tab=acciones&mias=1", ["accion_mia", "accion_vencida"]],
-    ["calidad_verificaciones", "Verificaciones de eficacia pendientes", "warning", "/calidad/incidencias?tab=nc&estado=en_verificacion", ["verificacion_pendiente"]],
-    ["calidad_retenidos", "Informes retenidos por NC", "danger", "/calidad/incidencias?tab=nc", ["informe_retenido"]],
-    ["calidad_suspensiones", "Métodos y equipos suspendidos", "danger", "/calidad/incidencias?tab=nc", ["suspension"]],
-    ["calidad_reasignar", "Acciones por reasignar", "warning", "/calidad/incidencias?tab=acciones", ["responsable_no_vigente"]],
-  ];
-  for (const [key, label, tone, href, tipos] of grupos) {
-    const items = calidad.filter((a) => tipos.includes(a.tipo));
-    if (items.length) avisos.push({ key, label, tone: items.some((a) => a.tono === "danger") ? "danger" : tone, count: items.length, href, items: items.slice(0, MAX_ITEMS).map((a) => ({ label: a.titulo, sub: a.detalle, href: a.href })) });
-  }
-
-  // Registro de actividad: posible cambio no autorizado (incidencia automatica abierta), a quien consulta Calidad.
-  if (permisoDe(auth, "calidad", "V") && (await alertaBitacoraAbierta(s))) {
-    avisos.unshift({ key: "bitacora_alterada", label: "Posible cambio no autorizado", tone: "danger", count: 1, href: "/auditoria", items: [{ label: "Se detectó un posible cambio no autorizado en el registro de actividad", sub: "Avisa a la Coordinación de Mejora Continua", href: "/auditoria" }] });
-  }
-
-  return json({ items: avisos, total: avisos.reduce((sum, a) => sum + a.count, 0) });
+  const grupos = await pendientesDe(s, auth);
+  const items = grupos.map((g) => ({ key: g.key, label: g.label, tone: g.tone, count: g.count, href: g.href, items: g.eventos.slice(0, 6).map((e) => ({ label: e.registro, sub: e.detalle, href: e.href, persona_id: e.persona_id ?? null, persona: e.persona ?? null })) }));
+  return json({ items, total: items.reduce((sum, a) => sum + a.count, 0) });
 }

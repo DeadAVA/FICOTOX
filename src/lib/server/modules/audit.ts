@@ -210,6 +210,11 @@ async function alertarAlteracionBitacora(s: Session, r: AuditVerification): Prom
 }
 
 /* Hay una alerta de la bitacora sin resolver (incidencia automatica abierta): para el Inicio y la campana. */
+/* La incidencia automatica abierta por un posible cambio no autorizado (id y cuando se reporto), si la hay. */
+export async function alertaBitacora(s: Session): Promise<Row | null> {
+  return (await s.queryOne<Row>("SELECT id, reportada_en FROM incidencias WHERE clave_automatica LIKE :prefijo AND estado IN ('reportada', 'en_evaluacion') ORDER BY id LIMIT 1", { prefijo: `alerta_integridad:${PREFIJO_ALERTA_BITACORA}%` })) ?? null;
+}
+
 export async function alertaBitacoraAbierta(s: Session): Promise<boolean> {
   const fila = await s.scalar("SELECT id FROM incidencias WHERE clave_automatica LIKE :prefijo AND estado IN ('reportada', 'en_evaluacion') LIMIT 1", { prefijo: `alerta_integridad:${PREFIJO_ALERTA_BITACORA}%` });
   return !!fila;
