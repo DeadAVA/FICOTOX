@@ -14,6 +14,8 @@
   --color-surface: #ffffff;
   --color-surface-2: #f5f7f9;
   --color-surface-3: #e9edf1;
+  /* Ventanas, hojas laterales y diálogos (un escalón sobre la superficie; en claro es blanco) */
+  --color-surface-elevated: #ffffff;
   --color-line: #e3e8ed;
   --color-line-strong: #cdd5dd;
 
@@ -176,53 +178,58 @@
     :root[data-theme="dark"] {
       color-scheme: dark;
 
-      --color-canvas: #0d141a;
-      --color-canvas-2: #0d141a;
-      --color-sidebar: #10181f;
-      --color-surface: #151e26;
-      --color-surface-2: #1a242d;
-      --color-surface-3: #233039;
-      --color-line: #25323c;
-      --color-line-strong: #364652;
+      /* Elevación tonal (mismo matiz azulado): lienzo → superficie → superficie 2/3 → ventana */
+      --color-canvas: #0c1319;
+      --color-canvas-2: #0c1319;
+      --color-sidebar: #0f171e;
+      --color-surface: #141d25;
+      --color-surface-2: #19232c;
+      --color-surface-3: #212d37;
+      --color-surface-elevated: #1a252f;
+      --color-line: #243039;
+      --color-line-strong: #33424d;
 
-      --color-ink: #e6edf2;
-      --color-ink-2: #bccad3;
-      --color-ink-3: #94a5b1;
-      --color-ink-4: #75868f;
+      --color-ink: #e4ebf0;
+      --color-ink-2: #b8c6cf;
+      --color-ink-3: #92a3ae;
+      --color-ink-4: #74858f;
 
-      --color-brand: #4cb8d3;
-      --color-brand-strong: #7ccde1;
-      --color-brand-soft: #14384a;
-      --color-brand-faint: #112933;
-      --color-brand-bright: #63c6de;
-      --color-brand-soft-hover: #1a4659;
-      --color-on-accent: #061a22;
+      /* Océano para oscuro: el mismo matiz de #0F7A95, más luminoso y menos saturado */
+      --color-brand: #42abc6;
+      --color-brand-strong: #74c5da;
+      --color-brand-soft: #143545;
+      --color-brand-faint: #112832;
+      --color-brand-bright: #5cbcd5;
+      --color-brand-soft-hover: #1a4253;
+      --color-on-accent: #04161d;
 
-      --color-success: #4fc38c;
-      --color-success-soft: #12301f;
-      --color-success-text: #82dcae;
-      --color-warning: #e2a93f;
-      --color-warning-soft: #33280f;
-      --color-warning-text: #f1c470;
-      --color-danger: #f0766c;
-      --color-danger-soft: #3a1b1a;
-      --color-danger-text: #ff9f96;
-      --color-danger-strong: #ff9389;
-      --color-bloom: #ec8d5f;
-      --color-bloom-soft: #3a2316;
-      --color-bloom-text: #f5ae86;
-      --color-violet-soft: #29223f;
-      --color-violet-text: #c6b5f6;
+      /* Estados y categorías con la misma intensidad: fondo tenue del tono y texto más claro */
+      --color-success: #4bb886;
+      --color-success-soft: #12291e;
+      --color-success-text: #82d3aa;
+      --color-warning: #d9a645;
+      --color-warning-soft: #2e2511;
+      --color-warning-text: #ebc47a;
+      --color-danger: #e6766d;
+      --color-danger-soft: #341b1a;
+      --color-danger-text: #f59c94;
+      --color-danger-strong: #f38d84;
+      --color-bloom: #e08b60;
+      --color-bloom-soft: #332217;
+      --color-bloom-text: #efac88;
+      --color-violet-soft: #251f39;
+      --color-violet-text: #c1b2f0;
 
       /* deep sigue oscuro (fondos de capas); deep-2 se usa como tono de texto e icono */
       --color-deep: #02080c;
-      --color-deep-2: #8ccfe0;
+      --color-deep-2: #88c7d7;
 
-      --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.05);
-      --shadow-raised: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 28px -14px rgba(0, 0, 0, 0.7);
-      --shadow-panel: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 64px -20px rgba(0, 0, 0, 0.75);
-      --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 16px 40px -16px rgba(0, 0, 0, 0.7);
-      --shadow-focus: 0 0 0 4px rgba(76, 184, 211, 0.3);
+      /* Sombras cambiadas por bordes tonales (las sombras negras casi no se ven) */
+      --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.045);
+      --shadow-raised: 0 0 0 1px rgba(255, 255, 255, 0.075), 0 10px 28px -16px rgba(0, 0, 0, 0.6);
+      --shadow-panel: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 64px -24px rgba(0, 0, 0, 0.7);
+      --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.085), 0 16px 40px -18px rgba(0, 0, 0, 0.65);
+      --shadow-focus: 0 0 0 4px rgba(66, 171, 198, 0.28);
     }
   }
 
@@ -508,10 +515,10 @@
   }
   @media screen {
     :root[data-theme="dark"] .material {
-      background: rgba(21, 30, 38, 0.74);
+      background: rgba(26, 37, 47, 0.82);
     }
     :root[data-theme="dark"] .material-thick {
-      background: rgba(26, 36, 45, 0.84);
+      background: rgba(25, 35, 44, 0.88);
     }
     :root[data-theme="dark"] .material-dark {
       background: rgba(44, 58, 70, 0.94);
@@ -520,7 +527,7 @@
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), var(--shadow-card);
     }
     :root[data-theme="dark"] .scroll-edge-b::after {
-      background: linear-gradient(to bottom, rgba(13, 20, 26, 0.9), rgba(13, 20, 26, 0));
+      background: linear-gradient(to bottom, rgba(12, 19, 25, 0.9), rgba(12, 19, 25, 0));
     }
   }
   .material-dark {

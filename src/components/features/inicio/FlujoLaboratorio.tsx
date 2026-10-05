@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type ReactNode } from "react";
-import { Archive, ArrowRight, ChartLine, Drop, FileText, HandArrowDown, Knife, Plus, SealCheck } from "@phosphor-icons/react";
+import { Archive, ChartLine, FlowArrow, Drop, FileText, HandArrowDown, Knife, Plus, SealCheck } from "@phosphor-icons/react";
 import { Avatar, Skeleton } from "@/components/ui/Primitives";
 import { Conteo } from "@/components/ui/Conteo";
 import { cn } from "@/components/ui/cn";
+import { TarjetaInicio } from "./TarjetaInicio";
 import { ETAPAS_FLUJO, type EtapaFlujo } from "@/lib/client/flujo";
 import { haceCuantoCorto } from "@/lib/client/tiempo";
 import type { MuestraEnCurso, PersonaAsignada } from "./tipos";
@@ -39,20 +40,8 @@ export function FlujoLaboratorio({ muestras, total, puedeCrear, className }: { m
   const recientes = [...(muestras || [])].sort((a, b) => String(b.ultimo_movimiento || "").localeCompare(String(a.ultimo_movimiento || ""))).slice(0, 5);
 
   return (
-    <section aria-labelledby="flujo" className={cn("entrada-escalonada flex min-w-0 flex-col gap-3", className)} style={{ ["--i" as string]: 2 }}>
-      <div className="flex items-baseline justify-between gap-3 px-1">
-        <h2 id="flujo" className="title-3 text-ink">
-          Flujo del laboratorio
-        </h2>
-        {muestras ? (
-          <Link href="/muestras/recepcion" className="inline-flex items-center gap-1 text-[13px] font-medium text-brand hover:text-brand-strong">
-            {total} en curso <ArrowRight size={13} />
-          </Link>
-        ) : null}
-      </div>
-
-      <div className="rounded-card bg-surface shadow-card">
-        <div className="px-2 pt-5 pb-4 sm:px-5">
+    <TarjetaInicio id="flujo" titulo="Flujo del laboratorio" icono={<FlowArrow weight="duotone" />} enlace={muestras ? { href: "/muestras/recepcion", texto: `${total} en curso` } : null} i={2} className={className}>
+        <div className="-mx-3 pt-2 pb-4 sm:-mx-1">
           <ol className="relative grid grid-cols-7" aria-label="Etapas del flujo">
             {ETAPAS_FLUJO.map((etapa, i) => (
               <Etapa key={etapa.clave} i={i} clave={etapa.clave} label={etapa.label} muestras={muestras ? porEtapa.get(etapa.clave) || [] : null} ultima={i === ETAPAS_FLUJO.length - 1} />
@@ -60,15 +49,15 @@ export function FlujoLaboratorio({ muestras, total, puedeCrear, className }: { m
           </ol>
         </div>
 
-        <div className="border-t border-line">
+        <div className="-mx-5 flex min-h-[288px] flex-1 flex-col border-t border-line px-2 pt-2">
           {!muestras ? (
-            <div className="flex flex-col gap-3 px-5 py-4" aria-hidden="true">
+            <div className="flex flex-col gap-3 px-3 py-2" aria-hidden="true">
               {Array.from({ length: 5 }, (_, i) => (
                 <Skeleton key={i} className="h-9 w-full" />
               ))}
             </div>
           ) : !recientes.length ? (
-            <div className="flex flex-col items-center gap-2 px-5 py-9 text-center">
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-5 py-6 text-center">
               <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-faint text-brand-strong">
                 <HandArrowDown size={22} weight="duotone" />
               </span>
@@ -80,15 +69,14 @@ export function FlujoLaboratorio({ muestras, total, puedeCrear, className }: { m
               ) : null}
             </div>
           ) : (
-            <ul className="flex flex-col p-1.5" aria-label="Muestras en curso más recientes">
+            <ul className="flex flex-col" aria-label="Muestras en curso más recientes">
               {recientes.map((m, i) => (
                 <FilaMuestra key={m.id} m={m} i={i} />
               ))}
             </ul>
           )}
         </div>
-      </div>
-    </section>
+    </TarjetaInicio>
   );
 }
 

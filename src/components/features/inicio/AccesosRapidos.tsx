@@ -51,15 +51,16 @@ export function AccesosRapidos({ accesos, className }: { accesos: Acceso[]; clas
   if (!accesos.length) return null;
   return (
     <nav aria-label="Accesos rápidos" className={cn("w-full", className)}>
-      <ul className={cn("grid gap-2.5", accesos.length >= 4 ? "grid-cols-2 sm:grid-cols-4" : accesos.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
+      {/* Ocupan exactamente el ancho del contenedor, en partes iguales y con la misma altura. */}
+      <ul className={cn("grid auto-rows-fr gap-3 sm:gap-4", accesos.length >= 4 ? "grid-cols-2 md:grid-cols-4" : accesos.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
         {accesos.map((a, i) => (
-          <li key={a.clave} className="entrada-escalonada" style={{ ["--i" as string]: i }}>
+          <li key={a.clave} className="entrada-escalonada min-w-0" style={{ ["--i" as string]: i }}>
             <Link
               href={a.href}
               aria-label={a.pendientes ? `${a.label}: ${a.pendientes} pendientes` : a.label}
-              className="press group relative flex h-full items-center gap-3 rounded-card bg-surface px-3.5 py-3 shadow-card ring-1 ring-line transition-[box-shadow,transform] duration-200 ease-[var(--ease-spring)] hover:-translate-y-0.5 hover:shadow-raised focus-visible:shadow-[var(--shadow-focus)] focus-visible:outline-none motion-reduce:hover:translate-y-0"
+              className="press group relative flex h-full flex-col items-start gap-2 rounded-card bg-surface px-4 py-3.5 shadow-card ring-1 ring-line transition-[box-shadow,transform] duration-200 ease-[var(--ease-spring)] hover:-translate-y-0.5 hover:shadow-raised focus-visible:shadow-[var(--shadow-focus)] focus-visible:outline-none motion-reduce:hover:translate-y-0 min-[520px]:flex-row min-[520px]:items-center min-[520px]:gap-3"
             >
-              <span aria-hidden="true" className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] text-[19px] [&>svg]:h-[1em] [&>svg]:w-[1em]", a.tono)}>
+              <span aria-hidden="true" className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[18px] [&>svg]:h-[1em] [&>svg]:w-[1em]", a.tono)}>
                 {a.icono}
               </span>
               <span className="text-[13.5px] leading-tight font-medium text-ink">{a.label}</span>

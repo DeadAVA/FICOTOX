@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { ArrowRight, CalendarBlank, Certificate, ChartLine, Eye, FileText, Flask, HandPalm, HourglassLow, ListChecks, Package, Pause, PaperPlaneTilt, PencilLine, Ruler, SealCheck, ShieldWarning, Stamp, TestTube, UserMinus, UserSwitch, WarningDiamond, Wrench } from "@phosphor-icons/react";
+import { ArrowRight, CalendarBlank, Certificate, ChartLine, Eye, FileText, Flask, HandPalm, HourglassLow, ListChecks, Package, Pause, PaperPlaneTilt, PencilLine, Ruler, SealCheck, ShieldWarning, Stamp, TestTube, Tray, UserMinus, UserSwitch, WarningDiamond, Wrench } from "@phosphor-icons/react";
 import { IncidenciaVentana, NcVentana } from "@/components/features/calidad/ventanas/CalidadVentanas";
 import { Conteo, MarcaDibujada } from "@/components/ui/Conteo";
 import { FiguraPersona } from "@/components/ui/FiguraPersona";
 import { Skeleton } from "@/components/ui/Primitives";
 import { cn } from "@/components/ui/cn";
+import { TarjetaInicio } from "./TarjetaInicio";
 import type { Pendiente, PendienteItem } from "./tipos";
 
 /*
@@ -70,25 +71,22 @@ export function ParaTi({ pendientes, className }: { pendientes: Pendiente[] | nu
   const lista = pendientes ? ordenarPendientes(pendientes) : null;
   const elegida = lista?.find((p) => p.key === abierta) || null;
   return (
-    <section aria-labelledby="para-ti" className={cn("entrada-escalonada flex flex-col gap-3", className)} style={{ ["--i" as string]: 1 }}>
-      <h2 id="para-ti" className="title-3 px-1 text-ink">
-        Para ti
-      </h2>
+    <TarjetaInicio id="para-ti" titulo="Para ti" icono={<Tray weight="duotone" />} i={1} minimo="min-h-[232px] gap-3" className={className}>
       {!lista ? (
-        <div className="grid grid-cols-2 gap-2.5" aria-hidden="true">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2" aria-hidden="true">
           {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} className="h-[104px] rounded-card" />
+            <Skeleton key={i} className="h-[98px] rounded-[12px]" />
           ))}
         </div>
       ) : !lista.length ? (
-        <div className="flex flex-col items-center gap-2 rounded-card bg-surface px-5 py-8 text-center shadow-card">
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
           <MarcaDibujada className="text-success" />
           <p className="text-[15px] font-semibold text-ink">Todo al día</p>
           <p className="text-[12.5px] text-ink-3">Nada te espera por ahora.</p>
         </div>
       ) : (
         <>
-          <ul className="grid grid-cols-2 gap-2.5">
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2">
             {lista.map((p, i) => (
               <li key={p.key} className="entrada-escalonada" style={{ ["--i" as string]: i }}>
                 <TarjetaPendiente pendiente={p} activa={abierta === p.key} onPulsar={() => setAbierta((actual) => (actual === p.key ? null : p.key))} />
@@ -98,7 +96,7 @@ export function ParaTi({ pendientes, className }: { pendientes: Pendiente[] | nu
           <Despliegue abierto={!!elegida}>{elegida ? <VistaPrevia key={elegida.key} pendiente={elegida} /> : null}</Despliegue>
         </>
       )}
-    </section>
+    </TarjetaInicio>
   );
 }
 
@@ -114,12 +112,12 @@ export function TarjetaPendiente({ pendiente, activa, onPulsar }: { pendiente: P
       aria-label={`${corto.label}: ${pendiente.count}`}
       title={pendiente.label}
       className={cn(
-        "press flex h-full w-full flex-col items-start gap-2 rounded-card bg-surface p-3.5 text-left shadow-card ring-1 transition-[box-shadow,transform] duration-200 ease-[var(--ease-spring)] hover:-translate-y-0.5 hover:shadow-raised focus-visible:shadow-[var(--shadow-focus)] focus-visible:outline-none motion-reduce:hover:translate-y-0",
-        activa ? tono.anillo + " ring-2" : "ring-line",
+        "press flex h-full w-full flex-col items-start gap-2 rounded-[12px] bg-surface-2 p-3.5 text-left ring-1 transition-[box-shadow,transform,background-color] duration-200 ease-[var(--ease-spring)] hover:-translate-y-0.5 hover:bg-surface-3/70 hover:shadow-raised focus-visible:shadow-[var(--shadow-focus)] focus-visible:outline-none motion-reduce:hover:translate-y-0",
+        activa ? tono.anillo + " ring-2" : "ring-line/70",
       )}
     >
       <span className="flex w-full items-center justify-between gap-2">
-        <span aria-hidden="true" className={cn("flex h-9 w-9 items-center justify-center rounded-full text-[19px] [&>svg]:h-[1em] [&>svg]:w-[1em]", tono.circulo)}>
+        <span aria-hidden="true" className={cn("flex h-9 w-9 items-center justify-center rounded-full text-[18px] [&>svg]:h-[1em] [&>svg]:w-[1em]", tono.circulo)}>
           {corto.icono}
         </span>
         <Conteo valor={pendiente.count} className={cn("text-[26px] leading-none font-semibold tracking-[-0.02em]", tono.numero)} />
@@ -147,11 +145,11 @@ function VistaPrevia({ pendiente }: { pendiente: Pendiente }) {
     else router.push(item.href);
   };
   return (
-    <div className="rounded-card bg-surface p-2 shadow-card ring-1 ring-line">
+    <div className="rounded-[12px] bg-surface-2 p-2 ring-1 ring-line/70">
       <ul className="flex flex-col">
         {pendiente.items.slice(0, 5).map((item, i) => (
           <li key={`${item.label}-${i}`} className="entrada-escalonada" style={{ ["--i" as string]: i }}>
-            <button type="button" onClick={() => abrir(item)} className="group flex w-full items-center gap-3 rounded-[12px] px-2.5 py-2 text-left transition-colors duration-150 hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none">
+            <button type="button" onClick={() => abrir(item)} className="group flex w-full items-center gap-3 rounded-[10px] px-2.5 py-2 text-left transition-colors duration-150 hover:bg-surface-3/70 focus-visible:bg-surface-3/70 focus-visible:outline-none">
               {item.persona_id || item.persona ? <FiguraPersona id={item.persona_id} nombre={item.persona} size="xs" /> : <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-ink-4 mx-[9px]" />}
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-[13.5px] font-medium text-ink">{item.label}</span>

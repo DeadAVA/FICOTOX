@@ -95,7 +95,7 @@ export function FilaActividad({ grupo, activa, onAbrir }: { grupo: GrupoActivida
         aria-haspopup="dialog"
         className={cn(
           "flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors duration-150 outline-none sm:px-5",
-          "hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:shadow-[inset_0_0_0_2px_rgba(15,122,149,0.45)]",
+          "hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:shadow-[inset_0_0_0_2px_color-mix(in_srgb,var(--color-brand)_45%,transparent)]",
           activa && "bg-brand-faint hover:bg-brand-faint",
         )}
       >

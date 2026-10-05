@@ -13,7 +13,7 @@ import { cn } from "./cn";
 
 const MUESTRA = {
   claro: { lienzo: "#f2f4f7", barra: "#f7f8fa", tarjeta: "#ffffff", linea: "#e3e8ed", texto: "#10202b", tenue: "#cdd5dd", acento: "#0f7a95" },
-  oscuro: { lienzo: "#0d141a", barra: "#10181f", tarjeta: "#151e26", linea: "#25323c", texto: "#e6edf2", tenue: "#364652", acento: "#4cb8d3" },
+  oscuro: { lienzo: "#0c1319", barra: "#0f171e", tarjeta: "#141d25", linea: "#243039", texto: "#e4ebf0", tenue: "#33424d", acento: "#42abc6" },
 } as const;
 
 function MiniVista({ tema }: { tema: "claro" | "oscuro" }) {

@@ -107,7 +107,7 @@ export function PanelFoto({ onCambio }: { onCambio: () => Promise<void> }) {
       >
         {user?.foto && actual ? (
           // eslint-disable-next-line @next/next/no-img-element -- blob: de la foto pedida con sesion
-          <img src={actual} alt={String(user?.nombre || "Tu foto")} className="foto-perfil h-24 w-24 rounded-full object-cover shadow-[0_6px_16px_-6px_rgba(16,32,43,0.35)]" />
+          <img src={actual} alt={String(user?.nombre || "Tu foto")} className="foto-perfil h-24 w-24 rounded-full object-cover shadow-raised" />
         ) : (
           <span aria-hidden="true" className="flex h-16 w-16 items-center justify-center rounded-full bg-surface text-brand-strong shadow-card">
             <Camera size={28} weight="duotone" />

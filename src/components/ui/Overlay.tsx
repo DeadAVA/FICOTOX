@@ -39,7 +39,7 @@ export function Sheet({ open, onOpenChange, title, description, children, footer
         <RadixDialog.Overlay className={OVERLAY_CLASS} />
         <RadixDialog.Content
           className={cn(
-            "fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-surface shadow-panel outline-none sm:inset-y-3 sm:right-3 sm:rounded-panel",
+            "fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-surface-elevated shadow-panel outline-none sm:inset-y-3 sm:right-3 sm:rounded-panel",
             "data-[state=open]:animate-sheet-in data-[state=closed]:animate-sheet-out",
             width,
           )}
@@ -85,7 +85,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
         <div className="fixed inset-0 z-50 flex items-end justify-center p-3 sm:items-center sm:p-6">
           <RadixDialog.Content
             className={cn(
-              "flex max-h-full w-full flex-col overflow-hidden rounded-panel bg-surface shadow-panel outline-none",
+              "flex max-h-full w-full flex-col overflow-hidden rounded-panel bg-surface-elevated shadow-panel outline-none",
               "data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out",
               width,
             )}

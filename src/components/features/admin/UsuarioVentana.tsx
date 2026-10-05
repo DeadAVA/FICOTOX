@@ -149,7 +149,7 @@ function FichaUsuario({ base, todos, onDesbloquear, onAbrirPersona }: { base: Ap
   return (
     <div className="flex flex-col gap-6" data-usuario-ventana={String(base.id)}>
       <VentanaEncabezado
-        figura={<Avatar name={item.nombre} email={item.email} avatar={item.avatar} size="xl" animado="siempre" className="shadow-[0_6px_16px_-6px_rgba(16,32,43,0.35)]" />}
+        figura={<Avatar name={item.nombre} email={item.email} avatar={item.avatar} size="xl" animado="siempre" className="shadow-raised" />}
         titulo={
           <>
             {String(item.nombre || item.email || "Sin nombre")}

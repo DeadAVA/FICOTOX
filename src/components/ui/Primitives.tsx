@@ -115,10 +115,10 @@ export function Avatar({ id, name, email, avatar, size = "md", className, animad
   if (url && fallida !== url) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- blob: de la foto pedida con sesion
-      <img src={url} alt={String(name || email || "Foto de perfil")} width={px} height={px} onError={() => setFallida(url)} className={cn("foto-perfil shrink-0 rounded-full bg-surface-3 object-cover shadow-[0_1px_2px_rgba(16,32,43,0.18)]", className)} style={{ width: px, height: px }} />
+      <img src={url} alt={String(name || email || "Foto de perfil")} width={px} height={px} onError={() => setFallida(url)} className={cn("foto-perfil shrink-0 rounded-full bg-surface-3 object-cover shadow-card", className)} style={{ width: px, height: px }} />
     );
   }
-  return <AvatarArt avatar={figura} seed={seed} size={px} animado={animado} className={cn("rounded-full shadow-[0_1px_2px_rgba(16,32,43,0.18)]", className)} />;
+  return <AvatarArt avatar={figura} seed={seed} size={px} animado={animado} className={cn("rounded-full shadow-card", className)} />;
 }
 
 export function Stat({ label, value, hint, tone = "neutral", icon, className }: { label: ReactNode; value: ReactNode; hint?: ReactNode; tone?: "neutral" | "brand" | "warning" | "danger" | "success"; icon?: ReactNode; className?: string }) {

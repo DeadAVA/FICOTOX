@@ -39,16 +39,21 @@ Los **mismos tokens** con otros valores, en `:root[data-theme="dark"]` dentro de
 
 | Token | Oscuro | Nota |
 | --- | --- | --- |
-| `canvas` / `sidebar` | `#0D141A` / `#10181F` | lienzo y barra lateral |
-| `surface` / `surface-2` / `surface-3` | `#151E26` / `#1A242D` / `#233039` | elevación tonal |
-| `line` / `line-strong` | `#25323C` / `#364652` | bordes suaves |
-| `ink` … `ink-4` | `#E6EDF2` / `#BCCAD3` / `#94A5B1` / `#75868F` | texto (AA sobre `surface`) |
-| `brand` / `brand-strong` | `#4CB8D3` / `#7CCDE1` | acento océano aclarado (AA como texto) |
-| `brand-soft` / `brand-faint` | `#14384A` / `#112933` | fondos tenues |
-| `success` / `warning` / `danger` (+ `-soft`, `-text`) | `#4FC38C` / `#E2A93F` / `#F0766C` | insignias: fondo tenue y texto claro del mismo tono |
-| `on-accent` | `#061A22` (claro: `#FFFFFF`) | texto sobre rellenos de color (botón primario, contadores, renglón resaltado) |
-| `deep-2` | `#8CCFE0` | tono de icono/texto; `deep` sigue oscuro para las capas |
+| `canvas` / `sidebar` | `#0C1319` / `#0F171E` | lienzo y barra lateral (escalón 0) |
+| `surface` | `#141D25` | tarjetas, listas (escalón 1) |
+| `surface-2` / `surface-3` | `#19232C` / `#212D37` | rellenos, mosaicos dentro de tarjetas, hover (escalones 2 y 3) |
+| `surface-elevated` | `#1A252F` (claro: `#FFFFFF`) | ventanas de detalle, hojas laterales y diálogos (escalón de ventana) |
+| `line` / `line-strong` | `#243039` / `#33424D` | bordes de la misma familia, sutiles |
+| `ink` … `ink-4` | `#E4EBF0` / `#B8C6CF` / `#92A3AE` / `#74858F` | texto (AA sobre `surface`) |
+| `brand` / `brand-strong` | `#42ABC6` / `#74C5DA` | océano de #0F7A95 más luminoso y menos saturado: botones, enlaces, selección, indicadores |
+| `brand-soft` / `brand-faint` | `#143545` / `#112832` | fondos tenues del acento |
+| `success` / `warning` / `danger` / `bloom` | `#4BB886` / `#D9A645` / `#E6766D` / `#E08B60` | misma intensidad entre sí; `-soft` es el fondo tenue del tono y `-text` el texto claro (`#82D3AA`, `#EBC47A`, `#F59C94`, `#EFAC88`) |
+| `violet-soft` / `violet-text` | `#251F39` / `#C1B2F0` | categoría E-A |
+| `on-accent` | `#04161D` (claro: `#FFFFFF`) | texto sobre rellenos de color |
+| `deep-2` | `#88C7D7` | tono de icono o texto de categoría; `deep` sigue oscuro para las capas |
 | `papel` / `tinta` | `#FFFFFF` / `#0B1F2A` en ambos temas | firmas, páginas de PDF, hojas de etiquetas |
+
+Sombras en oscuro: anillos tonales (`rgba(255,255,255,.045–.085)`) con una sombra negra muy suave solo en lo que flota. Los componentes usan `shadow-card`, `shadow-raised`, `shadow-panel` y `shadow-pop`, nunca sombras con color fijo. Materiales (`.material`, `.material-thick`) con el matiz de `surface-elevated`. Degradados: el panel del acceso tiene su versión de océano profundo; la línea del flujo usa `brand` con transparencia. Hover, activo y foco con la misma lógica en ambos temas (un escalón de superficie o el acento suave; nunca blanco brillante). Esqueletos: `surface-3` con pulso.
 
 Reglas: nunca `bg-white`/`text-white`/hex en componentes; texto sobre relleno de acento con `text-on-accent`, sobre `bg-ink` con `text-surface`; los tooltips (`material-dark`) quedan oscuros en ambos temas con texto blanco. Toasts con los tokens (`--normal-bg` de sonner).
 
@@ -125,7 +130,9 @@ Un solo motor (`useGlobalSearch`, `src/lib/client/search.ts`) alimenta el buscad
 
 Fecha, saludo (según la hora) y **buscador** centrados; sin el indicador "⌘ K" (el atajo sigue), sin ejemplos ni "¿Primera vez aquí?" (la ayuda vive en la barra lateral). Poco texto: números, íconos y colores con significado (Axel, 2026-10-04). Todo con los permisos y alcances de cada persona; se recarga cada 60 s y al volver a la pestaña sin vaciar la pantalla (los números cambian con conteo).
 
-Distribución: en ancha, accesos rápidos a todo lo ancho y dos columnas (`1.55fr / 1fr`): **Flujo del laboratorio** a la izquierda; **Para ti** y **Actividad reciente** a la derecha. En angosta, una columna: Para ti, flujo, accesos y actividad (`order-*`). Secciones con `.entrada-escalonada` y esqueletos de alto fijo (sin saltos).
+**Retícula**: un solo contenedor de 1200 px; fecha, saludo y buscador centrados sobre el mismo eje, y el buscador, los accesos rápidos y las secciones comparten los mismos bordes. Debajo, `lg:grid-cols-3` (≥ 1024 px): **Flujo del laboratorio** ocupa 2/3 (y dos filas si hay actividad), **Para ti** y **Actividad reciente** el 1/3; las tarjetas se estiran (`items-stretch` + cuerpo `flex-1`) para que ambas columnas midan lo mismo, con el contenido arriba. Puntos de quiebre: teléfono (< 640 px) y tableta (640–1023 px) en una columna con el orden Para ti, flujo, accesos y actividad; laptop (1024–1440 px) y pantalla grande (1920 px) con la retícula 2/3 + 1/3 dentro de los 1200 px. Accesos rápidos: `auto-rows-fr`, partes iguales (2 → 2 columnas; 3 → 3; 4 → 2 × 2 en teléfono y 4 desde 768 px), icono arriba en < 520 px.
+
+**Escala de espaciado** (`ESPACIO_INICIO`): 32 px entre bloques (encabezado → accesos → secciones), 24 px entre columnas y tarjetas, 12–16 px dentro de una tarjeta. **Tarjeta de sección** (`TarjetaInicio`): `rounded-card`, `bg-surface`, `ring-1 ring-line`, `shadow-card`, encabezado con icono de 18 px en acento + título de 15 px + enlace de 13 px a la derecha, padding de 20 px a los lados. Mosaicos internos (pendientes, vista previa) en `surface-2` con radio 12 px. Iconos de 18 px en círculos de 36 px en todos los bloques; números grandes de 26 px semibold. Estados vacíos con la altura mínima del contenido (flujo 288 px; Para ti y actividad 232 px).
 
 Componentes (`src/components/features/inicio/`):
 

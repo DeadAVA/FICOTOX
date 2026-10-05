@@ -109,7 +109,7 @@ export function ListaCuadricula<T>({
                     type="button"
                     onClick={() => onAbrir(fila, i)}
                     aria-haspopup="dialog"
-                    className="flex min-w-0 flex-col gap-2.5 py-4 pr-2 pl-4 text-left outline-none focus-visible:shadow-[inset_0_0_0_2px_rgba(15,122,149,0.45)] sm:pl-5 md:col-[span_var(--span)_/_span_var(--span)] md:grid md:grid-cols-subgrid md:items-center md:gap-0 md:py-3.5 md:pr-0"
+                    className="flex min-w-0 flex-col gap-2.5 py-4 pr-2 pl-4 text-left outline-none focus-visible:shadow-[inset_0_0_0_2px_color-mix(in_srgb,var(--color-brand)_45%,transparent)] sm:pl-5 md:col-[span_var(--span)_/_span_var(--span)] md:grid md:grid-cols-subgrid md:items-center md:gap-0 md:py-3.5 md:pr-0"
                     style={{ ["--span" as string]: columnas.length } as CSSProperties}
                   >
                     {valores.map((valor, k) => (

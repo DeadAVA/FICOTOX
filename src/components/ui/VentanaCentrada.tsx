@@ -59,7 +59,7 @@ export function VentanaCentrada({
               onMover(event.key === "ArrowDown" ? 1 : -1);
             }}
             className={cn(
-              "pointer-events-auto flex w-full flex-col overflow-hidden bg-surface shadow-panel outline-none transition-[max-width] duration-300 ease-[var(--ease-spring)]",
+              "pointer-events-auto flex w-full flex-col overflow-hidden bg-surface-elevated shadow-panel outline-none transition-[max-width] duration-300 ease-[var(--ease-spring)]",
               "h-full sm:h-auto sm:rounded-panel",
               // Amplia: mas ancha y mas alta (editor de permisos, fichas de inventario).
               amplia ? "sm:max-h-[min(92dvh,960px)] sm:max-w-[1080px]" : media ? "sm:max-h-[min(90dvh,900px)] sm:max-w-[880px]" : "sm:max-h-[min(88dvh,820px)] sm:max-w-[620px]",

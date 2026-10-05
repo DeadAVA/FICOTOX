@@ -7,6 +7,6 @@
 export const CLAVE_TEMA = "ficotox-tema";
 
 /* meta theme-color: el lienzo de cada tema. */
-export const COLORES_BARRA = { light: "#f2f4f7", dark: "#0d141a" } as const;
+export const COLORES_BARRA = { light: "#f2f4f7", dark: "#0c1319" } as const;
 
 export const SCRIPT_TEMA = `(function(){try{var t=localStorage.getItem("${CLAVE_TEMA}");if(t!=="claro"&&t!=="oscuro")t="auto";var d=t==="oscuro"||(t==="auto"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.dataset.theme=d?"dark":"light";r.dataset.tema=t;}catch(e){}})();`;

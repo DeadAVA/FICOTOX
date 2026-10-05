@@ -1,15 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ArrowRight } from "@phosphor-icons/react";
+import { ClockCounterClockwise } from "@phosphor-icons/react";
 import { ActividadDialog, agruparActividades, usePersonas } from "@/components/features/audit/Actividades";
 import { EntryIcon } from "@/components/features/audit/categorias";
 import { FiguraPersona } from "@/components/ui/FiguraPersona";
 import { Skeleton } from "@/components/ui/Primitives";
-import { cn } from "@/components/ui/cn";
 import { haceCuantoCorto } from "@/lib/client/tiempo";
 import type { ApiRecord } from "@/lib/client/types";
+import { TarjetaInicio } from "./TarjetaInicio";
 
 /*
  * Actividad reciente (solo para quien ve la Auditoría): las ultimas 5
@@ -21,24 +20,16 @@ export function ActividadReciente({ registros, className }: { registros: ApiReco
   const grupos = useMemo(() => (registros ? agruparActividades(registros, { personas }).slice(0, 5) : null), [registros, personas]);
   const [abierta, setAbierta] = useState<number | null>(null);
   return (
-    <section aria-labelledby="actividad-reciente" className={cn("entrada-escalonada flex flex-col gap-3", className)} style={{ ["--i" as string]: 3 }}>
-      <div className="flex items-baseline justify-between gap-3 px-1">
-        <h2 id="actividad-reciente" className="title-3 text-ink">
-          Actividad reciente
-        </h2>
-        <Link href="/auditoria" className="inline-flex items-center gap-1 text-[12.5px] font-medium text-brand hover:text-brand-strong">
-          Auditoría <ArrowRight size={12} />
-        </Link>
-      </div>
-      <div className="rounded-card bg-surface p-1.5 shadow-card">
+    <TarjetaInicio id="actividad-reciente" titulo="Actividad reciente" icono={<ClockCounterClockwise weight="duotone" />} enlace={{ href: "/auditoria", texto: "Auditoría" }} i={3} minimo="min-h-[232px]" className={className}>
+      <div className="-mx-2.5 flex flex-1 flex-col">
         {!grupos ? (
-          <div className="flex flex-col gap-2.5 p-2.5" aria-hidden="true">
+          <div className="flex flex-col gap-2.5 px-2.5" aria-hidden="true">
             {Array.from({ length: 5 }, (_, i) => (
               <Skeleton key={i} className="h-8 w-full" />
             ))}
           </div>
         ) : !grupos.length ? (
-          <p className="px-3 py-5 text-center text-[13px] text-ink-3">Sin actividad reciente.</p>
+          <p className="flex flex-1 items-center justify-center px-3 text-center text-[13px] text-ink-3">Sin actividad reciente.</p>
         ) : (
           <ul className="flex flex-col">
             {grupos.map((grupo, i) => {
@@ -57,6 +48,6 @@ export function ActividadReciente({ registros, className }: { registros: ApiReco
         )}
       </div>
       {grupos ? <ActividadDialog grupos={grupos} indice={abierta} onIndice={setAbierta} onCerrar={() => setAbierta(null)} /> : null}
-    </section>
+    </TarjetaInicio>
   );
 }
