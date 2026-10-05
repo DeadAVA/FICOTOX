@@ -601,36 +601,96 @@
     }
   }
 
-  /* Fondo del acceso en tonos blancos: dos luces océano muy tenues a la deriva. */
-  .light-field {
-    position: absolute;
-    inset: -30%;
-    pointer-events: none;
-    filter: blur(80px);
-    will-change: transform;
+  /*
+   * Pantalla de acceso (PantallaAcceso): panel océano con degradado de la
+   * paleta, olas, microalgas y parallax; la tarjeta del formulario con la
+   * superficie de la app. Entrada escalonada: fondo, logo, título y campos.
+   */
+  .acceso-panel {
+    background:
+      radial-gradient(120% 80% at 20% 10%, rgba(52, 167, 196, 0.55), transparent 60%),
+      linear-gradient(160deg, #1689a6 0%, #0f7a95 38%, #0b5f75 72%, #08475a 100%);
+    animation: fade-in 500ms var(--ease-spring) both;
   }
-  .light-field::before,
-  .light-field::after {
-    content: "";
-    position: absolute;
-    border-radius: 9999px;
-    will-change: transform;
+  @media screen {
+    :root[data-theme="dark"] .acceso-panel {
+      background:
+        radial-gradient(120% 80% at 20% 10%, rgba(52, 167, 196, 0.22), transparent 60%),
+        linear-gradient(160deg, #0d4a5c 0%, #0a3747 45%, #072733 78%, #051a23 100%);
+    }
   }
-  .light-field::before {
-    width: 55%;
-    height: 55%;
-    left: 10%;
-    top: 5%;
-    background: radial-gradient(circle at 40% 40%, rgba(46, 164, 194, 0.16), rgba(46, 164, 194, 0.04) 55%, transparent 70%);
-    animation: var(--animate-drift);
+  .acceso-capa {
+    transform: translate3d(calc(var(--px, 0) * var(--prof, 0) * 1px), calc(var(--py, 0) * var(--prof, 0) * 1px), 0);
+    transition: transform 900ms var(--ease-fluid);
   }
-  .light-field::after {
-    width: 50%;
-    height: 50%;
-    right: 5%;
-    bottom: 5%;
-    background: radial-gradient(circle at 60% 60%, rgba(10, 84, 104, 0.12), rgba(10, 84, 104, 0.03) 55%, transparent 70%);
-    animation: var(--animate-drift-2);
+  @keyframes acceso-logo-entra {
+    from { opacity: 0; transform: translateY(14px) scale(0.86); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes acceso-flota {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+  }
+  .acceso-logo {
+    animation: acceso-logo-entra 700ms var(--ease-spring) 120ms both, acceso-flota 7s var(--ease-fluid) 900ms infinite;
+  }
+  .acceso-entra {
+    animation: rise-in 520ms var(--ease-spring) both;
+    animation-delay: calc(120ms + var(--i, 0) * 90ms);
+  }
+  .acceso-fondo-entra {
+    animation: fade-in 1200ms var(--ease-spring) 200ms both;
+  }
+  @keyframes acceso-ola {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  .acceso-ola {
+    animation: acceso-ola var(--dur, 20s) linear infinite;
+  }
+  .acceso-tarjeta {
+    animation: rise-in 520ms var(--ease-spring) 260ms both;
+  }
+  @keyframes acceso-niega {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-7px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(2px); }
+  }
+  .acceso-tarjeta.acceso-niega {
+    animation: acceso-niega 420ms var(--ease-spring) both;
+  }
+  /* Al entrar: la tarjeta se desvanece y el panel se expande hacia la aplicación (< 600 ms). */
+  .acceso-tarjeta-sale {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+    transition: opacity 320ms var(--ease-spring), transform 320ms var(--ease-spring);
+  }
+  .acceso-panel-sale .acceso-logo {
+    animation: none;
+    opacity: 0;
+    transform: scale(1.18);
+    transition: opacity 420ms var(--ease-spring), transform 420ms var(--ease-spring);
+  }
+  @keyframes acceso-ojo {
+    from { opacity: 0; transform: scale(0.6) rotate(-20deg); }
+    to { opacity: 1; transform: none; }
+  }
+  .acceso-ojo {
+    animation: acceso-ojo 220ms var(--ease-spring) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .acceso-panel, .acceso-logo, .acceso-entra, .acceso-fondo-entra, .acceso-ola, .acceso-tarjeta, .acceso-tarjeta.acceso-niega, .acceso-ojo {
+      animation: none;
+    }
+    .acceso-capa {
+      transform: none;
+      transition: none;
+    }
+    .acceso-tarjeta-sale, .acceso-panel-sale .acceso-logo {
+      transition: none;
+    }
   }
 
   /* Lista agrupada tipo ajustes: filas separadas por líneas internas, sin bordes por fila. */

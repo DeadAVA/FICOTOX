@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { BrandMark } from "@/components/shell/Brand";
+import { PantallaAcceso, TarjetaAcceso } from "@/components/session/PantallaAcceso";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
@@ -75,26 +75,27 @@ export function FormCambiarPassword({ onDone, submitLabel = "Cambiar contraseña
   );
 }
 
-/* Pantalla obligatoria tras un restablecimiento: no se entra a nada hasta cambiarla. */
+/* Pantalla obligatoria tras un restablecimiento: no se entra a nada hasta cambiarla (mismo estilo que el acceso). */
 export function CambioPasswordObligatorio() {
   const { user, logout } = useSession();
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-canvas-2 px-6 py-12">
-      <section className="w-full max-w-[400px]" aria-labelledby="cambio-titulo">
-        <div className="flex flex-col items-center text-center">
-          <BrandMark size={52} />
-          <h1 id="cambio-titulo" className="mt-5 text-[22px] font-semibold text-ink">
-            Cambia tu contraseña
-          </h1>
-          <p className="mt-1.5 text-[14px] text-ink-2">Entraste con una contraseña temporal (asignada al crear o restablecer tu cuenta). Antes de continuar, {user?.nombre || user?.email}, elige una nueva.</p>
-        </div>
-        <div className="mt-7">
-          <FormCambiarPassword submitLabel="Guardar y continuar" />
-        </div>
-        <button type="button" onClick={logout} className="mt-5 w-full text-center text-[13px] text-ink-3 hover:underline">
-          Salir
-        </button>
-      </section>
-    </main>
+    <PantallaAcceso>
+      <TarjetaAcceso>
+        <section aria-labelledby="cambio-titulo">
+          <div className="flex flex-col gap-1">
+            <h1 id="cambio-titulo" className="text-[24px] font-bold tracking-[-0.03em] text-ink">
+              Cambia tu contraseña
+            </h1>
+            <p className="text-[14px] text-ink-2">Entraste con una contraseña temporal (asignada al crear o restablecer tu cuenta). Antes de continuar, {user?.nombre || user?.email}, elige una nueva.</p>
+          </div>
+          <div className="mt-6">
+            <FormCambiarPassword submitLabel="Guardar y continuar" />
+          </div>
+          <button type="button" onClick={logout} className="mt-5 w-full text-center text-[13px] text-ink-3 hover:underline">
+            Salir
+          </button>
+        </section>
+      </TarjetaAcceso>
+    </PantallaAcceso>
   );
 }
