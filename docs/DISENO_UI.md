@@ -122,6 +122,10 @@ Selección: el subdestino activo es una píldora océano; su padre queda en negr
 
 **Buscadores**: uno global (el del Inicio y la paleta ⌘K, mismo motor) y uno por lista para filtrar esa lista en el servidor. No hay campo de búsqueda en la barra lateral.
 
+### Listas de Muestras e Informes
+
+Recepción, Procesamiento, Extracción, Análisis e Informes comparten estos criterios (`src/components/ui/Table.tsx`): renglones de la misma altura (`FILA_LISTA`, 64 px) con el contenido centrado; fechas de ancho fijo y en una línea (`COL_FECHA`); columnas descriptivas (muestra, análisis, cliente) más anchas, con hasta 2 líneas antes de «…» y el texto completo al pasar el cursor (`CellPrimary lineas={2}`); columnas cortas (fechas, conteos, analista, autorizó) angostas, con conteos centrados y encabezado alineado como su contenido; folios sin partirse; pie con plural correcto (`contar`). En laptops (< 1500 px) se ocultan las columnas menos importantes (`SOLO_ANCHO`: Organismo, Muestras, Autorizó) en lugar de apretar las demás. Análisis usa nombres cortos (`ANALYSIS_NAME_SHORT`, `ANALYSIS_METHOD_SHORT`: «Toxinas lipofílicas (DSP)», «HPLC-MS/MS») sin cambiar lo guardado; la columna Origen acomoda los folios con aire y el ID interno debajo; la línea secundaria del estado va debajo de la insignia, en gris.
+
 ### Paleta tonal de insignias y estados
 
 Seis significados, cada uno con tokens propios por tema (`globals.css`): fondo `-soft`, texto `-text` y relleno de apoyo. La insignia (`Badge`, `TONES` en `Primitives.tsx`) usa fondo tenue + texto del mismo tono + borde interior del mismo tono al 15 %. Nunca un fondo sólido claro u oscuro ni colores puros: el tono `ink` (antes `bg-ink text-surface`, casi blanco en oscuro) es ahora un alias del gris tonal.

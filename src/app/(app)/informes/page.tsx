@@ -16,10 +16,11 @@ import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, Skeleton, TableSkeleton } from "@/components/ui/Primitives";
 import { FranjaPendientes } from "@/components/features/solicitudes/Solicitudes";
 import { StatusCell, StatusFlag } from "@/components/ui/StatusFlag";
-import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
+import { CellPrimary, COL_FECHA, FILA_LISTA, SOLO_ANCHO, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { openProtectedFile } from "@/lib/client/files";
-import { fmt, fmtDate } from "@/lib/client/format";
+import { cn } from "@/components/ui/cn";
+import { contar, fmt, fmtDate } from "@/lib/client/format";
 import { useDebouncedValue, useParamChange, useInitialParam } from "@/lib/client/hooks";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
@@ -116,7 +117,7 @@ function InformesContent() {
         {recepcionId ? <Badge tone="brand">Recepción #{recepcionId}</Badge> : null}
       </Toolbar>
 
-      <TableShell footer={items ? `${fmt(items.length)} informes` : undefined}>
+      <TableShell footer={items ? contar(items.length, "informe", "informes") : undefined}>
         {resource.error ? (
           <ErrorState message={resource.error} onRetry={resource.reload} />
         ) : !items ? (
@@ -127,32 +128,34 @@ function InformesContent() {
           <Table>
             <THead>
               <tr>
-                <Th>Folio</Th>
-                <Th>Cliente</Th>
-                <Th>Recepción</Th>
-                <Th>Análisis</Th>
-                <Th>Emisión</Th>
-                <Th>Autorizó</Th>
+                <Th className="w-[148px]">Folio</Th>
+                <Th className="min-w-[260px]">Cliente</Th>
+                <Th className="w-[150px]">Recepción</Th>
+                <Th align="center" className="w-[90px]">Análisis</Th>
+                <Th className={COL_FECHA}>Emisión</Th>
+                <Th className={cn("w-[150px]", SOLO_ANCHO)}>Autorizó</Th>
                 <Th>Estado</Th>
                 <Th align="right" sticky />
               </tr>
             </THead>
             <TBody>
               {items.map((item) => (
-                <Tr key={item.id} interactive onClick={() => router.push(`/informes/${item.id}`)} className={["anulado", "sustituido"].includes(String(item.estado)) ? "opacity-60" : undefined}>
+                <Tr key={item.id} interactive onClick={() => router.push(`/informes/${item.id}`)} className={cn(FILA_LISTA, ["anulado", "sustituido"].includes(String(item.estado)) && "opacity-60")}>
                   <Td>
                     <span className="flex items-center gap-2">
                       <FolioChip type="IR" num={item.folio_num} />
                       {Number(item.version) > 1 ? <Badge tone="warning">v{String(item.version)}</Badge> : null}
                     </span>
                   </Td>
-                  <Td className="max-w-[260px]">
-                    <CellPrimary title={(item.cliente as ApiRecord)?.nombre || item.solicitante || "-"} subtitle={item.recepcion_id_interno || undefined} />
+                  <Td className="min-w-[260px] max-w-[400px]">
+                    <CellPrimary lineas={2} title={(item.cliente as ApiRecord)?.nombre || item.solicitante || "-"} subtitle={item.recepcion_id_interno || undefined} />
                   </Td>
                   <Td>{item.folio_recepcion_num ? <FolioChip type="R" num={item.folio_recepcion_num} /> : "-"}</Td>
-                  <Td className="tnum">{fmt(item.analisis)}</Td>
-                  <Td muted>{fmtDate(item.fecha_emision)}</Td>
-                  <Td muted>{item.autorizado_nombre || "-"}</Td>
+                  <Td align="center" className="tnum">{fmt(item.analisis)}</Td>
+                  <Td muted className={COL_FECHA}>{fmtDate(item.fecha_emision)}</Td>
+                  <Td muted className={cn("max-w-[160px]", SOLO_ANCHO)}>
+                    <span className="line-clamp-2 break-words" title={item.autorizado_nombre || undefined}>{item.autorizado_nombre || "-"}</span>
+                  </Td>
                   <Td>
                     <StatusCell>
                       <StateBadge kind="informe" status={item.estado} />
@@ -161,7 +164,7 @@ function InformesContent() {
                       {Number(item.retenido || 0) ? <StatusFlag kind="bloqueo" label="Retenido por una no conformidad" detail="No se libera ni se envía hasta liberar la retención." data-retenido /> : null}
                       {Number(item.requiere_enmienda || 0) ? <StatusFlag kind="aviso" label="Requiere enmienda" detail={item.requiere_enmienda_motivo ? String(item.requiere_enmienda_motivo) : undefined} data-requiere-enmienda /> : null}
                     </StatusCell>
-                    {item.liberado_en ? <p className="mt-0.5 text-[11.5px] text-ink-3">Liberado {fmtDate(item.liberado_en)}</p> : null}
+                    {item.liberado_en ? <p className="mt-1 text-[11.5px] leading-tight text-ink-3">Liberado {fmtDate(item.liberado_en)}</p> : null}
                   </Td>
                   <Td align="right" sticky onClick={(event) => event.stopPropagation()}>
                     <ActionMenu items={menuFor(item)} header={String(item.folio || "")} />

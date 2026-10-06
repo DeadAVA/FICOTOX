@@ -1,6 +1,9 @@
 /* Utilidades de formato identicas a las de el app.js de la interfaz original. */
 import { fechaSola, formatearFecha, formatearFechaHora, hoyLocal, tonoVencimiento } from "../shared/fechas";
 
+/* "1 recepción" / "2 recepciones". */
+export const contar = (n: number, uno: string, varios: string): string => `${fmt(n)} ${n === 1 ? uno : varios}`;
+
 export const fmt = (value: unknown): string => {
   const numeric = Number(value || 0);
   return Number.isFinite(numeric) ? numeric.toLocaleString("es-MX") : "0";

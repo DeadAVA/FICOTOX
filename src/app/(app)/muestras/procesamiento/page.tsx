@@ -16,9 +16,10 @@ import { SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
 import { FranjaPendientes } from "@/components/features/solicitudes/Solicitudes";
 import { StatusCell } from "@/components/ui/StatusFlag";
-import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
+import { CellPrimary, COL_FECHA, FILA_LISTA, SOLO_ANCHO, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
-import { fmt, fmtDate } from "@/lib/client/format";
+import { cn } from "@/components/ui/cn";
+import { contar, fmtDate } from "@/lib/client/format";
 import { useDebouncedValue, useInitialParam, useParamChange } from "@/lib/client/hooks";
 import { formatProcessingFolio, normalizeSampleStatus } from "@/lib/client/samples";
 import { useResource } from "@/lib/client/store";
@@ -128,7 +129,7 @@ function ProcesamientoList() {
         <FilterChips groups={groups} toggles={toggles} />
       </Toolbar>
 
-      <TableShell footer={items ? `${fmt(visible.length)} procesamientos` : undefined}>
+      <TableShell footer={items ? contar(visible.length, "procesamiento", "procesamientos") : undefined}>
         {resource.error ? (
           <ErrorState message={resource.error} onRetry={resource.reload} />
         ) : !items ? (
@@ -139,11 +140,11 @@ function ProcesamientoList() {
           <Table>
             <THead>
               <tr>
-                <Th>Folio</Th>
-                <Th>Muestra</Th>
-                <Th>Recepción</Th>
-                <Th>Procesada</Th>
-                <Th>Organismo</Th>
+                <Th className="w-[136px]">Folio</Th>
+                <Th className="min-w-[240px]">Muestra</Th>
+                <Th className="w-[150px]">Recepción</Th>
+                <Th className={COL_FECHA}>Procesada</Th>
+                <Th className={SOLO_ANCHO}>Organismo</Th>
                 <Th>Estado</Th>
                 <Th align="right" sticky />
               </tr>
@@ -152,18 +153,18 @@ function ProcesamientoList() {
               {visible.map((item) => {
                 const anulada = item.estado === "anulada";
                 return (
-                  <Tr key={item.id} interactive onClick={() => router.push(`/muestras/procesamiento/${item.id}`)} className={anulada ? "opacity-60" : undefined}>
+                  <Tr key={item.id} interactive onClick={() => router.push(`/muestras/procesamiento/${item.id}`)} className={cn(FILA_LISTA, anulada && "opacity-60")}>
                     <Td>
                       <FolioChip type="P" num={item.folio_num} />
                     </Td>
-                    <Td className="max-w-[240px]">
-                      <CellPrimary title={item.id_interno || "—"} subtitle={item.muestra_tipo === "lote" ? "Lote" : "Muestra única"} />
+                    <Td className="min-w-[240px] max-w-[380px]">
+                      <CellPrimary lineas={2} title={item.id_interno || "—"} subtitle={item.muestra_tipo === "lote" ? "Lote" : "Muestra única"} />
                     </Td>
                     <Td>{item.folio_recepcion_num ? <FolioChip type="R" num={item.folio_recepcion_num} /> : <span className="text-[12.5px] text-ink-3">Sin vincular</span>}</Td>
-                    <Td muted className="whitespace-nowrap">
+                    <Td muted className={COL_FECHA}>
                       {fmtDate(item.fecha_procesamiento)}
                     </Td>
-                    <Td muted>{ORGANISMO[organismoDe(item)] || organismoDe(item) || "—"}</Td>
+                    <Td muted className={SOLO_ANCHO}>{ORGANISMO[organismoDe(item)] || organismoDe(item) || "—"}</Td>
                     <Td>
                       <StatusCell>
                         <SampleStatus status={item.estado} />

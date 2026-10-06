@@ -90,7 +90,7 @@ export function StatusFlag({ kind = "pendiente", label, detail, className, onCli
 /* Celda de estado: insignia y avisos compactos en una sola línea, sin saltos. */
 export function StatusCell({ children, className, ...rest }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("flex items-center gap-1.5 whitespace-nowrap", className)} {...rest}>
+    <div className={cn("flex items-center gap-2 whitespace-nowrap", className)} {...rest}>
       {children}
     </div>
   );

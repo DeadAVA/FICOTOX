@@ -15,9 +15,10 @@ import { SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { EmptyState, ErrorState, Skeleton, TableSkeleton } from "@/components/ui/Primitives";
 import { FranjaPendientes } from "@/components/features/solicitudes/Solicitudes";
 import { StatusCell } from "@/components/ui/StatusFlag";
-import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
+import { CellPrimary, COL_FECHA, FILA_LISTA, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
-import { fmt, fmtDate } from "@/lib/client/format";
+import { cn } from "@/components/ui/cn";
+import { contar, fmtDate } from "@/lib/client/format";
 import { useDebouncedValue, useInitialParam, useParamChange } from "@/lib/client/hooks";
 import { formatExtractionFolio, normalizeSampleStatus } from "@/lib/client/samples";
 import { useResource } from "@/lib/client/store";
@@ -157,7 +158,7 @@ function ExtraccionList() {
         <FilterChips groups={groups} toggles={toggles} />
       </Toolbar>
 
-      <TableShell footer={items ? `${fmt(visible.length)} extracciones${tipo ? ` ${extractionTypeMeta(tipo).short}` : ""}` : undefined}>
+      <TableShell footer={items ? `${contar(visible.length, "extracción", "extracciones")}${tipo ? ` ${extractionTypeMeta(tipo).short}` : ""}` : undefined}>
         {resource.error ? (
           <ErrorState message={resource.error} onRetry={resource.reload} />
         ) : !items ? (
@@ -173,11 +174,11 @@ function ExtraccionList() {
           <Table>
             <THead>
               <tr>
-                <Th>Folio</Th>
-                <Th>Formato</Th>
-                <Th>Muestra</Th>
-                <Th>Procesamiento</Th>
-                <Th>Extraída</Th>
+                <Th className="w-[136px]">Folio</Th>
+                <Th className="w-[190px]">Formato</Th>
+                <Th className="min-w-[220px]">Muestra</Th>
+                <Th className="w-[150px]">Procesamiento</Th>
+                <Th className={COL_FECHA}>Extraída</Th>
                 <Th>Estado</Th>
                 <Th align="right" sticky />
               </tr>
@@ -187,18 +188,18 @@ function ExtraccionList() {
                 const meta = extractionTypeMeta(item.tipo_registro);
                 const anulada = item.estado === "anulada";
                 return (
-                  <Tr key={item.id} interactive onClick={() => router.push(`/muestras/extraccion/${item.id}`)} className={anulada ? "opacity-60" : undefined}>
+                  <Tr key={item.id} interactive onClick={() => router.push(`/muestras/extraccion/${item.id}`)} className={cn(FILA_LISTA, anulada && "opacity-60")}>
                     <Td>
                       <FolioChip type={meta.tipo} num={item.folio_num} />
                     </Td>
                     <Td>
                       <CellPrimary title={meta.short} subtitle={item.tipo_molienda === "congelada" ? "Molienda congelada" : item.tipo_molienda === "fresca" ? "Molienda fresca" : meta.clave} />
                     </Td>
-                    <Td className="max-w-[220px]">
-                      <CellPrimary title={item.id_interno || "—"} subtitle={item.muestra_tipo === "lote" ? "Lote" : "Muestra única"} />
+                    <Td className="min-w-[220px] max-w-[360px]">
+                      <CellPrimary lineas={2} title={item.id_interno || "—"} subtitle={item.muestra_tipo === "lote" ? "Lote" : "Muestra única"} />
                     </Td>
                     <Td>{item.folio_procesamiento_num ? <FolioChip type="P" num={item.folio_procesamiento_num} /> : <span className="text-[12.5px] text-ink-3">Sin vincular</span>}</Td>
-                    <Td muted className="whitespace-nowrap">
+                    <Td muted className={COL_FECHA}>
                       {fmtDate(item.fecha_extraccion)}
                     </Td>
                     <Td>

@@ -16,9 +16,11 @@ import { SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, Skeleton, TableSkeleton } from "@/components/ui/Primitives";
 import { FranjaPendientes } from "@/components/features/solicitudes/Solicitudes";
 import { StatusCell } from "@/components/ui/StatusFlag";
-import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
+import { CellPrimary, COL_FECHA, FILA_LISTA, SOLO_ANCHO, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
-import { fmt, fmtDate } from "@/lib/client/format";
+import { cn } from "@/components/ui/cn";
+import { ANALYSIS_METHOD_SHORT, ANALYSIS_NAME_SHORT } from "@/lib/client/constants";
+import { contar, fmt, fmtDate } from "@/lib/client/format";
 import { useDebouncedValue, useInitialParam, useParamChange } from "@/lib/client/hooks";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
@@ -135,7 +137,7 @@ function AnalisisList() {
         {recepcionId ? <Badge tone="brand">Recepción #{recepcionId}</Badge> : null}
       </Toolbar>
 
-      <TableShell footer={loaded ? `${fmt(items.length)} análisis` : undefined}>
+      <TableShell footer={loaded ? contar(items.length, "análisis", "análisis") : undefined}>
         {resource.error ? (
           <ErrorState message={resource.error} onRetry={resource.reload} />
         ) : !loaded ? (
@@ -146,12 +148,12 @@ function AnalisisList() {
           <Table>
             <THead>
               <tr>
-                <Th>Folio A</Th>
-                <Th>Análisis</Th>
-                <Th>Origen</Th>
-                <Th>Fecha</Th>
-                <Th>Muestras</Th>
-                <Th>Analista</Th>
+                <Th className="w-[136px]">Folio A</Th>
+                <Th className="min-w-[240px]">Análisis</Th>
+                <Th className="min-w-[200px]">Origen</Th>
+                <Th className={COL_FECHA}>Fecha</Th>
+                <Th align="center" className={cn("w-[96px]", SOLO_ANCHO)}>Muestras</Th>
+                <Th className="w-[140px]">Analista</Th>
                 <Th>Estado</Th>
                 <Th align="right" sticky />
               </tr>
@@ -161,7 +163,7 @@ function AnalisisList() {
                 const tipo = ANALYSIS_TYPES.find((t) => t.value === item.tipo_analisis);
                 const metodo = item.metodo === "otro" ? item.metodo_otro : ANALYSIS_METHODS.find((m) => m.value === item.metodo)?.label;
                 return (
-                  <Tr key={item.id} interactive onClick={() => router.push(`/muestras/analisis/${item.id}`)} className={item.estado === "anulado" ? "opacity-60" : undefined}>
+                  <Tr key={item.id} interactive onClick={() => router.push(`/muestras/analisis/${item.id}`)} className={cn(FILA_LISTA, item.estado === "anulado" && "opacity-60")}>
                     <Td>
                       <span className="flex items-center gap-2">
                         <FolioChip type="A" num={item.folio_num} />
@@ -169,24 +171,26 @@ function AnalisisList() {
                         {Number(item.version || 1) > 1 ? <Badge tone="warning">v{String(item.version)}</Badge> : null}
                       </span>
                     </Td>
-                    <Td className="max-w-[220px]">
-                      <CellPrimary title={tipo?.label || item.tipo_analisis} subtitle={metodo || "-"} />
+                    <Td className="min-w-[240px] max-w-[340px]">
+                      <CellPrimary lineas={2} title={ANALYSIS_NAME_SHORT[String(item.tipo_analisis)] || tipo?.label || item.tipo_analisis} subtitle={ANALYSIS_METHOD_SHORT[String(item.metodo)] || metodo || "-"} tooltip={[tipo?.label || item.tipo_analisis, metodo].filter(Boolean).join("\n")} />
                     </Td>
-                    <Td>
-                      <div className="flex flex-wrap items-center gap-1.5">
+                    <Td className="min-w-[200px]">
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
                         {item.folio_recepcion_num ? <FolioChip type="R" num={item.folio_recepcion_num} /> : null}
                         {item.folio_extraccion_num ? <FolioChip type={String(item.tipo_extraccion || "E-A")} num={item.folio_extraccion_num} /> : null}
                       </div>
-                      {item.recepcion_id_interno ? <p className="mt-0.5 max-w-[220px] truncate text-[12px] text-ink-3">{item.recepcion_id_interno}</p> : null}
+                      {item.recepcion_id_interno ? <p className="mt-1.5 max-w-[240px] truncate text-[12px] text-ink-3" title={String(item.recepcion_id_interno)}>{item.recepcion_id_interno}</p> : null}
                     </Td>
-                    <Td muted className="whitespace-nowrap">
+                    <Td muted className={COL_FECHA}>
                       {fmtDate(item.fecha_analisis)}
                     </Td>
-                    <Td>
+                    <Td align="center" className={SOLO_ANCHO}>
                       <span className="tnum">{fmt(item.muestras)}</span>
                       {Number(item.no_conformes) > 0 ? <Badge tone="danger" className="ml-2">{fmt(item.no_conformes)} no conforme(s)</Badge> : null}
                     </Td>
-                    <Td muted>{item.analista_nombre || "-"}</Td>
+                    <Td muted className="max-w-[160px]">
+                      <span className="line-clamp-2 break-words" title={item.analista_nombre || undefined}>{item.analista_nombre || "-"}</span>
+                    </Td>
                     <Td>
                       <StatusCell>
                         <StateBadge kind="analisis" status={item.estado} />

@@ -204,6 +204,19 @@ export const MODULE_CARDS_CONFIG: ModuleCardConfig[] = [
   { page: "documentos", label: "Documentos SGC", desc: "Gestión documental del sistema de calidad", icon: "bi-file-earmark-text", color: "slate" },
 ];
 
+/* Nombres cortos para las listas (el nombre completo queda en el tooltip y en la ventana); no cambian los datos guardados. */
+export const ANALYSIS_NAME_SHORT: Record<string, string> = {
+  acido_domoico: "Ácido domoico (ASP)",
+  toxinas_lipofilicas: "Toxinas lipofílicas (DSP)",
+  toxinas_paralizantes: "Toxinas paralizantes (PSP)",
+};
+export const ANALYSIS_METHOD_SHORT: Record<string, string> = {
+  hplc_uv_vis: "HPLC-UV",
+  hplc_ms_ms: "HPLC-MS/MS",
+  hplc_fld: "HPLC-FLD",
+  bioensayo_raton: "Bioensayo en ratón",
+};
+
 export const SAMPLE_ANALYSIS_LABELS: Record<string, string> = Object.fromEntries(RECEPTION_ANALYSIS_TYPES.map((item) => [item.value, item.label]));
 
 export const SAMPLE_METHOD_LABELS: Record<string, string> = { ...LEGACY_RECEPTION_METHODS, ...Object.fromEntries(RECEPTION_METHODS.map((item) => [item.value, item.label])) };

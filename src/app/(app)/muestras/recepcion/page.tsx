@@ -16,12 +16,13 @@ import { SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
 import { FranjaPendientes } from "@/components/features/solicitudes/Solicitudes";
 import { StatusCell } from "@/components/ui/StatusFlag";
-import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
+import { CellPrimary, COL_FECHA, FILA_LISTA, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
-import { fmt, fmtDate } from "@/lib/client/format";
+import { cn } from "@/components/ui/cn";
+import { contar, fmtDate } from "@/lib/client/format";
 import { useDebouncedValue, useInitialParam, useParamChange } from "@/lib/client/hooks";
 import { ETAPAS_FLUJO, esEtapaFlujo, type EtapaFlujo } from "@/lib/client/flujo";
-import { formatSampleFolio, getSampleTypeSummary, normalizeSampleStatus } from "@/lib/client/samples";
+import { formatSampleFolio, normalizeSampleStatus } from "@/lib/client/samples";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { ACCEPTANCE_DECISIONS, RECEPTION_ANALYSIS_TYPES, RECEPTION_STATE_ORDER, SAMPLE_STATES } from "@/lib/shared/sgc";
@@ -186,7 +187,7 @@ function RecepcionList() {
         <FilterChips groups={groups} toggles={toggles} />
       </Toolbar>
 
-      <TableShell footer={items ? `${fmt(visible.length)} recepciones` : undefined}>
+      <TableShell footer={items ? contar(visible.length, "recepción", "recepciones") : undefined}>
         {resource.error ? (
           <ErrorState message={resource.error} onRetry={resource.reload} />
         ) : !items ? (
@@ -197,11 +198,11 @@ function RecepcionList() {
           <Table>
             <THead>
               <tr>
-                <Th>Folio</Th>
-                <Th>Muestra</Th>
-                <Th>Recibida</Th>
+                <Th className="w-[136px]">Folio</Th>
+                <Th className="min-w-[240px]">Muestra</Th>
+                <Th className={COL_FECHA}>Recibida</Th>
                 <Th>Análisis</Th>
-                <Th>Aceptación</Th>
+                <Th className="w-[150px]">Aceptación</Th>
                 <Th>Estado</Th>
                 <Th align="right" sticky />
               </tr>
@@ -212,14 +213,14 @@ function RecepcionList() {
                 const tipos = tiposDe(item);
                 const dec = String(item.decision_aceptacion || "");
                 return (
-                  <Tr key={item.id} interactive onClick={() => router.push(`/muestras/recepcion/${item.id}`)} className={anulada ? "opacity-60" : undefined}>
+                  <Tr key={item.id} interactive onClick={() => router.push(`/muestras/recepcion/${item.id}`)} className={cn(FILA_LISTA, anulada && "opacity-60")}>
                     <Td>
                       <FolioChip type={String(item.tipo_registro || "R")} num={item.folio_num} />
                     </Td>
-                    <Td className="max-w-[260px]">
-                      <CellPrimary title={item.id_interno || (item.muestra_unica ? "—" : "Lote")} subtitle={[item.solicitante, getSampleTypeSummary(item)].filter(Boolean).join(" · ")} />
+                    <Td className="min-w-[240px] max-w-[380px]">
+                      <CellPrimary lineas={2} title={item.id_interno || (item.muestra_unica ? "—" : "Lote")} subtitle={item.solicitante || undefined} />
                     </Td>
-                    <Td muted className="whitespace-nowrap">
+                    <Td muted className={COL_FECHA}>
                       {fmtDate(item.fecha_recepcion)}
                     </Td>
                     <Td>
