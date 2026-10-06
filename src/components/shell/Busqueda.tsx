@@ -34,7 +34,8 @@ export interface VentanaCalidad {
 }
 
 const ENCABEZADO = "[&_[cmdk-group-heading]]:flex [&_[cmdk-group-heading]]:items-center [&_[cmdk-group-heading]]:justify-between [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-ink-3";
-const ITEM = "group rounded-[10px] outline-none data-[selected=true]:bg-brand data-[selected=true]:text-on-accent";
+/* Seleccionado: fondo tenue de la superficie elevada y una barra fina de acento a la izquierda; el texto conserva su color. */
+const ITEM = "group relative rounded-[10px] outline-none before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-brand before:opacity-0 before:transition-opacity data-[selected=true]:bg-surface-3 data-[selected=true]:before:opacity-100";
 
 export function Busqueda({ modo, onCerrar, alAbrirVentana, className }: { modo: "pagina" | "ventana"; onCerrar?: () => void; /* Quien la aloja se encarga de las ventanas de detalle (si no, las abre ella misma). */ alAbrirVentana?: (ventana: VentanaCalidad) => void; className?: string }) {
   const router = useRouter();
@@ -168,7 +169,7 @@ export function Busqueda({ modo, onCerrar, alAbrirVentana, className }: { modo: 
               ))}
               {grupo.mas ? (
                 <Command.Item value={`${grupo.clave}-todos`} onSelect={() => verTodos(grupo.mas!.href)} className={ITEM}>
-                  <span className="flex cursor-pointer items-center gap-1.5 px-2.5 py-1.5 text-[12.5px] font-medium text-brand group-data-[selected=true]:text-on-accent">
+                  <span className="flex cursor-pointer items-center gap-1.5 px-2.5 py-1.5 text-[12.5px] font-medium text-brand">
                     {grupo.mas.etiqueta} <ArrowRight size={13} />
                   </span>
                 </Command.Item>
@@ -182,7 +183,7 @@ export function Busqueda({ modo, onCerrar, alAbrirVentana, className }: { modo: 
   return (
     <div
       ref={raiz}
-      className={cn("relative mx-auto w-full", className)}
+      className={cn("relative z-30 mx-auto w-full", className)}
       /* Si el foco sale del buscador (Shift+Tab, clic en otro control), el panel del Inicio se cierra. */
       onBlur={(event) => {
         if (modo === "pagina" && !raiz.current?.contains(event.relatedTarget as Node | null)) {

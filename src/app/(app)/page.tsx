@@ -69,11 +69,8 @@ export default function InicioPage() {
           {greeting()}
           {firstName ? `, ${firstName}` : ""}.
         </h1>
-        <div className="entrada-escalonada mt-8 w-full" style={{ ["--i" as string]: 1 }}>
-          <Busqueda modo="pagina" />
-        </div>
         {pendientes.length ? (
-          <ul aria-label="Pendientes" className="animate-fade-in mt-7 flex flex-wrap items-center justify-center gap-2">
+          <ul aria-label="Pendientes" className="animate-fade-in mt-4 flex flex-wrap items-center justify-center gap-2">
             {pendientes.map((p) => {
               const corto = CORTO[p.key] || { label: p.label, icono: null };
               const tono = TONO[p.tone];
@@ -91,6 +88,9 @@ export default function InicioPage() {
             })}
           </ul>
         ) : null}
+        <div className={cn("entrada-escalonada w-full", pendientes.length ? "mt-4" : "mt-8")} style={{ ["--i" as string]: 1 }}>
+          <Busqueda modo="pagina" />
+        </div>
       </div>
     </PageBody>
   );

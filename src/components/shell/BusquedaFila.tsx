@@ -39,7 +39,8 @@ const TONO: Partial<Record<TipoResultado, string>> = {
 
 /* Resalta en `texto` las palabras de `consulta` (sin importar mayúsculas ni acentos). */
 function Resaltado({ texto, consulta }: { texto: string; consulta?: string }) {
-  const terminos = norm(consulta || "").split(/[\s,;]+/).filter((t) => t.length >= 1);
+  // Con menos de 2 caracteres no se resalta, y tampoco palabras sueltas de una letra.
+  const terminos = norm(consulta || "").trim().length >= 2 ? norm(consulta || "").split(/[\s,;]+/).filter((t) => t.length >= 2) : [];
   if (!terminos.length) return <>{texto}</>;
   // Texto normalizado carácter a carácter, para que los índices coincidan con el original.
   const letras = Array.from(texto);
@@ -67,7 +68,7 @@ function Resaltado({ texto, consulta }: { texto: string; consulta?: string }) {
     const trozo = letras.slice(i, j).join("");
     partes.push(
       marcada[i] ? (
-        <mark key={i} className="rounded-[3px] bg-brand/15 text-inherit group-data-[selected=true]:bg-on-accent/25">
+        <mark key={i} className="bg-transparent font-semibold text-inherit underline decoration-brand/60 decoration-[1.5px] underline-offset-[3px]">
           {trozo}
         </mark>
       ) : (
@@ -90,18 +91,18 @@ export interface FilaBusqueda {
 export function BusquedaFila({ fila, consulta, onQuitar, className }: { fila: FilaBusqueda; consulta?: string; onQuitar?: () => void; className?: string }) {
   return (
     <div className={cn("flex cursor-pointer items-center gap-3 px-2.5 py-2 text-[14px]", className)}>
-      <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-surface-3 text-ink-2 transition-colors group-data-[selected=true]:bg-on-accent/15 group-data-[selected=true]:text-on-accent", fila.tipo ? TONO[fila.tipo] : undefined)}>{iconoDeTipo(fila.tipo)}</span>
+      <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-surface-3 text-ink-2 transition-colors group-data-[selected=true]:bg-brand-soft group-data-[selected=true]:text-brand-strong", fila.tipo ? TONO[fila.tipo] : undefined)}>{iconoDeTipo(fila.tipo)}</span>
       <span className="flex min-w-0 flex-1 flex-col leading-tight">
         <span className={cn("truncate font-medium", fila.mono && "code")}>
           <Resaltado texto={fila.titulo} consulta={consulta} />
         </span>
         {fila.sub ? (
-          <span className="truncate text-[12.5px] text-ink-3 group-data-[selected=true]:text-on-accent/80">
+          <span className="truncate text-[12.5px] text-ink-3">
             <Resaltado texto={fila.sub} consulta={consulta} />
           </span>
         ) : null}
       </span>
-      {fila.etiqueta ? <span className="hidden shrink-0 rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-medium text-ink-3 group-data-[selected=true]:bg-on-accent/15 group-data-[selected=true]:text-on-accent sm:inline">{fila.etiqueta}</span> : null}
+      {fila.etiqueta ? <span className="hidden shrink-0 rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-medium text-ink-3 sm:inline">{fila.etiqueta}</span> : null}
       {onQuitar ? (
         <button
           type="button"
@@ -113,7 +114,7 @@ export function BusquedaFila({ fila, consulta, onQuitar, className }: { fila: Fi
             event.stopPropagation();
             onQuitar();
           }}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-4 opacity-60 transition-[opacity,background-color] hover:bg-surface-3 hover:text-ink group-data-[selected=true]:text-on-accent/80 group-data-[selected=true]:hover:bg-on-accent/15 group-data-[selected=true]:hover:text-on-accent"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-4 opacity-60 transition-[opacity,background-color] hover:bg-surface-3 hover:text-ink"
         >
           <X size={12} weight="bold" />
         </button>
