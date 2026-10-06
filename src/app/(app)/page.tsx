@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { PageBody } from "@/components/shell/AppShell";
-import { HomeSearch } from "@/components/shell/HomeSearch";
+import { Busqueda } from "@/components/shell/Busqueda";
 import { CORTO, TONO, ordenarPendientes } from "@/components/features/inicio/pendientes";
 import type { Pendiente } from "@/components/features/inicio/tipos";
 import { useSession } from "@/components/session/SessionProvider";
@@ -70,7 +70,7 @@ export default function InicioPage() {
           {firstName ? `, ${firstName}` : ""}.
         </h1>
         <div className="entrada-escalonada mt-8 w-full" style={{ ["--i" as string]: 1 }}>
-          <HomeSearch />
+          <Busqueda modo="pagina" />
         </div>
         {pendientes.length ? (
           <ul aria-label="Pendientes" className="animate-fade-in mt-7 flex flex-wrap items-center justify-center gap-2">

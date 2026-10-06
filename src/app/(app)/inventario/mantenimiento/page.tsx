@@ -46,7 +46,8 @@ export default function MantenimientoPage() {
 function MantenimientoContent() {
   const { token, can } = useSession();
   const prompt = usePrompt();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(useInitialParam("buscar"));
+  useParamChange("buscar", setSearch);
   const [tipo, setTipo] = useState("");
   type EstadoFilter = "" | "pendiente" | "proximo" | "completado" | "vencido";
   const ESTADOS: EstadoFilter[] = ["", "pendiente", "proximo", "completado", "vencido"];

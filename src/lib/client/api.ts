@@ -174,9 +174,10 @@ export const postJson = async (url: string, body: unknown): Promise<ApiRecord> =
   return data;
 };
 
-export const getJsonAuth = async (url: string, token: string): Promise<ApiRecord> => {
+export const getJsonAuth = async (url: string, token: string, signal?: AbortSignal): Promise<ApiRecord> => {
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
+    signal,
   });
   const data = await parseJson(response);
   if (!response.ok) {

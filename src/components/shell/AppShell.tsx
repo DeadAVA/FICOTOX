@@ -94,6 +94,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user, permissions, logout } = useSession();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [cuentaClave, setCuentaClave] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
@@ -119,7 +120,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Fase 5: "Mi cuenta" se abre con el evento EVENTO_ABRIR_CUENTA o al llegar con #mis-autorizaciones.
   useEffect(() => {
-    const abrir = () => setAccountOpen(true);
+    const abrir = (event?: Event) => {
+      // La búsqueda ("cambiar contraseña") pide abrir la cuenta con el formulario de contraseña ya desplegado.
+      setCuentaClave(!!(event as CustomEvent<{ password?: boolean }> | undefined)?.detail?.password);
+      setAccountOpen(true);
+    };
     if (window.location.hash === ABRIR_MIS_AUTORIZACIONES) abrir();
     window.addEventListener(EVENTO_ABRIR_CUENTA, abrir);
     return () => window.removeEventListener(EVENTO_ABRIR_CUENTA, abrir);
@@ -208,7 +213,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <ReportarIncidenciaHost />
-      {accountOpen ? <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} /> : null}
+      {accountOpen ? <AccountSheet open={accountOpen} abrirClave={cuentaClave} onClose={() => setAccountOpen(false)} /> : null}
     </div>
   );
 }

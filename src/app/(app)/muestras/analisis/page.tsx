@@ -42,7 +42,8 @@ function AnalisisList() {
   const router = useRouter();
   const params = useSearchParams();
   const recepcionId = params.get("recepcion") || "";
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(useInitialParam("buscar"));
+  useParamChange("buscar", setSearch);
   /* ?filtro= llega desde los avisos del Inicio y el buscador ("Análisis por revisar o aprobar"). */
   const initialFilter = useInitialParam("filtro");
   const [estado, setEstado] = useState<EstadoFilter>(ESTADOS.includes(initialFilter) ? (initialFilter as EstadoFilter) : "");

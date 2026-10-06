@@ -32,12 +32,12 @@ import { ListaAutorizaciones } from "@/components/features/admin/AutorizacionesP
 export const ABRIR_MIS_AUTORIZACIONES = "#mis-autorizaciones";
 export const EVENTO_ABRIR_CUENTA = "ficotox:abrir-cuenta";
 
-export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function AccountSheet({ open, onClose, abrirClave = false }: { open: boolean; onClose: () => void; /* Abre ya el formulario de cambio de contraseña (desde la búsqueda). */ abrirClave?: boolean }) {
   const { user, token, refreshMe, roles, logoutAll, authConfig } = useSession();
   const confirm = useConfirm();
   const [cargo, setCargo] = useState<string>(user?.cargo_predeterminado ? String(user.cargo_predeterminado) : "");
   const [savingCargo, setSavingCargo] = useState(false);
-  const [cambiarClave, setCambiarClave] = useState(false);
+  const [cambiarClave, setCambiarClave] = useState(abrirClave);
   const { items: autorizaciones } = useAutorizaciones();
 
   // Si se abrio desde un enlace a #mis-autorizaciones, se lleva la vista a esa seccion.

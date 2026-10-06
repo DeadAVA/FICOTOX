@@ -21,7 +21,7 @@ import { Avatar, Badge } from "@/components/ui/Primitives";
 import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
 import { API_BASE_URL, getJsonAuth, resolveApiEntity, sendJsonAuth } from "@/lib/client/api";
 import { fmt, normalizeText } from "@/lib/client/format";
-import { useOpenState, useUrlTrigger } from "@/lib/client/hooks";
+import { useOpenState, useUrlTrigger, useInitialParam, useParamChange } from "@/lib/client/hooks";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { formatearFecha, formatearFechaHora, formatearHora, hoyLocal, sumarDias } from "@/lib/shared/fechas";
@@ -63,7 +63,8 @@ function UsuariosContent() {
   const { token, can, user: me, alcance } = useSession();
   const prompt = usePrompt();
   const params = useSearchParams();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(useInitialParam("buscar"));
+  useParamChange("buscar", setSearch);
   const [estado, setEstado] = useState<EstadoFiltro>(() => (params.get("estado") as EstadoFiltro) || "");
   const [tipo, setTipo] = useState<TipoFiltro>(() => (params.get("tipo") as TipoFiltro) || "");
   const [vigencia, setVigencia] = useState<VigenciaFiltro>(() => (params.get("vigencia") as VigenciaFiltro) || "");

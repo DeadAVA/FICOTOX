@@ -3,7 +3,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { API_BASE_URL, getJsonAuth, postJson, registrarAvisoSesion, sendJsonAuth } from "@/lib/client/api";
-import { resetSearchIndex } from "@/lib/client/search-index";
 import { adoptarTemaDeCuenta } from "@/lib/client/tema";
 import { clearSession, getStoredPermissions, getStoredToken, setSession, setStoredPermissions } from "@/lib/client/session";
 import type { ApiRecord, AuthConfig, ModuleAction, PermissionsMap, RolSesion, SessionUser } from "@/lib/client/types";
@@ -78,7 +77,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const leave = useCallback(() => {
     clearSession();
-    resetSearchIndex();
     setToken("");
     setUser(null);
     setPermissions({});

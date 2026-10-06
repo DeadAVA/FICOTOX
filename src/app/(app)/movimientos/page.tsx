@@ -16,6 +16,7 @@ import { useResource } from "@/lib/client/store";
 import { haceCuantoCorto } from "@/lib/client/tiempo";
 import type { ApiRecord } from "@/lib/client/types";
 import { formatearFechaHora } from "@/lib/shared/fechas";
+import { useInitialParam, useParamChange } from "@/lib/client/hooks";
 
 /*
  * Movimientos: entradas y salidas de reactivos y consumibles. Lista en
@@ -48,7 +49,8 @@ function MovimientosContent() {
   const [origin, setOrigin] = useState<Origin>("todos");
   const [tipo, setTipo] = useState<Tipo>("");
   const [orden, setOrden] = useState<Orden>("reciente");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(useInitialParam("buscar"));
+  useParamChange("buscar", setSearch);
   const [abierta, setAbierta] = useState<number | null>(null);
 
   const resource = useResource<{ items: ApiRecord[]; summary: ApiRecord }>(

@@ -7,7 +7,7 @@ import { PageBody } from "@/components/shell/AppShell";
 import { useSession } from "@/components/session/SessionProvider";
 import { cn } from "@/components/ui/cn";
 import { Kbd } from "@/components/ui/Primitives";
-import { HELP_TOPICS } from "@/lib/client/search";
+import { HELP_TOPICS } from "@/lib/shared/busqueda";
 
 /*
  * Ayuda: el manual de uso resumido, dentro de la plataforma. Una columna con

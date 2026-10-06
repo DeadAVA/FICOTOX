@@ -19,7 +19,7 @@ import { StatusCell } from "@/components/ui/StatusFlag";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { fmt, fmtDate } from "@/lib/client/format";
-import { useDebouncedValue } from "@/lib/client/hooks";
+import { useDebouncedValue, useInitialParam, useParamChange } from "@/lib/client/hooks";
 import { formatProcessingFolio, normalizeSampleStatus } from "@/lib/client/samples";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
@@ -39,7 +39,8 @@ type OrganismoFilter = "" | "bivalvos" | "sardinas" | "otro";
 function ProcesamientoList() {
   const { token, can } = useSession();
   const router = useRouter();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(useInitialParam("buscar"));
+  useParamChange("buscar", setSearch);
   const [showAnuladas, setShowAnuladas] = useState(false);
   const [mias, setMias] = useState(false);
   const [etapa, setEtapa] = useState<EtapaFilter>("");

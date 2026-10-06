@@ -184,6 +184,8 @@ function ConsumiblesContent() {
 
   const reportar = useMenuReportar();
   const reponer = (item: ApiRecord) => refill.open({ type: "consumible", id: Number(item.id), name: String(item.producto || "Consumible") });
+  // Desde la búsqueda ("reponer metanol"): ?reponer=<id> abre la reposición de ese registro.
+  useAbrirDesdeUrl(items ? visible : null, (indice) => (canRellenar ? reponer(visible[indice]) : undefined), "reponer");
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const inactive = Number(item.activo ?? 1) === 0;
     const list: MenuItem[] = [];

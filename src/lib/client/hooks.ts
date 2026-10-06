@@ -74,10 +74,10 @@ export function useOpenState<T = null>() {
  * termina de cargar (lo usa el Inicio para que cada pendiente abra la misma
  * ventana que su lista). Luego se limpia de la direccion.
  */
-export function useAbrirDesdeUrl<T extends { id?: unknown }>(filas: T[] | null | undefined, abrir: (indice: number) => void): void {
+export function useAbrirDesdeUrl<T extends { id?: unknown }>(filas: T[] | null | undefined, abrir: (indice: number) => void, parametro = "abrir"): void {
   const params = useSearchParams();
   const router = useRouter();
-  const valor = params.get("abrir");
+  const valor = params.get(parametro);
   const abrirRef = useRef(abrir);
   useEffect(() => {
     abrirRef.current = abrir;
@@ -88,9 +88,9 @@ export function useAbrirDesdeUrl<T extends { id?: unknown }>(filas: T[] | null |
     void Promise.resolve().then(() => {
       if (indice >= 0) abrirRef.current(indice);
       const next = new URLSearchParams(params.toString());
-      next.delete("abrir");
+      next.delete(parametro);
       const query = next.toString();
       router.replace(query ? `?${query}` : window.location.pathname, { scroll: false });
     });
-  }, [valor, filas, params, router]);
+  }, [valor, filas, params, router, parametro]);
 }

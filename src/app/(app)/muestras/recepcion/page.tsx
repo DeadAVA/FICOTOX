@@ -19,7 +19,7 @@ import { StatusCell } from "@/components/ui/StatusFlag";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { fmt, fmtDate } from "@/lib/client/format";
-import { useDebouncedValue, useInitialParam } from "@/lib/client/hooks";
+import { useDebouncedValue, useInitialParam, useParamChange } from "@/lib/client/hooks";
 import { ETAPAS_FLUJO, esEtapaFlujo, type EtapaFlujo } from "@/lib/client/flujo";
 import { formatSampleFolio, getSampleTypeSummary, normalizeSampleStatus } from "@/lib/client/samples";
 import { useResource } from "@/lib/client/store";
@@ -48,7 +48,8 @@ const tiposDe = (item: ApiRecord): string[] => (Array.isArray(item.analisis?.tip
 function RecepcionList() {
   const { token, can } = useSession();
   const router = useRouter();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(useInitialParam("buscar"));
+  useParamChange("buscar", setSearch);
   const [showAnuladas, setShowAnuladas] = useState(false);
   const [etapa, setEtapa] = useState<EtapaFilter>("");
   const [decision, setDecision] = useState<DecisionFilter>("");

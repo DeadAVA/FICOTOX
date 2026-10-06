@@ -21,7 +21,7 @@ import { ActionMenu, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { Badge, EmptyState, ErrorState, Skeleton } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
-import { useDebouncedValue, useInitialParam } from "@/lib/client/hooks";
+import { useDebouncedValue, useInitialParam, useParamChange } from "@/lib/client/hooks";
 import { invalidate, useResource } from "@/lib/client/store";
 import { fmtBytes } from "@/lib/shared/adjuntos";
 import { BIBLIOTECA_MAX_MB_DEFAULT, MOTIVO_MIN_BIBLIOTECA, TIPOS_ARCHIVO } from "@/lib/shared/biblioteca";
@@ -75,7 +75,8 @@ function Biblioteca() {
   const { token } = useSession();
   const router = useRouter();
   const prompt = usePrompt();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(useInitialParam("buscar"));
+  useParamChange("buscar", setSearch);
   const [categoria, setCategoria] = useState("");
   const [tipo, setTipo] = useState("");
   const [archivados, setArchivados] = useState(false);

@@ -27,7 +27,7 @@ import { StatusFlag } from "@/components/ui/StatusFlag";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { descargarCsv } from "@/lib/client/files";
 import { fmt, fmtDate, fmtDateTime } from "@/lib/client/format";
-import { useDebouncedValue, useParamChange } from "@/lib/client/hooks";
+import { useDebouncedValue, useParamChange, useInitialParam } from "@/lib/client/hooks";
 import { usePersonal } from "@/lib/client/personal";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
@@ -151,7 +151,8 @@ function ListaIncidencias() {
   const { token } = useSession();
   const params = useSearchParams();
   const puedeReportar = usePuedeReportar();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(useInitialParam("buscar"));
+  useParamChange("buscar", setSearch);
   const [estado, setEstado] = useState(params.get("filtro") === "por_evaluar" ? "por_evaluar" : "");
   const [tipo, setTipo] = useState("");
   const [periodo, setPeriodo] = useState("");
@@ -241,7 +242,8 @@ function ListaIncidencias() {
 function ListaNc() {
   const { token, can } = useSession();
   const params = useSearchParams();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(useInitialParam("buscar"));
+  useParamChange("buscar", setSearch);
   const [estado, setEstado] = useState(params.get("estado") && ESTADOS_NC[params.get("estado") || ""] ? String(params.get("estado")) : "abiertas");
   const [clasificacion, setClasificacion] = useState("");
   const [origen, setOrigen] = useState("");
@@ -441,7 +443,8 @@ function ListaAcciones() {
   const [estado, setEstado] = useState("");
   const [mias, setMias] = useState(params.get("mias") === "1");
   const [vencidas, setVencidas] = useState(false);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(useInitialParam("buscar"));
+  useParamChange("buscar", setSearch);
   const [periodo, setPeriodo] = useState("");
   const debounced = useDebouncedValue(search);
   const query = new URLSearchParams({ search: debounced.trim() });

@@ -18,7 +18,7 @@ import { StatusCell } from "@/components/ui/StatusFlag";
 import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { fmt, fmtDate } from "@/lib/client/format";
-import { useDebouncedValue } from "@/lib/client/hooks";
+import { useDebouncedValue, useInitialParam, useParamChange } from "@/lib/client/hooks";
 import { formatExtractionFolio, normalizeSampleStatus } from "@/lib/client/samples";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
@@ -42,7 +42,8 @@ function ExtraccionList() {
   const { token, can } = useSession();
   const router = useRouter();
   const params = useSearchParams();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(useInitialParam("buscar"));
+  useParamChange("buscar", setSearch);
   const [tipo, setTipo] = useState<TipoFilter>(normalizeExtractionType(params.get("tipo")) || "");
   const [etapa, setEtapa] = useState<EtapaFilter>("");
   const [molienda, setMolienda] = useState<MoliendaFilter>("");

@@ -21,6 +21,7 @@ import { fmt, normalizeText } from "@/lib/client/format";
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { descripcionDeRol } from "@/lib/shared/roles-descripcion";
+import { useInitialParam, useParamChange, useAbrirDesdeUrl } from "@/lib/client/hooks";
 
 /*
  * Roles (minimalista): una lista sencilla (nombre, cuantas personas lo tienen,
@@ -57,7 +58,8 @@ type UsoFiltro = "" | "con" | "sin";
 function RolesContent() {
   const { token, can, roles: rolesSesion } = useSession();
   const prompt = usePrompt();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(useInitialParam("buscar"));
+  useParamChange("buscar", setSearch);
   const [estado, setEstado] = useState<EstadoFiltro>("");
   const [tipo, setTipo] = useState<TipoFiltro>("");
   const [uso, setUso] = useState<UsoFiltro>("");
@@ -87,6 +89,9 @@ function RolesContent() {
       return true;
     });
   }, [roles, search, estado, tipo, uso]);
+
+  // Desde la búsqueda: /administracion/roles?abrir=<id> abre la ventana de ese rol.
+  useAbrirDesdeUrl(resource.data ? rows : null, setAbierto);
 
   // Errores de las acciones (motivo y contraseña ya capturados): pop-up con qué pasó y qué hacer.
   const vAccion = useValidacion({ titulo: "No se pudo completar la acción", reglas: () => [] });

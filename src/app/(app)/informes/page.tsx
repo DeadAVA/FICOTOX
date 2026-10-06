@@ -20,7 +20,7 @@ import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/comp
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { openProtectedFile } from "@/lib/client/files";
 import { fmt, fmtDate } from "@/lib/client/format";
-import { useDebouncedValue, useParamChange } from "@/lib/client/hooks";
+import { useDebouncedValue, useParamChange, useInitialParam } from "@/lib/client/hooks";
 import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 
@@ -45,7 +45,8 @@ function InformesContent() {
   const router = useRouter();
   const params = useSearchParams();
   const recepcionId = params.get("recepcion") || "";
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(useInitialParam("buscar"));
+  useParamChange("buscar", setSearch);
   const initialFilter = params.get("filtro") || "";
   const [estado, setEstado] = useState<EstadoFilter>(ESTADOS.includes(initialFilter) ? (initialFilter as EstadoFilter) : "");
   const [showAnulados, setShowAnulados] = useState(false);
