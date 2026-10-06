@@ -288,22 +288,24 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
             const active = isItemActive(pathname, item);
             const hasChildren = item.children.length > 0;
             const open = hasChildren && !collapsed && isOpen(item, active);
-            const leafActive = active && !hasChildren;
+            // Hoja activa (o, con la barra contraída, cualquier sección activa): fondo tenue y marca de acento.
+            const leafActive = active && (!hasChildren || collapsed);
             const link = (
               <Link
                 href={item.href}
-                aria-current={leafActive ? "page" : undefined}
+                aria-current={active && !hasChildren ? "page" : undefined}
+                data-activo={leafActive ? "true" : undefined}
                 aria-label={collapsed ? item.label : undefined}
                 onClick={() => {
                   if (hasChildren && !collapsed && !open) toggleExpanded(item.label, active);
                 }}
                 className={cn(
-                  "press group/item flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-[9px] text-[13.5px]",
+                  "seleccion press group/item flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-[9px] text-[13.5px]",
                   collapsed ? "justify-center px-0" : "px-2.5",
-                  leafActive ? "bg-brand font-medium text-on-accent shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" : active ? "font-semibold text-ink hover:bg-surface-3/80" : "font-medium text-ink-2 hover:bg-surface-3/80 hover:text-ink",
+                  leafActive ? "font-semibold text-ink" : active ? "font-semibold text-ink" : "font-medium text-ink-2 hover:text-ink",
                 )}
               >
-                <span className={cn("shrink-0 transition-colors", leafActive ? "text-on-accent" : active ? "text-brand" : "text-ink-3 group-hover/item:text-ink-2")}>{ICONS[item.icon]}</span>
+                <span className={cn("shrink-0 transition-colors", active ? "text-brand" : "text-ink-3 group-hover/item:text-ink-2")}>{ICONS[item.icon]}</span>
                 {!collapsed ? <span className="truncate">{item.label}</span> : null}
               </Link>
             );
@@ -344,12 +346,12 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
                               href={child.href}
                               tabIndex={open ? 0 : -1}
                               aria-current={childActive ? "page" : undefined}
-                              className={cn("press flex h-8 items-center gap-2 rounded-[7px] px-2.5 text-[13px] transition-colors", childActive ? "bg-brand font-medium text-on-accent shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" : "text-ink-2 hover:bg-surface-3/80 hover:text-ink")}
+                              className={cn("seleccion press flex h-8 items-center gap-2 rounded-[7px] px-2.5 text-[13px]", childActive ? "font-semibold text-ink" : "text-ink-2 hover:text-ink")}
                             >
-                              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full transition-colors", childActive ? "bg-on-accent" : "bg-line-strong")} aria-hidden="true" />
+                              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full transition-colors", childActive ? "bg-brand" : "bg-line-strong")} aria-hidden="true" />
                               <span className="truncate">{child.label}</span>
                               {contador[child.href] ? (
-                                <span className={cn("tnum ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold", childActive ? "bg-surface/90 text-brand-strong" : "bg-warning text-on-accent")} aria-label={`${contador[child.href]} pendientes`} data-contador={child.href}>
+                                <span className={cn("tnum ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold", "bg-warning text-on-accent")} aria-label={`${contador[child.href]} pendientes`} data-contador={child.href}>
                                   {contador[child.href]}
                                 </span>
                               ) : null}
@@ -384,12 +386,12 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
         {/* Ayuda: siempre visible, no depende de permisos. */}
         {collapsed ? (
           <Tooltip content="Ayuda" side="right">
-            <Link href="/ayuda" aria-current={isActivePath(pathname, "/ayuda") ? "page" : undefined} className={cn("press inline-flex h-8 w-8 items-center justify-center rounded-[8px]", isActivePath(pathname, "/ayuda") ? "bg-brand-soft text-brand-strong" : "text-ink-3 hover:bg-surface-3 hover:text-ink")} aria-label="Ayuda">
+            <Link href="/ayuda" aria-current={isActivePath(pathname, "/ayuda") ? "page" : undefined} className={cn("seleccion press inline-flex h-8 w-8 items-center justify-center rounded-[8px]", isActivePath(pathname, "/ayuda") ? "text-brand" : "text-ink-3 hover:text-ink")} aria-label="Ayuda">
               <Question size={18} />
             </Link>
           </Tooltip>
         ) : (
-          <Link href="/ayuda" aria-current={isActivePath(pathname, "/ayuda") ? "page" : undefined} className={cn("press mb-1 flex h-9 items-center gap-2.5 rounded-[9px] px-2.5 text-[13.5px] font-medium", isActivePath(pathname, "/ayuda") ? "bg-brand-soft text-brand-strong" : "text-ink-2 hover:bg-surface-3/80 hover:text-ink")}>
+          <Link href="/ayuda" aria-current={isActivePath(pathname, "/ayuda") ? "page" : undefined} className={cn("seleccion press mb-1 flex h-9 items-center gap-2.5 rounded-[9px] px-2.5 text-[13.5px]", isActivePath(pathname, "/ayuda") ? "font-semibold text-ink" : "font-medium text-ink-2 hover:text-ink")}>
             <Question size={18} className={isActivePath(pathname, "/ayuda") ? "text-brand" : "text-ink-3"} />
             Ayuda
           </Link>

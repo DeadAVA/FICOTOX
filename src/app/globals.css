@@ -493,6 +493,51 @@
     scrollbar-color: var(--color-line-strong) transparent;
   }
 
+  /*
+   * Estilo de selección compartido (resultados de la búsqueda y barra lateral):
+   * fondo tenue de la superficie elevada y una marca fina de acento a la izquierda;
+   * el texto conserva su color. Se activa con data-selected="true" (cmdk),
+   * data-activo="true" o aria-current="page". El hover es una versión aún más
+   * tenue, sin marca. El foco con teclado lo sigue marcando :focus-visible.
+   */
+  .seleccion {
+    position: relative;
+    transition: background-color 200ms var(--ease-spring), color 200ms var(--ease-spring);
+  }
+  .seleccion::before {
+    content: "";
+    position: absolute;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    left: 0;
+    width: 3px;
+    border-radius: 999px;
+    background: var(--color-brand);
+    opacity: 0;
+    transform: scaleY(0.4);
+    transition: opacity 200ms var(--ease-spring), transform 200ms var(--ease-spring);
+  }
+  .seleccion:hover {
+    background-color: color-mix(in srgb, var(--color-surface-3) 50%, transparent);
+  }
+  .seleccion[data-selected="true"],
+  .seleccion[data-activo="true"],
+  .seleccion[aria-current="page"] {
+    background-color: var(--color-surface-3);
+  }
+  .seleccion[data-selected="true"]::before,
+  .seleccion[data-activo="true"]::before,
+  .seleccion[aria-current="page"]::before {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .seleccion,
+    .seleccion::before {
+      transition: none;
+    }
+  }
+
   /* Respuesta al presionar: instantánea, con curva de resorte al soltar. */
   .press {
     transition: transform 160ms var(--ease-spring), background-color 160ms var(--ease-spring), border-color 160ms var(--ease-spring), color 160ms var(--ease-spring), box-shadow 160ms var(--ease-spring), opacity 160ms var(--ease-spring);

@@ -122,6 +122,10 @@ Selección: el subdestino activo es una píldora océano; su padre queda en negr
 
 **Buscadores**: uno global (el del Inicio y la paleta ⌘K, mismo motor) y uno por lista para filtrar esa lista en el servidor. No hay campo de búsqueda en la barra lateral.
 
+### Estilo de selección compartido
+
+Una sola clase, `.seleccion` (`src/app/globals.css`), marca lo seleccionado o activo en los resultados de la búsqueda (`data-selected="true"`, lo pone cmdk al moverse con ↑/↓ o con el cursor) y en la barra lateral (`aria-current="page"` o `data-activo="true"`): fondo tenue de la superficie elevada (`surface-3`) y una marca fina de acento (3 px, a la izquierda, con esquinas redondeadas); el texto conserva su color (en la barra lateral, con un peso mayor) y el ícono toma el acento. El hover es el mismo fondo a la mitad, sin marca; el foco con teclado sigue siendo `:focus-visible`. Transición suave de 200 ms, desactivada con `prefers-reduced-motion`. Barra lateral: sección principal sin hijos y subelementos activos llevan el estilo completo (el subelemento, con su sangría); la sección padre de un subelemento activo solo resalta su ícono, sin fondo; con la barra contraída, el ícono activo lleva el fondo tenue y la marca. Todo sale de los tokens de tema, así que se ve igual de armonioso en claro y oscuro.
+
 ### Búsqueda
 
 Un solo componente (`Busqueda.tsx`) en dos lugares: la barra del Inicio (`modo="pagina"`) y la ventana ⌘K de la barra lateral (`modo="ventana"`, diálogo centrado de 680 px con fondo difuminado y el campo ya enfocado). Misma lógica (`useBusqueda`, un solo `GET /api/busqueda` en el servidor, que aplica permisos y alcances), mismo diseño de fila (`BusquedaFila`: ícono por tipo, título, línea secundaria y lo buscado resaltado) y mismos recientes (por persona, en el servidor).

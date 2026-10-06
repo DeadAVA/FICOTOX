@@ -34,8 +34,8 @@ export interface VentanaCalidad {
 }
 
 const ENCABEZADO = "[&_[cmdk-group-heading]]:flex [&_[cmdk-group-heading]]:items-center [&_[cmdk-group-heading]]:justify-between [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-ink-3";
-/* Seleccionado: fondo tenue de la superficie elevada y una barra fina de acento a la izquierda; el texto conserva su color. */
-const ITEM = "group relative rounded-[10px] outline-none before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-brand before:opacity-0 before:transition-opacity data-[selected=true]:bg-surface-3 data-[selected=true]:before:opacity-100";
+/* Seleccionado: el estilo compartido `.seleccion` (el mismo de la barra lateral). */
+const ITEM = "seleccion group rounded-[10px] outline-none";
 
 export function Busqueda({ modo, onCerrar, alAbrirVentana, className }: { modo: "pagina" | "ventana"; onCerrar?: () => void; /* Quien la aloja se encarga de las ventanas de detalle (si no, las abre ella misma). */ alAbrirVentana?: (ventana: VentanaCalidad) => void; className?: string }) {
   const router = useRouter();
