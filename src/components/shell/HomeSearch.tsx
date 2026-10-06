@@ -23,15 +23,21 @@ export function HomeSearch({ className }: { className?: string }) {
   const router = useRouter();
   const { query, setQuery, sections, loading, warm, remember, forgetRecent } = useGlobalSearch();
   const [focused, setFocused] = useState(false);
+  // El panel de acciones y recientes se muestra solo cuando la persona interactúa, no por el enfoque automático.
+  const [shown, setShown] = useState(false);
+  const autoFocus = useRef(false);
   const [ventana, setVentana] = useState<{ tipo: "incidencia" | "nc"; id: number } | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const typed = query.trim().length > 0;
-  const open = focused && (typed || sections.length > 0);
+  const open = focused && (typed || (shown && sections.length > 0));
 
   // En computadora se enfoca sola; en teléfono no, para no abrir el teclado.
   useEffect(() => {
-    if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) input.current?.focus();
+    if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      autoFocus.current = true;
+      input.current?.focus();
+    }
   }, []);
 
   useEffect(() => {
@@ -43,7 +49,10 @@ export function HomeSearch({ className }: { className?: string }) {
     return () => document.removeEventListener("pointerdown", onDown);
   }, [focused]);
 
-  const close = () => setFocused(false);
+  const close = () => {
+    setFocused(false);
+    setShown(false);
+  };
 
   const go = (hit: SearchHit) => {
     remember(hit);
@@ -80,9 +89,13 @@ export function HomeSearch({ className }: { className?: string }) {
             onValueChange={setQuery}
             onFocus={() => {
               setFocused(true);
+              if (autoFocus.current) autoFocus.current = false;
+              else setShown(true);
               void warm();
             }}
+            onClick={() => setShown(true)}
             onKeyDown={(event) => {
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") setShown(true);
               if (event.key === "Escape") {
                 if (query) setQuery("");
                 else {
