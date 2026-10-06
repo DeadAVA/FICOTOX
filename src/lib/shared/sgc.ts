@@ -30,14 +30,14 @@ export const SAMPLE_STATES: Record<string, { label: string; tone: "neutral" | "b
   validada: { label: "Validada", tone: "success" },
   informe_elaborado: { label: "Informe elaborado", tone: "success" },
   liberada: { label: "Liberada", tone: "success" },
-  en_proceso: { label: "En proceso", tone: "warning" },
+  en_proceso: { label: "En proceso", tone: "brand" },
   completada: { label: "Completada", tone: "success" },
   analizada: { label: "Analizada", tone: "success" },
   informada: { label: "Informada", tone: "success" },
-  cerrada: { label: "Cerrada", tone: "ink" },
+  cerrada: { label: "Cerrada", tone: "neutral" },
   anulada: { label: "Anulada", tone: "danger" },
   // Valores historicos de la version anterior.
-  procesamiento: { label: "En proceso", tone: "warning" },
+  procesamiento: { label: "En proceso", tone: "brand" },
   extraccion: { label: "Extracción", tone: "warning" },
   finalizada: { label: "Finalizada", tone: "success" },
   cancelada: { label: "Cancelada", tone: "danger" },
@@ -224,10 +224,10 @@ export const REPORT_STATES: Record<string, { label: string; tone: "neutral" | "b
   en_revision: { label: "En revisión", tone: "warning" },
   autorizado: { label: "Autorizado", tone: "warning" },
   // Fase 6: liberar genera el PDF final; el envio por correo lo deja "enviado".
-  liberado: { label: "Liberado", tone: "success" },
-  enviado: { label: "Enviado", tone: "ink" },
+  liberado: { label: "Liberado", tone: "brand" },
+  enviado: { label: "Enviado", tone: "brand" },
   // Valor anterior a la Fase 6 (el servidor lo migra a "enviado").
-  entregado: { label: "Enviado", tone: "ink" },
+  entregado: { label: "Enviado", tone: "brand" },
   sustituido: { label: "Sustituido por enmienda", tone: "neutral" },
   anulado: { label: "Anulado", tone: "danger" },
 };
@@ -287,7 +287,7 @@ export const DOCUMENT_STATES: Record<string, { label: string; tone: "neutral" | 
   aprobado: { label: "Aprobado", tone: "brand" },
   en_revision: { label: "Revisión de calidad", tone: "warning" },
   vigente: { label: "Vigente", tone: "success" },
-  obsoleto: { label: "Obsoleto", tone: "ink" },
+  obsoleto: { label: "Obsoleto", tone: "neutral" },
   cancelado: { label: "Cancelado", tone: "danger" },
 };
 

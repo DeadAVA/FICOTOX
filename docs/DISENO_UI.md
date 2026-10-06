@@ -122,6 +122,21 @@ Selección: el subdestino activo es una píldora océano; su padre queda en negr
 
 **Buscadores**: uno global (el del Inicio y la paleta ⌘K, mismo motor) y uno por lista para filtrar esa lista en el servidor. No hay campo de búsqueda en la barra lateral.
 
+### Paleta tonal de insignias y estados
+
+Seis significados, cada uno con tokens propios por tema (`globals.css`): fondo `-soft`, texto `-text` y relleno de apoyo. La insignia (`Badge`, `TONES` en `Primitives.tsx`) usa fondo tenue + texto del mismo tono + borde interior del mismo tono al 15 %. Nunca un fondo sólido claro u oscuro ni colores puros: el tono `ink` (antes `bg-ink text-surface`, casi blanco en oscuro) es ahora un alias del gris tonal.
+
+| Significado | Token (`tone`) | Cuándo usarlo |
+| --- | --- | --- |
+| Éxito | `success` | Aceptada, Aprobado, Cumple, Activo, Vigente, Completada |
+| Advertencia | `warning` | Con desviación, Pendiente, Por vencer, En revisión, Autorizado |
+| Peligro | `danger` | Rechazada, No cumple, Vencido, Anulado, Bloqueado |
+| Información | `brand` | En proceso, Enviado, Liberado, Escalada a NC |
+| Acento | `brand` / `brand-soft` | Folios de recepción, selección, íconos activos |
+| Neutro | `neutral` (`ink`) | Cerrada, Borrador, Archivado, Inactivo, De baja, Obsoleto |
+
+En oscuro los tonos son poco saturados: fondo con muy baja opacidad del tono sobre la superficie (p. ej. éxito `#172821`, advertencia `#2a2417`, peligro `#2f2020`, información `#16303d`) y texto más claro y apagado del mismo matiz (`#8ccbad`, `#dcbc86`, `#eaa6a0`, `#74c5da`), todos con contraste AA y la misma intensidad visual. El neutro es `surface-3` con texto `ink-2`, nunca blanco. En claro los tonos no cambian. Los chips de folio (`CHIP_TONES`), los indicadores compactos (`StatusFlag`), los conteos, los círculos de ícono, las píldoras del Inicio, los avisos y los pasos de los formatos salen de estos mismos tokens: no hay colores fijos fuera de ellos (salvo la ilustración de las figuras de perfil, el papel y la tinta de los PDF y la pantalla de acceso). En la barra lateral, el elemento activo solo lleva el fondo tenue de la selección compartida; el foco con teclado (`:focus-visible`) es un borde interior sutil, y nunca un contorno brillante al hacer clic.
+
 ### Estilo de selección compartido
 
 Una sola clase, `.seleccion` (`src/app/globals.css`), marca lo seleccionado o activo en los resultados de la búsqueda (`data-selected="true"`, lo pone cmdk al moverse con ↑/↓ o con el cursor) y en la barra lateral (`aria-current="page"` o `data-activo="true"`): solo el fondo tenue de la superficie elevada (`surface-3`), sin barra ni borde de acento; el texto conserva su color (en la barra lateral, con un peso mayor) y el ícono toma el acento. El hover es el mismo fondo a la mitad; el foco con teclado sigue siendo `:focus-visible`. Transición suave de 200 ms, desactivada con `prefers-reduced-motion`. Barra lateral: sección principal sin hijos y subelementos activos llevan el estilo completo (el subelemento, con su sangría); la sección padre de un subelemento activo solo resalta su ícono, sin fondo; con la barra contraída, el ícono activo lleva el fondo tenue. Todo sale de los tokens de tema, así que se ve igual de armonioso en claro y oscuro.

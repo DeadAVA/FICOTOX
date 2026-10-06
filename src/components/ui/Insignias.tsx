@@ -30,7 +30,7 @@ const TONO_CONTEO: Record<"brand" | "success" | "warning" | "danger" | "neutral"
   brand: "bg-brand-faint text-brand-strong",
   success: "bg-success-soft text-success-text",
   warning: "bg-warning-soft text-warning-text",
-  danger: "bg-danger-soft text-danger",
+  danger: "bg-danger-soft text-danger-text",
   neutral: "bg-surface-3 text-ink-2",
 };
 

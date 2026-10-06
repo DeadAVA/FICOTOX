@@ -39,7 +39,7 @@ const CHIP_TONES: Record<string, string> = {
   "E-A": "bg-violet-soft text-violet-text",
   "E-D": "bg-bloom-soft text-bloom-text",
   A: "bg-success-soft text-success-text",
-  IR: "bg-ink text-surface",
+  IR: "bg-surface-3 text-ink-2 ring-1 ring-inset ring-line-strong/60",
 };
 
 /* Chip de folio: letra de etapa + numero con siete digitos. Cada tipo tiene su color. */

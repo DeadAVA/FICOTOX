@@ -197,28 +197,29 @@
       /* Océano para oscuro: el mismo matiz de #0F7A95, más luminoso y menos saturado */
       --color-brand: #42abc6;
       --color-brand-strong: #74c5da;
-      --color-brand-soft: #143545;
+      --color-brand-soft: #16303d;
       --color-brand-faint: #112832;
       --color-brand-bright: #5cbcd5;
       --color-brand-soft-hover: #1a4253;
       --color-on-accent: #04161d;
 
       /* Estados y categorías con la misma intensidad: fondo tenue del tono y texto más claro */
-      --color-success: #4bb886;
-      --color-success-soft: #12291e;
-      --color-success-text: #82d3aa;
-      --color-warning: #d9a645;
-      --color-warning-soft: #2e2511;
-      --color-warning-text: #ebc47a;
-      --color-danger: #e6766d;
-      --color-danger-soft: #341b1a;
-      --color-danger-text: #f59c94;
-      --color-danger-strong: #f38d84;
-      --color-bloom: #e08b60;
-      --color-bloom-soft: #332217;
-      --color-bloom-text: #efac88;
-      --color-violet-soft: #251f39;
-      --color-violet-text: #c1b2f0;
+      /* Poco saturados: fondo con baja opacidad del tono sobre la superficie y texto del mismo tono, más claro y apagado. */
+      --color-success: #58a888;
+      --color-success-soft: #172821;
+      --color-success-text: #8ccbad;
+      --color-warning: #cfa456;
+      --color-warning-soft: #2a2417;
+      --color-warning-text: #dcbc86;
+      --color-danger: #d9807a;
+      --color-danger-soft: #2f2020;
+      --color-danger-text: #eaa6a0;
+      --color-danger-strong: #e8928b;
+      --color-bloom: #d58f6a;
+      --color-bloom-soft: #2d2319;
+      --color-bloom-text: #e4b090;
+      --color-violet-soft: #251f36;
+      --color-violet-text: #bfb4e4;
 
       /* deep sigue oscuro (fondos de capas); deep-2 se usa como tono de texto e icono */
       --color-deep: #02080c;
@@ -295,6 +296,14 @@
   :focus-visible {
     outline: 2px solid var(--color-brand);
     outline-offset: 2px;
+  }
+  /* Elementos con el estilo de selección (barra lateral, resultados): nunca un contorno brillante; solo con teclado, un borde interior sutil. */
+  .seleccion:focus {
+    outline: none;
+  }
+  .seleccion:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-brand) 45%, transparent);
   }
 
   /* Campos de texto: al enfocar solo cambia el color del borde (lo pone cada

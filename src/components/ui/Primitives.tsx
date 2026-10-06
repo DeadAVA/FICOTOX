@@ -10,14 +10,20 @@ import { cn } from "./cn";
 
 export type Tone = "neutral" | "brand" | "success" | "warning" | "danger" | "bloom" | "ink";
 
+/*
+ * Paleta tonal de insignias (docs/DISENO_UI.md): fondo tenue del tono, texto del
+ * mismo tono y un borde sutil. brand = información / en curso; neutral = cerrado,
+ * borrador, archivado; "ink" es un alias del gris tonal (nunca un fondo claro u
+ * oscuro sólido, que en oscuro brillaba más que el resto).
+ */
 const TONES: Record<Tone, string> = {
-  neutral: "bg-surface-3 text-ink-2",
-  brand: "bg-brand-soft text-brand-strong",
-  success: "bg-success-soft text-success-text",
-  warning: "bg-warning-soft text-warning-text",
-  danger: "bg-danger-soft text-danger-text",
-  bloom: "bg-bloom-soft text-bloom-text",
-  ink: "bg-ink text-surface",
+  neutral: "bg-surface-3 text-ink-2 ring-1 ring-inset ring-line-strong/50",
+  brand: "bg-brand-soft text-brand-strong ring-1 ring-inset ring-brand-strong/15",
+  success: "bg-success-soft text-success-text ring-1 ring-inset ring-success-text/15",
+  warning: "bg-warning-soft text-warning-text ring-1 ring-inset ring-warning-text/15",
+  danger: "bg-danger-soft text-danger-text ring-1 ring-inset ring-danger-text/15",
+  bloom: "bg-bloom-soft text-bloom-text ring-1 ring-inset ring-bloom-text/15",
+  ink: "bg-surface-3 text-ink-2 ring-1 ring-inset ring-line-strong/50",
 };
 
 export function Badge({ tone = "neutral", dot, className, children }: { tone?: Tone; dot?: boolean; className?: string; children: ReactNode }) {

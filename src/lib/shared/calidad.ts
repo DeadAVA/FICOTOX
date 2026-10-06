@@ -32,7 +32,7 @@ export const ESTADOS_INCIDENCIA: Record<string, { label: string; tone: "neutral"
   reportada: { label: "Reportada", tone: "brand" },
   en_evaluacion: { label: "En evaluación", tone: "warning" },
   cerrada_sin_nc: { label: "Cerrada sin NC", tone: "success" },
-  escalada_a_nc: { label: "Escalada a NC", tone: "ink" },
+  escalada_a_nc: { label: "Escalada a NC", tone: "brand" },
   anulada: { label: "Anulada", tone: "danger" },
 };
 

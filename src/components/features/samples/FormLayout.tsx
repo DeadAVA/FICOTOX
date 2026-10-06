@@ -275,7 +275,7 @@ export function FormPage({ backHref, backLabel, code, title, status, statusTone 
                       aria-current={active ? "step" : undefined}
                       className={cn("press flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2 text-left text-[13px] transition-colors", active ? "bg-surface font-medium text-ink shadow-card" : "text-ink-3 hover:bg-surface-3/70 hover:text-ink")}
                     >
-                      <span className={cn("tnum flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10.5px] font-semibold", section.complete ? "bg-success text-on-accent" : missing ? "bg-warning-soft text-warning-text" : active ? "bg-ink text-surface" : "bg-surface-3 text-ink-3")}>{section.complete ? <Check size={11} weight="bold" /> : index + 1}</span>
+                      <span className={cn("tnum flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10.5px] font-semibold", section.complete ? "bg-success text-on-accent" : missing ? "bg-warning-soft text-warning-text" : active ? "bg-brand-soft text-brand-strong ring-1 ring-inset ring-brand/25" : "bg-surface-3 text-ink-3")}>{section.complete ? <Check size={11} weight="bold" /> : index + 1}</span>
                       <span className="truncate">{section.label}</span>
                       {section.optional ? <span className="ml-auto shrink-0 text-[10.5px] font-medium uppercase tracking-wide text-ink-4">{section.optionalLabel ? "después" : "opcional"}</span> : null}
                     </button>
@@ -352,7 +352,7 @@ export function FormCard({ id, title, description, children, aside, optional }: 
 
   // Solo la sección en curso lleva el número en tinta; con todo desplegado, las demás van en gris.
   const current = !!ctx && ctx.openId === id;
-  const badge = index >= 0 ? <span className={cn("tnum flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11.5px] font-semibold", meta?.complete ? "bg-success text-on-accent" : missing ? "bg-warning-soft text-warning-text" : current ? "bg-ink text-surface" : "bg-surface-3 text-ink-2")}>{meta?.complete ? <Check size={12} weight="bold" /> : index + 1}</span> : null;
+  const badge = index >= 0 ? <span className={cn("tnum flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11.5px] font-semibold", meta?.complete ? "bg-success text-on-accent" : missing ? "bg-warning-soft text-warning-text" : current ? "bg-brand-soft text-brand-strong ring-1 ring-inset ring-brand/25" : "bg-surface-3 text-ink-2")}>{meta?.complete ? <Check size={12} weight="bold" /> : index + 1}</span> : null;
 
   return (
     <section id={id} className={cn("scroll-mt-24 rounded-[16px] bg-surface shadow-card transition-[box-shadow] duration-300 sm:scroll-mt-28", current && isOpen && "shadow-raised", !isOpen && "hover:shadow-raised")} data-open={isOpen}>
@@ -392,7 +392,7 @@ export function FormCard({ id, title, description, children, aside, optional }: 
             {children}
             {stepMode && !isLast ? (
               <div className="mt-6 flex justify-end border-t border-line pt-4">
-                <button type="button" onClick={() => ctx!.next(id)} className="press inline-flex h-9 items-center gap-2 rounded-[9px] bg-ink px-3.5 text-[13.5px] font-medium text-surface hover:bg-ink-2">
+                <button type="button" onClick={() => ctx!.next(id)} className="press inline-flex h-9 items-center gap-2 rounded-[9px] bg-surface-3 px-3.5 text-[13.5px] font-medium text-ink ring-1 ring-inset ring-line-strong/60 hover:bg-line">
                   Continuar <ArrowRight size={14} weight="bold" />
                 </button>
               </div>
@@ -613,7 +613,7 @@ export function FlowSteps({ steps, current, failed }: { steps: { key: string; la
         const active = i === index;
         return (
           <li key={step.key} className="flex shrink-0 items-center gap-1">
-            <span className={cn("flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium transition-colors", active ? "bg-ink text-surface" : done ? "bg-success-soft text-success-text" : "bg-surface-3 text-ink-3")}>
+            <span className={cn("flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium transition-colors", active ? "bg-brand-soft text-brand-strong ring-1 ring-inset ring-brand/25" : done ? "bg-success-soft text-success-text" : "bg-surface-3 text-ink-3")}>
               {done ? <Check size={11} weight="bold" /> : null}
               {step.label}
             </span>
