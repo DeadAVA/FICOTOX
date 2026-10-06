@@ -1,10 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ArrowRight, ClockCounterClockwise, Cube, FileText, Flask, Funnel, Package, Plus, Question, TestTube, Wrench } from "@phosphor-icons/react";
+import { ArrowRight, ClockCounterClockwise, Cube, FileText, Flask, Funnel, Package, Plus, Question, TestTube, User, Warning, WarningDiamond, Wrench } from "@phosphor-icons/react";
 import { cn } from "@/components/ui/cn";
 import { Kbd } from "@/components/ui/Primitives";
-import { SEARCH_SCOPES, type SearchHit, type SearchKind, type SearchScope } from "@/lib/client/search";
+import { SEARCH_SCOPES, norm, type SearchHit, type SearchKind, type SearchScope } from "@/lib/client/search";
 
 /* Fila de resultado compartida por la paleta ⌘K y el buscador del Inicio. */
 
@@ -18,6 +18,9 @@ const KIND_ICON: Record<SearchKind, ReactNode> = {
   equipo: <Cube size={17} />,
   mantenimiento: <Wrench size={17} />,
   documento: <FileText size={17} />,
+  incidencia: <Warning size={17} />,
+  nc: <WarningDiamond size={17} />,
+  persona: <User size={17} />,
   accion: <Plus size={17} weight="bold" />,
   vista: <Funnel size={17} />,
   destino: <ArrowRight size={17} />,
@@ -29,13 +32,51 @@ const ICON_TONE: Partial<Record<SearchKind, string>> = {
   ayuda: "bg-bloom-soft text-bloom",
 };
 
-export function SearchHitRow({ hit, selectedStyle = false, className }: { hit: SearchHit; selectedStyle?: boolean; className?: string }) {
+/* Resalta en `text` las palabras de `query` (sin importar mayúsculas ni acentos). */
+function Resaltado({ text, query }: { text: string; query?: string }) {
+  const terms = norm(query || "").split(/\s+/).filter(Boolean);
+  if (!terms.length) return <>{text}</>;
+  // Texto normalizado carácter a carácter, para que los índices coincidan con el original.
+  let flat = "";
+  const origin: number[] = [];
+  Array.from(text).forEach((char, i) => {
+    const n = norm(char);
+    for (let k = 0; k < n.length; k++) origin.push(i);
+    flat += n;
+  });
+  const chars = Array.from(text);
+  const marked = new Array<boolean>(chars.length).fill(false);
+  for (const term of terms) {
+    let at = flat.indexOf(term);
+    while (at !== -1) {
+      for (let k = at; k < at + term.length; k++) marked[origin[k]] = true;
+      at = flat.indexOf(term, at + term.length);
+    }
+  }
+  if (!marked.some(Boolean)) return <>{text}</>;
+  const parts: ReactNode[] = [];
+  let i = 0;
+  while (i < chars.length) {
+    let j = i;
+    while (j < chars.length && marked[j] === marked[i]) j++;
+    const chunk = chars.slice(i, j).join("");
+    parts.push(marked[i] ? <mark key={i} className="rounded-[3px] bg-brand/15 text-inherit group-data-[selected=true]:bg-on-accent/25">{chunk}</mark> : chunk);
+    i = j;
+  }
+  return <>{parts}</>;
+}
+
+export function SearchHitRow({ hit, selectedStyle = false, query, className }: { hit: SearchHit; selectedStyle?: boolean; query?: string; className?: string }) {
   return (
     <div className={cn("flex cursor-pointer items-center gap-3 px-2.5 py-2 text-[14px]", className)}>
       <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-surface-3 text-ink-2 transition-colors", ICON_TONE[hit.kind], selectedStyle && "group-data-[selected=true]:bg-on-accent/15 group-data-[selected=true]:text-on-accent")}>{KIND_ICON[hit.kind]}</span>
       <span className="flex min-w-0 flex-1 flex-col leading-tight">
-        <span className={cn("truncate font-medium", hit.mono && "code")}>{hit.label}</span>
-        {hit.sub ? <span className={cn("truncate text-[12.5px] text-ink-3", selectedStyle && "group-data-[selected=true]:text-on-accent/80")}>{hit.sub}</span> : null}
+        <span className={cn("truncate font-medium", hit.mono && "code")}>
+          <Resaltado text={hit.label} query={query} />
+        </span>
+        {hit.sub ? <span className={cn("truncate text-[12.5px] text-ink-3", selectedStyle && "group-data-[selected=true]:text-on-accent/80")}>
+            <Resaltado text={hit.sub} query={query} />
+          </span> : null}
       </span>
       {hit.tag && (hit.kind === "muestra" || hit.kind === "reciente") ? <span className={cn("hidden shrink-0 rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-medium text-ink-3 sm:inline", selectedStyle && "group-data-[selected=true]:bg-on-accent/15 group-data-[selected=true]:text-on-accent")}>{hit.tag}</span> : null}
       <span className={cn("hidden shrink-0 text-[11px] text-ink-4 opacity-0 transition-opacity sm:inline", selectedStyle && "group-data-[selected=true]:text-on-accent/80 group-data-[selected=true]:opacity-100")} aria-hidden="true">

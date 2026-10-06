@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession, type SessionValue } from "@/components/session/SessionProvider";
+import { ESTADOS_INCIDENCIA, ESTADOS_NC, folioNc } from "../shared/calidad";
 import { FEATURES } from "../shared/features";
 import { API_BASE_URL, getJsonAuth } from "./api";
 import { resetSearchIndex, searchIndexState as idx } from "./search-index";
@@ -25,7 +26,7 @@ import type { ApiRecord } from "./types";
  * pero sí en la búsqueda de cada lista, que consulta al servidor.
  */
 
-export type SearchKind = "reciente" | "muestra" | "analisis" | "informe" | "reactivo" | "consumible" | "equipo" | "mantenimiento" | "documento" | "accion" | "vista" | "destino" | "ayuda";
+export type SearchKind = "reciente" | "muestra" | "analisis" | "informe" | "reactivo" | "consumible" | "equipo" | "mantenimiento" | "documento" | "incidencia" | "nc" | "persona" | "accion" | "vista" | "destino" | "ayuda";
 
 /* Ámbito opcional para acotar los resultados (chips del buscador). */
 export type SearchScope = "todo" | "muestras" | "inventario" | "informes" | "acciones";
@@ -77,18 +78,78 @@ const GROUP_TITLES: Record<SearchKind, string> = {
   equipo: "Equipos",
   mantenimiento: "Mantenimientos",
   documento: "Biblioteca",
+  incidencia: "Incidencias",
+  nc: "No conformidades",
+  persona: "Personas",
   accion: "Crear",
   vista: "Ver",
   destino: "Ir a",
   ayuda: "Ayuda",
 };
 
-const GROUP_ORDER: SearchKind[] = ["reciente", "accion", "muestra", "analisis", "informe", "reactivo", "consumible", "equipo", "mantenimiento", "documento", "vista", "destino", "ayuda"];
+const GROUP_ORDER: SearchKind[] = ["reciente", "accion", "muestra", "analisis", "informe", "reactivo", "consumible", "equipo", "mantenimiento", "documento", "incidencia", "nc", "persona", "vista", "destino", "ayuda"];
+
+/* ---------- Secciones del Inicio ---------- */
+
+export type SectionKey = "recientes" | "muestras" | "informes" | "inventario" | "calidad" | "biblioteca" | "personas" | "acciones" | "ir";
+
+export interface SearchSection {
+  key: SectionKey;
+  title: string;
+  hits: SearchHit[];
+  /* Coincidencias totales (puede ser más de las que se muestran). */
+  total: number;
+  /* Lista filtrada con todo lo que coincide; solo si hay más de lo mostrado. */
+  more?: string;
+}
+
+const SECTION_OF: Record<SearchKind, SectionKey> = {
+  reciente: "recientes",
+  muestra: "muestras",
+  analisis: "muestras",
+  informe: "informes",
+  reactivo: "inventario",
+  consumible: "inventario",
+  equipo: "inventario",
+  mantenimiento: "inventario",
+  documento: "biblioteca",
+  incidencia: "calidad",
+  nc: "calidad",
+  persona: "personas",
+  accion: "acciones",
+  vista: "ir",
+  destino: "ir",
+  ayuda: "ir",
+};
+const SECTION_TITLES: Record<SectionKey, string> = { recientes: "Recientes", muestras: "Muestras", informes: "Informes", inventario: "Inventario", calidad: "Calidad", biblioteca: "Biblioteca", personas: "Personas", acciones: "Acciones", ir: "Ir a" };
+const SECTION_ORDER: SectionKey[] = ["recientes", "acciones", "muestras", "informes", "inventario", "calidad", "biblioteca", "personas", "ir"];
+const SECTION_CAP = 4;
+
+/* A dónde lleva "Ver todos": la lista de ese tipo, con lo escrito cuando la lista sabe buscarlo. */
+function sectionMore(key: SectionKey, first: SearchHit, query: string): string | undefined {
+  const q = encodeURIComponent(query.trim());
+  switch (key) {
+    case "muestras":
+      return "/muestras";
+    case "informes":
+      return "/informes";
+    case "inventario":
+      return first.kind === "mantenimiento" ? "/inventario/mantenimiento" : `/inventario/${first.kind === "reactivo" ? "reactivos" : first.kind === "consumible" ? "consumibles" : "equipos"}?buscar=${q}`;
+    case "calidad":
+      return first.kind === "nc" ? "/calidad/incidencias?tab=nc" : "/calidad/incidencias";
+    case "biblioteca":
+      return "/calidad/biblioteca";
+    case "personas":
+      return "/administracion/usuarios";
+    default:
+      return undefined;
+  }
+}
 
 /* ---------- Recientes (últimos resultados abiertos, por persona en este navegador) ---------- */
 
-const RECENT_MAX = 6;
-const RECENT_KINDS = new Set<SearchKind>(["muestra", "analisis", "informe", "reactivo", "consumible", "equipo", "mantenimiento", "documento", "accion", "vista", "ayuda"]);
+const RECENT_MAX = 5;
+const RECENT_KINDS = new Set<SearchKind>(["muestra", "analisis", "informe", "reactivo", "consumible", "equipo", "mantenimiento", "documento", "incidencia", "nc", "persona", "accion", "vista", "ayuda"]);
 
 /* Clave por persona: en una PC compartida cada cuenta ve solo lo suyo. */
 const recentKey = (owner: string) => `ficotox.search.recent.${norm(owner).replace(/[^a-z0-9@.]/g, "_") || "anon"}`;
@@ -180,7 +241,7 @@ function informeFolio(item: ApiRecord): string {
   return `IR ${String(Number(item.folio_num || 0)).padStart(7, "0")}${Number(item.version || 1) > 1 ? ` v${item.version}` : ""}`;
 }
 
-async function buildIndex(token: string, can: SessionValue["can"]): Promise<SearchHit[]> {
+async function buildIndex(token: string, can: SessionValue["can"], alcance: SessionValue["alcance"]): Promise<SearchHit[]> {
   const safe = async (url: string, allowed: boolean): Promise<ApiRecord[]> => {
     if (!allowed) return [];
     try {
@@ -190,7 +251,7 @@ async function buildIndex(token: string, can: SessionValue["can"]): Promise<Sear
       return [];
     }
   };
-  const [reactivos, consumibles, equipos, recepciones, procesamientos, extracciones, analisis, informes, documentos, mantenimientos] = await Promise.all([
+  const [reactivos, consumibles, equipos, recepciones, procesamientos, extracciones, analisis, informes, documentos, mantenimientos, incidencias, ncs, personas] = await Promise.all([
     safe(`${API_BASE_URL}/inventory/reactivos`, can("inventario")),
     safe(`${API_BASE_URL}/consumables`, can("inventario")),
     safe(`${API_BASE_URL}/inventory/equipos`, can("equipos")),
@@ -201,6 +262,9 @@ async function buildIndex(token: string, can: SessionValue["can"]): Promise<Sear
     safe(`${API_BASE_URL}/informes`, can("informes")),
     safe(`${API_BASE_URL}/biblioteca`, FEATURES.documentos && can("documentos")),
     safe(`${API_BASE_URL}/inventory/mantenimientos`, can("equipos")),
+    safe(`${API_BASE_URL}/calidad/incidencias`, can("calidad", "V", { objeto: "incidencia" })),
+    safe(`${API_BASE_URL}/calidad/nc`, can("calidad", "V", { objeto: "nc" }) && alcance("calidad") !== "bitacora"),
+    safe(`${API_BASE_URL}/admin/usuarios`, can("usuarios") && alcance("usuarios") !== "propio"),
   ]);
 
   const hits: SearchHit[] = [];
@@ -254,6 +318,24 @@ async function buildIndex(token: string, can: SessionValue["can"]): Promise<Sear
     const filtro = estado === "completado" ? "completado" : estado === "vencido" ? "vencido" : "pendiente";
     hits.push({ id: `m-${m.id}`, kind: "mantenimiento", label: `${tipo} · ${equipo}`, sub: join(MANT_ESTADO[estado] || estado, m.fecha_programada ? `programado ${fmtDate(m.fecha_programada)}` : null, m.tecnico_proveedor), href: `/inventario/mantenimiento?filtro=${filtro}`, tag: "Mantenimiento", keywords: norm(join(tipo, equipo, m.equipo_marca, m.equipo_modelo, estado, MANT_ESTADO[estado], m.tecnico_proveedor, "mantenimiento")) });
   }
+  const corto = (value: unknown) => {
+    const text = String(value || "").replace(/\s+/g, " ").trim();
+    return text.length > 70 ? `${text.slice(0, 69)}…` : text;
+  };
+  for (const i of incidencias) {
+    const folio = String(i.folio || "");
+    const estado = ESTADOS_INCIDENCIA[String(i.estado)]?.label || String(i.estado || "");
+    hits.push({ id: `inc-${i.id}`, kind: "incidencia", label: folio, sub: join(estado, corto(i.descripcion)), href: `/calidad/incidencias/${i.id}`, mono: true, tag: "Incidencia", keywords: norm(join(folio, folio.replace(/\s/g, ""), i.descripcion, i.reportada_nombre, estado, "incidencia")) });
+  }
+  for (const n of ncs) {
+    const folio = folioNc(n.folio_num);
+    const estado = ESTADOS_NC[String(n.estado)]?.label || String(n.estado || "");
+    hits.push({ id: `nc-${n.id}`, kind: "nc", label: folio, sub: join(estado, corto(n.descripcion)), href: `/calidad/nc/${n.id}`, mono: true, tag: "NC", keywords: norm(join(folio, folio.replace(/\s/g, ""), n.descripcion, n.responsable_nombre, estado, "no conformidad")) });
+  }
+  for (const p of personas) {
+    const nombre = String(p.nombre || p.email || "");
+    hits.push({ id: `u-${p.id}`, kind: "persona", label: nombre, sub: join(p.email !== nombre ? p.email : null), href: `/administracion/usuarios?abrir=${p.id}`, tag: "Persona", keywords: norm(join(nombre, p.email)) });
+  }
   return hits;
 }
 
@@ -284,7 +366,7 @@ export function useGlobalSearch() {
     }
     if (!idx.inflight || idx.inflight.token !== token) {
       setLoading(true);
-      const promise = buildIndex(token, can).then((hits) => {
+      const promise = buildIndex(token, can, alcance).then((hits) => {
         // Solo se guarda si nadie reinició el índice ni cambió la sesión mientras se construía.
         if (idx.inflight && idx.inflight.promise === promise) {
           idx.cache = { hits, at: Date.now(), token };
@@ -299,7 +381,7 @@ export function useGlobalSearch() {
       setIndex(idx.cache && idx.cache.token === token ? idx.cache.hits : hits);
       setLoading(false);
     }
-  }, [token, owner, can]);
+  }, [token, owner, can, alcance]);
 
   const destinations = useMemo<SearchHit[]>(
     () =>
@@ -383,7 +465,28 @@ export function useGlobalSearch() {
     [can],
   );
 
-  const groups = useMemo<SearchGroup[]>(() => {
+  /* Sin escribir: unas pocas acciones frecuentes según lo que la persona puede hacer (primero lo que atiende, luego lo que crea). */
+  const quick = useMemo<SearchHit[]>(
+    () =>
+      [
+        { label: "Por autorizar", href: "/solicitudes", allowed: can("usuarios", "A"), kw: "solicitudes autorizar" },
+        { label: "Mis muestras", href: "/muestras/recepcion?mias=1", allowed: alcance("muestras", "V") === "asignado", kw: "asignadas" },
+        { label: "Análisis por revisar", href: "/muestras/analisis?filtro=pendiente", allowed: can("ensayos", "R"), kw: "firmar" },
+        { label: "Nueva recepción", href: "/muestras/recepcion/nueva", allowed: can("muestras", "C", { objeto: "recepcion", borrador: true }), kw: "muestra" },
+        { label: "Nuevo análisis", href: "/muestras/analisis/nuevo", allowed: can("ensayos", "C", { objeto: "analisis", borrador: true }), kw: "resultados" },
+        { label: "Informes por liberar", href: "/informes?filtro=autorizado", allowed: can("informes", "A"), kw: "entregar" },
+        { label: "Nuevo reactivo", href: "/inventario/reactivos?nuevo=1", allowed: can("inventario", "C", { objeto: "catalogo_inventario" }), kw: "inventario" },
+        { label: "Subir documento", href: "/calidad/biblioteca?subir=1", allowed: FEATURES.documentos && can("documentos", "G"), kw: "biblioteca" },
+        { label: "Reportar incidencia", href: "?reportar=1", allowed: can("calidad", "C", { objeto: "incidencia" }), kw: "problema" },
+        { label: "Nuevo usuario", href: "/administracion/usuarios?nuevo=1", allowed: can("usuarios", "G"), kw: "persona" },
+      ]
+        .filter((a) => a.allowed)
+        .slice(0, 5)
+        .map((a) => ({ id: `quick-${a.href}`, kind: "accion" as const, label: a.label, href: a.href, keywords: norm(`${a.label} ${a.kw}`) })),
+    [can, alcance],
+  );
+
+  const result = useMemo<{ groups: SearchGroup[]; sections: SearchSection[] }>(() => {
     const q = norm(query.trim());
     const compact = compactText(q);
     const terms = q.split(/\s+/).filter(Boolean);
@@ -425,7 +528,7 @@ export function useGlobalSearch() {
         const value = score(hit);
         if (value !== null) push(hit, value);
       }
-      return GROUP_ORDER.filter((kind) => buckets.has(kind)).map((kind) => ({
+      const groups = GROUP_ORDER.filter((kind) => buckets.has(kind)).map((kind) => ({
         kind,
         title: GROUP_TITLES[kind],
         hits: buckets
@@ -434,6 +537,14 @@ export function useGlobalSearch() {
           .slice(0, kind === "accion" ? 4 : perGroup)
           .map((entry) => entry.hit),
       }));
+      /* Las mismas coincidencias, agrupadas por sección para el Inicio (mejor puntuadas primero). */
+      const bySection = new Map<SectionKey, Array<{ hit: SearchHit; score: number }>>();
+      for (const [kind, entries] of buckets) bySection.set(SECTION_OF[kind], [...(bySection.get(SECTION_OF[kind]) || []), ...entries]);
+      const sections = SECTION_ORDER.filter((key) => bySection.has(key)).map((key) => {
+        const sorted = bySection.get(key)!.sort((a, b) => a.score - b.score).map((entry) => entry.hit);
+        return { key, title: SECTION_TITLES[key], hits: sorted.slice(0, SECTION_CAP), total: sorted.length, more: sorted.length > SECTION_CAP ? sectionMore(key, sorted[0], query) : undefined };
+      });
+      return { groups, sections };
     }
     /* Sin texto: lo último que abriste, lo que puedes crear y a dónde ir. */
     if (scope === "todo" || scope === "muestras" || scope === "inventario" || scope === "informes") {
@@ -448,8 +559,12 @@ export function useGlobalSearch() {
       for (const hit of actions.filter((a) => !a.specific && (scope === "muestras" ? a.href.startsWith("/muestras") : scope === "informes" ? a.href.startsWith("/informes") : a.href.startsWith("/inventario")))) push(hit, 0);
       for (const hit of views.filter((v) => (scope === "muestras" ? v.href.startsWith("/muestras") : scope === "informes" ? v.href.startsWith("/informes") : v.href.startsWith("/inventario")))) push(hit, 0);
     }
-    return GROUP_ORDER.filter((kind) => buckets.has(kind)).map((kind) => ({ kind, title: GROUP_TITLES[kind], hits: buckets.get(kind)!.map((entry) => entry.hit) }));
-  }, [query, scope, recent, index, actions, views, destinations, help]);
+    const groups = GROUP_ORDER.filter((kind) => buckets.has(kind)).map((kind) => ({ kind, title: GROUP_TITLES[kind], hits: buckets.get(kind)!.map((entry) => entry.hit) }));
+    const sections: SearchSection[] = [];
+    if (quick.length) sections.push({ key: "acciones", title: SECTION_TITLES.acciones, hits: quick, total: quick.length });
+    if (recent.length) sections.push({ key: "recientes", title: SECTION_TITLES.recientes, hits: recent.map((hit) => ({ ...hit, kind: "reciente" as const, sourceKind: hit.kind, tag: hit.tag || GROUP_TITLES[hit.kind] })), total: recent.length });
+    return { groups, sections };
+  }, [query, scope, recent, index, actions, views, destinations, help, quick]);
 
   const remember = useCallback(
     (hit: SearchHit) => {
@@ -464,5 +579,5 @@ export function useGlobalSearch() {
     setRecent([]);
   }, [owner]);
 
-  return { query, setQuery, scope, setScope, groups, loading, warm, remember, forgetRecent, hasRecent: recent.length > 0, ready: index !== null };
+  return { query, setQuery, scope, setScope, groups: result.groups, sections: result.sections, loading, warm, remember, forgetRecent, hasRecent: recent.length > 0, ready: index !== null };
 }

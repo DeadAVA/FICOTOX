@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Popover as RadixPopover } from "radix-ui";
 import { Bell, Check, Checks, WarningDiamond } from "@phosphor-icons/react";
 import { IncidenciaVentana, NcVentana } from "@/components/features/calidad/ventanas/CalidadVentanas";
-import { CORTO, TONO, ventanaDe } from "@/components/features/inicio/ParaTi";
+import { CORTO, TONO, ventanaDe } from "@/components/features/inicio/pendientes";
 import { useSession } from "@/components/session/SessionProvider";
 import { Conteo, MarcaDibujada } from "@/components/ui/Conteo";
 import { cn } from "@/components/ui/cn";
