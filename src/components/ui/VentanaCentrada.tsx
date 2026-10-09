@@ -47,8 +47,8 @@ export function VentanaCentrada({
   return (
     <RadixDialog.Root open={abierta} onOpenChange={(open) => !open && onCerrar()}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-deep/45 backdrop-blur-md data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out" />
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-stretch justify-center sm:items-center sm:p-6">
+        <RadixDialog.Overlay className="fixed inset-0 z-[var(--z-ventana)] bg-deep/45 backdrop-blur-md data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out" />
+        <div className="pointer-events-none fixed inset-0 z-[var(--z-ventana)] flex items-stretch justify-center sm:items-center sm:p-6">
           <RadixDialog.Content
             aria-describedby={undefined}
             onKeyDown={(event) => {

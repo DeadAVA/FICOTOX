@@ -18,7 +18,7 @@ import { armarCargo, armarReauth } from "@/lib/client/api";
  */
 
 /* Velo: oscurece y empuja el fondo hacia atras para enfocar la tarea. */
-const OVERLAY_CLASS = "fixed inset-0 z-40 bg-deep/35 backdrop-blur-[3px] data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out";
+const OVERLAY_CLASS = "fixed inset-0 z-[var(--z-ventana)] bg-deep/35 backdrop-blur-[3px] data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out";
 
 export interface SheetProps {
   open: boolean;
@@ -39,7 +39,7 @@ export function Sheet({ open, onOpenChange, title, description, children, footer
         <RadixDialog.Overlay className={OVERLAY_CLASS} />
         <RadixDialog.Content
           className={cn(
-            "fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-surface-elevated shadow-panel outline-none sm:inset-y-3 sm:right-3 sm:rounded-panel",
+            "fixed inset-y-0 right-0 z-[var(--z-ventana)] flex w-full flex-col bg-surface-elevated shadow-panel outline-none sm:inset-y-3 sm:right-3 sm:rounded-panel",
             "data-[state=open]:animate-sheet-in data-[state=closed]:animate-sheet-out",
             width,
           )}
@@ -82,7 +82,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
         <RadixDialog.Overlay className={OVERLAY_CLASS} />
-        <div className="fixed inset-0 z-50 flex items-end justify-center p-3 sm:items-center sm:p-6">
+        <div className="fixed inset-0 z-[var(--z-ventana)] flex items-end justify-center p-3 sm:items-center sm:p-6">
           <RadixDialog.Content
             className={cn(
               "flex max-h-full w-full flex-col overflow-hidden rounded-panel bg-surface-elevated shadow-panel outline-none",
@@ -332,7 +332,8 @@ export function Dropdown({ trigger, items, align = "end", label, header }: { tri
         <RadixDropdown.Content
           align={align}
           sideOffset={6}
-          className="material z-50 min-w-[220px] origin-[var(--radix-dropdown-menu-content-transform-origin)] rounded-[14px] p-1.5 shadow-pop data-[state=open]:animate-materialize"
+          collisionPadding={12}
+          className="scroll-thin max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto bg-popover border border-line z-[var(--z-popover)] min-w-[220px] origin-[var(--radix-dropdown-menu-content-transform-origin)] rounded-[14px] p-1.5 shadow-pop data-[state=open]:animate-materialize"
         >
           {header ? <div className="px-2.5 pt-1.5 pb-2 text-[12px] text-ink-3">{header}</div> : null}
           {items.map((item, index) => {
@@ -345,13 +346,13 @@ export function Dropdown({ trigger, items, align = "end", label, header }: { tri
                   onSelect={() => item.onSelect?.()}
                   className={cn(
                     "group flex cursor-pointer select-none items-center gap-3 rounded-[9px] px-2 py-1.5 text-[13.5px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
-                    tone === "danger" ? "text-danger data-[highlighted]:bg-danger data-[highlighted]:text-on-accent" : "text-ink data-[highlighted]:bg-brand data-[highlighted]:text-on-accent",
+                    tone === "danger" ? "text-danger data-[highlighted]:bg-danger-soft" : "text-ink data-[highlighted]:bg-surface-3",
                   )}
                 >
-                  {item.icon ? <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] transition-colors group-data-[highlighted]:bg-on-accent/15 group-data-[highlighted]:text-on-accent", ITEM_ICON_TONE[tone])}>{item.icon}</span> : null}
+                  {item.icon ? <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] transition-colors", ITEM_ICON_TONE[tone])}>{item.icon}</span> : null}
                   <span className="flex min-w-0 flex-col leading-tight">
                     <span className="truncate font-medium">{item.label}</span>
-                    {item.description ? <span className="truncate text-[11.5px] text-ink-3 group-data-[highlighted]:text-on-accent/80">{item.description}</span> : null}
+                    {item.description ? <span className="truncate text-[11.5px] text-ink-3">{item.description}</span> : null}
                   </span>
                 </RadixDropdown.Item>
               </div>
@@ -392,7 +393,7 @@ export function Tooltip({ content, children, side = "top" }: { content: ReactNod
     <RadixTooltip.Root>
       <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
       <RadixTooltip.Portal>
-        <RadixTooltip.Content side={side} sideOffset={6} className="material-dark z-50 max-w-xs rounded-[8px] px-2.5 py-1.5 text-[12.5px] text-white shadow-pop data-[state=delayed-open]:animate-menu-in">
+        <RadixTooltip.Content side={side} sideOffset={6} className="bg-popover border border-line z-[var(--z-popover)] max-w-xs rounded-[8px] px-2.5 py-1.5 text-[12.5px] text-ink shadow-pop data-[state=delayed-open]:animate-menu-in">
           {content}
         </RadixTooltip.Content>
       </RadixTooltip.Portal>

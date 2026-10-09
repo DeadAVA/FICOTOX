@@ -52,12 +52,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>{children}</Providers>
         <Toaster
           position="bottom-center"
+          style={{ zIndex: "var(--z-toast)" } as React.CSSProperties}
           toastOptions={{
             style: {
+              background: "var(--color-popover)",
+              color: "var(--color-ink)",
+              border: "1px solid var(--color-line)",
               fontFamily: "var(--font-sans)",
               fontSize: "13.5px",
               borderRadius: "14px",
-              border: "none",
               boxShadow: "var(--shadow-pop)",
             },
           }}

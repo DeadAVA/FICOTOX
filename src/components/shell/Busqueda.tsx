@@ -187,7 +187,7 @@ export function Busqueda({ modo, onCerrar, alAbrirVentana, className }: { modo: 
   return (
     <div
       ref={raiz}
-      className={cn("relative z-30 mx-auto w-full", className)}
+      className={cn("relative z-[var(--z-popover)] mx-auto w-full", className)}
       /* Si el foco sale del buscador (Shift+Tab, clic en otro control), el panel del Inicio se cierra. */
       onBlur={(event) => {
         if (modo === "pagina" && !raiz.current?.contains(event.relatedTarget as Node | null)) {
@@ -235,7 +235,7 @@ export function Busqueda({ modo, onCerrar, alAbrirVentana, className }: { modo: 
             </div>
           ) : null
         ) : (
-          <div onMouseDown={(event) => event.preventDefault()} className={cn("absolute inset-x-0 top-[calc(100%+10px)] z-30 overflow-hidden rounded-[20px] bg-surface/95 text-left shadow-panel ring-1 ring-line/60 backdrop-blur-2xl", abierto ? "animate-materialize" : "hidden")}>
+          <div onMouseDown={(event) => event.preventDefault()} className={cn("absolute inset-x-0 top-[calc(100%+10px)] z-[var(--z-popover)] overflow-hidden rounded-[20px] border border-line bg-popover text-left shadow-panel", abierto ? "animate-materialize" : "hidden")}>
             {panel}
           </div>
         )}

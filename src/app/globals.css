@@ -16,6 +16,8 @@
   --color-surface-3: #e9edf1;
   /* Ventanas, hojas laterales y diálogos (un escalón sobre la superficie; en claro es blanco) */
   --color-surface-elevated: #ffffff;
+  /* Elementos flotantes (menús, selects, calendario, campana, búsqueda, tooltips): siempre opacos */
+  --color-popover: #ffffff;
   --color-line: #e3e8ed;
   --color-line-strong: #cdd5dd;
 
@@ -150,6 +152,17 @@
 }
 
 @layer base {
+  /* Escala única de capas: contenido < barra lateral < ventanas y hojas < menús y popovers < toasts.
+     Los menús van sobre las ventanas porque los selects, el calendario y los menús ⋯ también se abren dentro de ellas. */
+  :root {
+    --z-contenido: 0;
+    --z-barra: 20;
+    --z-ventana: 50;
+    --z-popover: 60;
+    --z-toast: 80;
+    --z-bloqueo: 100;
+  }
+
   :root {
     color-scheme: light;
   }
@@ -174,6 +187,7 @@
       --color-surface-2: #19232c;
       --color-surface-3: #212d37;
       --color-surface-elevated: #1a252f;
+      --color-popover: #1f2c37;
       --color-line: #243039;
       --color-line-strong: #33424d;
 
@@ -290,6 +304,14 @@
     outline: none;
   }
   .seleccion:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-brand) 45%, transparent);
+  }
+  /* Dentro de menús y popovers: la opción enfocada usa el fondo tenue; el foco de teclado es un borde interior sutil, nunca un contorno azul. */
+  [data-radix-popper-content-wrapper] :focus {
+    outline: none;
+  }
+  [data-radix-popper-content-wrapper] :focus-visible {
     outline: none;
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-brand) 45%, transparent);
   }

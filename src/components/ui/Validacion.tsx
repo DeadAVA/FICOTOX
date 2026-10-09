@@ -198,8 +198,8 @@ function DialogoValidacion({ titulo, dato, modo, onCerrar }: { titulo: string; d
   return (
     <RadixDialog.Root open={!!modo} onOpenChange={(open) => !open && onCerrar()}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-[60] bg-deep/30 data-[state=open]:animate-fade-in motion-reduce:animate-none" />
-        <div className="fixed inset-0 z-[61] flex items-end justify-center p-3 sm:items-center sm:p-6">
+        <RadixDialog.Overlay className="fixed inset-0 z-[var(--z-ventana)] bg-deep/30 data-[state=open]:animate-fade-in motion-reduce:animate-none" />
+        <div className="fixed inset-0 z-[var(--z-ventana)] flex items-end justify-center p-3 sm:items-center sm:p-6">
           <RadixDialog.Content
             role="alertdialog"
             data-validacion={modo?.tipo}

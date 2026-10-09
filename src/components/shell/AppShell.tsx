@@ -170,7 +170,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh">
-      <a href="#contenido" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[60] focus:rounded-[8px] focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:shadow-pop">
+      <a href="#contenido" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[var(--z-toast)] focus:rounded-[8px] focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:shadow-pop">
         Saltar al contenido
       </a>
 
@@ -182,8 +182,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Barra lateral móvil: panel con foco atrapado, Escape y bloqueo de scroll (Radix Dialog). Siempre expandida. */}
       <RadixDialog.Root open={mobileOpen} onOpenChange={setMobileOpen}>
         <RadixDialog.Portal>
-          <RadixDialog.Overlay className="fixed inset-0 z-40 bg-deep/35 backdrop-blur-[3px] data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out lg:hidden" />
-          <RadixDialog.Content className="material-thick fixed inset-y-0 left-0 z-50 flex w-[280px] max-w-[85vw] flex-col shadow-panel outline-none data-[state=open]:animate-sheet-in-left data-[state=closed]:animate-sheet-out-left lg:hidden" aria-label="Navegación principal">
+          <RadixDialog.Overlay className="fixed inset-0 z-[var(--z-ventana)] bg-deep/35 backdrop-blur-[3px] data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out lg:hidden" />
+          <RadixDialog.Content className="bg-sidebar fixed inset-y-0 left-0 z-[var(--z-ventana)] flex w-[280px] max-w-[85vw] flex-col shadow-panel outline-none data-[state=open]:animate-sheet-in-left data-[state=closed]:animate-sheet-out-left lg:hidden" aria-label="Navegación principal">
             <RadixDialog.Title className="sr-only">Navegación principal</RadixDialog.Title>
             <RadixDialog.Description className="sr-only">Secciones del sistema</RadixDialog.Description>
             <SidebarContent {...sidebarProps} collapsed={false} onClose={() => setMobileOpen(false)} />

@@ -128,8 +128,8 @@ export function FilterMenu({ groups = [], toggles = [], children, className, lab
         </button>
       </RadixPopover.Trigger>
       <RadixPopover.Portal>
-        <RadixPopover.Content align="start" sideOffset={8} collisionPadding={12} className="material scroll-thin z-50 max-h-[min(72vh,640px)] w-[min(320px,calc(100vw-24px))] origin-[var(--radix-popover-content-transform-origin)] overflow-y-auto rounded-[16px] p-2 shadow-pop outline-none data-[state=open]:animate-materialize">
-          <div className="flex items-center justify-between gap-2 px-2 pt-0.5 pb-2">
+        <RadixPopover.Content align="start" sideOffset={8} collisionPadding={12} className="bg-popover border border-line z-[var(--z-popover)] flex max-h-[min(var(--radix-popover-content-available-height),640px)] w-[min(320px,calc(100vw-24px))] origin-[var(--radix-popover-content-transform-origin)] flex-col rounded-[16px] p-2 shadow-pop outline-none data-[state=open]:animate-materialize">
+          <div className="flex shrink-0 items-center justify-between gap-2 px-2 pt-0.5 pb-2">
             <p className="text-[13px] font-semibold text-ink">
               {label}
               {active > 0 ? <span className="tnum ml-1.5 font-normal text-ink-3">· {active} {active === 1 ? "activo" : "activos"}</span> : null}
@@ -138,7 +138,7 @@ export function FilterMenu({ groups = [], toggles = [], children, className, lab
               Limpiar filtros
             </button>
           </div>
-          <div className="flex flex-col gap-2.5">
+          <div className="scroll-thin flex min-h-0 flex-col gap-2.5 overflow-y-auto">
             {vista.map((section) => (
               <FilterSection key={section} title={section} first={index++ === 0}>
                 {togglesOf(section).map(toggleRow)}
