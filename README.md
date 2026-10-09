@@ -35,7 +35,23 @@ Todos los comandos se escriben dentro de la carpeta de FICOTOX (en Windows, Powe
 
 **HTTPS (opcional).** Con un certificado PEM institucional (o uno propio con OpenSSL) agrega a `.env` `TLS_CERT=instance/tls/ficotox.crt`, `TLS_KEY=instance/tls/ficotox.key` (y `TLS_CA=` si hace falta) y corre `npm run reiniciar`. Con HTTPS activo `http://` deja de responder.
 
-**MySQL/MariaDB (opcional).** El DBA crea la base vacía (`CREATE DATABASE ficotox CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`); en `.env` pon `DATABASE_URL=mysql://usuario:clave@servidor:3306/ficotox`. Respalda con `mysqldump --single-transaction --routines --triggers --hex-blob` (y copia aparte `instance/`) antes de cada migración, y migra con `npm run migrar -- --respaldo-hecho`. `instancia-nueva` es solo para SQLite. Para pasar de SQLite a MySQL: `npm run sqlite-a-mysql -- --simular` y luego `--destino … --confirmar`.
+**MySQL/MariaDB (opcional).** El DBA crea la base vacía (`CREATE DATABASE ficotox CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`); en `.env` pon `DATABASE_URL=mysql://usuario:clave@servidor:3306/ficotox`. Respalda con `mysqldump --single-transaction --routines --triggers --hex-blob` (y copia aparte `instance/`) antes de cada migración, y migra con `npm run migrar -- --respaldo-hecho`. `instancia-nueva` es solo para SQLite: en MySQL el primer administrador se crea a mano, después de `npm run migrar -- --respaldo-hecho`:
+
+```sql
+INSERT INTO roles (nombre, descripcion, clave, es_sistemico, activo)
+VALUES ('Administrador técnico del sistema', 'Administra cuentas, roles y asignaciones; consulta la bitácora.', 'admin_tecnico', 1, 1);
+SET @rol = LAST_INSERT_ID();
+INSERT INTO rol_acciones (id_rol, modulo, accion, alcance) VALUES
+  (@rol, 'usuarios', 'G', 'total'), (@rol, 'documentos', 'V', 'tecnico'), (@rol, 'muestras', 'V', 'estado'),
+  (@rol, 'equipos', 'V', 'total'), (@rol, 'calidad', 'V', 'bitacora');
+-- hash: node -e 'import("./src/lib/server/password.ts").then(m=>console.log(m.hashPassword(process.argv[1])))' 'contraseña'
+INSERT INTO usuarios (nombre, email, activo, id_rol, password_hash)
+VALUES ('Nombre Apellido', 'correo@cicese.mx', 1, @rol, '<hash scrypt$...>');
+INSERT INTO usuario_roles (usuario_id, rol_id, vigente_desde, motivo, asignado_en)
+VALUES (LAST_INSERT_ID(), @rol, CURDATE(), 'Alta manual del primer administrador', NOW());
+```
+
+Esa alta no queda en la bitácora: anótala en el registro de la instalación. El resto de los roles se da de alta desde Administración › Roles. Para pasar de SQLite a MySQL: `npm run sqlite-a-mysql -- --simular` y luego `--destino … --confirmar`.
 
 ## 3. Uso diario
 
@@ -97,5 +113,6 @@ npm run dev          # servidor de desarrollo
 npm run build        # compilación (standalone)
 npm run typecheck    # tsc --noEmit
 npm run lint         # eslint
-npm test             # pruebas (npm run test:api = solo API)
+npm test             # pruebas (npm run test:api = solo API; test:mysql contra MySQL/MariaDB)
+npm run seed:roles   # roles y usuarios iniciales (scripts/roles-catalogo.json + seed-usuarios.local.json)
 ```
