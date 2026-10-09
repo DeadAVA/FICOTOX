@@ -19,7 +19,6 @@ import { fmtDate } from "../../client/format";
 import { formatReactivoName, getReactivoStockInfo } from "../../client/reactivos";
 import { formatExtractionFolio, formatProcessingFolio, formatSampleFolio, sampleStatusLabel } from "../../client/samples";
 import type { ApiRecord } from "../../client/types";
-import { FEATURES } from "../../shared/features";
 import { cargarAutorizacion, type Autorizacion } from "../rbac";
 import { requireUser } from "../auth";
 import { type Row, type Session } from "../db";
@@ -260,7 +259,6 @@ export function hitDocumento(d: ApiRecord): Hit {
 }
 
 async function fuenteBiblioteca(request: Request, s: Session): Promise<Hit[]> {
-  if (!FEATURES.documentos) return [];
   return items(await leer(request, s, listarBiblioteca, "/api/biblioteca")).map(hitDocumento);
 }
 

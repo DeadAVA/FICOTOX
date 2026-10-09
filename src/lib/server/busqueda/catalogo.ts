@@ -8,7 +8,6 @@
  * ACCIONES con su `permiso` (y `kw` con las palabras con que se la nombra).
  * Los comandos (`comando`) los ejecuta la interfaz (tema, cerrar sesión…).
  */
-import { FEATURES } from "../../shared/features";
 import { HELP_TOPICS, type Comando, type GrupoClave, type TipoResultado } from "../../shared/busqueda";
 import { mapaPermisos, permite, type Accion, type Alcance, type ContextoAlcance, type Modulo } from "../../shared/permisos";
 import type { Autorizacion } from "../rbac";
@@ -57,7 +56,7 @@ const PANTALLAS: Def[] = [
   { titulo: "Equipos", href: "/inventario/equipos", permiso: (a) => a.can("equipos"), kw: "inventario equipos" },
   { titulo: "Mantenimiento", href: "/inventario/mantenimiento", permiso: (a) => a.can("equipos"), kw: "inventario mantenimientos calibracion" },
   { titulo: "Movimientos de inventario", href: "/movimientos", permiso: (a) => a.can("inventario"), kw: "movimientos entradas salidas" },
-  { titulo: "Biblioteca", href: "/calidad/biblioteca", permiso: (a) => FEATURES.documentos && a.can("documentos"), kw: "biblioteca documentos manual procedimientos instructivos formatos normas calidad" },
+  { titulo: "Biblioteca", href: "/calidad/biblioteca", permiso: (a) => a.can("documentos"), kw: "biblioteca documentos manual procedimientos instructivos formatos normas calidad" },
   { titulo: "Incidencias y no conformidades", href: "/calidad/incidencias", permiso: (a) => a.can("calidad", "V", ctx("incidencia")) && a.alcance("calidad") !== "bitacora", kw: "calidad incidencias no conformidades nc acciones correctivas" },
   { titulo: "Auditoría", sub: "Bitácora de actividad", href: "/auditoria", permiso: (a) => a.can("calidad", "V", ctx("bitacora")), kw: "auditoria bitacora historial actividad trazabilidad" },
   { titulo: "Usuarios", href: "/administracion/usuarios", permiso: (a) => a.can("usuarios"), kw: "administracion usuarios cuentas personas" },
@@ -100,7 +99,7 @@ const ACCIONES: Def[] = [
   { titulo: "Nuevo consumible", sub: "Alta en el inventario", href: "/inventario/consumibles?nuevo=1", permiso: (a) => a.can("inventario", "C", ctx("catalogo_inventario")), kw: "registrar inventario alta" },
   { titulo: "Nuevo equipo", sub: "Alta con clave de bitácora", href: "/inventario/equipos?nuevo=1", permiso: (a) => a.can("equipos", "C", ctx("equipo")), kw: "registrar inventario alta bitacora" },
   { titulo: "Programar mantenimiento", sub: "Preventivo, correctivo, calibración o verificación", href: "/inventario/mantenimiento?nuevo=1", permiso: (a) => a.can("equipos", "C", ctx("mantenimiento")), kw: "mantenimiento calibracion verificacion" },
-  { titulo: "Subir documento", sub: "A la biblioteca", href: "/calidad/biblioteca?subir=1", permiso: (a) => FEATURES.documentos && (a.can("documentos", "C", ctx("documento", { borrador: true })) || a.can("documentos", "G")), kw: "biblioteca calidad agregar" },
+  { titulo: "Subir documento", sub: "A la biblioteca", href: "/calidad/biblioteca?subir=1", permiso: (a) => (a.can("documentos", "C", ctx("documento", { borrador: true })) || a.can("documentos", "G")), kw: "biblioteca calidad agregar" },
   { titulo: "Reportar incidencia", sub: "Falla, desviación o queja; con foto", href: "", comando: "reportar_incidencia", permiso: (a) => a.can("calidad", "C", ctx("incidencia")), kw: "incidencia problema falla desviacion queja reportar calidad" },
   { titulo: "Nuevo usuario", sub: "Crear una cuenta", href: "/administracion/usuarios?nuevo=1", permiso: (a) => a.can("usuarios", "G"), kw: "registrar persona cuenta alta administracion" },
   { titulo: "Cambiar contraseña", sub: "En Mi cuenta", href: "", comando: "cambiar_password", permiso: () => true, kw: "password clave seguridad cuenta" },

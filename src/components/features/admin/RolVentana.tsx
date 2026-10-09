@@ -21,7 +21,6 @@ import { claveDeRol, descripcionDeRol } from "@/lib/shared/roles-descripcion";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { REGLAS_COMBINACION } from "@/lib/shared/combinaciones-roles";
-import { HIDDEN_MODULES } from "@/lib/shared/features";
 import { ACCION_KEYS, ALCANCES, firmaFilas, type PermisoFila } from "@/lib/shared/permisos";
 
 /*
@@ -276,7 +275,7 @@ function EditorPermisos({ role, iniciales, onCancelar, onGuardado }: { role: Api
   const [matriz, setMatriz] = useState<Matriz>(() => matrizDesdeFilas(iniciales));
   const [guardando, setGuardando] = useState(false);
   const v = useValidacion({ titulo: "No se pudieron guardar los permisos", reglas: () => [] });
-  const areas = AREAS_PERMISOS.filter((a) => !HIDDEN_MODULES.has(a.clave as never) || Object.keys(matriz).some((k) => k.startsWith(`${a.clave}:`) && matriz[k]));
+  const areas = AREAS_PERMISOS;
 
   const toggle = (modulo: string, accion: string, checked: boolean) => setMatriz((prev) => ({ ...prev, [celda(modulo, accion)]: checked ? prev[celda(modulo, accion)] || "total" : null }));
   const setAlcance = (modulo: string, accion: string, alcance: string) => setMatriz((prev) => ({ ...prev, [celda(modulo, accion)]: alcance }));
