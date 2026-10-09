@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { DownloadSimple, Plus, WarningDiamond } from "@phosphor-icons/react";
+import { Plus, WarningDiamond } from "@phosphor-icons/react";
 import { EstadoIncidencia, EstadoNc } from "@/components/features/calidad/comun";
 import { reportarIncidencia, usePuedeReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { FolioChip } from "@/components/features/samples/status";
@@ -26,7 +26,6 @@ import { Skeleton } from "@/components/ui/Primitives";
 import { FranjaPendientes } from "@/components/features/solicitudes/Solicitudes";
 import { StatusFlag } from "@/components/ui/StatusFlag";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
-import { descargarCsv } from "@/lib/client/files";
 import { fmt, fmtDateTime } from "@/lib/client/format";
 import { useDebouncedValue, useInitialParam, useParamChange, useParamsChange } from "@/lib/client/hooks";
 import { usePersonal } from "@/lib/client/personal";
@@ -37,8 +36,8 @@ import { formatearFechaCorta, hoyLocal, sumarDias } from "@/lib/shared/fechas";
 
 /*
  * Calidad › Incidencias y NC: una sola lista con incidencias y no
- * conformidades juntas (de la mas reciente a la mas antigua), con busqueda,
- * filtros y CSV. Con alcance "incidencias" el servidor entrega solo lo propio
+ * conformidades juntas (de la mas reciente a la mas antigua), con busqueda
+ * y filtros. Con alcance "incidencias" el servidor entrega solo lo propio
  * (incidencias reportadas por la persona y NC donde es responsable). Las
  * acciones correctivas se gestionan dentro de cada NC.
  */
@@ -126,27 +125,6 @@ function urlCanonica(f: FiltrosUrl, buscar: string): string {
   if (buscar) q.set("buscar", buscar);
   const texto = q.toString();
   return texto ? `?${texto}` : window.location.pathname;
-}
-
-function BotonCsv({ query }: { query: URLSearchParams }) {
-  const { token } = useSession();
-  const [cargando, setCargando] = useState(false);
-  return (
-    <Button
-      variant="secondary"
-      icon={<DownloadSimple size={16} />}
-      loading={cargando}
-      onClick={async () => {
-        setCargando(true);
-        const q = new URLSearchParams(query);
-        q.set("formato", "csv");
-        await descargarCsv(`${API_BASE_URL}/calidad/lista?${q.toString()}`, token, `incidencias-y-nc-${hoyLocal()}.csv`);
-        setCargando(false);
-      }}
-    >
-      CSV
-    </Button>
-  );
 }
 
 /* Descripcion breve (maximo 2 lineas; la completa sale en el tooltip y esta en la ventana). */
@@ -266,7 +244,6 @@ function Contenido() {
       <Toolbar
         end={
           <>
-            <BotonCsv query={query} />
             {puedeCrearNc ? (
               <Button variant="secondary" icon={<Plus size={16} weight="bold" />} onClick={() => setNueva(true)}>
                 Nueva NC

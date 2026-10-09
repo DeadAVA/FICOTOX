@@ -9,12 +9,11 @@
  * "Mis registros" y "Situacion" eligen lo que cada tipo puede cumplir.
  */
 import { requireUser } from "../../auth";
-import { registrarAuditoria } from "../../audit";
 import { HttpError, json, type RouteContext } from "../../http";
 import { type Row } from "../../db";
-import { CLASIFICACION_NC_LABEL, ESTADOS_INCIDENCIA, ESTADOS_NC, ORIGEN_AUTOMATICO_LABEL, ORIGEN_NC_LABEL, TIPO_INCIDENCIA_LABEL, folioIncidencia, folioNc } from "../../../shared/calidad";
-import { finDiaLocal, formatearFechaHora, hoyLocal, inicioDiaLocal } from "../../../shared/fechas";
-import { accesoCalidad, respuestaCsv, T, type AccesoCalidad } from "./comun";
+import { folioIncidencia, folioNc } from "../../../shared/calidad";
+import { finDiaLocal, hoyLocal, inicioDiaLocal } from "../../../shared/fechas";
+import { accesoCalidad, T, type AccesoCalidad } from "./comun";
 
 const lista = (request: Request, nombre: string): string[] => (new URL(request.url).searchParams.get(nombre) || "").split(",").map((v) => v.trim()).filter(Boolean);
 const param = (request: Request, nombre: string) => (new URL(request.url).searchParams.get(nombre) || "").trim();
@@ -36,7 +35,7 @@ async function accesoOpcional(s: RouteContext["s"], user: Awaited<ReturnType<typ
 }
 
 /*
- * GET /api/calidad/lista?tipos&estado_inc&etapa_nc&tipo_inc&clasificacion&mias&situacion&desde&hasta&anuladas=1&orden&search&formato=csv
+ * GET /api/calidad/lista?tipos&estado_inc&etapa_nc&tipo_inc&clasificacion&mias&situacion&desde&hasta&anuladas=1&orden&search
  * (los filtros de varias opciones van separados por comas).
  */
 export async function listarRegistrosCalidad({ request, s }: RouteContext): Promise<Response> {
@@ -140,18 +139,5 @@ export async function listarRegistrosCalidad({ request, s }: RouteContext): Prom
   });
   const recortados = items.slice(0, 1000);
 
-  if (param(request, "formato") === "csv") {
-    await registrarAuditoria(s, user, { accion: "exportar", entidad: T.incidencias, referencia: "Incidencias y no conformidades", detalle: { formato: "csv", filas: recortados.length, filtros: { tipos, estado_inc: lista(request, "estado_inc"), etapa_nc: lista(request, "etapa_nc"), tipo_inc: lista(request, "tipo_inc"), clasificacion: lista(request, "clasificacion"), mias, situacion, desde, hasta, search } } });
-    await s.commit();
-    return respuestaCsv(
-      `incidencias-y-nc-${hoyLocal()}.csv`,
-      ["Registro", "Folio", "Tipo", "Estado", "Persona", "Fecha", "Acciones vencidas", "Suspensión activa", "Informe retenido", "Descripción"],
-      recortados.map((f) =>
-        f.registro === "incidencia"
-          ? ["Incidencia", f.folio, TIPO_INCIDENCIA_LABEL[String(f.tipo)] || f.tipo, ESTADOS_INCIDENCIA[String(f.estado)]?.label || f.estado, f.reportada_nombre || (f.origen_automatico ? ORIGEN_AUTOMATICO_LABEL[String(f.origen_automatico)] || "Sistema" : ""), formatearFechaHora(f.fecha), "", "", "", f.descripcion]
-          : ["No conformidad", f.folio, `${f.clasificacion ? `${CLASIFICACION_NC_LABEL[String(f.clasificacion)]} · ` : ""}${ORIGEN_NC_LABEL[String(f.origen)] || f.origen}`, ESTADOS_NC[String(f.estado)]?.label || f.estado, f.responsable_nombre || "", formatearFechaHora(f.fecha), Number(f.acciones_vencidas) || "", Number(f.suspensiones_activas) ? "Sí" : "", Number(f.retenciones_activas) ? "Sí" : "", f.descripcion],
-      ),
-    );
-  }
   return json({ items: recortados, total: recortados.length, alcance: (accInc?.total || accNc?.total) ? "total" : "incidencias", tipos_visibles: [...(accInc ? ["incidencia"] : []), ...(accNc ? ["nc"] : [])] });
 }
