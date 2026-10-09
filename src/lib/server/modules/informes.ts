@@ -726,7 +726,6 @@ export async function getInformePdf({ request, s, params }: RouteContext): Promi
   const row = await snapshotRow(s, TABLE, id);
   if (!row) return json({ message: "Informe no encontrado" }, 404);
   const ver = new URL(request.url).searchParams.get("modo") === "ver";
-  if (ver && !row.archivo_pdf) return json({ message: "Este informe todavía no tiene PDF final", codigo: "sin_pdf" }, 404);
   let pdf: Buffer;
   const integridad = await integridadPdf(row);
   const alertar = async (motivo: string, clave: string, descripcion: string, detalle: Record<string, unknown>) => {
@@ -738,12 +737,12 @@ export async function getInformePdf({ request, s, params }: RouteContext): Promi
     pdf = await fs.promises.readFile(path.join(informesDir(), String(row.archivo_pdf)));
     // Fase 6: si la huella no coincide con la guardada al liberar, se avisa en la bitacora (y en la ficha).
     if (integridad === "alterado") await alertar("El SHA-256 del PDF no coincide con el guardado al liberar", `informe:${id}:${row.pdf_sha256}`, `El PDF final del informe ${informeFolio(row)} no coincide con su huella SHA-256 registrada al liberarlo (alerta de integridad).`, { esperado: row.pdf_sha256, obtenido: createHash("sha256").update(pdf).digest("hex") });
-  } else if (ver) {
+  } else if (ver && row.archivo_pdf) {
     await alertar("El PDF final del informe no está en el servidor", `informe:${id}:faltante:${row.pdf_sha256}`, `El PDF final del informe ${informeFolio(row)} no está en el servidor (alerta de integridad).`, { esperado: row.pdf_sha256, archivo: row.archivo_pdf });
     await s.commit();
     return json({ message: "El PDF del informe no está en el servidor; se registró una alerta de integridad", codigo: "archivo_faltante" }, 404);
   } else {
-    // Borrador: vista previa generada al vuelo, marcada como tal.
+    // Sin PDF final (borrador, revisión, autorizado): vista previa generada al vuelo, marcada como tal. Con modo=ver (el visor) no se registra en la bitacora.
     const analyses = await loadAnalyses(s, safeJsonLoad<number[]>(String(row.analisis_ids_json || "[]"), []));
     const render = await buildRender(s, row, analyses);
     render.declaraciones = { ...render.declaraciones, opiniones: [render.declaraciones.opiniones, "VISTA PREVIA — informe no liberado"].filter(Boolean).join("\n") };
