@@ -46,12 +46,12 @@ export const SAMPLE_TABS: NavChild[] = [
   { href: "/muestras/procesamiento", label: "Procesamiento", module: "ensayos" },
   { href: "/muestras/extraccion", label: "Extracción", module: "ensayos" },
   { href: "/muestras/analisis", label: "Análisis", module: "ensayos" },
+  { href: "/informes", label: "Informes", module: "informes" },
 ];
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Inicio", modules: [], description: "Búsqueda y lo pendiente", icon: "house" },
-  { href: "/muestras", label: "Muestras", modules: ["muestras", "ensayos"], description: "Recepción, procesamiento, extracción y análisis", icon: "testtube", children: [...SAMPLE_TABS, { href: "/supervision", label: "Por supervisar" }, { href: "/solicitudes", label: "Por autorizar" }] },
-  { href: "/informes", label: "Informes", modules: ["informes"], description: "Informes de resultados para el cliente", icon: "report" },
+  { href: "/muestras", label: "Muestras", modules: ["muestras", "ensayos", "informes"], description: "Recepción, procesamiento, extracción, análisis e informes", icon: "testtube", children: [...SAMPLE_TABS, { href: "/supervision", label: "Por supervisar" }, { href: "/solicitudes", label: "Por autorizar" }] },
   {
     href: "/inventario",
     label: "Inventario",

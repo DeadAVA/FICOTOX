@@ -35,8 +35,7 @@ Si no puede ingresar, contacte al administrador del sistema para validar que su 
 La **barra lateral** (a la izquierda) tiene seis entradas, visibles segun los permisos del usuario:
 
 - **Inicio**.
-- **Muestras** ▸ Recepcion, Procesamiento, Extraccion y Analisis.
-- **Informes**.
+- **Muestras** ▸ Recepcion, Procesamiento, Extraccion, Analisis e Informes.
 - **Inventario** ▸ Reactivos, Consumibles, Equipos, Mantenimiento y Movimientos.
 - **Calidad** ▸ Biblioteca, Incidencias y NC, y Auditoria.
 - **Administracion** ▸ Usuarios y Roles.
