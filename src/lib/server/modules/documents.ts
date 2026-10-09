@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { markSchemaReady, schemaReady } from "../schema";
+
 import fs from "node:fs";
 import path from "node:path";
 import { requireUser } from "../auth";
 import { registrarAuditoria } from "../audit";
 import { getConfig } from "../config";
-import { isSqlite, type Session } from "../db";
+import { type Session } from "../db";
 import { json, type RouteContext } from "../http";
 import { requirePermission } from "../rbac";
 
@@ -17,51 +17,13 @@ function reportsUploadDir(): string {
   return folder;
 }
 
-export async function ensureReportesMantenimientoSchema(s: Session): Promise<void> {
-  if (schemaReady("reportes_mantenimiento")) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS reportes_mantenimiento (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          codigo VARCHAR(50) NOT NULL UNIQUE,
-          id_mantenimiento INTEGER NOT NULL,
-          version VARCHAR(20) NOT NULL,
-          estado VARCHAR(40) DEFAULT 'borrador',
-          id_responsable INTEGER DEFAULT NULL,
-          fecha_reporte DATE NOT NULL,
-          archivo_url TEXT,
-          creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS reportes_mantenimiento (
-          id INT NOT NULL AUTO_INCREMENT,
-          codigo VARCHAR(50) NOT NULL,
-          id_mantenimiento INT NOT NULL,
-          version VARCHAR(20) NOT NULL,
-          estado ENUM('borrador','en_revision','aprobado','publicado') DEFAULT 'borrador',
-          id_responsable INT DEFAULT NULL,
-          fecha_reporte DATE NOT NULL,
-          archivo_url TEXT,
-          creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (id),
-          UNIQUE KEY codigo (codigo),
-          KEY id_mantenimiento (id_mantenimiento),
-          KEY id_responsable (id_responsable)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-      `,
-  );
-  markSchemaReady("reportes_mantenimiento");
-}
-
 async function nextReportCode(s: Session, mantenimientoId: number): Promise<string> {
   const count = Number((await s.scalar("SELECT COUNT(*) FROM reportes_mantenimiento WHERE id_mantenimiento = :id", { id: mantenimientoId })) || 0);
   return `RM-${String(mantenimientoId).padStart(5, "0")}-${String(count + 1).padStart(2, "0")}`;
 }
 
 /* Equivalente de werkzeug.utils.secure_filename. */
-export function secureFilename(filename: string): string {
+function secureFilename(filename: string): string {
   let value = filename.normalize("NFKD").replace(/[^\x00-\x7F]/g, "");
   value = value.replace(/[/\\]/g, " ");
   value = value
@@ -75,28 +37,9 @@ export function secureFilename(filename: string): string {
   return value;
 }
 
-export async function documentsSummary({ request, s }: RouteContext): Promise<Response> {
-  const user = await requireUser(request);
-  await requirePermission(s, user, "dashboard", "read");
-  await ensureReportesMantenimientoSchema(s);
-
-  const summary = await s.queryOne(
-    `
-    SELECT
-      (SELECT COUNT(*) FROM reportes_mantenimiento) AS total_documentos,
-      (SELECT COUNT(*) FROM reportes_mantenimiento WHERE estado = 'borrador') AS borrador,
-      (SELECT COUNT(*) FROM reportes_mantenimiento WHERE estado = 'en_revision') AS en_revision,
-      (SELECT COUNT(*) FROM reportes_mantenimiento WHERE estado = 'aprobado') AS aprobados,
-      (SELECT COUNT(*) FROM reportes_mantenimiento WHERE estado = 'publicado') AS publicados
-    `,
-  );
-  return json(summary || {});
-}
-
 export async function listDocuments({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "read");
-  await ensureReportesMantenimientoSchema(s);
+  await requirePermission(s, user, "equipos", "V");
 
   const rows = await s.query(
     `
@@ -113,8 +56,7 @@ export async function listDocuments({ request, s }: RouteContext): Promise<Respo
 
 export async function createMaintenanceReport({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "create");
-  await ensureReportesMantenimientoSchema(s);
+  await requirePermission(s, user, "equipos", "C", { objeto: "mantenimiento" });
 
   let form: FormData;
   try {
@@ -189,7 +131,7 @@ const MIME_TYPES: Record<string, string> = {
 
 export async function getDocumentFile({ request, s, params }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "documentos", "read");
+  await requirePermission(s, user, "equipos", "V");
 
   const parts = Array.isArray(params.filename) ? params.filename : [String(params.filename || "")];
   const relative = parts.map((part) => decodeURIComponent(part)).join("/");

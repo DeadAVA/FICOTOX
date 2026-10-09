@@ -1,12 +1,18 @@
 /*
  * Prueba de extremo a extremo del flujo completo (recepcion -> procesamiento ->
- * extraccion -> analisis -> informe -> disposicion), anulaciones, documentos
- * SGC, bajas de inventario y bitacora de auditoria. Corre contra el dev
+ * extraccion -> analisis -> informe -> disposicion), anulaciones, Biblioteca
+ * (y el retiro de Documentos SGC), bajas de inventario y bitacora de auditoria. Corre contra el dev
  * server apuntando a la COPIA de prueba de la base.
  */
+import "./lib/reauth-auto.mjs";
+import { readFileSync } from "node:fs";
+import { autorizarTodo } from "./lib/autorizar.mjs";
+import { pdfConTexto } from "./lib/archivos.mjs";
+import { liberar, registrarEnvio } from "./lib/envio.mjs";
 const BASE = process.env.BASE || "http://localhost:3100/api";
 let token = "";
 let token2 = "";
+let token3 = "";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
@@ -33,19 +39,35 @@ for (let i = 0; i < 60; i += 1) {
   await new Promise((r) => setTimeout(r, 1000));
 }
 
-// ---------- Sesiones (dos usuarios: QA admin y Melisa? solo QA tiene password; creamos otro) ----------
+// ---------- Sesiones (QA, con el rol de prueba que tiene G en todo, y una revisora con un rol de revision creado por API) ----------
 {
   const bad = await api("POST", "/auth/login", { email: "qa@ficotox.local", password: "incorrecta-123" });
   check("login fallido -> 401", bad.status === 401, `status ${bad.status}`);
   const r = await api("POST", "/auth/login", { email: "qa@ficotox.local", password: "QaFicotox2026!" });
   token = r.data?.token || "";
-  check("login QA", r.status === 200 && !!token && r.data?.permissions?.auditoria?.read === true && r.data?.permissions?.aprobaciones?.update === true, `perm auditoria=${JSON.stringify(r.data?.permissions?.auditoria)} aprobaciones=${JSON.stringify(r.data?.permissions?.aprobaciones)}`);
-  // Segundo usuario (revisor independiente) creado por API
-  const u = await api("POST", "/admin/usuarios", { nombre: "Revisora QA", email: "revisora@cicese.mx", activo: true, id_rol: 1, departamento: "Calidad", password: "RevisoraQA2026!" });
-  check("crear usuario revisora", u.status === 201, `status ${u.status} ${JSON.stringify(u.data)}`);
+  check("login QA", r.status === 200 && !!token && r.data?.permissions?.calidad?.V === "total" && r.data?.permissions?.ensayos?.A === "total", `perm calidad=${JSON.stringify(r.data?.permissions?.calidad)} ensayos=${JSON.stringify(r.data?.permissions?.ensayos)}`);
+  // Segundo usuario (revisor independiente) con un rol que revisa y aprueba (sin usuarios:G, para no violar la regla 1).
+  const rolRev = await api("POST", "/admin/roles", {
+    nombre: "Revisora QA",
+    descripcion: "Revisa y aprueba (pruebas)",
+    motivo: "Rol de pruebas",
+    permisos: [
+      { modulo: "ensayos", accion: "R" }, { modulo: "ensayos", accion: "A" },
+      { modulo: "informes", accion: "R" }, { modulo: "informes", accion: "A" },
+      { modulo: "documentos", accion: "E" }, { modulo: "documentos", accion: "A" }, { modulo: "muestras", accion: "V" },
+    ],
+  });
+  const u = await api("POST", "/admin/usuarios", { nombre: "Revisora QA", email: "revisora@cicese.mx", activo: true, rol_id: rolRev.data?.id, departamento: "Calidad", password: "RevisoraQA2026!" });
+  await autorizarTodo(BASE, token, u.data?.id);
+  check("crear usuario revisora", rolRev.status === 201 && u.status === 201, `rol ${rolRev.status} usuario ${u.status} ${JSON.stringify(u.data)}`);
   const r2 = await api("POST", "/auth/login", { email: "revisora@cicese.mx", password: "RevisoraQA2026!" });
   token2 = r2.data?.token || "";
   check("login revisora", r2.status === 200 && !!token2, `status ${r2.status}`);
+  // Tercera persona (Mejora Continua).
+  const cred = JSON.parse(readFileSync(process.env.CREDENCIALES_ROLES, "utf8"));
+  const r3 = await api("POST", "/auth/login", { email: "ana.torres@ficotox.local", password: cred["ana.torres@ficotox.local"] });
+  token3 = r3.data?.token || "";
+  check("login Mejora Continua (tercera persona)", r3.status === 200 && !!token3, `status ${r3.status}`);
 }
 
 // ---------- Recepcion con aceptacion ----------
@@ -101,7 +123,7 @@ let extraccionId = null;
   procesamientoId = proc.data?.id;
   check("procesamiento desde recepcion aceptada -> 201", proc.status === 201, JSON.stringify(proc.data));
   const r = (await api("GET", `/samples/reception/${recepcionId}`)).data?.item;
-  check("recepcion avanza a en_proceso", r?.estado === "en_proceso" && Array.isArray(r?.procesamientos) && r.procesamientos.length === 1, `estado=${r?.estado}`);
+  check("recepcion avanza a en_procesamiento", r?.estado === "en_procesamiento" && Array.isArray(r?.procesamientos) && r.procesamientos.length === 1, `estado=${r?.estado}`);
   const ext = await api("POST", "/samples/extraction", { tipo_registro: "E-D", procesamiento_id: procesamientoId, tipo_molienda: "fresca", id_interno: "D26-100", fecha_extraccion: "2026-09-10", registro_pesos: [{ id_muestra: "D26-100", replica: "D26-100_R1", peso_muestra: 2.01 }], nombre_quien_extrajo: "Ana QA" });
   extraccionId = ext.data?.id;
   check("extraccion DSP -> 201", ext.status === 201, JSON.stringify(ext.data));
@@ -136,22 +158,24 @@ let analisisId = null;
   check("analisis deriva procesamiento y recepcion desde la extraccion", item?.procesamiento_id === procesamientoId && item?.recepcion_id === recepcionId && item?.equipo_nombre === "Centrifuga", `p=${item?.procesamiento_id} r=${item?.recepcion_id} eq=${item?.equipo_nombre}`);
   const aprobarSinRevisar = await api("POST", `/samples/analysis/${analisisId}/aprobar`, {});
   check("aprobar sin revisar -> 409", aprobarSinRevisar.status === 409, `status ${aprobarSinRevisar.status}`);
-  // Regla de dos personas apagada (TWO_PERSON_RULE=false): quien tiene el permiso revisa y aprueba, sin motivo de excepcion.
+  // Fase 3: la revisa y aprueba otra persona (la revisora); revisor y aprobador pueden coincidir.
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${analisisId}/enviar-revision`, {});
   const rev = await api("POST", `/samples/analysis/${analisisId}/revisar`, { observaciones: "Controles dentro de criterio" }, { token: token2 });
   check("revisar analisis -> revisado", rev.status === 200 && rev.data?.item?.estado === "revisado", `status ${rev.status} ${rev.data?.message}`);
   const apr = await api("POST", `/samples/analysis/${analisisId}/aprobar`, {}, { token: token2 });
-  check("aprobar por la misma persona que reviso -> aprobado (sin excepcion)", apr.status === 200 && apr.data?.item?.estado === "aprobado", `status ${apr.status} ${apr.data?.message}`);
+  check("aprobar por la misma persona que reviso (distinta de quien elaboro) -> aprobado", apr.status === 200 && apr.data?.item?.estado === "aprobado", `status ${apr.status} ${apr.data?.message}`);
   const e = (await api("GET", `/samples/extraction/${extraccionId}`)).data?.item;
   const p = (await api("GET", `/samples/processing/${procesamientoId}`)).data?.item;
   const rAna = (await api("GET", `/samples/reception/${recepcionId}`)).data?.item;
-  check("extraccion -> analizada, procesamiento -> completada, recepcion -> analizada", e?.estado === "analizada" && p?.estado === "completada" && rAna?.estado === "analizada", `e=${e?.estado} p=${p?.estado} r=${rAna?.estado}`);
+  check("extraccion -> analizada, procesamiento -> completada, recepcion -> validada", e?.estado === "analizada" && p?.estado === "completada" && rAna?.estado === "validada", `e=${e?.estado} p=${p?.estado} r=${rAna?.estado}`);
   const edit = await api("PUT", `/samples/analysis/${analisisId}`, { tipo_analisis: "toxinas_lipofilicas", metodo: "hplc_ms_ms", extraccion_id: extraccionId, fecha_analisis: "2026-09-10", analista_nombre: "Ana QA", resultados: [{ id_muestra: "D26-100", resultado: 90 }] });
   check("editar analisis aprobado -> 409", edit.status === 409, `status ${edit.status}`);
   const anularExt = await api("POST", `/samples/extraction/${extraccionId}/anular`, { motivo: "prueba de bloqueo" });
   check("anular extraccion con analisis vigente -> 409", anularExt.status === 409, `status ${anularExt.status} ${anularExt.data?.message}`);
 }
 
-// ---------- Informe: crear, revisar, autorizar (PDF), entregar, enmienda ----------
+// ---------- Informe: crear, revisar, autorizar, liberar (PDF), enviar, enmienda ----------
 let informeId = null;
 {
   const disponibles = await api("GET", `/informes/recepcion/${recepcionId}`);
@@ -163,21 +187,30 @@ let informeId = null;
   check("autorizar sin revisar -> 409", autSinRev.status === 409, `status ${autSinRev.status}`);
   const preview = await api("GET", `/informes/${informeId}/pdf`);
   check("vista previa PDF del borrador", preview.status === 200 && preview.type.includes("pdf") && preview.data?.byteLength > 1000, `status ${preview.status} ${preview.type} bytes=${preview.data?.byteLength}`);
-  // Sin cargo en el payload: el servidor toma el rol de quien firma.
-  const rev = await api("POST", `/informes/${informeId}/revisar`, {});
-  check("revisar informe (misma persona que elaboro, regla apagada) con cargo = rol", rev.status === 200 && rev.data?.item?.estado === "en_revision" && !!rev.data?.item?.revisado_cargo, `status ${rev.status} cargo=${rev.data?.item?.revisado_cargo}`);
-  const aut = await api("POST", `/informes/${informeId}/autorizar`, {});
-  check("autorizar informe -> autorizado con PDF y sha256", aut.status === 200 && aut.data?.item?.estado === "autorizado" && !!aut.data?.item?.archivo_pdf && String(aut.data?.item?.pdf_sha256 || "").length === 64, `status ${aut.status} ${aut.data?.message} pdf=${aut.data?.item?.archivo_pdf}`);
+  // Sin cargo en el payload: el servidor toma el rol de quien firma. Quien elaboro (QA) no revisa: 409 segregacion.
+  const revPropio = await api("POST", `/informes/${informeId}/revisar`, {});
+  check("revisar informe propio -> 409 segregacion", revPropio.status === 409 && revPropio.data?.codigo === "segregacion", `status ${revPropio.status} ${revPropio.data?.message}`);
+  const rev = await api("POST", `/informes/${informeId}/revisar`, {}, { token: token2 });
+  check("revisar informe (otra persona) con cargo = rol", rev.status === 200 && rev.data?.item?.estado === "en_revision" && !!rev.data?.item?.revisado_cargo, `status ${rev.status} cargo=${rev.data?.item?.revisado_cargo}`);
+  const aut = await api("POST", `/informes/${informeId}/autorizar`, {}, { token: token2 });
+  check("autorizar informe -> autorizado SIN PDF final (Fase 6)", aut.status === 200 && aut.data?.item?.estado === "autorizado" && !aut.data?.item?.archivo_pdf && !aut.data?.item?.pdf_sha256, `status ${aut.status} ${aut.data?.message} pdf=${aut.data?.item?.archivo_pdf}`);
+  const rAut = (await api("GET", `/samples/reception/${recepcionId}`)).data?.item;
+  check("autorizar no mueve la recepcion a liberada", rAut?.estado !== "liberada", `estado=${rAut?.estado}`);
+  const envAut = await registrarEnvio(BASE, token, informeId, { nombre: "Juan Pérez", correo: "juan@ejemplo.mx" });
+  check("enviar un informe autorizado (no liberado) -> 409", envAut.status === 409, `status ${envAut.status} ${envAut.data?.message}`);
+  const lib = await liberar(BASE, token2, informeId);
+  check("liberar -> liberado con PDF final y sha256", lib.status === 200 && lib.data?.item?.estado === "liberado" && !!lib.data?.item?.archivo_pdf && String(lib.data?.item?.pdf_sha256 || "").length === 64, `status ${lib.status} ${lib.data?.message}`);
   const r = (await api("GET", `/samples/reception/${recepcionId}`)).data?.item;
-  check("recepcion avanza a informada", r?.estado === "informada", `estado=${r?.estado}`);
+  check("liberar lleva la recepcion a liberada", r?.estado === "liberada", `estado=${r?.estado}`);
   const pdf = await api("GET", `/informes/${informeId}/pdf`);
-  check("descarga PDF autorizado", pdf.status === 200 && pdf.data?.byteLength > 1500, `bytes=${pdf.data?.byteLength}`);
+  check("descarga PDF liberado", pdf.status === 200 && pdf.data?.byteLength > 1500, `bytes=${pdf.data?.byteLength}`);
   const editAut = await api("PUT", `/informes/${informeId}`, { recepcion_id: recepcionId, analisis_ids: [analisisId] });
-  check("editar informe autorizado -> 409", editAut.status === 409, `status ${editAut.status}`);
+  check("editar informe liberado -> 409", editAut.status === 409, `status ${editAut.status}`);
   const anularAnalisis = await api("POST", `/samples/analysis/${analisisId}/anular`, { motivo: "prueba bloqueo por informe" });
-  check("anular analisis incluido en informe autorizado -> 409", anularAnalisis.status === 409, `status ${anularAnalisis.status} ${anularAnalisis.data?.message}`);
-  const ent = await api("POST", `/informes/${informeId}/entregar`, { fecha: "2026-09-11", medio: "correo", a_quien: "Juan Pérez" });
-  check("entregar informe", ent.status === 200 && ent.data?.item?.estado === "entregado", `status ${ent.status} ${ent.data?.message}`);
+  check("anular analisis incluido en informe liberado -> 409", anularAnalisis.status === 409, `status ${anularAnalisis.status} ${anularAnalisis.data?.message}`);
+  const ent = await registrarEnvio(BASE, token, informeId, { nombre: "Juan Pérez", correo: "juan@ejemplo.mx" });
+  const tras = (await api("GET", `/informes/${informeId}`)).data?.item;
+  check("registrar envio con evidencia -> 200 y el informe pasa a enviado", ent.status === 200 && tras?.estado === "enviado", `status ${ent.status} ${ent.data?.message} ${tras?.estado}`);
   const enm = await api("POST", `/informes/${informeId}/enmienda`, { motivo: "Error en dirección del cliente" });
   check("enmienda crea version 2 en borrador", enm.status === 201 && enm.data?.version === 2, JSON.stringify(enm.data));
   const enm2 = await api("POST", `/informes/${informeId}/enmienda`, { motivo: "segunda enmienda" });
@@ -186,15 +219,16 @@ let informeId = null;
   check("enmienda de un borrador -> 409", enmBorrador.status === 409, `status ${enmBorrador.status}`);
   const shaV1 = (await api("GET", `/informes/${informeId}`)).data?.item?.pdf_sha256;
   await api("POST", `/informes/${enm.data?.id}/revisar`, { cargo: "Coordinadora técnica" }, { token: token2 });
-  const autV2 = await api("POST", `/informes/${enm.data?.id}/autorizar`, { cargo: "Directora" });
+  const autV2 = await api("POST", `/informes/${enm.data?.id}/autorizar`, { cargo: "Directora" }, { token: token2 });
+  const libV2 = await liberar(BASE, token2, enm.data?.id);
   const v1 = (await api("GET", `/informes/${informeId}`)).data?.item;
-  check("autorizar la enmienda deja el original 'sustituido' con PDF regenerado", autV2.status === 200 && v1?.estado === "sustituido" && !!v1?.pdf_sha256 && v1.pdf_sha256 !== shaV1, `status ${autV2.status} v1=${v1?.estado} sha cambio=${v1?.pdf_sha256 !== shaV1}`);
-  const entV1 = await api("POST", `/informes/${informeId}/entregar`, { fecha: "2026-09-12", medio: "correo", a_quien: "Juan Pérez" });
-  check("entregar un informe sustituido -> 409", entV1.status === 409, `status ${entV1.status}`);
+  check("liberar la enmienda deja el original 'sustituido' con PDF regenerado", autV2.status === 200 && libV2.status === 200 && v1?.estado === "sustituido" && !!v1?.pdf_sha256 && v1.pdf_sha256 !== shaV1, `status ${autV2.status} ${libV2.status} v1=${v1?.estado} sha cambio=${v1?.pdf_sha256 !== shaV1}`);
+  const entV1 = await registrarEnvio(BASE, token, informeId, { nombre: "Juan Pérez", correo: "juan@ejemplo.mx" });
+  check("enviar un informe sustituido -> 409", entV1.status === 409, `status ${entV1.status}`);
   const excAudit = (await api("GET", `/audit?entidad=muestras_analisis&entidad_id=${analisisId}&accion=aprobar`)).data?.items || [];
   check("bitacora del analisis registra la aprobacion sin excepcion (motivo vacio)", excAudit.length === 1 && !excAudit[0].motivo, JSON.stringify(excAudit.map((a) => a.motivo)));
   const lista = (await api("GET", "/informes")).data?.items || [];
-  check("lista de informes incluye v1 sustituido y v2 autorizado", lista.some((i) => i.id === informeId && i.estado === "sustituido") && lista.some((i) => i.version === 2 && i.estado === "autorizado"), JSON.stringify(lista.map((i) => `${i.folio}v${i.version}:${i.estado}`)));
+  check("lista de informes incluye v1 sustituido y v2 liberado", lista.some((i) => i.id === informeId && i.estado === "sustituido") && lista.some((i) => i.version === 2 && i.estado === "liberado"), JSON.stringify(lista.map((i) => `${i.folio}v${i.version}:${i.estado}`)));
 }
 
 // ---------- Disposicion final -> cerrada ----------
@@ -252,19 +286,19 @@ let informeId = null;
   await api("POST", `/inventory/reactivos/${acido.id}/reactivar`, { motivo: "Prueba terminada" });
 
   // Historial por registro: solo quien puede leer el modulo.
-  const permisos = (await api("GET", "/admin/permissions")).data?.items || [];
-  const muestrasPerm = permisos.find((p) => p.clave === "muestras");
-  const rol = await api("POST", "/admin/roles", { nombre: "Analista QA", descripcion: "Solo muestras", permissions: muestrasPerm ? [{ permiso_id: muestrasPerm.id, can_read: true, can_create: true, can_update: true, can_delete: false }] : [] });
-  const u3 = await api("POST", "/admin/usuarios", { nombre: "Analista QA", email: "analista@cicese.mx", activo: true, id_rol: rol.data?.id || rol.data?.role?.id, departamento: "Lab", password: "AnalistaQA2026!" });
+  const rol = await api("POST", "/admin/roles", { nombre: "Analista QA", descripcion: "Solo muestras", motivo: "Rol de pruebas", permisos: [{ modulo: "muestras", accion: "V" }, { modulo: "muestras", accion: "C" }, { modulo: "muestras", accion: "E" }] });
+  const u3 = await api("POST", "/admin/usuarios", { nombre: "Analista QA", email: "analista@cicese.mx", activo: true, rol_id: rol.data?.id, departamento: "Lab", password: "AnalistaQA2026!" });
   const t3 = (await api("POST", "/auth/login", { email: "analista@cicese.mx", password: "AnalistaQA2026!" })).data?.token || "";
-  check("usuario con rol limitado creado", rol.status === 201 && u3.status === 201 && !!t3, `rol ${rol.status} user ${u3.status} perm=${muestrasPerm?.id}`);
+  check("usuario con rol limitado creado", rol.status === 201 && u3.status === 201 && !!t3, `rol ${rol.status} user ${u3.status}`);
   const users = (await api("GET", "/admin/usuarios")).data?.items || [];
   const qa = users.find((u) => u.email === "qa@ficotox.local");
   const histUsuario = await api("GET", `/audit?entidad=usuarios&entidad_id=${qa?.id}`, undefined, { token: t3 });
   check("historial de usuarios sin permiso 'usuarios' -> 403", histUsuario.status === 403, `status ${histUsuario.status}`);
   const histMuestra = await api("GET", `/audit?entidad=muestras_recepcion&entidad_id=${recepcionId}`, undefined, { token: t3 });
-  check("historial de una recepcion con permiso 'muestras' -> 200", histMuestra.status === 200 && (histMuestra.data?.items || []).length > 0, `status ${histMuestra.status}`);
+  check("historial de una recepcion con permiso muestras:V -> 200", histMuestra.status === 200 && (histMuestra.data?.items || []).length > 0, `status ${histMuestra.status}`);
   const logCompleto = await api("GET", "/audit", undefined, { token: t3 });
+  // Fase 6: el analisis se revisa solo despues de enviarlo a revision.
+  await api("POST", `/samples/analysis/${anaId}/enviar-revision`, {});
   const aprobarSinPermiso = await api("POST", `/samples/analysis/${anaId}/revisar`, {}, { token: t3 });
   check("bitacora completa y revisar sin permiso -> 403", logCompleto.status === 403 && aprobarSinPermiso.status === 403, `log ${logCompleto.status} revisar ${aprobarSinPermiso.status}`);
   const histSinMapa = await api("GET", "/audit?entidad=sesion&entidad_id=1", undefined, { token: t3 });
@@ -320,58 +354,21 @@ let informeId = null;
   check("anular procesamiento con extraccion vigente -> 409", anProc.status === 409, `status ${anProc.status}`);
 }
 
-// ---------- Documentos SGC ----------
-let docId = null;
+// ---------- Biblioteca (reemplaza el flujo de Documentos SGC; el detalle esta en api-biblioteca.mjs) ----------
 {
-  const badKey = await api("POST", "/documentos-sgc", { clave: "PROC-1", titulo: "x", tipo: "P", area: "GC" });
-  check("clave invalida -> 400", badKey.status === 400, `status ${badKey.status} ${badKey.data?.message}`);
   const form = new FormData();
-  form.set("clave", "FX-GCP-CD");
   form.set("titulo", "Procedimiento de gestión de calidad para control de documentos");
-  form.set("fecha_emision", "2026-09-01");
-  form.set("elaboro", JSON.stringify({ nombre: "Marcela O.", cargo: "Coordinadora de Mejora Continua" }));
-  form.set("archivo", new File([Buffer.from("%PDF-1.4\n%prueba\n")], "FX-GCP-CD.pdf", { type: "application/pdf" }));
-  const cr = await api("POST", "/documentos-sgc", form, { form: true });
-  docId = cr.data?.id;
-  check("documento creado (multipart) con tipo y area derivados", cr.status === 201 && cr.data?.revision === 1, JSON.stringify(cr.data));
-  const item = (await api("GET", `/documentos-sgc/${docId}`)).data?.item;
-  check("tipo P y area GC derivados de la clave; proxima revision +3 anos", item?.tipo === "P" && item?.area === "GC" && item?.fecha_proxima_revision === "2029-09-01" && !!item?.archivo_sha256, JSON.stringify({ tipo: item?.tipo, area: item?.area, prox: item?.fecha_proxima_revision }));
-  const aprBorrador = await api("POST", `/documentos-sgc/${docId}/aprobar`, {}, { token: token2 });
-  check("aprobar un borrador (sin enviar a revision) -> 409", aprBorrador.status === 409, `status ${aprBorrador.status} ${aprBorrador.data?.message}`);
-  const claveTipo = await api("POST", "/documentos-sgc", { clave: "FX-GCX-CD", titulo: "Clave con tipo desconocido", tipo: "P", area: "GC" });
-  check("clave con tipo invalido no se salva con el tipo del cuerpo -> 400", claveTipo.status === 400, `status ${claveTipo.status} ${claveTipo.data?.message}`);
-  const revArbitraria = await api("POST", "/documentos-sgc", { clave: "FX-GCP-CD", titulo: "Otra revision a mano", revision: 7 });
-  check("segunda alta de una clave con revision en curso -> 409", revArbitraria.status === 409, `status ${revArbitraria.status} ${revArbitraria.data?.message}`);
-  const rev = await api("POST", `/documentos-sgc/${docId}/enviar-revision`, { reviso: { nombre: "Daniela C.", cargo: "Coordinadora Técnica" } });
-  check("enviar a revision", rev.status === 200 && rev.data?.item?.estado === "en_revision", `status ${rev.status} ${rev.data?.message}`);
-  const apr = await api("POST", `/documentos-sgc/${docId}/aprobar`, { aprobo: { nombre: "Ernesto G.", cargo: "Director General" }, fecha_vigencia: "2026-09-15" }, { token: token2 });
-  check("aprobar -> vigente", apr.status === 200 && apr.data?.item?.estado === "vigente", `status ${apr.status} ${apr.data?.message}`);
-  const editVig = await api("PUT", `/documentos-sgc/${docId}`, { titulo: "otro" });
-  check("editar vigente -> 409", editVig.status === 409, `status ${editVig.status}`);
-  const cancelado = await api("POST", "/documentos-sgc", { clave: "FX-ADP-QA1", titulo: "Borrador que se cancela" });
-  await api("POST", `/documentos-sgc/${cancelado.data?.id}/cancelar`, { motivo: "Prueba: borrador descartado" });
-  const revCancelada = await api("POST", `/documentos-sgc/${cancelado.data?.id}/nueva-revision`, { cambios: "Intento sobre un cancelado" });
-  check("nueva revision de un documento cancelado -> 409", revCancelada.status === 409, `status ${revCancelada.status} ${revCancelada.data?.message}`);
-  const nueva = await api("POST", `/documentos-sgc/${docId}/nueva-revision`, { cambios: "Se agrega el control de registros electrónicos" });
-  const nuevaId = nueva.data?.id;
-  check("nueva revision 2 en borrador", nueva.status === 201 && nueva.data?.revision === 2, JSON.stringify(nueva.data));
-  const dup = await api("POST", `/documentos-sgc/${docId}/nueva-revision`, { cambios: "otra" });
-  check("segunda revision en curso -> 409", dup.status === 409, `status ${dup.status}`);
-  const form2 = new FormData();
-  form2.set("titulo", "Procedimiento de gestión de calidad para control de documentos");
-  form2.set("archivo", new File([Buffer.from("%PDF-1.4\n%rev2\n")], "FX-GCP-CD-2.pdf", { type: "application/pdf" }));
-  const upd = await api("PUT", `/documentos-sgc/${nuevaId}`, form2, { form: true });
-  check("adjuntar archivo a la revision 2", upd.status === 200, `status ${upd.status} ${upd.data?.message}`);
-  await api("POST", `/documentos-sgc/${nuevaId}/enviar-revision`, {});
-  const apr2 = await api("POST", `/documentos-sgc/${nuevaId}/aprobar`, {}, { token: token2 });
-  const v1 = (await api("GET", `/documentos-sgc/${docId}`)).data?.item;
-  check("aprobar revision 2 deja obsoleta la revision 1", apr2.status === 200 && v1?.estado === "obsoleto", `status ${apr2.status} v1=${v1?.estado}`);
-  const maestra = (await api("GET", "/documentos-sgc/lista-maestra")).data?.items || [];
-  check("lista maestra muestra solo la revision vigente (2)", maestra.filter((d) => d.clave === "FX-GCP-CD").length === 1 && maestra.find((d) => d.clave === "FX-GCP-CD")?.revision === 2, JSON.stringify(maestra.map((d) => `${d.clave}-${d.revision}`)));
-  const archivo = await api("GET", `/documentos-sgc/${docId}/archivo`);
-  check("descarga de archivo obsoleto marcada", archivo.status === 200 && archivo.type.includes("pdf"), `status ${archivo.status} ${archivo.type}`);
-  const del = await api("DELETE", `/documentos-sgc/${docId}`);
-  check("DELETE documento -> 405", del.status === 405, `status ${del.status}`);
+  form.set("clave", "FX-GCP-CD");
+  form.set("archivo", new File([await pdfConTexto(1, "Control de documentos")], "FX-GCP-CD.pdf", { type: "application/pdf" }));
+  const cr = await api("POST", "/biblioteca", form, { form: true });
+  const docBib = cr.data?.item?.id;
+  const ficha = (await api("GET", `/biblioteca/${docBib}`)).data;
+  const v = ficha?.versiones?.[0];
+  check("biblioteca: subir un PDF (201) con su versión y SHA-256", cr.status === 201 && !!v?.sha256 && ficha?.item?.integridad === "ok", `status ${cr.status} ${cr.data?.message || ""}`);
+  const descarga = await api("GET", `/biblioteca/versiones/${v?.id}/archivo?modo=descargar`);
+  check("biblioteca: descargar el archivo (queda en la bitácora)", descarga.status === 200 && descarga.type.includes("pdf"), `status ${descarga.status} ${descarga.type}`);
+  const viejo = await api("POST", "/documentos-sgc", { clave: "FX-GCP-QA9", titulo: "Flujo retirado" });
+  check("Documentos SGC retirado: crear responde 410", viejo.status === 410 && viejo.data?.codigo === "retirado", `status ${viejo.status}`);
 }
 
 // ---------- Bajas logicas de inventario y usuarios ----------
@@ -399,8 +396,8 @@ let docId = null;
   const all = (await api("GET", "/audit?limit=500")).data?.items || [];
   const acciones = new Set(all.map((a) => a.accion));
   const entidades = new Set(all.map((a) => a.entidad));
-  check("bitacora registra login, login_fallido, crear, editar, aceptar, revisar, aprobar, autorizar, entregar, cerrar, anular, restaurar, baja, reactivar, descargar", ["login", "login_fallido", "crear", "editar", "aceptar", "revisar", "aprobar", "autorizar", "entregar", "cerrar", "anular", "restaurar", "baja", "reactivar", "descargar"].every((a) => acciones.has(a)), `faltan: ${["login", "login_fallido", "crear", "editar", "aceptar", "revisar", "aprobar", "autorizar", "entregar", "cerrar", "anular", "restaurar", "baja", "reactivar", "descargar"].filter((a) => !acciones.has(a)).join(",")}`);
-  check("bitacora cubre recepcion, procesamiento, extraccion, analisis, informes, documentos, equipos, usuarios, sesion", ["muestras_recepcion", "muestras_procesamiento", "muestras_extraccion", "muestras_analisis", "informes", "documentos_sgc", "equipos", "usuarios", "sesion"].every((e) => entidades.has(e)), `faltan: ${["muestras_recepcion", "muestras_procesamiento", "muestras_extraccion", "muestras_analisis", "informes", "documentos_sgc", "equipos", "usuarios", "sesion"].filter((e) => !entidades.has(e)).join(",")}`);
+  check("bitacora registra login, login_fallido, crear, editar, aceptar, revisar, aprobar, autorizar, liberar, enviar, cerrar, anular, restaurar, baja, reactivar, descargar", ["login", "login_fallido", "crear", "editar", "aceptar", "revisar", "aprobar", "autorizar", "liberar", "enviar", "cerrar", "anular", "restaurar", "baja", "reactivar", "descargar"].every((a) => acciones.has(a)), `faltan: ${["login", "login_fallido", "crear", "editar", "aceptar", "revisar", "aprobar", "autorizar", "liberar", "enviar", "cerrar", "anular", "restaurar", "baja", "reactivar", "descargar"].filter((a) => !acciones.has(a)).join(",")}`);
+  check("bitacora cubre recepcion, procesamiento, extraccion, analisis, informes, documentos, equipos, usuarios, sesion", ["muestras_recepcion", "muestras_procesamiento", "muestras_extraccion", "muestras_analisis", "informes", "biblioteca_documentos", "equipos", "usuarios", "sesion"].every((e) => entidades.has(e)), `faltan: ${["muestras_recepcion", "muestras_procesamiento", "muestras_extraccion", "muestras_analisis", "informes", "biblioteca_documentos", "equipos", "usuarios", "sesion"].filter((e) => !entidades.has(e)).join(",")}`);
   const edit = all.find((a) => a.accion === "editar" && a.entidad === "muestras_recepcion");
   check("entrada de edicion guarda antes/despues por campo", !!edit && Object.keys(edit.cambios || {}).length > 0 && "decision_aceptacion" in (edit.cambios || {}), JSON.stringify(edit?.cambios ? Object.keys(edit.cambios) : null));
   const detalle = (await api("GET", `/audit/${edit?.id}`)).data?.item;

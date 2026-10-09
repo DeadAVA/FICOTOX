@@ -7,7 +7,7 @@ import { PageBody } from "@/components/shell/AppShell";
 import { useSession } from "@/components/session/SessionProvider";
 import { cn } from "@/components/ui/cn";
 import { Kbd } from "@/components/ui/Primitives";
-import { HELP_TOPICS } from "@/lib/client/search";
+import { HELP_TOPICS } from "@/lib/shared/busqueda";
 
 /*
  * Ayuda: el manual de uso resumido, dentro de la plataforma. Una columna con
@@ -172,7 +172,7 @@ export default function AyudaPage() {
                 <b>Acciones:</b> «nueva» lista todo lo que puedes crear; «nueva extracción ASP» abre directo ese formato.
               </li>
               <li>
-                <b>Vistas por estado:</b> «stock bajo», «por revisar», «calibración», «mantenimientos vencidos», «entregados».
+                <b>Vistas por estado:</b> «stock bajo», «por revisar», «calibración», «mantenimientos vencidos», «enviados».
               </li>
               <li>
                 <b>Ayuda:</b> «cómo anular», «atajos» abren la sección de esta guía.
@@ -187,7 +187,7 @@ export default function AyudaPage() {
             <Steps
               items={[
                 <>
-                  <b>Recepción (R).</b> Quién entrega, qué muestra o lote, análisis solicitado, inspección visual (7 requisitos) y la <b>decisión de aceptación</b>. Sin decisión, o con la muestra rechazada, no se puede seguir. {can("muestras", "create") ? <Go href="/muestras/recepcion/nueva">Nueva recepción</Go> : null}
+                  <b>Recepción (R).</b> Quién entrega, qué muestra o lote, análisis solicitado, inspección visual (7 requisitos) y la <b>decisión de aceptación</b>. Sin decisión, o con la muestra rechazada, no se puede seguir. {can("muestras", "C", { objeto: "recepcion", borrador: true }) ? <Go href="/muestras/recepcion/nueva">Nueva recepción</Go> : null}
                 </>,
                 <>
                   <b>Procesamiento (P).</b> Lavado, desconche y molienda; equipo usado en cada paso y peso de la molienda. Descuenta las bolsas del inventario.
@@ -223,7 +223,7 @@ export default function AyudaPage() {
                 <b>Equipos con alerta.</b> Si un equipo está en mantenimiento o con calibración vencida, se avisa y se pide confirmación; no se bloquea.
               </li>
             </ul>
-            <Tip>Las personas (quién extrajo, quién supervisó) se eligen de la lista del personal autorizado; el cargo sale de su rol, no se captura.</Tip>
+            <Tip>Las personas (quién extrajo, quién supervisó) se eligen de la lista del personal autorizado; el cargo no se captura: se guarda el del rol con el que actúa quien firma.</Tip>
           </Section>
 
           <Section anchor="analisis" title="Análisis, revisión y aprobación" lead="El análisis captura lo medido en el extracto y pasa por dos firmas antes de poder informarse.">
@@ -239,7 +239,7 @@ export default function AyudaPage() {
                   Registra los controles de calidad (blanco, material de referencia, duplicado) y presiona <b>Registrar análisis</b>.
                 </>,
                 <>
-                  <b>Marcar revisado</b> y luego <b>Aprobar</b> (permiso Aprobaciones). Cualquier persona con ese permiso puede hacerlo, aunque haya capturado el registro. Un análisis aprobado ya no se edita: si está mal, se anula y se captura otro.
+                  <b>Marcar revisado</b> y luego <b>Aprobar</b> (permisos de revisar y aprobar ensayos). Cualquier persona con ese permiso puede hacerlo, aunque haya capturado el registro. Si tienes varios roles que lo permiten, el sistema te pregunta con qué cargo actúas. Un análisis aprobado ya no se edita: si está mal, se anula y se captura otro.
                 </>,
               ]}
             />
@@ -249,7 +249,7 @@ export default function AyudaPage() {
             <Steps
               items={[
                 <>
-                  <b>Crear:</b> elige la recepción; se cargan cliente, ítems ensayados y los análisis aprobados. Revisa las declaraciones (alcance, regla de decisión, desviaciones) y crea el borrador. {can("informes", "create") ? <Go href="/informes/nuevo">Nuevo informe</Go> : null}
+                  <b>Crear:</b> elige la recepción; se cargan cliente, ítems ensayados y los análisis aprobados. Revisa las declaraciones (alcance, regla de decisión, desviaciones) y crea el borrador. {can("informes", "C") ? <Go href="/informes/nuevo">Nuevo informe</Go> : null}
                 </>,
                 <>
                   <b>Marcar revisado</b> y <b>Autorizar</b> con firma: los resultados quedan congelados y se genera el PDF definitivo con su huella SHA-256.
@@ -267,7 +267,7 @@ export default function AyudaPage() {
           <Section anchor="inventario" title="Inventario y avisos" lead="Reactivos, consumibles y equipos con sus existencias, caducidades, calibraciones y mantenimientos. Los formatos descuentan solos lo que usan.">
             <ul className="flex flex-col gap-2">
               <li>
-                <b>Existencias.</b> Cada reactivo y consumible muestra un medidor: cuánto queda frente a su capacidad y el mínimo. «Stock bajo» es por debajo del mínimo (o del 20 % si no hay mínimo); en consumibles, 5 piezas o menos. <b>Reponer</b> registra una entrada.
+                <b>Existencias.</b> Cada reactivo y consumible muestra un medidor: cuánto queda frente a su capacidad y el mínimo. «Stock bajo» es por debajo del mínimo (o del 20 % si no hay mínimo); los consumibles se cuentan en unidades (no en cajas) y avisan con 5 unidades o menos si no tienen mínimo propio. <b>Registrar movimiento</b> anota entradas, salidas, consumos o ajustes por conteo.
               </li>
               <li>
                 <b>Equipos y mantenimiento.</b> Programar un mantenimiento pone el equipo <b>En mantenimiento</b>; al completarlo vuelve a <b>Operativo</b> y, si fue calibración, actualiza la próxima fecha. Una calibración vencida se marca en el equipo y en los avisos.
@@ -283,7 +283,7 @@ export default function AyudaPage() {
 
           <Section anchor="calidad" title="Auditoría y trazabilidad" lead="Todo lo que se hace queda registrado: quién, qué, cuándo y por qué.">
             <p>
-              Cada formato tiene al final un <b>Historial</b> con frases sencillas («Axel aprobó el análisis A 0000004») y el botón «Ver cambios» para comparar valor anterior y nuevo. En <b>Calidad › Auditoría</b> se ve lo mismo para todo el sistema, con filtros por persona, acción y fecha. La bitácora está sellada: si alguien altera una entrada, la cadena se rompe y el sistema lo detecta.
+              Cada formato tiene al final un <b>Historial</b> con frases sencillas («Axel aprobó el análisis A 0000004»); al pulsar una actividad se abre una ventana con qué pasó, qué cambió y el motivo. En <b>Calidad › Auditoría</b> se ve lo mismo para toda la plataforma, con el buscador y el botón «Filtros» (periodo, personas, tipo de actividad y área). La bitácora no se exporta: se consulta solo aquí. Está sellada: si alguien la altera fuera de la plataforma, se detecta solo y aparece un aviso rojo.
             </p>
           </Section>
 

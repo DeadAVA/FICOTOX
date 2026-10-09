@@ -1,4 +1,5 @@
 /* Prueba de extremo a extremo de la extraccion DSP contra el servidor de desarrollo (base de prueba). */
+import "./lib/reauth-auto.mjs";
 const BASE = process.env.BASE || "http://localhost:3100/api";
 let token = "";
 const results = [];

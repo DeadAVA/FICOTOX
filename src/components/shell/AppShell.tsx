@@ -3,16 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useAlternarTema } from "@/components/ui/SelectorTema";
 import { Dialog as RadixDialog } from "radix-ui";
-import { ArrowsLeftRight, CaretRight, ClockCounterClockwise, Cube, FileText, Flask, House, List, MagnifyingGlass, Package, Question, SealCheck, ShieldCheck, SidebarSimple, SignOut, TestTube, UserCircle, Users, Wrench, X } from "@phosphor-icons/react";
+import { ArrowsLeftRight, CaretRight, ClockCounterClockwise, Cube, FileText, Flask, House, List, MagnifyingGlass, Package, Question, SealCheck, ShieldCheck, SidebarSimple, SignOut, TestTube, UserCircle, Users, WarningDiamond, Wrench, X } from "@phosphor-icons/react";
+import { reportarIncidencia, ReportarIncidenciaHost, usePuedeReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { useSession } from "@/components/session/SessionProvider";
 import { cn } from "@/components/ui/cn";
 import { Dropdown, Tooltip } from "@/components/ui/Overlay";
 import { Avatar } from "@/components/ui/Primitives";
 import { isActivePath, isItemActive, visibleNav, type NavChild, type NavIcon, type NavItem } from "@/lib/client/nav";
 import { BrandLockup, BrandMark } from "./Brand";
-import { AccountSheet } from "./AccountSheet";
+import { ABRIR_MIS_AUTORIZACIONES, AccountSheet, EVENTO_ABRIR_CUENTA } from "./AccountSheet";
+import { usePendientesPorResolver } from "@/components/features/solicitudes/Solicitudes";
+import { Campana } from "./Campana";
 import { CommandPalette } from "./CommandPalette";
+import { VisorPdfFlotante } from "./VisorPdfFlotante";
 
 /*
  * Shell de la aplicacion: barra lateral con seis destinos; los que agrupan
@@ -90,15 +95,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user, permissions, logout } = useSession();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [cuentaClave, setCuentaClave] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
 
   const toggleCollapsed = () => writeCollapsed(!collapsed);
 
-  useEffect(() => {
+  // Al cambiar de pantalla se cierra el panel movil (ajuste de estado durante el render, sin efecto en cascada).
+  const [rutaAnterior, setRutaAnterior] = useState(pathname);
+  if (rutaAnterior !== pathname) {
+    setRutaAnterior(pathname);
     setMobileOpen(false);
-  }, [pathname]);
+  }
 
   // Si la ventana crece a escritorio con el panel abierto, se cierra (si no, quedaría bloqueando el scroll sin verse).
   useEffect(() => {
@@ -108,6 +117,18 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);
+  }, []);
+
+  // Fase 5: "Mi cuenta" se abre con el evento EVENTO_ABRIR_CUENTA o al llegar con #mis-autorizaciones.
+  useEffect(() => {
+    const abrir = (event?: Event) => {
+      // La búsqueda ("cambiar contraseña") pide abrir la cuenta con el formulario de contraseña ya desplegado.
+      setCuentaClave(!!(event as CustomEvent<{ password?: boolean }> | undefined)?.detail?.password);
+      setAccountOpen(true);
+    };
+    if (window.location.hash === ABRIR_MIS_AUTORIZACIONES) abrir();
+    window.addEventListener(EVENTO_ABRIR_CUENTA, abrir);
+    return () => window.removeEventListener(EVENTO_ABRIR_CUENTA, abrir);
   }, []);
 
   useEffect(() => {
@@ -122,6 +143,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   const items = visibleNav(permissions);
+  const puedeReportar = usePuedeReportar();
 
   const sidebarProps = {
     items,
@@ -135,6 +157,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       setMobileOpen(false);
       setAccountOpen(true);
     },
+    // Fase 11: "Reportar incidencia" siempre a la mano para quien tiene calidad:C.
+    onReportar: puedeReportar
+      ? () => {
+          setMobileOpen(false);
+          reportarIncidencia();
+        }
+      : undefined,
     isMac,
     user,
     onLogout: logout,
@@ -142,20 +171,20 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh">
-      <a href="#contenido" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[60] focus:rounded-[8px] focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:shadow-pop">
+      <a href="#contenido" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[var(--z-toast)] focus:rounded-[8px] focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:shadow-pop">
         Saltar al contenido
       </a>
 
       {/* Barra lateral de escritorio */}
-      <aside className={cn("sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line/70 bg-[#f7f8fa] transition-[width] duration-300 ease-[var(--ease-spring)] lg:flex", collapsed ? "w-[68px]" : "w-[240px]")} aria-label="Navegación principal">
+      <aside className={cn("sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line/70 bg-sidebar transition-[width] duration-300 ease-[var(--ease-spring)] lg:flex", collapsed ? "w-[68px]" : "w-[240px]")} aria-label="Navegación principal">
         <SidebarContent {...sidebarProps} collapsed={collapsed} />
       </aside>
 
       {/* Barra lateral móvil: panel con foco atrapado, Escape y bloqueo de scroll (Radix Dialog). Siempre expandida. */}
       <RadixDialog.Root open={mobileOpen} onOpenChange={setMobileOpen}>
         <RadixDialog.Portal>
-          <RadixDialog.Overlay className="fixed inset-0 z-40 bg-deep/35 backdrop-blur-[3px] data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out lg:hidden" />
-          <RadixDialog.Content className="material-thick fixed inset-y-0 left-0 z-50 flex w-[280px] max-w-[85vw] flex-col shadow-panel outline-none data-[state=open]:animate-sheet-in-left data-[state=closed]:animate-sheet-out-left lg:hidden" aria-label="Navegación principal">
+          <RadixDialog.Overlay className="fixed inset-0 z-[var(--z-ventana)] bg-deep/35 backdrop-blur-[3px] data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out lg:hidden" />
+          <RadixDialog.Content className="bg-sidebar fixed inset-y-0 left-0 z-[var(--z-ventana)] flex w-[280px] max-w-[85vw] flex-col shadow-panel outline-none data-[state=open]:animate-sheet-in-left data-[state=closed]:animate-sheet-out-left lg:hidden" aria-label="Navegación principal">
             <RadixDialog.Title className="sr-only">Navegación principal</RadixDialog.Title>
             <RadixDialog.Description className="sr-only">Secciones del sistema</RadixDialog.Description>
             <SidebarContent {...sidebarProps} collapsed={false} onClose={() => setMobileOpen(false)} />
@@ -184,16 +213,23 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
-      {accountOpen ? <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} /> : null}
+      <ReportarIncidenciaHost />
+      <VisorPdfFlotante />
+      {accountOpen ? <AccountSheet open={accountOpen} abrirClave={cuentaClave} onClose={() => setAccountOpen(false)} /> : null}
     </div>
   );
 }
 
 type VisibleItem = NavItem & { children: NavChild[] };
 
-function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAccount, onClose, isMac, user, onLogout }: { items: VisibleItem[]; pathname: string; collapsed: boolean; onSearch: () => void; onToggle: () => void; onAccount: () => void; onClose?: () => void; isMac: boolean; user: { nombre?: string; email?: string; rol?: string; avatar?: string | null } | null; onLogout: () => void }) {
+function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAccount, onClose, onReportar, isMac, user, onLogout }: { items: VisibleItem[]; pathname: string; collapsed: boolean; onSearch: () => void; onToggle: () => void; onAccount: () => void; onClose?: () => void; onReportar?: () => void; isMac: boolean; user: { id?: number; nombre?: string; email?: string; roles?: string[]; avatar?: string | null } | null; onLogout: () => void }) {
   // El shell solo se monta ya autenticado (en el cliente), así que leer localStorage al iniciar no desajusta la hidratación.
   const [expanded, setExpanded] = useState<string[]>(() => (typeof window === "undefined" ? [] : readExpanded()));
+  // Contadores de lo que la persona puede resolver: "Por autorizar" y "Por supervisar".
+  const pendientes = usePendientesPorResolver();
+  // Acceso rapido de apariencia en el menu de la cuenta (Claro <-> Oscuro).
+  const tema = useAlternarTema();
+  const contador: Record<string, number> = { "/solicitudes": pendientes.solicitudes.length, "/supervision": pendientes.supervision.length };
 
   const toggleExpanded = (label: string, active: boolean) => {
     setExpanded((current) => {
@@ -218,6 +254,7 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
         </Link>
         {!collapsed ? (
           <div className="flex items-center gap-0.5">
+            <Campana />
             <Tooltip content={`Buscar (${isMac ? "⌘" : "Ctrl"} K)`} side="bottom">
               <button type="button" onClick={onSearch} className="press inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-3 hover:bg-surface-3 hover:text-ink" aria-label="Buscar">
                 <MagnifyingGlass size={17} />
@@ -237,7 +274,8 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
       </div>
 
       {collapsed ? (
-        <div className="px-2">
+        <div className="flex flex-col gap-0.5 px-2">
+          <Campana compacta />
           <Tooltip content={`Buscar (${isMac ? "⌘" : "Ctrl"} K)`} side="right">
             <button type="button" onClick={onSearch} className="press flex h-9 w-full items-center justify-center rounded-[9px] text-ink-3 hover:bg-surface-3 hover:text-ink" aria-label="Buscar">
               <MagnifyingGlass size={18} />
@@ -252,22 +290,24 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
             const active = isItemActive(pathname, item);
             const hasChildren = item.children.length > 0;
             const open = hasChildren && !collapsed && isOpen(item, active);
-            const leafActive = active && !hasChildren;
+            // Hoja activa (o, con la barra contraída, cualquier sección activa): fondo tenue y marca de acento.
+            const leafActive = active && (!hasChildren || collapsed);
             const link = (
               <Link
                 href={item.href}
-                aria-current={leafActive ? "page" : undefined}
+                aria-current={active && !hasChildren ? "page" : undefined}
+                data-activo={leafActive ? "true" : undefined}
                 aria-label={collapsed ? item.label : undefined}
                 onClick={() => {
                   if (hasChildren && !collapsed && !open) toggleExpanded(item.label, active);
                 }}
                 className={cn(
-                  "press group/item flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-[9px] text-[13.5px]",
+                  "seleccion press group/item flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-[9px] text-[13.5px]",
                   collapsed ? "justify-center px-0" : "px-2.5",
-                  leafActive ? "bg-brand font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" : active ? "font-semibold text-ink hover:bg-surface-3/80" : "font-medium text-ink-2 hover:bg-surface-3/80 hover:text-ink",
+                  leafActive ? "font-semibold text-ink" : active ? "font-semibold text-ink" : "font-medium text-ink-2 hover:text-ink",
                 )}
               >
-                <span className={cn("shrink-0 transition-colors", leafActive ? "text-white" : active ? "text-brand" : "text-ink-3 group-hover/item:text-ink-2")}>{ICONS[item.icon]}</span>
+                <span className={cn("shrink-0 transition-colors", active ? "text-brand" : "text-ink-3 group-hover/item:text-ink-2")}>{ICONS[item.icon]}</span>
                 {!collapsed ? <span className="truncate">{item.label}</span> : null}
               </Link>
             );
@@ -308,10 +348,15 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
                               href={child.href}
                               tabIndex={open ? 0 : -1}
                               aria-current={childActive ? "page" : undefined}
-                              className={cn("press flex h-8 items-center gap-2 rounded-[7px] px-2.5 text-[13px] transition-colors", childActive ? "bg-brand font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" : "text-ink-2 hover:bg-surface-3/80 hover:text-ink")}
+                              className={cn("seleccion press flex h-8 items-center gap-2 rounded-[7px] px-2.5 text-[13px]", childActive ? "font-semibold text-ink" : "text-ink-2 hover:text-ink")}
                             >
-                              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full transition-colors", childActive ? "bg-white" : "bg-line-strong")} aria-hidden="true" />
+                              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full transition-colors", childActive ? "bg-brand" : "bg-line-strong")} aria-hidden="true" />
                               <span className="truncate">{child.label}</span>
+                              {contador[child.href] ? (
+                                <span className={cn("tnum ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold", "bg-warning text-on-accent")} aria-label={`${contador[child.href]} pendientes`} data-contador={child.href}>
+                                  {contador[child.href]}
+                                </span>
+                              ) : null}
                             </Link>
                           </li>
                         );
@@ -326,15 +371,29 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
       </nav>
 
       <div className={cn("border-t border-line/70 p-2", collapsed && "flex flex-col items-center gap-1")}>
+        {onReportar ? (
+          collapsed ? (
+            <Tooltip content="Reportar incidencia" side="right">
+              <button type="button" onClick={onReportar} className="press inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-3 hover:bg-surface-3 hover:text-ink" aria-label="Reportar incidencia">
+                <WarningDiamond size={18} />
+              </button>
+            </Tooltip>
+          ) : (
+            <button type="button" onClick={onReportar} className="press mb-0.5 flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] font-medium text-ink-2 hover:bg-surface-3/80 hover:text-ink" data-reportar-incidencia-boton>
+              <WarningDiamond size={18} className="text-ink-3" />
+              Reportar incidencia
+            </button>
+          )
+        ) : null}
         {/* Ayuda: siempre visible, no depende de permisos. */}
         {collapsed ? (
           <Tooltip content="Ayuda" side="right">
-            <Link href="/ayuda" aria-current={isActivePath(pathname, "/ayuda") ? "page" : undefined} className={cn("press inline-flex h-8 w-8 items-center justify-center rounded-[8px]", isActivePath(pathname, "/ayuda") ? "bg-brand-soft text-brand-strong" : "text-ink-3 hover:bg-surface-3 hover:text-ink")} aria-label="Ayuda">
+            <Link href="/ayuda" aria-current={isActivePath(pathname, "/ayuda") ? "page" : undefined} className={cn("seleccion press inline-flex h-8 w-8 items-center justify-center rounded-[8px]", isActivePath(pathname, "/ayuda") ? "text-brand" : "text-ink-3 hover:text-ink")} aria-label="Ayuda">
               <Question size={18} />
             </Link>
           </Tooltip>
         ) : (
-          <Link href="/ayuda" aria-current={isActivePath(pathname, "/ayuda") ? "page" : undefined} className={cn("press mb-1 flex h-9 items-center gap-2.5 rounded-[9px] px-2.5 text-[13.5px] font-medium", isActivePath(pathname, "/ayuda") ? "bg-brand-soft text-brand-strong" : "text-ink-2 hover:bg-surface-3/80 hover:text-ink")}>
+          <Link href="/ayuda" aria-current={isActivePath(pathname, "/ayuda") ? "page" : undefined} className={cn("seleccion press mb-1 flex h-9 items-center gap-2.5 rounded-[9px] px-2.5 text-[13.5px]", isActivePath(pathname, "/ayuda") ? "font-semibold text-ink" : "font-medium text-ink-2 hover:text-ink")}>
             <Question size={18} className={isActivePath(pathname, "/ayuda") ? "text-brand" : "text-ink-3"} />
             Ayuda
           </Link>
@@ -349,17 +408,18 @@ function SidebarContent({ items, pathname, collapsed, onSearch, onToggle, onAcco
           align="start"
           trigger={
             <button type="button" className={cn("press flex w-full items-center gap-2.5 rounded-[10px] py-1.5 text-left hover:bg-surface-3/80", collapsed ? "justify-center px-0" : "px-2")} aria-label="Menú de usuario">
-              <Avatar name={user?.nombre} email={user?.email} avatar={user?.avatar} size="md" />
+              <Avatar id={user?.id} name={user?.nombre} email={user?.email} avatar={user?.avatar} size="md" />
               {!collapsed ? (
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-[13.5px] font-medium text-ink">{user?.nombre || user?.email}</span>
-                  <span className="truncate text-[12px] text-ink-3">{user?.rol || user?.email}</span>
+                  <span className="truncate text-[12px] text-ink-3">{user?.roles?.join(", ") || user?.email}</span>
                 </span>
               ) : null}
             </button>
           }
           items={[
             { label: "Mi cuenta", icon: <UserCircle size={16} />, onSelect: onAccount },
+            { label: tema.etiqueta, icon: tema.icono, onSelect: tema.alternar },
             { label: "Cerrar sesión", icon: <SignOut size={16} />, onSelect: onLogout, tone: "danger", separatorBefore: true },
           ]}
         />

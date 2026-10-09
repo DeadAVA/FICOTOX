@@ -18,7 +18,7 @@ function NuevaExtraccion() {
 
 export default function NuevaExtraccionPage() {
   return (
-    <RequireModule modules="muestras">
+    <RequireModule modules="ensayos">
       <Suspense fallback={<Skeleton className="h-64 w-full" />}>
         <NuevaExtraccion />
       </Suspense>

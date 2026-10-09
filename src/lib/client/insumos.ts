@@ -1,6 +1,7 @@
 import { API_BASE_URL, getJsonAuth } from "./api";
 import { getStoredToken } from "./session";
 import type { ApiRecord } from "./types";
+import { diasEntre, fechaSola, formatearFecha, hoyLocal } from "../shared/fechas";
 
 /*
  * Cache de insumos (reactivos, consumibles y equipos) para los buscadores de
@@ -8,13 +9,11 @@ import type { ApiRecord } from "./types";
  * sesion de pagina, igual que en el app.js de la interfaz original.
  */
 
-export type InsumoTipo = "reactivo" | "consumible" | "equipo";
-
 export interface InsumoOption {
   ref: string;
   label: string;
   cantidad_actual?: number | null;
-  piezas?: number | null;
+  existencia?: number | null;
   unidad?: string;
   /* Solo reactivos: lote (se sugiere como folio de preparación de soluciones). */
   lote?: string | null;
@@ -67,8 +66,8 @@ export const loadInsumoOptions = (): Promise<void> => {
       }));
       consumiblesCache = ((Array.isArray(cData) ? cData : cData.items || []) as ApiRecord[]).map((c) => ({
         ref: String(c.id),
-        piezas: c.piezas ?? null,
-        unidad: "piezas",
+        existencia: c.existencia ?? null,
+        unidad: "unidades",
         label: [c.producto, c.catalogo_parte_cas].filter(Boolean).join(" · ") || String(c.id),
       }));
       // Los equipos se referencian por id (los registros viejos guardaban el nombre; ver findInsumoOption).
@@ -110,36 +109,27 @@ export const findReactivoByRef = (ref: string): InsumoOption | null => {
   return (reactivosCache || []).find((r) => r.ref === ref) || null;
 };
 
-const dateOnly = (value: unknown): Date | null => {
-  const text = String(value || "").slice(0, 10);
-  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return null;
-  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-};
-
-const formatDay = (date: Date): string => date.toLocaleDateString("es-MX", { year: "numeric", month: "2-digit", day: "2-digit" });
 
 /*
  * Aviso sobre un equipo al momento de usarlo en un formato: estado no
  * operativo o calibracion vencida (o por vencer en 30 dias). El formato
  * muestra el aviso y, si requiere confirmacion, la pide antes de guardar.
  */
-export const equipoAlert = (option: InsumoOption | null | undefined, today: Date = new Date()): EquipoAlert | null => {
+export const equipoAlert = (option: InsumoOption | null | undefined, today: string = hoyLocal()): EquipoAlert | null => {
   if (!option) return null;
   const estado = String(option.estado || "").toLowerCase();
   if (estado === "fuera_servicio") return { level: "danger", message: "Fuera de servicio", requiresConfirm: true };
   if (estado === "mantenimiento") return { level: "warning", message: "En mantenimiento", requiresConfirm: true };
   if (estado === "calibracion_pendiente") return { level: "warning", message: "Calibración pendiente", requiresConfirm: true };
-  const due = dateOnly(option.fecha_prox_calibracion);
-  if (!due) return null;
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const days = Math.round((due.getTime() - start.getTime()) / 86_400_000);
-  if (days < 0) return { level: "danger", message: `Calibración vencida desde el ${formatDay(due)}`, requiresConfirm: true };
-  if (days <= 30) return { level: "info", message: `Calibración vence el ${formatDay(due)}`, requiresConfirm: false };
+  const due = fechaSola(option.fecha_prox_calibracion);
+  const days = due ? diasEntre(today, due) : null;
+  if (days === null) return null;
+  if (days < 0) return { level: "danger", message: `Calibración vencida desde el ${formatearFecha(due)}`, requiresConfirm: true };
+  if (days <= 30) return { level: "info", message: `Calibración vence el ${formatearFecha(due)}`, requiresConfirm: false };
   return null;
 };
 
-export const normalizeInsumoText = (value: unknown): string =>
+const normalizeInsumoText = (value: unknown): string =>
   String(value || "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -259,8 +249,7 @@ export const findUniqueOperativeEquipo = (query: unknown): InsumoOption | null =
   const tokens = normalizeInsumoText(query).split(" ").filter(Boolean);
   if (!tokens.length) return null;
   // Solo equipos operativos y con calibración vigente: nunca se sugiere uno que dispararía un aviso.
-  const today = new Date();
-  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const todayIso = hoyLocal();
   const matches = getInsumoOptions("equipo").filter((item) => {
     const text = normalizeInsumoText(item.label);
     const vigente = !item.fecha_prox_calibracion || String(item.fecha_prox_calibracion).slice(0, 10) >= todayIso;

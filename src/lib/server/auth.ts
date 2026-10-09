@@ -4,12 +4,13 @@ import { HttpError } from "./http";
 
 /* Portado de utils/auth.py del backend Flask original (JWT HS256 con PyJWT). */
 
+/* El token solo identifica a la persona; roles y permisos se leen de la base en cada peticion. */
 export interface CurrentUser extends JWTPayload {
   sub: string;
-  role_id?: number | null;
   email?: string;
   nombre?: string;
-  rol?: string;
+  /* token_version de la cuenta al emitir el token (Fase 2: revocacion del lado del servidor). */
+  tv?: number;
 }
 
 function secretKey(): Uint8Array {
@@ -26,7 +27,7 @@ export async function createAccessToken(payload: Record<string, unknown>): Promi
     .sign(secretKey());
 }
 
-export async function decodeAccessToken(token: string): Promise<CurrentUser> {
+async function decodeAccessToken(token: string): Promise<CurrentUser> {
   const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
   return payload as CurrentUser;
 }

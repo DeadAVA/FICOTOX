@@ -1,4 +1,5 @@
 /* Recorrido en navegador: login -> elegir formato -> extraccion DSP desde un procesamiento -> guardar -> reabrir. */
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -6,6 +7,10 @@ const require = createRequire(import.meta.url);
 const { chromium } = require("playwright-core");
 
 const BASE = process.env.BASE || "http://localhost:3100";
+// Ids de la cadena R -> P -> E-A 1 que crea tests/datos-apoyo.mjs.
+const APOYO = JSON.parse(readFileSync(process.env.DATOS_APOYO_FILE, "utf8"));
+const PROC_ID = APOYO.procesamiento_id;
+const EXT_ASP_ID = APOYO.extraccion_asp_id;
 const executablePath = process.env.CHROME_PATH || path.join(os.homedir(), "Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing");
 const results = [];
 const check = (name, ok, detail = "") => {
@@ -32,7 +37,7 @@ try {
   check("login en navegador", true, page.url());
 
   // Chooser desde el boton "Extraer" del procesamiento
-  await page.goto(`${BASE}/muestras/extraccion/nueva?procesamiento=2`);
+  await page.goto(`${BASE}/muestras/extraccion/nueva?procesamiento=${PROC_ID}`);
   await page.getByText("¿Qué extracción vas a registrar?").waitFor();
   check("aparece el selector de formato", true);
   await page.getByRole("link", { name: /Registrar extracción DSP/ }).click();
@@ -48,7 +53,7 @@ try {
   const folio = await page.inputValue("#e-folio");
   check("folio E-D sugerido (serie propia)", Number(folio) >= 2, `folio=${folio}`);
   const procValue = await page.inputValue("#e-proc");
-  check("procesamiento prellenado", procValue === "2", `value=${procValue}`);
+  check("procesamiento prellenado", procValue === String(PROC_ID), `value=${procValue}`);
   await page.getByText("Registro de peso de las submuestras").waitFor();
   const blanco = await page.getByText("Agua desionizada").count();
   check("tabla de pesos con fila de blanco", blanco >= 1);
@@ -72,8 +77,12 @@ try {
   await page.getByLabel(/Submuestrear por duplicado/).check();
   await page.getByLabel(/Transferir el sobrenadante a un matraz/).check();
   await page.getByRole("checkbox", { name: /^Entregado a FX-106/ }).check();
-  // Quien supervisó: solo personal con permiso de aprobación (Melisa, Coordinador).
-  await page.locator("#persona-quien-superviso").selectOption("Melisa");
+  // Quien supervisó: solo personal con permiso de aprobación (Coordinador/a del Área Técnica del catálogo de roles).
+  await page.locator("#persona-quien-superviso").selectOption("Ricardo Medina Flores");
+  // Fase 5: la firma de otra persona se confirma con su contraseña.
+  await page.locator("#firma-password").fill(JSON.parse(readFileSync(process.env.CREDENCIALES_ROLES, "utf8"))["ricardo.medina@ficotox.local"]);
+  await page.getByRole("button", { name: "Confirmar firma" }).click();
+  await page.locator("#firma-password").waitFor({ state: "detached" });
   // Pesos e hidrolisis
   await page.getByLabel("Peso (g) de D45-2", { exact: true }).fill("2.03");
   await page.getByText("Sí se realizó hidrólisis").click();
@@ -103,7 +112,7 @@ try {
   check("reabre con folio de bitácora, pesos e hidrólisis persistidos", peso === "2.03" && pre === "5.2", `peso=${peso} pre=${pre}`);
 
   // Registro ASP existente (creado antes de este cambio) sigue abriendo
-  await page.goto(`${BASE}/muestras/extraccion/2`);
+  await page.goto(`${BASE}/muestras/extraccion/${EXT_ASP_ID}`);
   await page.getByRole("heading", { name: /Extracción ASP · E-A 0000001/ }).waitFor();
   await page.getByText("Limpieza del extracto").first().waitFor();
   check("registro ASP anterior abre con el formato ASP", true);
@@ -111,23 +120,23 @@ try {
 
   // Regresion del revisor: reguardar el ASP viejo no debe duplicar el descuento del protocolo
   {
-    const before = await page.evaluate(async () => {
+    const before = await page.evaluate(async (id) => {
       const token = localStorage.getItem("ficotox_access_token");
-      const res = await fetch("/api/samples/extraction/2", { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`/api/samples/extraction/${id}`, { headers: { Authorization: `Bearer ${token}` } });
       return (await res.json()).item;
-    });
-    await page.goto(`${BASE}/muestras/extraccion/2`);
+    }, EXT_ASP_ID);
+    await page.goto(`${BASE}/muestras/extraccion/${EXT_ASP_ID}`);
     await page.getByRole("heading", { name: /Extracción ASP · E-A 0000001/ }).waitFor();
     await page.waitForTimeout(1500);
     await page.getByRole("button", { name: "Guardar cambios" }).click();
     const dialog = page.getByText("Revisar antes de guardar");
     if (await dialog.isVisible({ timeout: 3000 }).catch(() => false)) await page.getByRole("button", { name: "Guardar de todos modos" }).click();
     await page.waitForURL((url) => url.pathname === "/muestras/extraccion");
-    const after = await page.evaluate(async () => {
+    const after = await page.evaluate(async (id) => {
       const token = localStorage.getItem("ficotox_access_token");
-      const res = await fetch("/api/samples/extraction/2", { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`/api/samples/extraction/${id}`, { headers: { Authorization: `Bearer ${token}` } });
       return (await res.json()).item;
-    });
+    }, EXT_ASP_ID);
     const refs = (rows) => rows.map((r) => `${r.tipo}|${r.ref}`).sort().join(",");
     check("reguardar ASP viejo conserva los mismos insumos (sin duplicar)", before.uso_inventario.length === after.uso_inventario.length && refs(before.uso_inventario) === refs(after.uso_inventario), `antes=${JSON.stringify(before.uso_inventario)} despues=${JSON.stringify(after.uso_inventario)}`);
     check("pasos_json conserva las claves del ASP viejo", Object.keys(before.pasos).filter((k) => before.pasos[k] !== null).every((k) => k in after.pasos), `faltan: ${Object.keys(before.pasos).filter((k) => before.pasos[k] !== null && !(k in after.pasos)).join(",")}`);
@@ -136,13 +145,13 @@ try {
 
   // Regresion del revisor (ronda 2): un insumo manual igual a uno del protocolo se conserva al reabrir
   {
-    const created = await page.evaluate(async () => {
+    const created = await page.evaluate(async (procesamientoId) => {
       const token = localStorage.getItem("ficotox_access_token");
       const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
       const reactivos = (await (await fetch("/api/inventory/reactivos?search=", { headers })).json()).items;
       const metanol = reactivos.find((r) => /metanol/i.test(String(r.producto || "")));
       const body = {
-        tipo_registro: "E-D", procesamiento_id: 2, tipo_molienda: "fresca", id_interno: "D45-2",
+        tipo_registro: "E-D", procesamiento_id: procesamientoId, tipo_molienda: "fresca", id_interno: "D45-2",
         pasos: { checklist: [], reactivo_metanol_1: String(metanol.id) },
         registro_pesos: [{ id_muestra: "Blanco", es_blanco: true, replica: "BlancoR1" }, { id_muestra: "D45-2", replica: "D45-2_R1" }],
         uso_inventario: [
@@ -152,7 +161,7 @@ try {
       };
       const res = await fetch("/api/samples/extraction", { method: "POST", headers, body: JSON.stringify(body) });
       return await res.json();
-    });
+    }, PROC_ID);
     await page.goto(`${BASE}/muestras/extraccion/${created.id}`);
     await page.getByRole("heading", { name: /Extracción DSP/ }).waitFor();
     const manualInput = page.locator("#sec-insumos input[type=number]");

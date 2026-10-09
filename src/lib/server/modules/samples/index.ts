@@ -1,10 +1,7 @@
 import { requireUser } from "../../auth";
 import { isSqlite } from "../../db";
 import { json, type RouteContext } from "../../http";
-import { requirePermission } from "../../rbac";
-import { ensureSamplesExtraccionSchema } from "./extraccion";
-import { ensureSamplesProcesamientoSchema } from "./procesamiento";
-import { ensureSamplesRecepcionSchema } from "./recepcion";
+import { cargarAutorizacion, permisoDe, requirePermission, soloEstado } from "../../rbac";
 
 /* Portado de modules/samples/endpoints.py del backend Flask original. */
 
@@ -16,45 +13,13 @@ function folioExpression(fallbackPrefix: string): string {
     : `CONCAT(COALESCE(NULLIF(tipo_registro, ''), '${fallbackPrefix}'), '-', LPAD(folio_num, 7, '0'))`;
 }
 
-async function ensureAll(ctx: RouteContext): Promise<void> {
-  await ensureSamplesRecepcionSchema(ctx.s);
-  await ensureSamplesProcesamientoSchema(ctx.s);
-  await ensureSamplesExtraccionSchema(ctx.s);
-}
-
-export async function samplesSummary(ctx: RouteContext): Promise<Response> {
-  const user = await requireUser(ctx.request);
-  await requirePermission(ctx.s, user, "dashboard", "read");
-  await ensureAll(ctx);
-
-  const summary = await ctx.s.queryOne(
-    `
-    SELECT
-      (
-        (SELECT COUNT(*) FROM muestras_recepcion) +
-        (SELECT COUNT(*) FROM muestras_procesamiento) +
-        (SELECT COUNT(*) FROM muestras_extraccion)
-      ) AS total_muestras,
-      0 AS pendientes,
-      (
-        (SELECT COUNT(*) FROM muestras_recepcion WHERE estado = 'en_proceso') +
-        (SELECT COUNT(*) FROM muestras_procesamiento WHERE estado = 'en_proceso') +
-        (SELECT COUNT(*) FROM muestras_extraccion WHERE estado = 'en_proceso')
-      ) AS en_proceso,
-      (
-        (SELECT COUNT(*) FROM muestras_recepcion WHERE estado = 'completada') +
-        (SELECT COUNT(*) FROM muestras_procesamiento WHERE estado = 'completada') +
-        (SELECT COUNT(*) FROM muestras_extraccion WHERE estado = 'completada')
-      ) AS completadas
-    `,
-  );
-  return json(summary || {});
-}
-
 export async function listSamples(ctx: RouteContext): Promise<Response> {
   const user = await requireUser(ctx.request);
-  await requirePermission(ctx.s, user, "muestras", "read");
-  await ensureAll(ctx);
+  // Mezcla recepciones (muestras) con procesamientos y extracciones (ensayos): cada fila segun su modulo.
+  const auth = await cargarAutorizacion(ctx.s, user);
+  const muestras = permisoDe(auth, "muestras", "V");
+  const ensayos = permisoDe(auth, "ensayos", "V");
+  if (!muestras && !ensayos) await requirePermission(ctx.s, user, "muestras", "V", undefined, auth);
 
   const rows = await ctx.s.query(
     `
@@ -79,34 +44,8 @@ export async function listSamples(ctx: RouteContext): Promise<Response> {
     LIMIT 200
     `,
   );
-  return json({ items: rows, total: rows.length });
-}
-
-export async function listPendingSamples(ctx: RouteContext): Promise<Response> {
-  const user = await requireUser(ctx.request);
-  await requirePermission(ctx.s, user, "muestras", "read");
-  await ensureAll(ctx);
-
-  const rows = await ctx.s.query(
-    `
-    SELECT id, codigo, cliente, tipo, prioridad, estado, fecha_ingreso
-    FROM (
-      SELECT id, ${folioExpression("R")} AS codigo, solicitante AS cliente,
-             'Recepcion' AS tipo, '-' AS prioridad, estado, fecha_recepcion AS fecha_ingreso
-      FROM muestras_recepcion
-      UNION ALL
-      SELECT id, ${folioExpression("P")} AS codigo, id_interno AS cliente,
-             'Procesamiento' AS tipo, '-' AS prioridad, estado, fecha_procesamiento AS fecha_ingreso
-      FROM muestras_procesamiento
-      UNION ALL
-      SELECT id, ${folioExpression("E-A")} AS codigo, id_interno AS cliente,
-             'Extraccion' AS tipo, '-' AS prioridad, estado, fecha_extraccion AS fecha_ingreso
-      FROM muestras_extraccion
-    ) m
-    WHERE estado IN ('pendiente', 'en_proceso', 'registrada')
-    ORDER BY fecha_ingreso ASC
-    LIMIT 100
-    `,
-  );
-  return json({ items: rows, total: rows.length });
+  const items = rows
+    .filter((row) => (row.tipo === "Recepcion" ? !!muestras : !!ensayos))
+    .map((row) => (row.tipo === "Recepcion" && muestras && soloEstado(muestras) ? { ...row, analista: null } : row));
+  return json({ items, total: items.length });
 }

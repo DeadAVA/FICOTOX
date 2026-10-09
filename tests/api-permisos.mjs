@@ -1,11 +1,12 @@
 /*
  * Se ejecuta DESPUES de reiniciar el servidor de pruebas, con la base que dejo
- * `api-sgc.mjs` (incluye el rol "Analista QA", con permiso solo sobre muestras).
+ * `api-sgc.mjs` (incluye el rol "Analista QA", con muestras V C E y nada mas).
  *
- * Comprueba que el relleno de permisos del arranque (`ensureRbacSchema`) no
- * amplia por su cuenta lo que un rol puede hacer: un permiso ausente significa
- * "no concedido", no "pendiente de configurar".
+ * Comprueba que el arranque (`ensureRbacSchema`, que ya no rellena permisos)
+ * no amplia por su cuenta lo que un rol puede hacer: un permiso ausente
+ * significa "no concedido", no "pendiente de configurar".
  */
+import "./lib/reauth-auto.mjs";
 const BASE = process.env.BASE || "http://localhost:3100/api";
 const results = [];
 const check = (name, ok, detail = "") => {
@@ -38,16 +39,19 @@ const token = login.data?.token || "";
 const permisos = login.data?.permissions || {};
 check("login del rol limitado tras reiniciar", login.status === 200 && !!token, `status ${login.status}`);
 
-const modulos = Object.keys(permisos).filter((clave) => permisos[clave]?.read);
-check("el rol conserva solo el permiso de muestras", modulos.length === 1 && modulos[0] === "muestras", `modulos con lectura: ${modulos.join(", ") || "(ninguno)"}`);
+const modulos = Object.keys(permisos).filter((clave) => Object.keys(permisos[clave] || {}).length);
+const acciones = Object.keys(permisos.muestras || {}).sort().join(",");
+check("el rol conserva solo muestras V C E", modulos.length === 1 && modulos[0] === "muestras" && acciones === "C,E,V", `modulos: ${modulos.join(", ") || "(ninguno)"} acciones muestras: ${acciones}`);
 
 const negados = [
-  ["/inventory/reactivos", "reactivos"],
-  ["/admin/roles", "roles"],
+  ["/inventory/reactivos", "inventario"],
+  ["/inventory/equipos", "equipos"],
+  ["/samples/processing", "ensayos"],
+  ["/admin/roles", "usuarios (roles)"],
   ["/admin/usuarios", "usuarios"],
   ["/informes", "informes"],
-  ["/documentos-sgc", "documentos"],
-  ["/audit", "auditoria (log completo)"],
+  ["/biblioteca", "documentos (biblioteca)"],
+  ["/audit", "calidad (bitacora completa)"],
 ];
 for (const [ruta, etiqueta] of negados) {
   const r = await api("GET", ruta, undefined, token);

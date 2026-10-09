@@ -2,13 +2,18 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Field, Input, Textarea } from "@/components/ui/Field";
+import { Field, Textarea } from "@/components/ui/Field";
 import { Dialog } from "@/components/ui/Overlay";
+import { CampoCargo, CampoIdentidad, useConfirmaConPassword } from "@/components/session/Reautenticar";
+import { armarCargo, armarReauth } from "@/lib/client/api";
+import { EditableScope } from "./FormLayout";
 import { SignaturePad } from "./SignaturePad";
 
 /*
- * Dialogo de firma para revisar, aprobar o autorizar: deja constancia con
- * nombre (el de la sesion), cargo opcional, firma y observaciones.
+ * Dialogo de firma para revisar, aprobar o autorizar: deja constancia con el
+ * nombre de la sesion, firma y observaciones. El cargo no se captura: el
+ * servidor guarda el del rol con el que se actua (si hay varios, el dialogo
+ * "Actuar como" lo pregunta al confirmar).
  */
 export function SignDialog({
   open,
@@ -16,10 +21,10 @@ export function SignDialog({
   title,
   description,
   confirmLabel,
-  withCargo = true,
   withObservaciones = false,
   requireSignature = false,
   loading = false,
+  critico = false,
   onConfirm,
 }: {
   open: boolean;
@@ -27,24 +32,34 @@ export function SignDialog({
   title: string;
   description?: string;
   confirmLabel: string;
-  withCargo?: boolean;
   withObservaciones?: boolean;
   requireSignature?: boolean;
   loading?: boolean;
-  onConfirm: (data: { firma: string; cargo: string; observaciones: string }) => Promise<void> | void;
+  /* Aprobar/autorizar (Fase 2): pide la contrasena en el mismo dialogo. */
+  critico?: boolean;
+  onConfirm: (data: { firma: string; observaciones: string }) => Promise<void> | void;
 }) {
   const [firma, setFirma] = useState("");
-  const [cargo, setCargo] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [cargo, setCargo] = useState("");
+  const conPassword = useConfirmaConPassword();
 
   const submit = async () => {
     if (requireSignature && !firma) {
       setError("La firma es obligatoria");
       return;
     }
+    if (critico && conPassword && !password) {
+      setError("Escribe tu contraseña para confirmar");
+      return;
+    }
     setError(null);
-    await onConfirm({ firma, cargo: cargo.trim(), observaciones: observaciones.trim() });
+    if (critico) armarReauth(conPassword ? { password } : null);
+    armarCargo(cargo ? Number(cargo) : null);
+    setPassword("");
+    await onConfirm({ firma, observaciones: observaciones.trim() });
   };
 
   return (
@@ -66,19 +81,21 @@ export function SignDialog({
       }
     >
       <div className="flex flex-col gap-4">
-        {withCargo ? (
-          <Field label="Cargo" htmlFor="sign-cargo" hint="Aparece junto a tu nombre en el registro y en el informe.">
-            <Input id="sign-cargo" maxLength={120} value={cargo} onChange={(event) => setCargo(event.target.value)} placeholder="Ej. Coordinadora técnica" />
-          </Field>
-        ) : null}
         {withObservaciones ? (
           <Field label="Observaciones" htmlFor="sign-obs">
             <Textarea id="sign-obs" rows={3} value={observaciones} onChange={(event) => setObservaciones(event.target.value)} />
           </Field>
         ) : null}
         <Field label={requireSignature ? "Firma" : "Firma (opcional)"}>
-          <SignaturePad value={firma} onChange={setFirma} label={`Firma: ${title}`} />
+          <EditableScope>
+            <SignaturePad value={firma} onChange={setFirma} label={`Firma: ${title}`} />
+          </EditableScope>
         </Field>
+        {critico ? (
+          <CampoIdentidad value={password} onChange={setPassword} id="sign-password" cargo={cargo} onCargo={setCargo} />
+        ) : (
+          <CampoCargo value={cargo} onChange={setCargo} />
+        )}
       </div>
     </Dialog>
   );

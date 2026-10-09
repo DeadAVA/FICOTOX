@@ -3,263 +3,130 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Eye, EyeSlash } from "@phosphor-icons/react";
+import { Panel } from "@/components/features/samples/FormLayout";
+import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
+import { msg, type Problema } from "@/lib/client/mensajes";
 import { useSession } from "@/components/session/SessionProvider";
 import { AvatarPicker } from "@/components/ui/AvatarPicker";
 import { Button } from "@/components/ui/Button";
-import { Checkbox, Field, FormGrid, Input, Select, Switch, Textarea } from "@/components/ui/Field";
+import { Field, FormGrid, Input, Select, Switch, Textarea } from "@/components/ui/Field";
+import { DateInput } from "@/components/ui/DateInput";
 import { Sheet } from "@/components/ui/Overlay";
-import { HIDDEN_MODULES } from "@/lib/shared/features";
-import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
+import { SolicitudBannerDe } from "@/components/features/solicitudes/Solicitudes";
+import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
+import { CampoIdentidad } from "@/components/session/Reautenticar";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 
-/* ---------- Roles ---------- */
-
-const FLAGS = [
-  { key: "can_read", label: "Leer" },
-  { key: "can_create", label: "Crear" },
-  { key: "can_update", label: "Editar" },
-  { key: "can_delete", label: "Eliminar" },
-] as const;
-type FlagKey = (typeof FLAGS)[number]["key"];
-
-export interface PermissionRow {
-  permiso_id: number;
-  /* Clave del módulo (reactivos, muestras, documentos...). */
-  clave: string;
-  nombre: string;
-  descripcion: string;
-  can_read: boolean;
-  can_create: boolean;
-  can_update: boolean;
-  can_delete: boolean;
-}
-
-export const toPermissionRows = (items: ApiRecord[]): PermissionRow[] =>
-  items.map((perm) => ({
-    permiso_id: Number(perm.permiso_id || perm.id),
-    clave: String(perm.clave || perm.permiso_clave || ""),
-    nombre: String(perm.nombre || ""),
-    descripcion: String(perm.descripcion || ""),
-    can_read: !!perm.can_read,
-    can_create: !!perm.can_create,
-    can_update: !!perm.can_update,
-    can_delete: !!perm.can_delete,
-  }));
-
-const fullRow = (row: PermissionRow) => FLAGS.every((flag) => row[flag.key]);
-
-export function RoleSheet({ open, role, initialPermissions, onClose }: { open: boolean; role: ApiRecord | null; initialPermissions: PermissionRow[]; onClose: () => void }) {
-  const { token, can } = useSession();
-  const [nombre, setNombre] = useState(String(role?.nombre || ""));
-  const [descripcion, setDescripcion] = useState(String(role?.descripcion || ""));
-  const [activo, setActivo] = useState(role ? !!role.activo : true);
-  const [rows, setRows] = useState<PermissionRow[]>(initialPermissions);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const editing = !!role?.id;
-
-  const fullCount = rows.filter(fullRow).length;
-  const allChecked = rows.length > 0 && fullCount === rows.length;
-  const someChecked = fullCount > 0 && fullCount < rows.length;
-
-  const setRowFlag = (id: number, flag: FlagKey, checked: boolean) => setRows((prev) => prev.map((row) => (row.permiso_id === id ? { ...row, [flag]: checked } : row)));
-  const setRowAll = (id: number, checked: boolean) => setRows((prev) => prev.map((row) => (row.permiso_id === id ? { ...row, can_read: checked, can_create: checked, can_update: checked, can_delete: checked } : row)));
-  const setAll = (checked: boolean) => setRows((prev) => prev.map((row) => ({ ...row, can_read: checked, can_create: checked, can_update: checked, can_delete: checked })));
-
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    const payload = {
-      nombre: nombre.trim(),
-      descripcion: descripcion.trim(),
-      activo,
-      permissions: rows.map((row) => ({ permiso_id: row.permiso_id, can_read: row.can_read, can_create: row.can_create, can_update: row.can_update, can_delete: row.can_delete })),
-    };
-    if (!payload.nombre) {
-      setError("El nombre del rol es obligatorio");
-      return;
-    }
-    if (!can("roles", editing ? "update" : "create")) {
-      setError("No tienes permiso para esta acción");
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    try {
-      if (editing) {
-        await sendJsonAuth("PUT", `${API_BASE_URL}/admin/roles/${role!.id}`, token, payload);
-        toast.success("Rol actualizado");
-      } else {
-        await sendJsonAuth("POST", `${API_BASE_URL}/admin/roles`, token, payload);
-        toast.success("Rol creado");
-      }
-      invalidate("roles", "usuarios");
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo guardar el rol");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <Sheet
-      open={open}
-      onOpenChange={(value) => !value && onClose()}
-      title={editing ? "Editar rol" : "Nuevo rol"}
-      description="Define qué puede ver y hacer cada módulo."
-      size="lg"
-      footer={
-        <>
-          {error ? <p className="mr-auto text-[13px] text-danger">{error}</p> : null}
-          <Button variant="secondary" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button type="submit" form="role-form" loading={submitting}>
-            {editing ? "Guardar cambios" : "Crear rol"}
-          </Button>
-        </>
-      }
-    >
-      <form id="role-form" onSubmit={handleSubmit} className="flex flex-col gap-6" noValidate>
-        <FormGrid>
-          <Field label="Nombre" htmlFor="role-nombre" required className="sm:col-span-2">
-            <Input id="role-nombre" maxLength={50} value={nombre} onChange={(event) => setNombre(event.target.value)} autoFocus={!editing} invalid={!!error && !nombre.trim()} />
-          </Field>
-          <Field label="Descripción" htmlFor="role-descripcion" className="sm:col-span-2">
-            <Textarea id="role-descripcion" rows={2} value={descripcion} onChange={(event) => setDescripcion(event.target.value)} />
-          </Field>
-        </FormGrid>
-        <Switch checked={activo} onCheckedChange={setActivo} label="Rol activo" description="Los usuarios con un rol inactivo no pueden entrar." />
-
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-[15px] font-semibold text-ink">Permisos por módulo</h3>
-            <Checkbox
-              label="Seleccionar todo"
-              checked={allChecked}
-              disabled={!rows.length}
-              ref={(el) => {
-                if (el) el.indeterminate = someChecked;
-              }}
-              onChange={(event) => setAll(event.target.checked)}
-            />
-          </div>
-          <div className="overflow-hidden rounded-card border border-line">
-            <table className="w-full text-[13px]">
-              <thead className="bg-surface-2/70 text-[12px] text-ink-3">
-                <tr>
-                  <th className="h-9 px-3 text-left font-medium">Módulo</th>
-                  {FLAGS.map((flag) => (
-                    <th key={flag.key} className="h-9 w-16 px-2 text-center font-medium">
-                      {flag.label}
-                    </th>
-                  ))}
-                  <th className="h-9 w-16 px-2 text-center font-medium">Todo</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {/* Los módulos apagados (ver features.ts) no se muestran; sus permisos guardados viajan intactos al guardar. */}
-                {rows.filter((row) => !HIDDEN_MODULES.has(String(row.clave || ""))).map((row) => (
-                  <tr key={row.permiso_id} className="hover:bg-surface-2/40">
-                    <td className="px-3 py-2">
-                      <div className="font-medium text-ink">{row.nombre}</div>
-                      {row.descripcion ? <div className="text-[12px] text-ink-3">{row.descripcion}</div> : null}
-                    </td>
-                    {FLAGS.map((flag) => (
-                      <td key={flag.key} className="px-2 text-center">
-                        <Checkbox className="inline-flex" aria-label={`${flag.label} en ${row.nombre}`} checked={row[flag.key]} onChange={(event) => setRowFlag(row.permiso_id, flag.key, event.target.checked)} />
-                      </td>
-                    ))}
-                    <td className="px-2 text-center">
-                      <Checkbox className="inline-flex" aria-label={`Todo en ${row.nombre}`} checked={fullRow(row)} onChange={(event) => setRowAll(row.permiso_id, event.target.checked)} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </form>
-    </Sheet>
-  );
-}
-
 /* ---------- Usuarios ---------- */
 
+/*
+ * Alta y edicion de los datos de una cuenta (nombre, correo, departamento,
+ * avatar, contrasena, activa, vigencia y supervisor). Los roles y las
+ * autorizaciones se gestionan en la ventana de la persona (UsuarioVentana).
+ */
 export function UserSheet({ open, item, onClose }: { open: boolean; item: ApiRecord | null; onClose: () => void }) {
-  const { token, can, authConfig } = useSession();
+  const { token, can, authConfig, user: me } = useSession();
   const [roles, setRoles] = useState<ApiRecord[]>([]);
   const [nombre, setNombre] = useState(String(item?.nombre || ""));
   const [email, setEmail] = useState(String(item?.email || ""));
-  const [roleId, setRoleId] = useState(item?.id_rol ? String(item.id_rol) : "");
+  const [roleId, setRoleId] = useState("");
+  const [motivoAlta, setMotivoAlta] = useState("Alta de usuario");
   const [departamento, setDepartamento] = useState(String(item?.departamento || ""));
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [activo, setActivo] = useState(item ? !!item.activo : true);
   const [avatar, setAvatar] = useState<string | null>(item?.avatar ? String(item.avatar) : null);
+  // Fase 2: vigencia de la cuenta y supervisor (temporal => fin y supervisor obligatorios).
+  const [tipoCuenta, setTipoCuenta] = useState<string>(String(item?.tipo_cuenta || "permanente"));
+  const [cuentaDesde, setCuentaDesde] = useState(String(item?.vigente_desde || ""));
+  const [cuentaHasta, setCuentaHasta] = useState(String(item?.vigente_hasta || ""));
+  const [supervisorId, setSupervisorId] = useState(item?.supervisor_id ? String(item.supervisor_id) : "");
+  const [motivoCuenta, setMotivoCuenta] = useState("");
+  const [personas, setPersonas] = useState<ApiRecord[]>([]);
+  // Contrasena de quien administra: confirma la identidad en la misma hoja (reautenticacion).
+  const [clave, setClave] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const editing = !!item?.id;
+  const puedeAdministrar = can("usuarios", "G");
+  const esPropia = editing && Number(me?.id) === Number(item?.id);
 
   useEffect(() => {
-    if (!open || !token) return;
+    if (!open || !token || !puedeAdministrar) return;
     getJsonAuth(`${API_BASE_URL}/admin/roles`, token)
       .then((data) => setRoles(((data.items || []) as ApiRecord[]).filter((role) => !!role.activo)))
       .catch(() => setRoles([]));
-  }, [open, token]);
+    // Posibles supervisores: cuentas activas y permanentes (el servidor valida que tengan R o A en ensayos o muestras).
+    getJsonAuth(`${API_BASE_URL}/admin/usuarios`, token)
+      .then((data) => setPersonas(((data.items || []) as ApiRecord[]).filter((u) => !!u.activo && String(u.tipo_cuenta || "permanente") !== "temporal" && !u.vigente_hasta && Number(u.id) !== Number(item?.id))))
+      .catch(() => setPersonas([]));
+  }, [open, token, puedeAdministrar, item?.id]);
 
-  const allowedDomain = authConfig.microsoft?.allowedDomain || "cicese.mx";
+  const cambiaCuenta =
+    editing &&
+    (String(item?.tipo_cuenta || "permanente") !== tipoCuenta ||
+      String(item?.vigente_desde || "") !== cuentaDesde ||
+      String(item?.vigente_hasta || "") !== cuentaHasta ||
+      String(item?.supervisor_id || "") !== supervisorId);
+  // Pide la contrasena en la hoja cuando el guardado es critico: alta (asigna rol), cambio de vigencia o supervisor, baja o fijar la contrasena de otra persona.
+  const guardadoCritico = !editing || cambiaCuenta || (editing && !!item?.activo && !activo) || (editing && !!password && !esPropia);
+
+  const dominios = authConfig.dominios_permitidos || [];
+  /* Reglas de la cuenta, en el orden de la hoja. */
+  const v = useValidacion({
+    titulo: editing ? "No se pudo guardar el usuario" : "No se pudo crear el usuario",
+    reglas: () => {
+      const out: Problema[] = [];
+      const correo = email.trim();
+      const emailCambio = !editing || String(item?.email || "").toLowerCase() !== correo.toLowerCase();
+      if (!correo) out.push({ campo: "u-email", mensaje: msg.indica("el correo") });
+      else if (emailCambio && dominios.length && !dominios.some((d) => correo.toLowerCase().endsWith(`@${d}`))) out.push({ campo: "u-email", mensaje: `Usa un correo de ${dominios.map((d) => `@${d}`).join(", ")}` });
+      if (!editing) {
+        if (!roleId) out.push({ campo: "u-rol", mensaje: msg.elige("el rol inicial") });
+        if (motivoAlta.trim().length < 5) out.push({ campo: "u-motivo-rol", mensaje: msg.minimo("El motivo de la asignación", 5) });
+        if (!password && !esPropia) out.push({ campo: "u-password", mensaje: msg.indica("una contraseña inicial") });
+      }
+      if (password && password.length < 10) out.push({ campo: "u-password", mensaje: "La contraseña debe tener al menos 10 caracteres" });
+      if (tipoCuenta === "temporal" && !supervisorId) out.push({ campo: "u-supervisor", mensaje: "Una cuenta temporal necesita supervisor" });
+      if (tipoCuenta === "temporal" && !cuentaHasta) out.push({ campo: "u-cuenta-hasta", mensaje: "Una cuenta temporal necesita fecha de fin" });
+      if (cambiaCuenta && motivoCuenta.trim().length < 5) out.push({ campo: "u-motivo-cuenta", mensaje: msg.minimo("El motivo del cambio", 5) });
+      return out;
+    },
+  });
+  const camposUsuario = { correo: "u-email", motivo: editing ? "u-motivo-cuenta" : "u-motivo-rol", password: guardadoCritico ? "u-clave-admin" : "u-password" };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!puedeAdministrar) return;
     const payload: Record<string, unknown> = {
       nombre: nombre.trim(),
       email: email.trim(),
-      id_rol: Number(roleId || 0),
       departamento: departamento.trim() || null,
       ...(avatar ? { avatar } : {}),
       activo,
     };
     if (password) payload.password = password;
-    if (!payload.email) {
-      setError("El correo es obligatorio");
-      return;
+    if (!v.validar()) return;
+    if (!editing) {
+      payload.rol_id = Number(roleId);
+      payload.motivo = motivoAlta.trim();
     }
-    if (!String(payload.email).toLowerCase().endsWith(`@${allowedDomain}`)) {
-      setError(`Solo se aceptan correos @${allowedDomain}`);
-      return;
-    }
-    if (!payload.id_rol) {
-      setError("Selecciona un rol");
-      return;
-    }
-    if (!editing && !password) {
-      setError("Define una contraseña inicial");
-      return;
-    }
-    if (password && password.length < 8) {
-      setError("La contraseña debe tener al menos 8 caracteres");
-      return;
-    }
-    if (!can("usuarios", editing ? "update" : "create")) {
-      setError("No tienes permiso para esta acción");
-      return;
-    }
+    payload.tipo_cuenta = tipoCuenta;
+    payload.vigente_desde = cuentaDesde || null;
+    payload.vigente_hasta = cuentaHasta || null;
+    payload.supervisor_id = supervisorId ? Number(supervisorId) : null;
+    if (cambiaCuenta) payload.motivo_cuenta = motivoCuenta.trim();
+    if (guardadoCritico) armarReauth(clave ? { password: clave } : null);
     setSubmitting(true);
-    setError(null);
     try {
-      if (editing) {
-        await sendJsonAuth("PUT", `${API_BASE_URL}/admin/usuarios/${item!.id}`, token, payload);
-        toast.success("Usuario actualizado");
-      } else {
-        await sendJsonAuth("POST", `${API_BASE_URL}/admin/usuarios`, token, payload);
-        toast.success("Usuario creado");
-      }
-      invalidate("usuarios", "roles");
+      // Fase 3: el rol inicial, la reactivacion y la ampliacion de vigencia los aprueba un segundo usuario (respuesta con `solicitud`).
+      const data = await sendJsonAuth(editing ? "PUT" : "POST", editing ? `${API_BASE_URL}/admin/usuarios/${item!.id}` : `${API_BASE_URL}/admin/usuarios`, token, payload);
+      if (data.solicitud) toast.info(String(data.message || "Pendiente de autorización de un segundo usuario"), { duration: 8000 });
+      else toast.success(editing ? "Usuario actualizado" : "Usuario creado");
+      invalidate("usuarios", "roles", "solicitudes");
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo guardar el usuario");
+      v.errorServidor(err, camposUsuario);
     } finally {
       setSubmitting(false);
     }
@@ -269,61 +136,118 @@ export function UserSheet({ open, item, onClose }: { open: boolean; item: ApiRec
     <Sheet
       open={open}
       onOpenChange={(value) => !value && onClose()}
-      title={editing ? "Editar usuario" : "Nuevo usuario"}
-      description="Acceso con correo institucional y permisos según su rol."
+      title={!puedeAdministrar ? String(item?.nombre || item?.email || "Usuario") : editing ? "Editar usuario" : "Nuevo usuario"}
+      description={editing ? "Datos de acceso y vigencia de la cuenta. Los roles y las autorizaciones se gestionan en la ventana de la persona." : "Acceso con correo institucional; la cuenta nace con un rol inicial."}
+      size="lg"
       footer={
         <>
-          {error ? <p className="mr-auto text-[13px] text-danger">{error}</p> : null}
           <Button variant="secondary" onClick={onClose}>
-            Cancelar
+            {puedeAdministrar ? "Cancelar" : "Cerrar"}
           </Button>
-          <Button type="submit" form="user-form" loading={submitting}>
-            {editing ? "Guardar cambios" : "Crear usuario"}
-          </Button>
+          {puedeAdministrar ? (
+            <Button type="submit" form="user-form" loading={submitting}>
+              {editing ? "Guardar cambios" : "Crear usuario"}
+            </Button>
+          ) : null}
         </>
       }
     >
+      <ValidacionAmbito v={v}>
+      {editing ? <div className="mb-5"><SolicitudBannerDe entidad="usuarios" entidadId={item?.id as number} /></div> : null}
       <form id="user-form" onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
-        <FormGrid>
-          <Field label="Nombre" htmlFor="u-nombre">
-            <Input id="u-nombre" maxLength={100} value={nombre} onChange={(event) => setNombre(event.target.value)} autoFocus={!editing} />
-          </Field>
-          <Field label="Correo" htmlFor="u-email" required hint={`Debe ser @${allowedDomain}`}>
-            <Input id="u-email" type="email" maxLength={100} value={email} onChange={(event) => setEmail(event.target.value)} invalid={!!error && !email.trim()} />
-          </Field>
-          <Field label="Rol" htmlFor="u-rol" required>
-            <Select id="u-rol" value={roles.some((role) => String(role.id) === roleId) ? roleId : ""} onChange={(event) => setRoleId(event.target.value)} invalid={!!error && !roleId}>
-              <option value="">Seleccionar rol</option>
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.nombre}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Departamento" htmlFor="u-depto">
-            <Input id="u-depto" maxLength={100} value={departamento} onChange={(event) => setDepartamento(event.target.value)} />
-          </Field>
-          <Field label="Avatar" hint={editing ? "La persona también puede cambiarlo desde Mi cuenta." : "Si no eliges uno, se asigna al azar."} className="sm:col-span-2">
-            <AvatarPicker value={avatar} seed={email.trim().toLowerCase() || nombre.toLowerCase()} onChange={setAvatar} size={44} />
-          </Field>
-          <Field label={editing ? "Nueva contraseña" : "Contraseña"} htmlFor="u-password" required={!editing} hint={editing ? "Déjala vacía para conservar la actual." : "Mínimo 8 caracteres."} className="sm:col-span-2">
-            <Input
-              id="u-password"
-              type={showPassword ? "text" : "password"}
-              autoComplete="new-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              trailing={
-                <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"} className="rounded-full p-1 text-ink-3 hover:bg-surface-2 hover:text-ink">
-                  {showPassword ? <EyeSlash size={16} /> : <Eye size={16} />}
-                </button>
-              }
-            />
-          </Field>
-        </FormGrid>
-        <Switch checked={activo} onCheckedChange={setActivo} label="Usuario activo" description="Un usuario inactivo conserva su historial pero no puede entrar." />
+        <fieldset disabled={!puedeAdministrar} className="contents">
+          <FormGrid>
+            <Field label="Nombre" htmlFor="u-nombre">
+              <Input id="u-nombre" maxLength={100} value={nombre} onChange={(event) => setNombre(event.target.value)} autoFocus={!editing} />
+            </Field>
+            <Field label="Correo" htmlFor="u-email" required hint={editing || !dominios.length ? undefined : `Debe ser de ${dominios.map((d) => `@${d}`).join(", ")}`}>
+              <Input id="u-email" type="email" maxLength={100} value={email} onChange={(event) => setEmail(event.target.value)} />
+            </Field>
+            {!editing ? (
+              <>
+                <Field label="Rol inicial" htmlFor="u-rol" required>
+                  <Select id="u-rol" value={roles.some((role) => String(role.id) === roleId) ? roleId : ""} onChange={(event) => setRoleId(event.target.value)}>
+                    <option value="">Seleccionar rol</option>
+                    {roles.map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.nombre}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Motivo de la asignación" htmlFor="u-motivo-rol" required hint="Queda en la bitácora.">
+                  <Textarea id="u-motivo-rol" rows={2} maxLength={200} value={motivoAlta} onChange={(event) => setMotivoAlta(event.target.value)} />
+                </Field>
+              </>
+            ) : null}
+            <Field label="Departamento" htmlFor="u-depto">
+              <Input id="u-depto" maxLength={100} value={departamento} onChange={(event) => setDepartamento(event.target.value)} />
+            </Field>
+            {puedeAdministrar ? (
+              <>
+                <Field label="Avatar" hint={editing ? "La persona también puede cambiarlo desde Mi cuenta." : "Si no eliges uno, se asigna al azar."} className="sm:col-span-2">
+                  <AvatarPicker value={avatar} seed={email.trim().toLowerCase() || nombre.toLowerCase()} onChange={setAvatar} size={44} />
+                </Field>
+                {esPropia ? (
+                  <p className="text-[12.5px] text-ink-3 sm:col-span-2">Tu propia contraseña se cambia en Mi cuenta › Cambiar contraseña.</p>
+                ) : (
+                  <Field label={editing ? "Nueva contraseña" : "Contraseña"} htmlFor="u-password" required={!editing} hint={editing ? "Déjala vacía para conservar la actual. Si la cambias, la persona deberá cambiarla al entrar." : "Mínimo 10 caracteres; distinta del correo y del nombre."} className="sm:col-span-2">
+                    <Input
+                      id="u-password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      trailing={
+                        <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"} className="rounded-full p-1 text-ink-3 hover:bg-surface-2 hover:text-ink">
+                          {showPassword ? <EyeSlash size={16} /> : <Eye size={16} />}
+                        </button>
+                      }
+                    />
+                  </Field>
+                )}
+              </>
+            ) : null}
+          </FormGrid>
+          {puedeAdministrar ? <Switch checked={activo} onCheckedChange={setActivo} label="Usuario activo" description="Un usuario inactivo conserva su historial pero no puede entrar." /> : null}
+
+          <Panel title="Vigencia de la cuenta" description="Una cuenta temporal (estudiantes, estancias) necesita fecha de fin y un supervisor; fuera de su vigencia no puede entrar y sus roles no pueden durar más que la cuenta.">
+            <FormGrid>
+              <Field label="Tipo de cuenta" htmlFor="u-tipo-cuenta">
+                <Select id="u-tipo-cuenta" value={tipoCuenta} onChange={(event) => setTipoCuenta(event.target.value)}>
+                  <option value="permanente">Permanente</option>
+                  <option value="temporal">Temporal</option>
+                </Select>
+              </Field>
+              <Field label="Supervisor" htmlFor="u-supervisor" required={tipoCuenta === "temporal"} hint="Persona con cuenta permanente que revisa y aprueba en ensayos o muestras.">
+                <Select id="u-supervisor" value={supervisorId} onChange={(event) => setSupervisorId(event.target.value)}>
+                  <option value="">Sin supervisor</option>
+                  {personas.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre || p.email}
+                    </option>
+                  ))}
+                  {supervisorId && !personas.some((p) => String(p.id) === supervisorId) ? <option value={supervisorId}>{String(item?.supervisor_nombre || `Usuario #${supervisorId}`)}</option> : null}
+                </Select>
+              </Field>
+              <Field label="Vigente desde" htmlFor="u-cuenta-desde" hint="Opcional">
+                <DateInput id="u-cuenta-desde" value={cuentaDesde} onChange={(value) => setCuentaDesde(value)} />
+              </Field>
+              <Field label="Vigente hasta" htmlFor="u-cuenta-hasta" required={tipoCuenta === "temporal"} hint={tipoCuenta === "temporal" ? undefined : "Opcional"}>
+                <DateInput id="u-cuenta-hasta" value={cuentaHasta} onChange={(value) => setCuentaHasta(value)} />
+              </Field>
+              {cambiaCuenta ? (
+                <Field label="Motivo del cambio de vigencia o supervisor" htmlFor="u-motivo-cuenta" required hint="Queda en la bitácora." className="sm:col-span-2">
+                  <Textarea id="u-motivo-cuenta" rows={2} maxLength={300} value={motivoCuenta} onChange={(event) => setMotivoCuenta(event.target.value)} />
+                </Field>
+              ) : null}
+            </FormGrid>
+          </Panel>
+          {puedeAdministrar && guardadoCritico ? <CampoIdentidad value={clave} onChange={setClave} id="u-clave-admin" /> : null}
+        </fieldset>
       </form>
+      </ValidacionAmbito>
+
     </Sheet>
   );
 }

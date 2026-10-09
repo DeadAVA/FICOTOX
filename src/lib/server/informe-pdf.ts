@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import { LAB_IDENTITY, REPORT_DEFAULT_STATEMENTS } from "../shared/sgc";
+import { formatearFecha } from "../shared/fechas";
 
 /*
  * Render del informe de resultados en PDF (ISO/IEC 17025 7.8.2 y 7.8.3):
@@ -8,7 +9,7 @@ import { LAB_IDENTITY, REPORT_DEFAULT_STATEMENTS } from "../shared/sgc";
  * declaraciones, desviaciones y personas que autorizan.
  */
 
-export interface InformeResultado {
+interface InformeResultado {
   id_muestra: string;
   resultado: number | null;
   resultado_texto: string | null;
@@ -32,7 +33,7 @@ export interface InformeAnalisis {
   resultados: InformeResultado[];
 }
 
-export interface InformeFirma {
+interface InformeFirma {
   nombre: string | null;
   cargo: string | null;
   fecha: string | null;
@@ -54,6 +55,8 @@ export interface InformeRender {
   anulado: boolean;
   /* Folio y version de la enmienda que dejo sin efecto a este informe (7.8.8). */
   sustituido_por: string | null;
+  /* Fase 3: "Revisión autorizada por excepción, solicitud #N" (segregacion de funciones). */
+  excepciones?: string[];
 }
 
 const INK = "#10202b";
@@ -67,11 +70,9 @@ const BAD = "#c8433b";
 
 const PAGE = { top: 92, bottom: 64, left: 48, right: 48 };
 
+/* dd/mm/aaaa: una fecha sola tal cual; un instante (autorizado_en, creado_en) en la zona del laboratorio. */
 function fmtDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  const text = String(value).slice(0, 10);
-  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : text;
+  return formatearFecha(value);
 }
 
 function fmtNumber(value: number | null): string {
@@ -313,6 +314,10 @@ export async function renderInformePdf(data: InformeRender): Promise<Buffer> {
   });
   doc.y = top + blockHeight;
   doc.x = left;
+  if (data.excepciones?.length) {
+    // Excepcion de segregacion aprobada por un segundo usuario: queda declarada en el informe.
+    text(data.excepciones.join(" · "), left, doc.y + 4, { size: 7.5, color: MUTED, width });
+  }
 
   // ---------- Cabecera y pie en cada página ----------
   const range = doc.bufferedPageRange();

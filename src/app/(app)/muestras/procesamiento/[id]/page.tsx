@@ -8,7 +8,7 @@ import { RequireModule } from "@/components/session/RequireModule";
 export default function EditarProcesamientoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireModule modules="muestras">
+    <RequireModule modules="ensayos">
       <RecordLoader url={`/samples/processing/${id}`}>{(item) => <ProcessingForm key={String(item.id)} item={item} />}</RecordLoader>
     </RequireModule>
   );

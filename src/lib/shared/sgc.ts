@@ -20,21 +20,46 @@ export interface CatalogItem {
 export const SAMPLE_STATES: Record<string, { label: string; tone: "neutral" | "brand" | "warning" | "success" | "danger" | "bloom" | "ink" }> = {
   registrada: { label: "Registrada", tone: "brand" },
   aceptada: { label: "Aceptada", tone: "brand" },
+  aceptada_con_desviacion: { label: "Aceptada con desviación", tone: "warning" },
   rechazada: { label: "Rechazada", tone: "danger" },
-  en_proceso: { label: "En proceso", tone: "warning" },
+  // Fase 5: estados de la recepcion (seccion 7 de la especificacion), solo hacia adelante.
+  en_procesamiento: { label: "En procesamiento", tone: "warning" },
+  en_extraccion: { label: "En extracción", tone: "warning" },
+  en_analisis: { label: "En análisis", tone: "warning" },
+  en_revision_tecnica: { label: "En revisión técnica", tone: "bloom" },
+  validada: { label: "Validada", tone: "success" },
+  informe_elaborado: { label: "Informe elaborado", tone: "success" },
+  liberada: { label: "Liberada", tone: "success" },
+  en_proceso: { label: "En proceso", tone: "brand" },
   completada: { label: "Completada", tone: "success" },
   analizada: { label: "Analizada", tone: "success" },
   informada: { label: "Informada", tone: "success" },
-  cerrada: { label: "Cerrada", tone: "ink" },
+  cerrada: { label: "Cerrada", tone: "neutral" },
   anulada: { label: "Anulada", tone: "danger" },
   // Valores historicos de la version anterior.
-  procesamiento: { label: "En proceso", tone: "warning" },
+  procesamiento: { label: "En proceso", tone: "brand" },
   extraccion: { label: "Extracción", tone: "warning" },
   finalizada: { label: "Finalizada", tone: "success" },
   cancelada: { label: "Cancelada", tone: "danger" },
   pendiente: { label: "Pendiente", tone: "neutral" },
 };
 
+/* Fase 5: estados de la recepcion en orden (aceptada, aceptada_con_desviacion y rechazada comparten paso). */
+export const RECEPTION_STATE_ORDER = ["registrada", "aceptada", "aceptada_con_desviacion", "rechazada", "en_procesamiento", "en_extraccion", "en_analisis", "en_revision_tecnica", "validada", "informe_elaborado", "liberada", "cerrada"] as const;
+export const RECEPTION_STATE_RANK: Record<string, number> = {
+  registrada: 0,
+  aceptada: 1,
+  aceptada_con_desviacion: 1,
+  rechazada: 1,
+  en_procesamiento: 2,
+  en_extraccion: 3,
+  en_analisis: 4,
+  en_revision_tecnica: 5,
+  validada: 6,
+  informe_elaborado: 7,
+  liberada: 8,
+  cerrada: 9,
+};
 /* Estados en los que un registro ya no se edita ni se usa como origen de otra etapa. */
 export const SAMPLE_TERMINAL_STATES = new Set(["anulada", "rechazada", "cerrada"]);
 
@@ -151,9 +176,12 @@ export const ANALYSIS_METHODS: CatalogItem[] = [
 
 export const ANALYSIS_STATES: Record<string, { label: string; tone: "neutral" | "brand" | "warning" | "success" | "danger" }> = {
   registrado: { label: "Registrado", tone: "brand" },
+  // Fase 5: enviado a revision (ya no se edita) y sustituido por una enmienda.
+  en_revision: { label: "En revisión", tone: "warning" },
   revisado: { label: "Revisado", tone: "warning" },
   aprobado: { label: "Aprobado", tone: "success" },
   anulado: { label: "Anulado", tone: "danger" },
+  sustituido: { label: "Sustituido", tone: "neutral" },
 };
 
 export const CONFORMITY_OPTIONS: CatalogItem[] = [
@@ -191,8 +219,12 @@ export const CLIENT_CONTACT_MEDIA: CatalogItem[] = [
 export const REPORT_STATES: Record<string, { label: string; tone: "neutral" | "brand" | "warning" | "success" | "danger" | "ink" }> = {
   borrador: { label: "Borrador", tone: "neutral" },
   en_revision: { label: "En revisión", tone: "warning" },
-  autorizado: { label: "Autorizado", tone: "success" },
-  entregado: { label: "Entregado", tone: "ink" },
+  autorizado: { label: "Autorizado", tone: "warning" },
+  // Fase 6: liberar genera el PDF final; el envio por correo lo deja "enviado".
+  liberado: { label: "Liberado", tone: "brand" },
+  enviado: { label: "Enviado", tone: "brand" },
+  // Valor anterior a la Fase 6 (el servidor lo migra a "enviado").
+  entregado: { label: "Enviado", tone: "brand" },
   sustituido: { label: "Sustituido por enmienda", tone: "neutral" },
   anulado: { label: "Anulado", tone: "danger" },
 };
@@ -220,88 +252,17 @@ export const LAB_IDENTITY = {
 
 /* ---------- Documentos controlados (FX-MC 8.3, FX-GCP-CD) ---------- */
 
-export const DOCUMENT_TYPES: CatalogItem[] = [
-  { value: "M", label: "Manual" },
-  { value: "P", label: "Procedimiento" },
-  { value: "I", label: "Instructivo de trabajo" },
-  { value: "F", label: "Formato" },
-  { value: "R", label: "Registro" },
-  { value: "L", label: "Lista maestra / plan" },
-  { value: "B", label: "Bitácora" },
-  { value: "E", label: "Documento externo (norma, manual de fabricante)" },
-];
-
-/* Area segun el segundo bloque de la clave: FX-GCP-CD -> GC. */
-export const DOCUMENT_AREAS: CatalogItem[] = [
-  { value: "MC", label: "Manual de calidad" },
-  { value: "GC", label: "Gestión de calidad" },
-  { value: "TC", label: "Técnica" },
-  { value: "AD", label: "Administración" },
-  { value: "CO", label: "Comercial / clientes" },
-  { value: "TH", label: "Talento humano" },
-  { value: "DI", label: "Dirección" },
-  { value: "EX", label: "Externo" },
-];
-
 export const DOCUMENT_STATES: Record<string, { label: string; tone: "neutral" | "brand" | "warning" | "success" | "danger" | "ink" }> = {
   borrador: { label: "Borrador", tone: "neutral" },
-  en_revision: { label: "En revisión", tone: "warning" },
+  // Fase 7: flujo de control documental.
+  revision_calidad: { label: "Revisión de calidad", tone: "warning" },
+  revision_tecnica: { label: "Revisión técnica", tone: "warning" },
+  por_aprobar: { label: "Por aprobar", tone: "brand" },
+  aprobado: { label: "Aprobado", tone: "brand" },
+  en_revision: { label: "Revisión de calidad", tone: "warning" },
   vigente: { label: "Vigente", tone: "success" },
-  obsoleto: { label: "Obsoleto", tone: "ink" },
+  obsoleto: { label: "Obsoleto", tone: "neutral" },
   cancelado: { label: "Cancelado", tone: "danger" },
 };
 
-/* Clave FX-<area><tipo>-<siglas>: FX-GCP-CD, FX-TCF-GMR, FX-ADF-IEQ... */
-export const DOCUMENT_KEY_RE = /^FX-[A-Z]{2}[A-Z]-[A-Z0-9]{1,8}(?:-[A-Z0-9]{1,8})?$/;
-
-export function parseDocumentKey(clave: string): { area: string; tipo: string } | null {
-  const text = String(clave || "").trim().toUpperCase();
-  if (text === "FX-MC") return { area: "MC", tipo: "M" };
-  const match = text.match(/^FX-([A-Z]{2})([A-Z])-/);
-  if (!match) return null;
-  return { area: match[1], tipo: match[2] };
-}
-
-/* Revision periodica al menos cada tres anos (FX-MC 7.2.1.2). */
-export const DOCUMENT_REVIEW_YEARS = 3;
-
 /* ---------- Auditoria ---------- */
-
-export const AUDIT_ACTIONS: Record<string, string> = {
-  crear: "Creó",
-  editar: "Editó",
-  anular: "Anuló",
-  restaurar: "Restauró",
-  baja: "Dio de baja",
-  reactivar: "Reactivó",
-  revisar: "Marcó revisado",
-  aprobar: "Aprobó",
-  autorizar: "Autorizó",
-  entregar: "Entregó",
-  rechazar: "Rechazó",
-  aceptar: "Aceptó",
-  cerrar: "Cerró",
-  importar: "Importó",
-  eliminar: "Eliminó",
-  reponer: "Repuso stock",
-  login: "Inició sesión",
-  login_fallido: "Intento de acceso fallido",
-  descargar: "Descargó",
-};
-
-export const AUDIT_ENTITIES: Record<string, string> = {
-  muestras_recepcion: "Recepción",
-  muestras_procesamiento: "Procesamiento",
-  muestras_extraccion: "Extracción",
-  muestras_analisis: "Análisis",
-  informes: "Informe de resultados",
-  documentos_sgc: "Documento SGC",
-  reactivos: "Reactivo",
-  consumibles: "Consumible",
-  equipos: "Equipo",
-  mantenimientos: "Mantenimiento",
-  usuarios: "Usuario",
-  roles: "Rol",
-  sesion: "Sesión",
-  reportes_mantenimiento: "Reporte de mantenimiento",
-};

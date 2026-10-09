@@ -8,12 +8,15 @@ set "DATABASE_FREQUENCY=%~1"
 
 if "%DATABASE_FREQUENCY%"=="" set "DATABASE_FREQUENCY=15days"
 
-if /I "%DATABASE_FREQUENCY%"=="monthly" (
+if /I "%DATABASE_FREQUENCY%"=="daily" (
+  rem Fase 10: frecuencia propuesta (diaria local), por validar con Mejora Continua.
+  schtasks /Create /TN "FICOTOX respaldo base de datos" /TR "\"%BACKUP_CMD%\" --target database --project-root \"%PROJECT_ROOT%\"" /SC DAILY /ST 02:00 /F
+) else if /I "%DATABASE_FREQUENCY%"=="monthly" (
   schtasks /Create /TN "FICOTOX respaldo base de datos" /TR "\"%BACKUP_CMD%\" --target database --project-root \"%PROJECT_ROOT%\"" /SC MONTHLY /D 1 /ST 02:00 /F
 ) else if /I "%DATABASE_FREQUENCY%"=="15days" (
   schtasks /Create /TN "FICOTOX respaldo base de datos" /TR "\"%BACKUP_CMD%\" --target database --project-root \"%PROJECT_ROOT%\"" /SC DAILY /MO 15 /ST 02:00 /F
 ) else (
-  echo Usa "15days" o "monthly".
+  echo Usa "daily", "15days" o "monthly".
   exit /b 1
 )
 

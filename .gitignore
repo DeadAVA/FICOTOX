@@ -8,8 +8,13 @@ instance/*.db
 instance/maintenance_reports/
 instance/informes/
 instance/documentos_sgc/
+instance/evidencias/
+instance/servidor.lock
+# Fase 10: restauraciones de prueba (scripts/restaurar-ficotox.mjs)
+instance-restaurada/
 instance/test/
 instance/fixtures/
+instance/test-fixture/
 tests/ui/fail.png
 
 # Node / Next.js
@@ -38,3 +43,42 @@ __pycache__/
 # Respaldos automaticos previos a migraciones de esquema
 instance/backups/
 instance/auditoria.key
+
+# Contrasenas de los usuarios iniciales (scripts/seed-roles-usuarios.mjs)
+scripts/seed-usuarios.local.json
+
+# Fase 12: registros, verificaciones, servicio generado, adjuntos y firmas de la instancia
+instance/logs/
+instance/verificaciones/
+instance/servicio/
+instance/lanzador.lock
+instance/detener
+instance/servidor.lock.toma/
+instance/*.sqlite3-wal
+instance/*.sqlite3-shm
+instance/tls/
+instance/calidad/
+instance/adjuntos/
+instance/llave-bitacora.huella
+
+# Herramientas locales
+.claude/scheduled_tasks.lock
+.venv/
+
+# Archivo de la instancia anterior (comenzar en limpio para pruebas manuales)
+archivo-pre-pruebas-*/
+
+# Toda la instancia (bases, archivos subidos, logs, llaves y fotos)
+instance/
+
+# Despliegue (Railway): nunca se suben bases, respaldos, Excel, llaves ni secretos
+instance/
+backups/
+.env
+.env.*
+!.env.example
+*.sqlite3*
+*.xlsx
+*.tar.gz
+auditoria.key
+*.pem

@@ -1,0 +1,33 @@
+/*
+ * Documentos SGC (Fase 7) — RETIRADO. Por decision confirmada del laboratorio,
+ * Calidad › Documentos funciona como biblioteca de consulta (modules/biblioteca.ts)
+ * y reemplaza el flujo de control documental de la seccion 6 de la
+ * especificacion (revision, aprobacion, lista maestra, distribucion y acuse de
+ * lectura, propuestas). Sus escrituras responden 410 (ver src/lib/server/retirado.ts).
+ *
+ * Aqui solo queda la lectura que siguen usando el historial y las incidencias
+ * de los documentos anteriores (sus tablas se conservan sin uso).
+ */
+import { type Row, type Session } from "../db";
+import { permisoDe, type Autorizacion } from "../rbac";
+
+const DISTRIBUCION = "distribucion_documento";
+
+/* Distribucion de un documento anterior (quien confirmo la lectura), en solo lectura. */
+export async function distribucionDe(s: Session, documentoId: number): Promise<Row[]> {
+  return s.query<Row>(`SELECT x.usuario_id, u.nombre, u.email, x.distribuido_en, x.leido_en FROM ${DISTRIBUCION} x LEFT JOIN usuarios u ON u.id = x.usuario_id WHERE x.documento_id = :doc ORDER BY u.nombre`, { doc: documentoId });
+}
+
+/*
+ * Alcance "autorizados" de documentos:V (Estudiante). En la biblioteca limita a
+ * los documentos visibles para todos o para su rol; sobre los documentos del
+ * flujo anterior (solo lectura) conserva su regla: vigentes que le fueron distribuidos.
+ */
+export function soloAutorizados(auth: Autorizacion): boolean {
+  const permiso = permisoDe(auth, "documentos", "V");
+  return !!permiso && permiso.alcances.length > 0 && permiso.alcances.every((a) => a === "autorizados");
+}
+
+export async function documentosDistribuidosA(s: Session, usuarioId: number): Promise<number[]> {
+  return (await s.query<{ documento_id: number }>(`SELECT DISTINCT documento_id FROM ${DISTRIBUCION} WHERE usuario_id = :u`, { u: usuarioId })).map((f) => Number(f.documento_id));
+}

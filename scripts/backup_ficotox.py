@@ -277,26 +277,43 @@ def make_code_backup(project_root: Path, destination_dir: Path) -> Path:
     return zip_path
 
 
-def resolve_sqlite_path(dotenv: dict[str, str], project_root: Path) -> Path:
-    """Misma resolucion que src/lib/server/config.ts: SQLITE_PATH o instance/ficotox.sqlite3."""
-    configured = config_value(dotenv, "SQLITE_PATH")
-    if configured:
-        sqlite_path = Path(configured)
-        return sqlite_path if sqlite_path.is_absolute() else project_root / sqlite_path
+def make_sqlite_backup(project_root: Path, destination_dir: Path, include_key: bool) -> Path:
+    """
+    Fase 10: la base y los archivos los respalda la implementacion unica en Node
+    (scripts/respaldar-ficotox.mjs -> src/lib/shared/respaldo.mjs): snapshot en
+    linea de SQLite, archivos de la instancia, manifest.json y la llave de la
+    bitacora aparte. Aqui solo se empaqueta esa carpeta en un .zip para la copia
+    externa (OneDrive, rclone o Graph), SIN la llave salvo con --incluir-llave.
+    """
+    node = shutil.which("node")
+    if not node:
+        raise RuntimeError("Node.js no esta instalado o no esta en PATH (el respaldo usa scripts/respaldar-ficotox.mjs).")
 
-    return project_root / "instance" / "ficotox.sqlite3"
+    result = subprocess.run(
+        [node, str(project_root / "scripts" / "respaldar-ficotox.mjs"), "--json", "--etiqueta", "automatico"],
+        cwd=project_root,
+        # Misma carpeta local que este script (backups/ o --local-backup-dir / FICOTOX_BACKUP_DIR).
+        env={**os.environ, "FICOTOX_BACKUP_DIR": str(destination_dir.parent)},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    info = json.loads(result.stdout.strip().splitlines()[-1])
+    folder = Path(info["carpeta"])
+    zip_path = destination_dir / f"ficotox-respaldo-{info['id']}{'-con-llave' if include_key else ''}.zip"
 
+    with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
+        for file_path in sorted(folder.rglob("*")):
+            if not file_path.is_file():
+                continue
+            relative = file_path.relative_to(folder)
+            if relative.parts and relative.parts[0] == "llave" and not include_key:
+                continue
+            archive.write(file_path, Path(info["id"]) / relative)
 
-def make_sqlite_backup(dotenv: dict[str, str], project_root: Path, destination_dir: Path) -> Path:
-    sqlite_path = resolve_sqlite_path(dotenv, project_root)
-
-    if not sqlite_path.exists():
-        raise FileNotFoundError(f"No existe la base SQLite esperada: {sqlite_path}")
-
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup_path = destination_dir / f"ficotox-db-sqlite-{timestamp}.sqlite3"
-    shutil.copy2(sqlite_path, backup_path)
-    return backup_path
+    print(f"Respaldo local: {folder} (llave de la bitacora {'incluida' if info.get('incluye_llave') else 'no incluida'})")
+    print(f"Copia externa: {zip_path.name} ({'CON la llave' if include_key else 'sin la llave'})")
+    return zip_path
 
 
 def make_mysql_backup(database_url: str, destination_dir: Path) -> Path:
@@ -331,12 +348,12 @@ def make_mysql_backup(database_url: str, destination_dir: Path) -> Path:
     return backup_path
 
 
-def make_database_backup(dotenv: dict[str, str], project_root: Path, destination_dir: Path) -> Path:
+def make_database_backup(dotenv: dict[str, str], project_root: Path, destination_dir: Path, include_key: bool) -> Path:
     database_url = config_value(dotenv, "DATABASE_URL")
     if database_url.startswith("mysql"):
         return make_mysql_backup(database_url, destination_dir)
 
-    return make_sqlite_backup(dotenv, project_root, destination_dir)
+    return make_sqlite_backup(project_root, destination_dir, include_key)
 
 
 def main() -> int:
@@ -346,6 +363,11 @@ def main() -> int:
     parser.add_argument("--onedrive-remote", default="")
     parser.add_argument("--onedrive-sync-dir", default="")
     parser.add_argument("--local-backup-dir", default="")
+    parser.add_argument(
+        "--incluir-llave",
+        action="store_true",
+        help="Incluir la llave de la bitacora en la copia externa (por omision solo va en el respaldo local).",
+    )
     args = parser.parse_args()
 
     project_root = Path(args.project_root).resolve()
@@ -362,7 +384,7 @@ def main() -> int:
     created: list[Path] = []
 
     if args.target in {"database", "all"}:
-        database_backup = make_database_backup(dotenv, project_root, database_backup_dir)
+        database_backup = make_database_backup(dotenv, project_root, database_backup_dir, args.incluir_llave)
         copied_path = copy_to_onedrive(database_backup, "backup/database", onedrive_remote, onedrive_sync_dir, dotenv)
         created.append(database_backup)
         if copied_path:

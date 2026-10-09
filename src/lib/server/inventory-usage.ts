@@ -1,47 +1,10 @@
 import { HttpError } from "./http";
-import { isSqlite, type Session } from "./db";
-import { markSchemaReady, schemaReady } from "./schema";
-import { ensureConsumiblesSchema } from "./modules/consumables";
-import { ensureReactivosSchema } from "./modules/inventory";
+import { type Session } from "./db";
+import { hoyLocal } from "../shared/fechas";
 
 /* Portado de utils/inventory_usage.py del backend Flask original. */
 
 const SUPPORTED_INVENTORY_TABLES = new Set(["reactivos", "consumibles"]);
-
-export async function ensureMovimientosSchema(s: Session): Promise<void> {
-  if (schemaReady("movimientos")) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS movimientos (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          tipo VARCHAR(20) NOT NULL,
-          tabla_origen VARCHAR(40) NOT NULL,
-          id_item INTEGER NOT NULL,
-          cantidad REAL NOT NULL DEFAULT 0,
-          motivo TEXT,
-          referencia VARCHAR(120) UNIQUE,
-          id_usuario INTEGER DEFAULT NULL,
-          creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS movimientos (
-          id INT NOT NULL AUTO_INCREMENT,
-          tipo VARCHAR(20) NOT NULL,
-          tabla_origen VARCHAR(40) NOT NULL,
-          id_item INT NOT NULL,
-          cantidad DECIMAL(12,4) NOT NULL DEFAULT 0,
-          motivo TEXT,
-          referencia VARCHAR(120) UNIQUE,
-          id_usuario INT DEFAULT NULL,
-          creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      `,
-  );
-  markSchemaReady("movimientos");
-}
 
 function toPositiveFloat(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
@@ -107,7 +70,6 @@ async function movementExists(s: Session, reference: string): Promise<boolean> {
 /* Revierte salidas de inventario registradas bajo un prefijo de referencia. */
 export async function restoreInventoryUsage(s: Session, referencePrefix: string): Promise<number> {
   if (!referencePrefix) return 0;
-  await ensureMovimientosSchema(s);
   const rows = await s.query<{ id: number; tabla_origen: string; id_item: number; cantidad: number | string | null }>(
     `
     SELECT id, tabla_origen, id_item, cantidad
@@ -138,7 +100,7 @@ export async function restoreInventoryUsage(s: Session, referencePrefix: string)
       await s.execute(
         `
         UPDATE consumibles
-        SET piezas = COALESCE(piezas, 0) + :cantidad
+        SET existencia = COALESCE(existencia, 0) + :cantidad
         WHERE id = :id
         `,
         { id: row.id_item, cantidad: amount },
@@ -164,6 +126,9 @@ interface ConsumeOptions {
   referencia: string;
   /* El insumo ya estaba declarado en el registro: se permite aunque este dado de baja. */
   permitirInactivo?: boolean;
+  /* Etapa de muestras que origina el consumo (el formato ya valido el acceso del usuario a ese folio). */
+  vinculoTipo?: string | null;
+  vinculoId?: number | null;
 }
 
 /*
@@ -174,8 +139,6 @@ interface ConsumeOptions {
  * 4. Insertar movimiento para trazabilidad.
  */
 export async function consumeReactivo(s: Session, referenceValue: unknown, cantidad: unknown, options: ConsumeOptions): Promise<boolean> {
-  await ensureReactivosSchema(s);
-  await ensureMovimientosSchema(s);
   const itemId = await resolveItemId(s, "reactivos", referenceValue);
   const amount = toPositiveFloat(cantidad);
   if (!itemId || !amount || (await movementExists(s, options.referencia))) return false;
@@ -198,8 +161,6 @@ export async function consumeReactivo(s: Session, referenceValue: unknown, canti
 }
 
 export async function consumeConsumible(s: Session, referenceValue: unknown, cantidad: unknown, options: ConsumeOptions): Promise<boolean> {
-  await ensureConsumiblesSchema(s);
-  await ensureMovimientosSchema(s);
   const itemId = await resolveItemId(s, "consumibles", referenceValue);
   const amount = toPositiveFloat(cantidad);
   if (!itemId || !amount || (await movementExists(s, options.referencia))) return false;
@@ -208,7 +169,7 @@ export async function consumeConsumible(s: Session, referenceValue: unknown, can
   await s.execute(
     `
     UPDATE consumibles
-    SET piezas = COALESCE(piezas, 0) - :cantidad
+    SET existencia = COALESCE(existencia, 0) - :cantidad
     WHERE id = :id
     `,
     { id: itemId, cantidad: amount },
@@ -218,13 +179,14 @@ export async function consumeConsumible(s: Session, referenceValue: unknown, can
 }
 
 async function insertMovement(s: Session, tableName: string, itemId: number, cantidad: number, options: ConsumeOptions): Promise<void> {
+  const unidad = tableName === "reactivos" ? (await s.scalar("SELECT unidad FROM reactivos WHERE id = :id", { id: itemId })) || null : "unidades";
   await s.execute(
     `
     INSERT INTO movimientos (
-        tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario
+        tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario, unidad, vinculo_tipo, vinculo_id, fecha_movimiento
     )
     VALUES (
-        'salida', :tabla_origen, :id_item, :cantidad, :motivo, :referencia, :id_usuario
+        'salida', :tabla_origen, :id_item, :cantidad, :motivo, :referencia, :id_usuario, :unidad, :vinculo_tipo, :vinculo_id, :fecha_movimiento
     )
     `,
     {
@@ -234,6 +196,10 @@ async function insertMovement(s: Session, tableName: string, itemId: number, can
       motivo: options.motivo,
       referencia: options.referencia,
       id_usuario: options.userId,
+      unidad,
+      vinculo_tipo: options.vinculoTipo ?? null,
+      vinculo_id: options.vinculoId ?? null,
+      fecha_movimiento: hoyLocal(),
     },
   );
 }

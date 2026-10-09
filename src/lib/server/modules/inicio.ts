@@ -1,14 +1,12 @@
+import { numeroFolio } from "../../shared/folios";
 import { requireUser } from "../auth";
-import { isSqlite, type Row } from "../db";
+import { pendientesDe } from "../pendientes";
 import { json, type RouteContext } from "../http";
-import { requirePermission } from "../rbac";
-import { ensureConsumiblesSchema } from "./consumables";
-import { ensureInformesSchema } from "./informes";
-import { ensureEquiposSchema, ensureMantenimientosSchema, ensureReactivosSchema } from "./inventory";
-import { ensureAnalysisSchema } from "./samples/analisis";
-import { ensureSamplesExtraccionSchema } from "./samples/extraccion";
-import { ensureSamplesProcesamientoSchema } from "./samples/procesamiento";
-import { ensureSamplesRecepcionSchema } from "./samples/recepcion";
+import { cargarAutorizacion, permisoDe, requirePermission, soloEstado } from "../rbac";
+import type { Accion, ContextoAlcance, Modulo } from "../../shared/permisos";
+
+import { diasDesde, formatearFecha } from "../../shared/fechas";
+import { esCoordinacion, filtroAsignadas, soloAsignado } from "../asignaciones";
 
 /*
  * Datos del Inicio.
@@ -24,7 +22,6 @@ import { ensureSamplesRecepcionSchema } from "./samples/recepcion";
  * coincida con lo que se ve al abrirlo.
  */
 
-const pad = (n: unknown) => String(Number(n || 0)).padStart(7, "0");
 
 type StepKey = "recepcion" | "procesamiento" | "extraccion" | "analisis" | "informe";
 type StepState = "done" | "current" | "pending" | "warn";
@@ -48,8 +45,17 @@ interface FlowItem {
   dias: number;
   estado: string;
   etapa: StepKey | "cierre";
-  siguiente: { label: string; href: string; accion: "capturar" | "revisar" | "aprobar" | "cerrar" };
+  /* accion "ver": la persona no tiene el permiso de ese paso; solo se informa. */
+  siguiente: { label: string; href: string; accion: "capturar" | "revisar" | "aprobar" | "cerrar" | "ver" };
   pasos: FlowStep[];
+  /* Fase 6: recepcion liberada -> "Falta disposición final" (va al final de la lista). */
+  nota?: string | null;
+  /* Etapa del flujo del Inicio: como `etapa`, con "revision" aparte (analisis o informe esperando firma). */
+  etapa_flujo: StepKey | "revision" | "cierre";
+  /* Personas con la muestra asignada (vigentes). */
+  asignados: Array<{ id: number; nombre: string | null; email: string | null; avatar: string | null }>;
+  /* Ultimo cambio en la recepcion o en cualquiera de sus registros. */
+  ultimo_movimiento: string | null;
 }
 
 const safeJson = <T,>(raw: unknown, fallback: T): T => {
@@ -61,55 +67,49 @@ const safeJson = <T,>(raw: unknown, fallback: T): T => {
   }
 };
 
-const fmtDate = (value: unknown): string | null => {
-  const raw = String(value || "").slice(0, 10);
-  if (!raw) return null;
-  const [y, m, d] = raw.split("-");
-  return y && m && d ? `${d}/${m}/${y}` : raw;
-};
+const fmtDate = (value: unknown): string | null => (value ? formatearFecha(value) : null);
 
-const daysSince = (iso: string | null): number => {
-  if (!iso) return 0;
-  const then = new Date(`${String(iso).slice(0, 10)}T00:00:00`);
-  if (Number.isNaN(then.getTime())) return 0;
-  return Math.max(0, Math.floor((Date.now() - then.getTime()) / 86_400_000));
-};
+/* Dias transcurridos por dia local del laboratorio. */
+const daysSince = (iso: string | null): number => diasDesde(iso);
 
 export async function inicioEnCurso({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "read");
-  await ensureSamplesRecepcionSchema(s);
-  await ensureSamplesProcesamientoSchema(s);
-  await ensureSamplesExtraccionSchema(s);
-  await ensureAnalysisSchema(s);
-  await ensureInformesSchema(s);
+  const permiso = await requirePermission(s, user, "muestras", "V");
 
-  const ABIERTAS = "estado NOT IN ('cerrada', 'anulada', 'rechazada')";
-  const total = Number((await s.scalar(`SELECT COUNT(*) FROM muestras_recepcion WHERE ${ABIERTAS}`)) || 0);
+  /*
+   * Fase 5: cada analista (captura ensayos sin ser coordinacion) o quien tiene el
+   * alcance "asignado" ve solo sus muestras: asignadas o registradas por la persona.
+   */
+  const soloMias = soloAsignado(permiso) || (!esCoordinacion(permiso.auth) && !!permisoDe(permiso.auth, "ensayos", "C"));
+  const mias = await filtroAsignadas(s, permiso.auth.userId, "id", soloMias, "creado_por");
+  const ABIERTAS = `estado NOT IN ('cerrada', 'anulada', 'rechazada') ${mias.sql}`;
+  const total = Number((await s.scalar(`SELECT COUNT(*) FROM muestras_recepcion WHERE ${ABIERTAS}`, mias.params)) || 0);
   const recepciones = await s.query(
-    `SELECT id, folio_num, solicitante, id_interno, muestra_unica, lote_muestras_json, analisis_json, estado, decision_aceptacion, fecha_recepcion
+    `SELECT id, folio_num, solicitante, id_interno, muestra_unica, lote_muestras_json, analisis_json, estado, decision_aceptacion, fecha_recepcion, actualizado_en
      FROM muestras_recepcion
      WHERE ${ABIERTAS}
      ORDER BY fecha_recepcion DESC, id DESC
-     LIMIT 40`,
+     LIMIT 300`,
+    mias.params,
   );
   if (!recepciones.length) return json({ items: [], resumen: {}, total: 0 });
 
   const ids = recepciones.map((r) => Number(r.id));
   const inList = ids.join(",");
-  const [procesamientos, analisis, informes] = await Promise.all([
-    s.query(`SELECT id, folio_num, recepcion_id, estado, fecha_procesamiento FROM muestras_procesamiento WHERE recepcion_id IN (${inList}) AND estado <> 'anulada' ORDER BY id DESC`),
-    s.query(`SELECT id, folio_num, recepcion_id, extraccion_id, tipo_analisis, estado FROM muestras_analisis WHERE recepcion_id IN (${inList}) AND estado <> 'anulado' ORDER BY id DESC`),
-    s.query(`SELECT id, folio_num, version, recepcion_id, estado FROM informes WHERE recepcion_id IN (${inList}) AND estado NOT IN ('anulado', 'sustituido') ORDER BY version DESC, id DESC`),
+  const [procesamientos, analisis, informes, asignaciones] = await Promise.all([
+    s.query(`SELECT id, folio_num, recepcion_id, estado, fecha_procesamiento, actualizado_en FROM muestras_procesamiento WHERE recepcion_id IN (${inList}) AND estado <> 'anulada' ORDER BY id DESC`),
+    s.query(`SELECT id, folio_num, recepcion_id, extraccion_id, tipo_analisis, estado, actualizado_en FROM muestras_analisis WHERE recepcion_id IN (${inList}) AND estado <> 'anulado' ORDER BY id DESC`),
+    s.query(`SELECT id, folio_num, version, recepcion_id, estado, actualizado_en FROM informes WHERE recepcion_id IN (${inList}) AND estado NOT IN ('anulado', 'sustituido') ORDER BY version DESC, id DESC`),
+    s.query(`SELECT a.recepcion_id, u.id, u.nombre, u.email, u.avatar FROM asignaciones_muestra a INNER JOIN usuarios u ON u.id = a.usuario_id WHERE a.recepcion_id IN (${inList}) AND a.revocado_en IS NULL ORDER BY a.id ASC`),
   ]);
   const procIds = procesamientos.map((p) => Number(p.id));
   const extracciones = procIds.length
-    ? await s.query(`SELECT id, folio_num, tipo_registro, procesamiento_id, estado FROM muestras_extraccion WHERE procesamiento_id IN (${procIds.join(",")}) AND estado <> 'anulada' ORDER BY id DESC`)
+    ? await s.query(`SELECT id, folio_num, tipo_registro, procesamiento_id, estado, actualizado_en FROM muestras_extraccion WHERE procesamiento_id IN (${procIds.join(",")}) AND estado <> 'anulada' ORDER BY id DESC`)
     : [];
 
   const items: FlowItem[] = recepciones.map((r) => {
     const id = Number(r.id);
-    const folio = `R ${pad(r.folio_num)}`;
+    const folio = `R ${numeroFolio(r.folio_num)}`;
     const lote = safeJson<Array<Record<string, unknown>>>(r.lote_muestras_json, []);
     const muestras = r.muestra_unica || !lote.length ? [String(r.id_interno || "")].filter(Boolean) : lote.filter((m) => m.trabajar !== false).map((m) => String(m.id_interno || "")).filter(Boolean);
     const tipos = safeJson<{ tipos?: string[] }>(r.analisis_json, {}).tipos || [];
@@ -125,7 +125,7 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
     const ext = exts[0] || null;
     const ans = analisis.filter((a) => Number(a.recepcion_id) === id);
     const extSinAnalisis = exts.find((e) => !ans.some((a) => Number(a.extraccion_id) === Number(e.id))) || null;
-    const RANK: Record<string, number> = { registrado: 0, revisado: 1, aprobado: 2 };
+    const RANK: Record<string, number> = { registrado: 0, en_revision: 1, revisado: 2, aprobado: 3 };
     const an = ans.length ? ans.reduce((menor, a) => ((RANK[String(a.estado)] ?? 0) < (RANK[String(menor.estado)] ?? 0) ? a : menor)) : null;
     const inf = informes.find((i) => Number(i.recepcion_id) === id) || null;
     const decision = String(r.decision_aceptacion || "");
@@ -137,42 +137,66 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
     /* Etapa actual y siguiente paso. */
     let etapa: FlowItem["etapa"];
     let siguiente: FlowItem["siguiente"];
+    let requiere: [Modulo, Accion, ContextoAlcance?];
     if (!aceptada) {
       etapa = "recepcion";
       siguiente = { label: "Registrar decisión de aceptación", href: `/muestras/recepcion/${id}`, accion: "capturar" };
+      requiere = ["muestras", "E", { objeto: "recepcion", borrador: true }];
     } else if (!proc) {
       etapa = "procesamiento";
       siguiente = { label: "Registrar procesamiento", href: `/muestras/procesamiento/nuevo?recepcion=${id}`, accion: "capturar" };
+      requiere = ["ensayos", "C", { objeto: "procesamiento", borrador: true }];
     } else if (!ext || faltaTipo) {
       etapa = "extraccion";
       const label = ext && faltaTipo ? `Registrar extracción ${faltaTipo === "E-D" ? "DSP" : "ASP"}` : "Registrar extracción";
       siguiente = { label, href: `/muestras/extraccion/nueva?procesamiento=${proc.id}${tipoExtraccion ? `&tipo=${tipoExtraccion}` : ""}`, accion: "capturar" };
+      requiere = ["ensayos", "C", { objeto: "extraccion", borrador: true }];
     } else if (!an || extSinAnalisis) {
       etapa = "analisis";
       const objetivo = extSinAnalisis || ext;
       const label = an && extSinAnalisis ? `Registrar análisis ${String(extSinAnalisis.tipo_registro) === "E-D" ? "DSP" : "ASP"}` : "Registrar análisis";
       siguiente = { label, href: `/muestras/analisis/nuevo?extraccion=${objetivo.id}`, accion: "capturar" };
+      requiere = ["ensayos", "C", { objeto: "analisis", borrador: true }];
     } else if (anEstado === "registrado") {
       etapa = "analisis";
+      siguiente = { label: "Enviar análisis a revisión", href: `/muestras/analisis/${an.id}`, accion: "capturar" };
+      requiere = ["ensayos", "C", { objeto: "analisis", borrador: true }];
+    } else if (anEstado === "en_revision") {
+      etapa = "analisis";
       siguiente = { label: "Revisar análisis", href: `/muestras/analisis/${an.id}`, accion: "revisar" };
+      requiere = ["ensayos", "R"];
     } else if (anEstado === "revisado") {
       etapa = "analisis";
       siguiente = { label: "Aprobar análisis", href: `/muestras/analisis/${an.id}`, accion: "aprobar" };
+      requiere = ["ensayos", "A"];
     } else if (!inf) {
       etapa = "informe";
       siguiente = { label: "Crear informe", href: `/informes/nuevo?recepcion=${id}`, accion: "capturar" };
+      requiere = ["informes", "C", { objeto: "informe", borrador: true }];
     } else if (infEstado === "borrador") {
       etapa = "informe";
       siguiente = { label: "Revisar informe", href: `/informes/${inf.id}`, accion: "revisar" };
+      requiere = ["informes", "R"];
     } else if (infEstado === "en_revision") {
       etapa = "informe";
       siguiente = { label: "Autorizar informe", href: `/informes/${inf.id}`, accion: "aprobar" };
+      requiere = ["informes", "A"];
     } else if (infEstado === "autorizado") {
       etapa = "informe";
-      siguiente = { label: "Registrar entrega", href: `/informes/${inf.id}`, accion: "cerrar" };
+      siguiente = { label: "Liberar informe", href: `/informes/${inf.id}`, accion: "aprobar" };
+      requiere = ["informes", "A"];
+    } else if (infEstado === "liberado") {
+      etapa = "informe";
+      siguiente = { label: "Enviar informe por correo", href: `/informes/${inf.id}`, accion: "cerrar" };
+      requiere = ["informes", "A"];
     } else {
       etapa = "cierre";
       siguiente = { label: "Registrar disposición final", href: `/muestras/recepcion/${id}`, accion: "cerrar" };
+      requiere = ["muestras", "A"];
+    }
+    // Si la persona no puede dar ese paso, se muestra como pendiente (sin boton de accion) y enlaza a la recepcion.
+    if (!permisoDe(permiso.auth, requiere[0], requiere[1], requiere[2])) {
+      siguiente = { label: `Pendiente: ${siguiente.label.charAt(0).toLowerCase()}${siguiente.label.slice(1)}`, href: `/muestras/recepcion/${id}`, accion: "ver" };
     }
 
     const order: StepKey[] = ["recepcion", "procesamiento", "extraccion", "analisis", "informe"];
@@ -180,15 +204,21 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
     const stateFor = (index: number): StepState => (index < currentIndex ? "done" : index === currentIndex ? "current" : "pending");
     const pasos: FlowStep[] = [
       { key: "recepcion", label: "Recepción", state: stateFor(0), folio, href: `/muestras/recepcion/${id}`, detail: aceptada ? (decision === "aceptada_con_desviacion" ? "Aceptada con desviación" : "Aceptada") : "Sin decisión de aceptación" },
-      { key: "procesamiento", label: "Procesamiento", state: stateFor(1), folio: proc ? `P ${pad(proc.folio_num)}` : null, href: proc ? `/muestras/procesamiento/${proc.id}` : null, detail: proc ? fmtDate(proc.fecha_procesamiento) : null },
-      { key: "extraccion", label: "Extracción", state: stateFor(2), folio: exts.length ? exts.map((e) => `${e.tipo_registro || "E-A"} ${pad(e.folio_num)}`).join(" · ") : null, href: ext ? `/muestras/extraccion/${ext.id}` : null, detail: faltaTipo ? `Falta la extracción ${faltaTipo === "E-D" ? "DSP" : "ASP"}` : exts.length ? exts.map((e) => (String(e.tipo_registro) === "E-D" ? "DSP" : "ASP")).join(" + ") : tipoExtraccion ? (tipoExtraccion === "E-D" ? "DSP" : "ASP") : null },
-      { key: "analisis", label: "Análisis", state: stateFor(3), folio: ans.length ? ans.map((a) => `A ${pad(a.folio_num)}`).join(" · ") : null, href: an ? `/muestras/analisis/${an.id}` : null, detail: extSinAnalisis && an ? `Falta el análisis ${String(extSinAnalisis.tipo_registro) === "E-D" ? "DSP" : "ASP"}` : an ? (anEstado === "aprobado" ? (ans.length > 1 ? "Aprobados" : "Aprobado") : anEstado === "revisado" ? "Revisado, falta aprobar" : "Registrado, falta revisar") : null },
-      { key: "informe", label: "Informe", state: stateFor(4), folio: inf ? `IR ${pad(inf.folio_num)}${Number(inf.version || 1) > 1 ? ` v${inf.version}` : ""}` : null, href: inf ? `/informes/${inf.id}` : null, detail: inf ? ({ borrador: "Borrador", en_revision: "En revisión", autorizado: "Autorizado, falta entregar", entregado: "Entregado" } as Record<string, string>)[infEstado] || infEstado : null },
+      { key: "procesamiento", label: "Procesamiento", state: stateFor(1), folio: proc ? `P ${numeroFolio(proc.folio_num)}` : null, href: proc ? `/muestras/procesamiento/${proc.id}` : null, detail: proc ? fmtDate(proc.fecha_procesamiento) : null },
+      { key: "extraccion", label: "Extracción", state: stateFor(2), folio: exts.length ? exts.map((e) => `${e.tipo_registro || "E-A"} ${numeroFolio(e.folio_num)}`).join(" · ") : null, href: ext ? `/muestras/extraccion/${ext.id}` : null, detail: faltaTipo ? `Falta la extracción ${faltaTipo === "E-D" ? "DSP" : "ASP"}` : exts.length ? exts.map((e) => (String(e.tipo_registro) === "E-D" ? "DSP" : "ASP")).join(" + ") : tipoExtraccion ? (tipoExtraccion === "E-D" ? "DSP" : "ASP") : null },
+      { key: "analisis", label: "Análisis", state: stateFor(3), folio: ans.length ? ans.map((a) => `A ${numeroFolio(a.folio_num)}`).join(" · ") : null, href: an ? `/muestras/analisis/${an.id}` : null, detail: extSinAnalisis && an ? `Falta el análisis ${String(extSinAnalisis.tipo_registro) === "E-D" ? "DSP" : "ASP"}` : an ? (anEstado === "aprobado" ? (ans.length > 1 ? "Aprobados" : "Aprobado") : anEstado === "revisado" ? "Revisado, falta aprobar" : anEstado === "en_revision" ? "Enviado a revisión, falta revisar" : "Registrado, falta enviar a revisión") : null },
+      { key: "informe", label: "Informe", state: stateFor(4), folio: inf ? `IR ${numeroFolio(inf.folio_num)}${Number(inf.version || 1) > 1 ? ` v${inf.version}` : ""}` : null, href: inf ? `/informes/${inf.id}` : null, detail: inf ? ({ borrador: "Borrador", en_revision: "En revisión", autorizado: "Autorizado, falta liberar", liberado: "Liberado, falta enviar", enviado: "Enviado" } as Record<string, string>)[infEstado] || infEstado : null },
     ];
+
+    const revision = (etapa === "analisis" && (anEstado === "en_revision" || anEstado === "revisado")) || (etapa === "informe" && !!inf && (infEstado === "borrador" || infEstado === "en_revision"));
+    const marcas = [r.actualizado_en, proc?.actualizado_en, inf?.actualizado_en, ...exts.map((e) => e.actualizado_en), ...ans.map((a) => a.actualizado_en)].map((v) => String(v || "")).filter(Boolean);
 
     return {
       id,
       folio,
+      etapa_flujo: revision ? "revision" : etapa,
+      asignados: asignaciones.filter((a) => Number(a.recepcion_id) === id).map((a) => ({ id: Number(a.id), nombre: (a.nombre as string | null) ?? null, email: (a.email as string | null) ?? null, avatar: (a.avatar as string | null) ?? null })),
+      ultimo_movimiento: marcas.length ? marcas.sort().at(-1) || null : null,
       cliente: (r.solicitante as string | null) || null,
       muestras,
       analisis_tipos: tipos,
@@ -198,87 +228,36 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
       etapa,
       siguiente,
       pasos,
+      nota: String(r.estado) === "liberada" ? "Falta disposición final" : null,
     };
   });
 
   /* Lo más urgente primero: quien espera una firma, luego lo más antiguo. */
-  const weight: Record<FlowItem["siguiente"]["accion"], number> = { aprobar: 0, revisar: 1, capturar: 2, cerrar: 3 };
-  items.sort((a, b) => weight[a.siguiente.accion] - weight[b.siguiente.accion] || b.dias - a.dias);
+  const weight: Record<FlowItem["siguiente"]["accion"], number> = { aprobar: 0, revisar: 1, capturar: 2, cerrar: 3, ver: 4 };
+  // Fase 6: las recepciones liberadas (solo falta la disposicion final) van al final.
+  items.sort((a, b) => Number(!!a.nota) - Number(!!b.nota) || weight[a.siguiente.accion] - weight[b.siguiente.accion] || b.dias - a.dias);
 
   const resumen: Record<string, number> = {};
-  for (const item of items) resumen[item.etapa] = (resumen[item.etapa] || 0) + 1;
+  for (const item of items) resumen[item.etapa_flujo] = (resumen[item.etapa_flujo] || 0) + 1;
+  // Alcance "estado": folio, solicitante, fechas y estado; sin muestras, analisis ni enlaces a ensayos.
+  if (soloEstado(permiso)) {
+    const recortados = items.map((item) => ({ ...item, muestras: [], analisis_tipos: [], pasos: item.pasos.map((paso) => ({ ...paso, href: paso.key === "recepcion" ? paso.href : null, detail: null }))}));
+    return json({ items: recortados, resumen, total, solo_estado: true });
+  }
   return json({ items, resumen, total });
 }
 
-/* ---------- Avisos con detalle ---------- */
+/* ---------- Avisos con detalle ("Para ti") ---------- */
 
-interface AvisoItem {
-  label: string;
-  sub: string | null;
-  href: string;
-}
-
-interface Aviso {
-  key: string;
-  label: string;
-  tone: "danger" | "warning" | "info";
-  count: number;
-  href: string;
-  items: AvisoItem[];
-}
-
+/*
+ * Los pendientes de la persona agrupados, con su cuenta y los primeros seis
+ * elementos. Salen de la misma fuente que la campana (src/lib/server/pendientes.ts),
+ * asi que ningun pendiente aparece en uno y falta en el otro.
+ */
 export async function inicioAvisos({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "dashboard", "read");
-  await ensureReactivosSchema(s);
-  await ensureConsumiblesSchema(s);
-  await ensureEquiposSchema(s);
-  await ensureMantenimientosSchema(s);
-  await ensureAnalysisSchema(s);
-  await ensureInformesSchema(s);
-
-  const today = isSqlite() ? "date('now')" : "CURDATE()";
-  const in30 = isSqlite() ? "date('now', '+30 days')" : "DATE_ADD(CURDATE(), INTERVAL 30 DAY)";
-  const nombreReactivo = "COALESCE(NULLIF(producto, ''), NULLIF(nombre, ''), NULLIF(item_name, ''), 'Reactivo')";
-
-  /* Cada aviso: la cuenta completa (COUNT) y solo los primeros seis elementos para el detalle. */
-  const MAX_ITEMS = 6;
-  const fetch = async (from: string, select: string, order: string): Promise<{ count: number; rows: Row[] }> => {
-    const [count, rows] = await Promise.all([s.scalar(`SELECT COUNT(*) ${from}`), s.query(`SELECT ${select} ${from} ORDER BY ${order} LIMIT ${MAX_ITEMS}`)]);
-    return { count: Number(count || 0), rows };
-  };
-  const [mantVencidos, mantProximos, equiposCal, reactivosBajos, consumiblesBajos, analisisPendientes, informesRevision, informesEntrega] = await Promise.all([
-    fetch(`FROM mantenimientos mt LEFT JOIN equipos e ON e.id = mt.id_equipo WHERE mt.estado = 'vencido' OR (mt.fecha_programada < ${today} AND mt.estado IN ('programado', 'en_proceso'))`, "mt.id, mt.tipo, mt.fecha_programada, e.nombre AS equipo, e.clave_bitacora", "mt.fecha_programada ASC"),
-    fetch(`FROM mantenimientos mt LEFT JOIN equipos e ON e.id = mt.id_equipo WHERE mt.fecha_programada BETWEEN ${today} AND ${in30} AND mt.estado IN ('programado', 'en_proceso')`, "mt.id, mt.tipo, mt.fecha_programada, e.nombre AS equipo, e.clave_bitacora", "mt.fecha_programada ASC"),
-    fetch(`FROM equipos WHERE COALESCE(activo, 1) = 1 AND (estado IN ('calibracion_pendiente', 'fuera_servicio') OR (fecha_prox_calibracion IS NOT NULL AND fecha_prox_calibracion < ${today}))`, "id, nombre, clave_bitacora, estado, fecha_prox_calibracion", "fecha_prox_calibracion ASC"),
-    fetch(
-      `FROM reactivos WHERE COALESCE(activo, 1) = 1 AND cantidad_actual IS NOT NULL AND (cantidad_actual <= 0 OR (COALESCE(stock_minimo, 0) > 0 AND cantidad_actual <= stock_minimo) OR (COALESCE(stock_minimo, 0) <= 0 AND COALESCE(stock_maximo, 0) > 0 AND cantidad_actual <= stock_maximo * 0.2))`,
-      `id, ${nombreReactivo} AS nombre, cantidad_actual, unidad, stock_minimo, stock_maximo`,
-      "cantidad_actual ASC",
-    ),
-    fetch("FROM consumibles WHERE COALESCE(activo, 1) = 1 AND COALESCE(piezas, 0) <= 5", "id, producto, piezas", "piezas ASC"),
-    fetch("FROM muestras_analisis a LEFT JOIN muestras_recepcion r ON r.id = a.recepcion_id WHERE a.estado IN ('registrado', 'revisado')", "a.id, a.folio_num, a.estado, a.tipo_analisis, r.solicitante", "a.id ASC"),
-    fetch("FROM informes WHERE estado IN ('borrador', 'en_revision')", "id, folio_num, version, estado, cliente_json", "id ASC"),
-    fetch("FROM informes WHERE estado = 'autorizado'", "id, folio_num, version, estado, cliente_json", "id ASC"),
-  ]);
-
-  const cliente = (row: Row) => {
-    const value = safeJson<{ nombre?: string }>(row.cliente_json, {});
-    return value.nombre || null;
-  };
-  const TIPO_MANT: Record<string, string> = { preventivo: "Preventivo", correctivo: "Correctivo", calibracion: "Calibración", verificacion: "Verificación" };
-  const build = (key: string, label: string, tone: Aviso["tone"], href: string, data: { count: number; rows: Row[] }, map: (row: Row) => AvisoItem): Aviso => ({ key, label, tone, count: data.count, href, items: data.rows.map(map) });
-
-  const avisos: Aviso[] = [
-    build("mant_vencidos", "Mantenimientos vencidos", "danger", "/inventario/mantenimiento?filtro=vencido", mantVencidos, (m) => ({ label: String(m.equipo || "Equipo"), sub: `${TIPO_MANT[String(m.tipo)] || m.tipo || "Mantenimiento"} · programado ${fmtDate(m.fecha_programada)}`, href: "/inventario/mantenimiento?filtro=vencido" })),
-    build("equipos_cal", "Equipos con alerta de calibración", "warning", "/inventario/equipos?filtro=calibracion", equiposCal, (e) => ({ label: String(e.nombre || "Equipo"), sub: String(e.estado) === "fuera_servicio" ? "Fuera de servicio" : e.fecha_prox_calibracion ? `Calibración vencida el ${fmtDate(e.fecha_prox_calibracion)}` : "Calibración pendiente", href: `/inventario/equipos?buscar=${encodeURIComponent(String(e.nombre || ""))}` })),
-    build("reactivos_bajos", "Reactivos con stock bajo", "warning", "/inventario/reactivos?filtro=bajo", reactivosBajos, (r) => ({ label: String(r.nombre), sub: Number(r.cantidad_actual) <= 0 ? "Agotado" : `Quedan ${Number(r.cantidad_actual)} ${r.unidad || ""}`.trim(), href: `/inventario/reactivos?buscar=${encodeURIComponent(String(r.nombre))}` })),
-    build("consumibles_bajos", "Consumibles con 5 piezas o menos", "warning", "/inventario/consumibles?filtro=bajo", consumiblesBajos, (c) => ({ label: String(c.producto || "Consumible"), sub: Number(c.piezas) <= 0 ? "Agotado" : `${Number(c.piezas)} pieza${Number(c.piezas) === 1 ? "" : "s"}`, href: `/inventario/consumibles?buscar=${encodeURIComponent(String(c.producto || ""))}` })),
-    build("analisis_pendientes", "Análisis esperando revisión o aprobación", "info", "/muestras/analisis?filtro=pendiente", analisisPendientes, (a) => ({ label: `A ${pad(a.folio_num)}`, sub: `${String(a.estado) === "revisado" ? "Falta aprobar" : "Falta revisar"}${a.solicitante ? ` · ${a.solicitante}` : ""}`, href: `/muestras/analisis/${a.id}` })),
-    build("informes_revision", "Informes por revisar o autorizar", "info", "/informes?filtro=pendiente", informesRevision, (i) => ({ label: `IR ${pad(i.folio_num)}${Number(i.version || 1) > 1 ? ` v${i.version}` : ""}`, sub: `${String(i.estado) === "en_revision" ? "Falta autorizar" : "Borrador, falta revisar"}${cliente(i) ? ` · ${cliente(i)}` : ""}`, href: `/informes/${i.id}` })),
-    build("informes_entrega", "Informes autorizados sin entregar", "info", "/informes?filtro=autorizado", informesEntrega, (i) => ({ label: `IR ${pad(i.folio_num)}${Number(i.version || 1) > 1 ? ` v${i.version}` : ""}`, sub: cliente(i) || "Falta registrar la entrega", href: `/informes/${i.id}` })),
-    build("mant_proximos", "Mantenimientos en los próximos 30 días", "info", "/inventario/mantenimiento?filtro=proximo", mantProximos, (m) => ({ label: String(m.equipo || "Equipo"), sub: `${TIPO_MANT[String(m.tipo)] || m.tipo || "Mantenimiento"} · ${fmtDate(m.fecha_programada)}`, href: "/inventario/mantenimiento?filtro=proximo" })),
-  ].filter((a) => a.count > 0);
-
-  return json({ items: avisos, total: avisos.reduce((sum, a) => sum + a.count, 0) });
+  const auth = await cargarAutorizacion(s, user);
+  const grupos = await pendientesDe(s, auth);
+  const items = grupos.map((g) => ({ key: g.key, label: g.label, tone: g.tone, count: g.count, href: g.href, items: g.eventos.slice(0, 6).map((e) => ({ label: e.registro, sub: e.detalle, href: e.href, persona_id: e.persona_id ?? null, persona: e.persona ?? null })) }));
+  return json({ items, total: items.reduce((sum, a) => sum + a.count, 0) });
 }

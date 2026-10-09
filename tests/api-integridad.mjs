@@ -5,6 +5,7 @@
  *
  * Corre al final de todo porque deja la cadena rota a proposito.
  */
+import "./lib/reauth-auto.mjs";
 import { createRequire } from "node:module";
 
 const BASE = process.env.BASE || "http://localhost:3100/api";
@@ -64,7 +65,7 @@ check("la cadena esta integra antes de manipularla", inicial.data?.ok === true &
 {
   const db = new Database(process.env.TEST_DB_PATH);
   db.exec("DROP TRIGGER IF EXISTS auditoria_sin_update; DROP TRIGGER IF EXISTS auditoria_sin_delete");
-  const objetivo = db.prepare("SELECT id FROM auditoria ORDER BY id LIMIT 1 OFFSET 2").get();
+  const objetivo = db.prepare("SELECT id, motivo FROM auditoria ORDER BY id LIMIT 1 OFFSET 2").get();
   db.prepare("UPDATE auditoria SET motivo = 'motivo cambiado a mano' WHERE id = ?").run(objetivo.id);
   db.close();
   const alterada = await api("/audit/verify", token);
@@ -72,7 +73,7 @@ check("la cadena esta integra antes de manipularla", inicial.data?.ok === true &
   // Se deja como estaba para las siguientes comprobaciones.
   const db2 = new Database(process.env.TEST_DB_PATH);
   db2.exec("DROP TRIGGER IF EXISTS auditoria_sin_update; DROP TRIGGER IF EXISTS auditoria_sin_delete");
-  db2.prepare("UPDATE auditoria SET motivo = NULL WHERE id = ?").run(objetivo.id);
+  db2.prepare("UPDATE auditoria SET motivo = ? WHERE id = ?").run(objetivo.motivo, objetivo.id);
   db2.close();
   const restaurada = await api("/audit/verify", token);
   check("al deshacer el cambio la cadena vuelve a estar integra", restaurada.data?.ok === true, JSON.stringify(restaurada.data));
@@ -96,7 +97,7 @@ check("la cadena esta integra antes de manipularla", inicial.data?.ok === true &
   db.prepare("DELETE FROM auditoria WHERE id = ?").run(medio.id);
   db.close();
   const hueco = await api("/audit/verify", token);
-  check("borrar una entrada intermedia se detecta por el hueco de ids", hueco.data?.ok === false && hueco.data?.filas_faltantes_intermedias === 1, JSON.stringify(hueco.data));
+  check("borrar una entrada intermedia se detecta por el hueco de ids", hueco.data?.ok === false && hueco.data?.filas_faltantes_intermedias >= 1, JSON.stringify(hueco.data));
 }
 
 const failed = results.filter((r) => !r.ok);

@@ -28,6 +28,8 @@ export interface Session {
   scalar<T = unknown>(sql: string, params?: Params): Promise<T | null>;
   execute(sql: string, params?: Params): Promise<ExecuteResult>;
   commit(): Promise<void>;
+  /* Fase 12: true si ya se confirmo algo en esta sesion (entonces un reintento repetiria efectos). */
+  readonly confirmado: boolean;
   rollback(): Promise<void>;
 }
 
@@ -95,7 +97,31 @@ function getSqliteDb(): SqliteDatabase {
   const Database = require("better-sqlite3") as typeof import("better-sqlite3");
   const config = getConfig();
   sqliteDb = new Database(config.SQLITE_PATH || ":memory:");
+  aplicarPragmasSqlite(sqliteDb);
   return sqliteDb;
+}
+
+/*
+ * Fase 12: configuracion de SQLite para produccion (README.md).
+ * - journal_mode=WAL: los lectores no bloquean al escritor ni al reves (los
+ *   scripts de respaldo, verificacion y pruebas leen mientras el servidor escribe).
+ * - synchronous=NORMAL: con WAL es seguro ante caidas de la aplicacion y del
+ *   sistema operativo (una caida de corriente puede perder solo la ultima
+ *   transaccion confirmada, nunca corromper la base); FULL hace fsync en cada
+ *   commit y no aporta integridad adicional con WAL.
+ * - busy_timeout=5000: si otro proceso (un script) tiene la base, se espera
+ *   hasta 5 s en lugar de fallar con SQLITE_BUSY.
+ * - foreign_keys=ON: el esquema SQLite no declara llaves foraneas hoy
+ *   (foreign_key_check sin violaciones en la base real); se activa para que
+ *   las que se agreguen en migraciones futuras se cumplan.
+ */
+export const PRAGMAS_SQLITE = { journal_mode: "WAL", synchronous: "NORMAL", busy_timeout: 5000, foreign_keys: "ON" } as const;
+
+function aplicarPragmasSqlite(db: SqliteDatabase): void {
+  if ((getConfig().SQLITE_PATH || ":memory:") !== ":memory:") db.pragma(`journal_mode = ${PRAGMAS_SQLITE.journal_mode}`);
+  db.pragma(`synchronous = ${PRAGMAS_SQLITE.synchronous}`);
+  db.pragma(`busy_timeout = ${PRAGMAS_SQLITE.busy_timeout}`);
+  db.pragma(`foreign_keys = ${PRAGMAS_SQLITE.foreign_keys}`);
 }
 
 function withSqliteLock<T>(fn: () => Promise<T>): Promise<T> {
@@ -110,6 +136,7 @@ function withSqliteLock<T>(fn: () => Promise<T>): Promise<T> {
 class SqliteSession implements Session {
   readonly dialect: Dialect = "sqlite";
   private inTransaction = false;
+  confirmado = false;
 
   constructor(private readonly db: SqliteDatabase) {}
 
@@ -157,6 +184,7 @@ class SqliteSession implements Session {
     if (this.inTransaction) {
       this.db.exec("COMMIT");
       this.inTransaction = false;
+      this.confirmado = true;
     }
   }
 
@@ -198,6 +226,13 @@ function getMysqlPool(): MysqlPool {
     multipleStatements: false,
     connectionLimit: 10,
     charset: "utf8mb4",
+    // Fase 3: los TIMESTAMP (CURRENT_TIMESTAMP) se guardan y leen en UTC, igual que en SQLite;
+    // la interfaz los muestra en America/Tijuana (src/lib/shared/fechas.ts).
+    timezone: "Z",
+  });
+  // Cada conexion nueva trabaja en UTC, sin importar la zona del servidor MySQL.
+  (mysqlPool as unknown as { pool: { on: (evento: string, fn: (conn: { query: (sql: string) => void }) => void) => void } }).pool.on("connection", (conn) => {
+    conn.query("SET time_zone = '+00:00'");
   });
   return mysqlPool;
 }
@@ -205,6 +240,7 @@ function getMysqlPool(): MysqlPool {
 class MysqlSession implements Session {
   readonly dialect: Dialect = "mysql";
   private inTransaction = false;
+  confirmado = false;
 
   constructor(private readonly connection: MysqlConnection) {}
 
@@ -245,6 +281,7 @@ class MysqlSession implements Session {
     if (this.inTransaction) {
       await this.connection.commit();
       this.inTransaction = false;
+      this.confirmado = true;
     }
   }
 
@@ -296,6 +333,21 @@ export function isIntegrityError(error: unknown): boolean {
     code === "ER_ROW_IS_REFERENCED_2" ||
     /constraint failed/i.test(message)
   );
+}
+
+/*
+ * Fase 12: choque de unicidad de una serie con folio. SQLite nombra la columna
+ * ("UNIQUE constraint failed: muestras_recepcion.folio_num"); MySQL/MariaDB nombra
+ * el indice, y un UNIQUE sin nombre toma el de su primera columna: el de
+ * extracciones es (tipo_registro, folio_num) -> "for key '...tipo_registro'".
+ * Tambien el codigo automatico de los reportes de mantenimiento.
+ */
+const RE_CHOQUE_FOLIO = /folio|for key '(?:[\w$]+\.)?tipo_registro'|reportes_mantenimiento\.codigo|for key '(?:reportes_mantenimiento\.)?codigo'/i;
+export function esConflictoDeFolio(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = String((error as { code?: unknown }).code || "");
+  const message = String((error as { message?: unknown }).message || "");
+  return (code === "ER_DUP_ENTRY" || code.startsWith("SQLITE_CONSTRAINT") || /constraint failed/i.test(message)) && RE_CHOQUE_FOLIO.test(message);
 }
 
 export function isOperationalError(error: unknown): boolean {

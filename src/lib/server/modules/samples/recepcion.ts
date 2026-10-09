@@ -1,12 +1,24 @@
-import { requireUser, userIdFromClaims } from "../../auth";
+import { formatearFolio } from "../../../shared/folios";
+import { conSolicitudesYPuede } from "../../puede-registro";
+import { requireUser, userIdFromClaims, type CurrentUser } from "../../auth";
+import { incidenciaPorDecisionRecepcion } from "../calidad/automaticas";
+import { actorDe } from "../calidad/comun";
 import { registrarAuditoria, snapshotRow } from "../../audit";
-import { isSqlite, type Row, type Session } from "../../db";
-import { intParam, json, readJson, type RouteContext } from "../../http";
-import { requirePermission } from "../../rbac";
-import { addColumnIfMissing, markSchemaReady, schemaReady } from "../../schema";
-import { anularRegistro, assertEditable, deletionNotAllowed, ensureAnulacionColumns, folioLabel, isFolioConflict, nextFolioNum, readMotivo, restaurarRegistro } from "../../samples-flow";
-import { ACCEPTANCE_DECISIONS, DISPOSAL_TYPES } from "../../../shared/sgc";
+import { type Row, type Session } from "../../db";
+import { HttpError, intParam, json, readJson, type RouteContext } from "../../http";
+import { cargoActuante, permisoDe, requirePermission, soloEstado, type Permiso } from "../../rbac";
+import { exigirReauth } from "../../seguridad";
+import { crearSolicitud, detalleSolicitud, exigirSinSolicitudPendiente, respuestaSolicitud, serializarSolicitud, type ContextoEjecucion } from "../../solicitudes";
+import { aplicarSupervision, exigirSinSupervisionPendiente, filtroSupervision, marcaSupervision } from "../../supervision";
+
+import { anularOSolicitar, assertEditableAsync, deletionNotAllowed, folioLabel, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
+import { ACCEPTANCE_DECISIONS, DISPOSAL_TYPES, RECEPTION_STATE_RANK } from "../../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
+
+import { exigirAutorizaciones } from "../../autorizaciones";
+import { requisitosRecepcion } from "../../../shared/autorizaciones";
+import { exigirVistaAsignada, filtroAsignadas, soloAsignado } from "../../asignaciones";
+import { guardarFirmantes, resolverFirmantes, verificarFirmasConPassword, type RolFirma } from "../../firmas";
 
 /*
  * Portado de modules/samples/recepcion.py del backend Flask original.
@@ -18,88 +30,20 @@ import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from
 
 const TABLE = "muestras_recepcion";
 
-export async function ensureSamplesRecepcionSchema(s: Session): Promise<void> {
-  if (schemaReady("muestras_recepcion")) return;
-  await s.execute(
-    isSqlite()
-      ? `
-      CREATE TABLE IF NOT EXISTS muestras_recepcion (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        folio_num INTEGER NOT NULL UNIQUE,
-        tipo_registro VARCHAR(2) NOT NULL DEFAULT 'R',
-        clave_revision VARCHAR(50) DEFAULT 'FX-TCF-GMR',
-        fecha_emision DATE DEFAULT NULL,
-        fecha_recepcion DATE DEFAULT NULL,
-        hora_recepcion VARCHAR(20) DEFAULT NULL,
-        recibido_por VARCHAR(150) DEFAULT NULL,
-        medio_recepcion VARCHAR(50) DEFAULT NULL,
-        solicitante VARCHAR(180) DEFAULT NULL,
-        muestra_unica INTEGER DEFAULT 0,
-        fecha_muestra DATE DEFAULT NULL,
-        id_interno VARCHAR(100) DEFAULT NULL,
-        especificaciones TEXT,
-        lote_muestras_json TEXT,
-        analisis_json TEXT,
-        inspeccion_json TEXT,
-        datos_solicitante_json TEXT,
-        datos_custodio_json TEXT,
-        decision_aceptacion VARCHAR(30) DEFAULT NULL,
-        aceptacion_json TEXT,
-        disposicion_json TEXT,
-        estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
-        creado_por INTEGER DEFAULT NULL,
-        actualizado_por INTEGER DEFAULT NULL,
-        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-      `
-      : `
-      CREATE TABLE IF NOT EXISTS muestras_recepcion (
-        id INT NOT NULL AUTO_INCREMENT,
-        folio_num INT NOT NULL,
-        tipo_registro VARCHAR(2) NOT NULL DEFAULT 'R',
-        clave_revision VARCHAR(50) DEFAULT 'FX-TCF-GMR',
-        fecha_emision DATE DEFAULT NULL,
-        fecha_recepcion DATE DEFAULT NULL,
-        hora_recepcion VARCHAR(20) DEFAULT NULL,
-        recibido_por VARCHAR(150) DEFAULT NULL,
-        medio_recepcion VARCHAR(50) DEFAULT NULL,
-        solicitante VARCHAR(180) DEFAULT NULL,
-        muestra_unica TINYINT(1) DEFAULT 0,
-        fecha_muestra DATE DEFAULT NULL,
-        id_interno VARCHAR(100) DEFAULT NULL,
-        especificaciones TEXT,
-        lote_muestras_json LONGTEXT,
-        analisis_json LONGTEXT,
-        inspeccion_json LONGTEXT,
-        datos_solicitante_json LONGTEXT,
-        datos_custodio_json LONGTEXT,
-        decision_aceptacion VARCHAR(30) DEFAULT NULL,
-        aceptacion_json LONGTEXT,
-        disposicion_json LONGTEXT,
-        estado VARCHAR(30) NOT NULL DEFAULT 'registrada',
-        creado_por INT DEFAULT NULL,
-        actualizado_por INT DEFAULT NULL,
-        creado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-        actualizado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        UNIQUE KEY uq_muestras_recepcion_folio_num (folio_num),
-        KEY idx_muestras_recepcion_creado_por (creado_por),
-        KEY idx_muestras_recepcion_actualizado_por (actualizado_por),
-        CONSTRAINT fk_muestras_recepcion_creado_por FOREIGN KEY (creado_por) REFERENCES usuarios(id) ON DELETE SET NULL,
-        CONSTRAINT fk_muestras_recepcion_actualizado_por FOREIGN KEY (actualizado_por) REFERENCES usuarios(id) ON DELETE SET NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-      `,
-  );
-  await addColumnIfMissing(s, TABLE, "recibido_por", "VARCHAR(150) DEFAULT NULL");
-  await addColumnIfMissing(s, TABLE, "medio_recepcion", "VARCHAR(50) DEFAULT NULL");
-  await addColumnIfMissing(s, TABLE, "decision_aceptacion", "VARCHAR(30) DEFAULT NULL");
-  await addColumnIfMissing(s, TABLE, "aceptacion_json", "LONGTEXT");
-  await addColumnIfMissing(s, TABLE, "disposicion_json", "LONGTEXT");
-  await ensureAnulacionColumns(s, TABLE);
-  markSchemaReady("muestras_recepcion");
-}
+/* Fase 5: quien recibio se elige de las cuentas activas. */
+const FIRMAS_RECEPCION: RolFirma[] = [{ rol: "recibio", columnaNombre: "recibido_por", etiqueta: "Recibió" }];
 
+/*
+ * Alcance "estado" (muestras:V): solo folio, solicitante, fechas y estado; sin
+ * datos tecnicos, resultados ni firmas.
+ */
+const CAMPOS_ESTADO = ["id", "folio_num", "tipo_registro", "solicitante", "fecha_emision", "fecha_recepcion", "hora_recepcion", "fecha_muestra", "estado", "creado_en", "anulado_en"];
+
+function vistaEstado(row: Row): Row {
+  const out: Row = { solo_estado: true };
+  for (const campo of CAMPOS_ESTADO) if (campo in row) out[campo] = row[campo];
+  return out;
+}
 
 function serializeRow(row: Row): Row {
   const item: Row = { ...row };
@@ -200,37 +144,41 @@ function validateAcceptance(data: ReceptionData): string | null {
 function resolveState(stored: Row | null, data: ReceptionData): string {
   const current = stored ? String(stored.estado || "registrada") : "registrada";
   if (current === "anulada") return current;
+  // Fase 5: los estados que avanza el flujo (en_procesamiento ... cerrada) no se retroceden desde el formato.
+  if ((RECEPTION_STATE_RANK[current] ?? 0) >= 2) return current;
   if (data.decision_aceptacion === "rechazada") return "rechazada";
-  if (stored?.disposicion_json && current === "cerrada") return "cerrada";
-  // Estados avanzados por el sistema (en_proceso, informada, cerrada) no se retroceden desde el formato.
-  if (["en_proceso", "completada", "analizada", "informada", "cerrada"].includes(current)) return current;
+  if (data.decision_aceptacion === "aceptada_con_desviacion") return "aceptada_con_desviacion";
   if (data.decision_aceptacion) return "aceptada";
+  // Fase 3: una decision ya registrada no se quita editando (volveria a "registrada" y se anularia sin segundo usuario).
+  if (current === "aceptada" || current === "aceptada_con_desviacion" || current === "rechazada") throw new HttpError(409, { message: "La decisión de aceptación ya quedó registrada; se puede cambiar, pero no quitar", codigo: "decision_registrada" });
   return "registrada";
 }
 
-
 export async function getNextFolio({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "read");
-  await ensureSamplesRecepcionSchema(s);
+  await requirePermission(s, user, "muestras", "V");
   return json({ next_folio: await nextFolioNum(s, TABLE) });
 }
 
 export async function listReceptionSamples({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "read");
-  await ensureSamplesRecepcionSchema(s);
+  const permiso = await requirePermission(s, user, "muestras", "V");
 
   const search = searchParam(request, "search");
   const includeAnuladas = searchParam(request, "anuladas") === "1";
+  const supFiltro = filtroSupervision(request, "", permiso.auth.userId);
+  // Fase 5: alcance "asignado" (solo lo asignado o registrado por la persona) y filtro "Mis muestras".
+  const asignadas = await filtroAsignadas(s, permiso.auth.userId, "id", soloAsignado(permiso) || searchParam(request, "mias") === "1", "creado_por");
   const rows = await s.query(
     `
     SELECT id, folio_num, tipo_registro, clave_revision, fecha_emision,
            fecha_recepcion, hora_recepcion, recibido_por, medio_recepcion,
            solicitante, id_interno, muestra_unica, analisis_json, decision_aceptacion,
-           estado, motivo_anulacion, anulado_en, creado_en
+           estado, motivo_anulacion, anulado_en, creado_en, supervision_estado, supervisor_id
     FROM muestras_recepcion
     WHERE (:incluir_anuladas = 1 OR estado <> 'anulada')
+      ${supFiltro.sql}
+      ${asignadas.sql}
       AND (:search = ''
        OR solicitante LIKE :search_like
        OR recibido_por LIKE :search_like
@@ -239,10 +187,11 @@ export async function listReceptionSamples({ request, s }: RouteContext): Promis
     ORDER BY folio_num DESC
     LIMIT 400
     `,
-    { search, search_like: `%${search}%`, incluir_anuladas: includeAnuladas ? 1 : 0 },
+    { search, search_like: `%${search}%`, incluir_anuladas: includeAnuladas ? 1 : 0, ...supFiltro.params, ...asignadas.params },
   );
   return json({
-    items: rows.map((row) => {
+    items: (await conSolicitudesYPuede(s, user, TABLE, rows)).map((row) => {
+      if (soloEstado(permiso)) return vistaEstado(row);
       const item: Row = { ...row, analisis: safeJsonLoad(row.analisis_json, {}) };
       delete item.analisis_json;
       return item;
@@ -254,30 +203,42 @@ export async function listReceptionSamples({ request, s }: RouteContext): Promis
 export async function getReceptionSample({ request, s, params }: RouteContext): Promise<Response> {
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "read");
-  await ensureSamplesRecepcionSchema(s);
+  const permiso = await requirePermission(s, user, "muestras", "V");
 
   const row = await s.queryOne(`SELECT * FROM ${TABLE} WHERE id = :id`, { id: sampleId });
   if (!row) {
     return json({ message: "Registro no encontrado" }, 404);
   }
+  await exigirVistaAsignada(s, permiso, row);
+  if (soloEstado(permiso)) return json({ item: vistaEstado(row) });
   // Etapas derivadas, para mostrar la cadena completa desde la recepcion.
   const procesamientos = await s.query("SELECT id, folio_num, estado FROM muestras_procesamiento WHERE recepcion_id = :id ORDER BY folio_num", { id: sampleId });
-  return json({ item: { ...serializeRow(row), procesamientos } });
+  return json({ item: { ...(await conSolicitudesYPuede(s, user, TABLE, [serializeRow(row)]))[0], procesamientos } });
 }
 
 export async function createReceptionSample({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "create");
-  await ensureSamplesRecepcionSchema(s);
+  const permiso = await requirePermission(s, user, "muestras", "C", { objeto: "recepcion", borrador: true });
+  const actuo = cargoActuante(request, permiso);
+  const supervision = marcaSupervision(permiso);
 
-  const data = normalizePayload(await readJson(request));
+  const payload = await readJson(request);
+  // Contraseñas de firmantes enviadas al guardar: se verifican antes de cualquier otra escritura.
+  await verificarFirmasConPassword(s, user, payload);
+  const data = normalizePayload(payload);
+  // Fase 4: autorizacion FX-THF-AP de quien captura.
+  await exigirAutorizaciones(s, user, requisitosRecepcion());
+  if (!data.solicitante) return json({ message: "Indica el solicitante" }, 400);
   if (!data.folio_num) {
     data.folio_num = await nextFolioNum(s, TABLE);
   }
   const invalid = validateAcceptance(data);
   if (invalid) return json({ message: invalid }, 400);
+  // Fase 5: rechazo o aceptacion con desviacion los autoriza la Coord. Tecnica (muestras:A).
+  const decision = await decisionConAutorizacion(s, request, user, permiso, data, null);
   data.estado = resolveState(null, data);
+  // Fase 5: firmas ligadas a cuentas.
+  await resolverFirmantes(s, user, payload, data, FIRMAS_RECEPCION, null);
   const userId = userIdFromClaims(user);
 
   try {
@@ -291,7 +252,7 @@ export async function createReceptionSample({ request, s }: RouteContext): Promi
         lote_muestras_json, analisis_json, inspeccion_json,
         datos_solicitante_json, datos_custodio_json,
         decision_aceptacion, aceptacion_json, estado,
-        creado_por, actualizado_por
+        creado_por, actualizado_por, creado_rol_id, creado_cargo
       ) VALUES (
         :folio_num, :tipo_registro, :clave_revision, :fecha_emision,
           :fecha_recepcion, :hora_recepcion, :recibido_por, :medio_recepcion,
@@ -300,22 +261,29 @@ export async function createReceptionSample({ request, s }: RouteContext): Promi
         :lote_muestras_json, :analisis_json, :inspeccion_json,
         :datos_solicitante_json, :datos_custodio_json,
         :decision_aceptacion, :aceptacion_json, :estado,
-        :creado_por, :actualizado_por
+        :creado_por, :actualizado_por, :creado_rol_id, :creado_cargo
       )
       `,
-      { ...data, creado_por: userId, actualizado_por: userId },
+      { ...data, creado_por: userId, actualizado_por: userId, creado_rol_id: actuo.rol_id, creado_cargo: actuo.cargo },
     );
     const id = result.lastrowid as number;
+    await aplicarSupervision(s, TABLE, id, supervision, userId);
+    await guardarFirmantes(s, TABLE, id, data, FIRMAS_RECEPCION);
     const despues = await snapshotRow(s, TABLE, id);
-    await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues });
+    await registrarAuditoria(s, user, { accion: "crear", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), despues, detalle: { actuo_como: actuo } });
     if (data.decision_aceptacion) {
       await registrarAuditoria(s, user, { accion: data.decision_aceptacion === "rechazada" ? "rechazar" : "aceptar", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), detalle: { decision: data.decision_aceptacion } });
+      // Fase 11: aceptada con desviacion o rechazada -> incidencia automatica.
+      await incidenciaPorDecisionRecepcion(s, user, despues!, folioLabel(TABLE, despues), String(data.decision_aceptacion), actuo.cargo);
     }
+    const solicitud = decision ? await crearSolicitud(s, user, { tipo: "decision_recepcion", entidad: TABLE, entidadId: id, referencia: folioLabel(TABLE, despues), accion: decision.decision, datos: decision, motivo: decision.motivo, cargo: actuo.cargo }) : null;
     await s.commit();
+    if (solicitud) return json({ message: `Recepcion de muestra creada; la decision "${etiquetaDecision(solicitud.accion)}" queda pendiente de la Coord. Tecnica (solicitud #${solicitud.id})`, id, estado: data.estado, solicitud: serializarSolicitud(solicitud), codigo: "solicitud_creada" }, 201);
     return json({ message: "Recepcion de muestra creada", id, estado: data.estado }, 201);
   } catch (error) {
     await s.rollback();
-    if (isFolioConflict(error)) {
+    // Fase 12: si el folio lo asigno el servidor, el choque es de concurrencia: se relanza y apiRoute reintenta.
+    if (isFolioConflict(error) && toIntOrNull(payload.folio_num)) {
       return json({ message: "El folio ya existe" }, 409);
     }
     throw error;
@@ -325,18 +293,32 @@ export async function createReceptionSample({ request, s }: RouteContext): Promi
 export async function updateReceptionSample({ request, s, params }: RouteContext): Promise<Response> {
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "update");
-  await ensureSamplesRecepcionSchema(s);
 
   const antes = await snapshotRow(s, TABLE, sampleId);
-  assertEditable(antes, TABLE);
-  const data = normalizePayload(await readJson(request));
+  const permiso = await requirePermission(s, user, "muestras", "E", { objeto: "recepcion", borrador: String(antes?.estado || "registrada") === "registrada" });
+  const actuo = cargoActuante(request, permiso);
+  const supervision = marcaSupervision(permiso);
+  await assertEditableAsync(s, antes, TABLE);
+  // Fase 5: con alcance "asignado" solo se edita lo asignado (o registrado por la persona).
+  if (antes) await exigirVistaAsignada(s, permiso, antes);
+  const payload = await readJson(request);
+  // Contraseñas de firmantes enviadas al guardar: se verifican antes de cualquier otra escritura.
+  await verificarFirmasConPassword(s, user, payload);
+  const data = normalizePayload(payload);
+  // Fase 4: autorizacion FX-THF-AP de quien captura.
+  await exigirAutorizaciones(s, user, requisitosRecepcion());
   if (!data.folio_num) {
     return json({ message: "El folio es obligatorio" }, 400);
   }
+  // Campo 3 del formato FX-TCF-GMR: obligatorio al guardar (las recepciones anteriores sin él se abren igual).
+  if (!data.solicitante) return json({ message: "Indica el solicitante" }, 400);
+  // Fase 5: el folio ya no se edita; cambiarlo requiere solicitud (POST /folio).
+  if (antes && Number(data.folio_num) !== Number(antes.folio_num)) return json({ message: "El folio de la recepción ya no se edita; usa \"Cambiar folio\" (requiere motivo y autorización de la Coord. Técnica)", codigo: "folio_bloqueado" }, 409);
   const invalid = validateAcceptance(data);
   if (invalid) return json({ message: invalid }, 400);
+  const decision = await decisionConAutorizacion(s, request, user, permiso, data, antes);
   data.estado = resolveState(antes, data);
+  await resolverFirmantes(s, user, payload, data, FIRMAS_RECEPCION, antes);
   const userId = userIdFromClaims(user);
 
   try {
@@ -373,12 +355,17 @@ export async function updateReceptionSample({ request, s, params }: RouteContext
       await s.rollback();
       return json({ message: "Registro no encontrado" }, 404);
     }
+    await aplicarSupervision(s, TABLE, sampleId, supervision, userId);
+    await guardarFirmantes(s, TABLE, sampleId, data, FIRMAS_RECEPCION);
     const despues = await snapshotRow(s, TABLE, sampleId);
-    await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), antes, despues });
+    await registrarAuditoria(s, user, { accion: "editar", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { actuo_como: actuo } });
     if (data.decision_aceptacion && data.decision_aceptacion !== String(antes?.decision_aceptacion || "")) {
       await registrarAuditoria(s, user, { accion: data.decision_aceptacion === "rechazada" ? "rechazar" : "aceptar", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), detalle: { decision: data.decision_aceptacion } });
+      await incidenciaPorDecisionRecepcion(s, user, despues!, folioLabel(TABLE, despues), String(data.decision_aceptacion), actuo.cargo);
     }
+    const solicitud = decision ? await crearSolicitud(s, user, { tipo: "decision_recepcion", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), accion: decision.decision, datos: decision, motivo: decision.motivo, cargo: actuo.cargo }) : null;
     await s.commit();
+    if (solicitud) return respuestaSolicitud(solicitud, `la decisión "${etiquetaDecision(solicitud.accion)}" de ${solicitud.referencia}`);
     return json({ message: "Recepcion de muestra actualizada", estado: data.estado });
   } catch (error) {
     await s.rollback();
@@ -392,34 +379,31 @@ export async function updateReceptionSample({ request, s, params }: RouteContext
 /* Los registros tecnicos no se eliminan; el endpoint se conserva para responder 405 con la regla. */
 export async function deleteReceptionSample({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "delete");
+  await requirePermission(s, user, "muestras", "AN");
   return deletionNotAllowed();
 }
 
 export async function anularReceptionSample({ request, s, params }: RouteContext): Promise<Response> {
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "delete");
-  await ensureSamplesRecepcionSchema(s);
+  const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "AN"));
   const motivo = await readMotivo(request);
-  const row = await anularRegistro(s, user, TABLE, sampleId, motivo, {
-    bloqueaSi: async () => {
-      const activos = Number((await s.scalar("SELECT COUNT(*) FROM muestras_procesamiento WHERE recepcion_id = :id AND estado <> 'anulada'", { id: sampleId })) || 0);
-      return activos ? `La recepcion tiene ${activos} procesamiento(s) vigente(s); anulalos primero` : null;
-    },
-  });
+  await exigirReauth(s, request, user, "muestras:AN");
+  const { row, solicitud } = await anularOSolicitar(s, user, TABLE, sampleId, motivo, actuo);
   await s.commit();
-  return json({ message: "Recepcion anulada", item: serializeRow(row) });
+  if (solicitud) return respuestaSolicitud(solicitud, `la anulación de la recepción ${solicitud.referencia}`);
+  return json({ message: "Recepcion anulada", item: serializeRow(row!) });
 }
 
 export async function restaurarReceptionSample({ request, s, params }: RouteContext): Promise<Response> {
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "delete");
-  await ensureSamplesRecepcionSchema(s);
-  const row = await restaurarRegistro(s, user, TABLE, sampleId, await readMotivo(request));
+  const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "AN"));
+  await exigirReauth(s, request, user, "muestras:AN");
+  const { row, solicitud } = await restaurarOSolicitar(s, user, TABLE, sampleId, await readMotivo(request), actuo);
   await s.commit();
-  return json({ message: "Recepcion restaurada", item: serializeRow(row) });
+  if (solicitud) return respuestaSolicitud(solicitud, `la restauración de la recepción ${solicitud.referencia}`);
+  return json({ message: "Recepcion restaurada", item: serializeRow(row!) });
 }
 
 const DISPOSALS = new Set(DISPOSAL_TYPES.map((item) => item.value));
@@ -428,19 +412,21 @@ const DISPOSALS = new Set(DISPOSAL_TYPES.map((item) => item.value));
 export async function registrarDisposicion({ request, s, params }: RouteContext): Promise<Response> {
   const sampleId = intParam(params.id);
   const user = await requireUser(request);
-  await requirePermission(s, user, "muestras", "update");
-  await ensureSamplesRecepcionSchema(s);
+  const actuo = cargoActuante(request, await requirePermission(s, user, "muestras", "A"));
 
   const antes = await snapshotRow(s, TABLE, sampleId);
   if (!antes) return json({ message: "Recepcion no encontrada" }, 404);
   // Una muestra rechazada tambien se dispone (p. ej. se devuelve al cliente); una cerrada o anulada ya no.
   if (["cerrada", "anulada"].includes(String(antes.estado))) return json({ message: `La recepcion ${folioLabel(TABLE, antes)} ya esta ${antes.estado}; no admite otra disposicion` }, 409);
+  exigirSinSupervisionPendiente(antes, `La recepcion ${folioLabel(TABLE, antes)}`, "cerrar");
+  await exigirSinSolicitudPendiente(s, TABLE, sampleId, `La recepcion ${folioLabel(TABLE, antes)}`, "cerrar");
   const payload = await readJson(request);
   const tipo = String(payload.tipo || "").trim();
   if (!DISPOSALS.has(tipo)) return json({ message: "Selecciona el tipo de disposicion final" }, 400);
   const fecha = strippedOrNull(payload.fecha, 10);
   const responsable = strippedOrNull(payload.responsable, 180);
   if (!fecha || !responsable) return json({ message: "La fecha y el responsable de la disposicion son obligatorios" }, 400);
+  await exigirReauth(s, request, user, "muestras:A");
   const disposicion = {
     tipo,
     tipo_otro: tipo === "otro" ? strippedOrNull(payload.tipo_otro, 120) : null,
@@ -450,12 +436,134 @@ export async function registrarDisposicion({ request, s, params }: RouteContext)
     remanentes: strippedOrNull(payload.remanentes),
     observaciones: strippedOrNull(payload.observaciones),
     registrado_por: userIdFromClaims(user),
+    registrado_rol_id: actuo.rol_id,
+    registrado_cargo: actuo.cargo,
     registrado_en: new Date().toISOString(),
   };
-  await s.execute(`UPDATE ${TABLE} SET disposicion_json = :disposicion, estado = 'cerrada', actualizado_por = :usuario WHERE id = :id`, { disposicion: jsonText(disposicion), usuario: userIdFromClaims(user), id: sampleId });
+  await s.execute(`UPDATE ${TABLE} SET disposicion_json = :disposicion, estado_antes_cierre = :previo, estado = 'cerrada', actualizado_por = :usuario WHERE id = :id`, { disposicion: jsonText(disposicion), previo: String(antes.estado || ""), usuario: userIdFromClaims(user), id: sampleId });
   const despues = await snapshotRow(s, TABLE, sampleId);
-  await registrarAuditoria(s, user, { accion: "cerrar", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { disposicion: tipo } });
+  await registrarAuditoria(s, user, { accion: "cerrar", entidad: TABLE, entidadId: sampleId, referencia: folioLabel(TABLE, despues), antes, despues, detalle: { disposicion: tipo, actuo_como: actuo } });
   await s.commit();
   return json({ message: "Disposicion final registrada; la muestra queda cerrada", item: serializeRow(despues || antes!) });
 }
 
+/* ---------- Fase 5: decisiones que autoriza la Coord. Tecnica ---------- */
+
+const DECISIONES_CRITICAS = new Set(["rechazada", "aceptada_con_desviacion"]);
+const etiquetaDecision = (decision: string) => ACCEPTANCE_DECISIONS.find((d) => d.value === decision)?.label || decision;
+
+/*
+ * Rechazo o aceptacion con desviacion: si quien la registra tiene muestras:A se
+ * aplica directo (con reautenticacion); si no, el registro se guarda sin esa
+ * decision y se devuelve lo necesario para crear la solicitud.
+ */
+async function decisionConAutorizacion(s: Session, request: Request, user: CurrentUser, permiso: Permiso, data: ReceptionData, antes: Row | null): Promise<{ decision: string; aceptacion_json: string | null; motivo: string } | null> {
+  const nueva = String(data.decision_aceptacion || "");
+  if (!DECISIONES_CRITICAS.has(nueva) || nueva === String(antes?.decision_aceptacion || "")) return null;
+  if (permisoDe(permiso.auth, "muestras", "A")) {
+    await exigirReauth(s, request, user, "muestras:A");
+    return null;
+  }
+  const pedida = { decision: nueva, aceptacion_json: data.aceptacion_json, motivo: `Decisión de la recepción: ${etiquetaDecision(nueva)}` };
+  data.decision_aceptacion = (antes?.decision_aceptacion as string | null) || null;
+  data.aceptacion_json = String(antes?.aceptacion_json || jsonText({}));
+  return pedida;
+}
+
+async function recepcionOError(s: Session, id: number): Promise<Row> {
+  const row = await snapshotRow(s, TABLE, id);
+  if (!row) throw new HttpError(404, { message: "Recepción no encontrada" });
+  return row;
+}
+
+/* Ejecutor: aplica la decision aprobada por la Coord. Tecnica. */
+export async function ejecutarDecisionRecepcion(ctx: ContextoEjecucion): Promise<Record<string, unknown>> {
+  const antes = await recepcionOError(ctx.s, Number(ctx.solicitud.entidad_id));
+  if ((RECEPTION_STATE_RANK[String(antes.estado)] ?? 0) >= 2 || String(antes.estado) === "anulada") throw new HttpError(409, { message: `La recepción ${folioLabel(TABLE, antes)} ya avanzó; la decisión no se aplica` });
+  const decision = String(ctx.datos.decision || "");
+  await ctx.s.execute(`UPDATE ${TABLE} SET decision_aceptacion = :decision, aceptacion_json = COALESCE(:aceptacion, aceptacion_json), estado = :estado WHERE id = :id`, { decision, aceptacion: (ctx.datos.aceptacion_json as string | null) || null, estado: decision, id: antes.id });
+  const despues = await snapshotRow(ctx.s, TABLE, Number(antes.id));
+  await registrarAuditoria(ctx.s, ctx.user, { accion: decision === "rechazada" ? "rechazar" : "aceptar", entidad: TABLE, entidadId: Number(antes.id), referencia: folioLabel(TABLE, antes), antes, despues, motivo: ctx.motivo, detalle: { decision, actuo_como: ctx.actuo, ...detalleSolicitud(ctx.solicitud) } });
+  // Fase 11: la incidencia automatica la reporta quien tomo la decision (el solicitante), no quien la aprobo.
+  await incidenciaPorDecisionRecepcion(ctx.s, (await actorDe(ctx.s, Number(ctx.solicitud.solicitado_por))) || ctx.user, despues!, folioLabel(TABLE, antes), decision, ctx.solicitud.rol ? String(ctx.solicitud.rol) : null);
+  return { item: serializeRow(despues!) };
+}
+
+async function aplicarCambioFolio(s: Session, user: CurrentUser, antes: Row, folio: number, motivo: string, detalle: Record<string, unknown>): Promise<Row> {
+  if (await s.scalar(`SELECT id FROM ${TABLE} WHERE folio_num = :folio AND id <> :id`, { folio, id: antes.id })) throw new HttpError(409, { message: `El folio ${formatearFolio("R", folio)} ya existe` });
+  await s.execute(`UPDATE ${TABLE} SET folio_num = :folio WHERE id = :id`, { folio, id: antes.id });
+  const despues = (await snapshotRow(s, TABLE, Number(antes.id)))!;
+  await registrarAuditoria(s, user, { accion: "cambiar_folio", entidad: TABLE, entidadId: Number(antes.id), referencia: folioLabel(TABLE, despues), antes, despues, motivo, detalle: { folio_anterior: antes.folio_num, folio_nuevo: folio, ...detalle } });
+  return despues;
+}
+
+export async function ejecutarCambioFolio(ctx: ContextoEjecucion): Promise<Record<string, unknown>> {
+  const antes = await recepcionOError(ctx.s, Number(ctx.solicitud.entidad_id));
+  const despues = await aplicarCambioFolio(ctx.s, ctx.user, antes, Number(ctx.datos.folio_num), ctx.solicitud.motivo, { actuo_como: ctx.actuo, ...detalleSolicitud(ctx.solicitud) });
+  return { item: serializeRow(despues) };
+}
+
+async function aplicarReapertura(s: Session, user: CurrentUser, antes: Row, motivo: string, detalle: Record<string, unknown>): Promise<Row> {
+  const actual = String(antes.estado || "");
+  if (!["cerrada", "rechazada"].includes(actual)) throw new HttpError(409, { message: `Solo se reabre una recepción cerrada o rechazada (está "${actual}")` });
+  // Rechazada -> registrada (sin decision, para decidir de nuevo); cerrada -> el estado en que se cerro.
+  const previo = actual === "rechazada" ? "registrada" : String(antes.estado_antes_cierre || "liberada");
+  await s.execute(`UPDATE ${TABLE} SET estado = :previo${actual === "rechazada" ? ", decision_aceptacion = NULL" : ""} WHERE id = :id`, { previo, id: antes.id });
+  const despues = (await snapshotRow(s, TABLE, Number(antes.id)))!;
+  await registrarAuditoria(s, user, { accion: "reabrir", entidad: TABLE, entidadId: Number(antes.id), referencia: folioLabel(TABLE, despues), antes, despues, motivo, detalle: { de: actual, a: previo, ...detalle } });
+  return despues;
+}
+
+export async function ejecutarReapertura(ctx: ContextoEjecucion): Promise<Record<string, unknown>> {
+  const antes = await recepcionOError(ctx.s, Number(ctx.solicitud.entidad_id));
+  const despues = await aplicarReapertura(ctx.s, ctx.user, antes, ctx.solicitud.motivo, { actuo_como: ctx.actuo, ...detalleSolicitud(ctx.solicitud) });
+  return { item: serializeRow(despues) };
+}
+
+/* POST /api/samples/reception/:id/folio { folio_num, motivo }: directo con muestras:A; si no, solicitud. */
+export async function cambiarFolioRecepcion({ request, s, params }: RouteContext): Promise<Response> {
+  const user = await requireUser(request);
+  const permiso = await requirePermission(s, user, "muestras", "E", { objeto: "recepcion" });
+  const actuo = cargoActuante(request, permiso);
+  const antes = await recepcionOError(s, intParam(params.id));
+  await exigirVistaAsignada(s, permiso, antes);
+  await exigirSinSolicitudPendiente(s, TABLE, Number(antes.id), `La recepción ${folioLabel(TABLE, antes)}`, "cambiar el folio");
+  const payload = await readJson(request);
+  const folio = toIntOrNull(payload.folio_num);
+  const motivo = String(payload.motivo || "").trim();
+  if (!folio || folio < 1) return json({ message: "Indica el folio nuevo" }, 400);
+  if (folio === Number(antes.folio_num)) return json({ message: "El folio nuevo es igual al actual" }, 400);
+  if (motivo.length < 5) return json({ message: "Indica el motivo del cambio de folio (al menos 5 caracteres)" }, 400);
+  if (permisoDe(permiso.auth, "muestras", "A")) {
+    await exigirReauth(s, request, user, "muestras:A");
+    const despues = await aplicarCambioFolio(s, user, antes, folio, motivo, { actuo_como: actuo });
+    await s.commit();
+    return json({ message: `Folio cambiado a ${folioLabel(TABLE, despues)}`, item: serializeRow(despues) });
+  }
+  await exigirReauth(s, request, user, "muestras:E");
+  const solicitud = await crearSolicitud(s, user, { tipo: "cambiar_folio", entidad: TABLE, entidadId: Number(antes.id), referencia: folioLabel(TABLE, antes), accion: "cambiar_folio", datos: { folio_num: folio }, motivo, cargo: actuo.cargo });
+  await s.commit();
+  return respuestaSolicitud(solicitud, `el cambio de folio de ${solicitud.referencia} a ${formatearFolio("R", folio)}`);
+}
+
+/* POST /api/samples/reception/:id/reabrir { motivo }: directo con muestras:A; si no, solicitud. */
+export async function reabrirRecepcion({ request, s, params }: RouteContext): Promise<Response> {
+  const user = await requireUser(request);
+  const permiso = await requirePermission(s, user, "muestras", "E", { objeto: "recepcion" });
+  const actuo = cargoActuante(request, permiso);
+  const antes = await recepcionOError(s, intParam(params.id));
+  await exigirVistaAsignada(s, permiso, antes);
+  if (!["cerrada", "rechazada"].includes(String(antes.estado))) return json({ message: "Solo se reabre una recepción cerrada o rechazada" }, 409);
+  const motivo = String((await readJson(request)).motivo || "").trim();
+  if (motivo.length < 5) return json({ message: "Indica el motivo de la reapertura (al menos 5 caracteres)" }, 400);
+  if (permisoDe(permiso.auth, "muestras", "A")) {
+    await exigirReauth(s, request, user, "muestras:A");
+    const despues = await aplicarReapertura(s, user, antes, motivo, { actuo_como: actuo });
+    await s.commit();
+    return json({ message: `Recepción reabierta (${despues.estado})`, item: serializeRow(despues) });
+  }
+  await exigirReauth(s, request, user, "muestras:E");
+  const solicitud = await crearSolicitud(s, user, { tipo: "reabrir_recepcion", entidad: TABLE, entidadId: Number(antes.id), referencia: folioLabel(TABLE, antes), accion: "reabrir", motivo, cargo: actuo.cargo });
+  await s.commit();
+  return respuestaSolicitud(solicitud, `la reapertura de ${solicitud.referencia}`);
+}

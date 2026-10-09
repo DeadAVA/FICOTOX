@@ -1,9 +1,27 @@
 import { toast } from "sonner";
 
+/* Pide al visor interno (VisorPdfFlotante, montado en el AppShell) que muestre un PDF protegido por token. */
+export const EVENTO_VER_PDF = "ficotox:ver-pdf";
+export interface PeticionVerPdf {
+  url: string;
+  /* Nombre con que se descarga si la persona pulsa Descargar. */
+  nombre: string;
+  titulo?: string;
+}
+
 /*
- * Abre en una pestaña nueva un archivo protegido por token (PDF de informe,
- * archivo de documento controlado): se descarga con el encabezado
- * Authorization y se muestra desde un blob local.
+ * Ver un PDF dentro de la plataforma: sin pestaña nueva y sin descarga
+ * automatica; descargar es una accion explicita del visor.
+ */
+export function verPdf(url: string, nombre: string, titulo?: string): void {
+  window.dispatchEvent(new CustomEvent<PeticionVerPdf>(EVENTO_VER_PDF, { detail: { url, nombre, titulo } }));
+}
+
+/*
+ * Abre en una pestaña nueva un archivo protegido por token que no es un PDF
+ * (por ejemplo, la evidencia de un envio, que puede ser una imagen): se baja
+ * con el encabezado Authorization y se muestra desde un blob local. Solo se
+ * descarga si el navegador bloquea la pestaña nueva.
  */
 export async function openProtectedFile(url: string, token: string, filename?: string): Promise<void> {
   try {
@@ -20,8 +38,10 @@ export async function openProtectedFile(url: string, token: string, filename?: s
     }
     const blob = await res.blob();
     const objectUrl = URL.createObjectURL(blob);
-    const opened = window.open(objectUrl, "_blank", "noopener");
-    if (!opened) {
+    // Sin "noopener" en las caracteristicas: con ese valor window.open siempre devuelve null y se descargaria ademas.
+    const opened = window.open(objectUrl, "_blank");
+    if (opened) opened.opener = null;
+    else {
       const link = document.createElement("a");
       link.href = objectUrl;
       link.download = filename || "archivo";

@@ -1,256 +1,270 @@
 "use client";
 
-import Link from "next/link";
-import { Fragment, useMemo, useState } from "react";
-import { toast } from "sonner";
-import { ArrowSquareOut, CaretDown, ShieldCheck, ShieldWarning } from "@phosphor-icons/react";
-import { ChangeList } from "@/components/features/audit/AuditTimeline";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActividadDialog, agruparActividades, ListaActividades, usePersonas } from "@/components/features/audit/Actividades";
+import { CATEGORIAS, type Categoria } from "@/components/features/audit/categorias";
+import { Callout } from "@/components/features/samples/FormLayout";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
-import { Button } from "@/components/ui/Button";
-import { Field, Input } from "@/components/ui/Field";
-import { FilterChips, FilterMenu, type FilterGroup } from "@/components/ui/FilterMenu";
+import { DateInput } from "@/components/ui/DateInput";
+import { FilterMenu, type FilterGroup, type FilterToggle } from "@/components/ui/FilterMenu";
 import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
-import { Badge, EmptyState, ErrorState, TableSkeleton } from "@/components/ui/Primitives";
-import { CellPrimary, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
+import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Primitives";
 import { cn } from "@/components/ui/cn";
-import { humanizeAuditEntry, timeLabel } from "@/lib/client/audit-humanize";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
-import { fmt, fmtDate } from "@/lib/client/format";
+import { fmt } from "@/lib/client/format";
 import { useDebouncedValue } from "@/lib/client/hooks";
-import { useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
-import { AUDIT_ACTIONS, AUDIT_ENTITIES } from "@/lib/shared/sgc";
+import { hoyLocal, sumarDias } from "@/lib/shared/fechas";
 
-const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+/*
+ * Auditoria: la actividad de la plataforma en lenguaje simple. Una barra con
+ * el buscador y un boton "Filtros" (como en Muestras); la lista agrupada por
+ * dia; al pulsar una actividad, su detalle en una ventana centrada. La
+ * verificacion de la cadena de la bitacora corre en segundo plano y solo se
+ * nota si encuentra un problema. La bitacora no se exporta (decision del
+ * laboratorio). Solo interfaz: la bitacora, sus sellos, permisos y alcances
+ * no cambian.
+ */
 
-interface Integridad {
-  ok: boolean;
-  total: number;
-  primer_error: number | null;
-  filas_faltantes_al_final?: number;
-  filas_faltantes_intermedias?: number;
-  triggers_ok?: boolean;
-}
+type Periodo = "hoy" | "7" | "30" | "todo" | "rango";
+const PERIODOS: Array<{ value: Periodo; label: string }> = [
+  { value: "hoy", label: "Hoy" },
+  { value: "7", label: "Últimos 7 días" },
+  { value: "30", label: "Últimos 30 días" },
+  { value: "todo", label: "Todo" },
+  { value: "rango", label: "Personalizado" },
+];
 
-/* Qué falló exactamente en la verificación, en una frase. */
-function integridadDetalle(r: Integridad): string {
-  if (r.primer_error) return `Alterada desde la entrada #${r.primer_error}`;
-  if (r.filas_faltantes_intermedias) return `Faltan ${fmt(r.filas_faltantes_intermedias)} entradas intermedias`;
-  if (r.filas_faltantes_al_final) return `Faltan ${fmt(r.filas_faltantes_al_final)} entradas al final`;
-  if (r.triggers_ok === false) return "Sin protección contra cambios";
-  return "Verificación fallida";
-}
+/* Areas de la plataforma y los registros que abarca cada una. */
+const AREAS: Array<{ value: string; label: string; entidades: string[] }> = [
+  { value: "muestras", label: "Muestras", entidades: ["muestras_recepcion", "muestras_procesamiento", "muestras_extraccion", "muestras_analisis"] },
+  { value: "informes", label: "Informes", entidades: ["informes"] },
+  { value: "inventario", label: "Inventario", entidades: ["reactivos", "consumibles"] },
+  { value: "equipos", label: "Equipos", entidades: ["equipos", "mantenimientos", "reportes_mantenimiento"] },
+  { value: "calidad", label: "Calidad", entidades: ["incidencias", "no_conformidades", "acciones_correctivas", "suspensiones", "respaldos", "auditoria"] },
+  { value: "biblioteca", label: "Biblioteca", entidades: ["biblioteca_documentos", "biblioteca_categorias", "documentos_sgc"] },
+  { value: "usuarios", label: "Usuarios y accesos", entidades: ["usuarios", "roles", "sesion"] },
+];
 
+const PAGINA = 60;
 
 export default function AuditoriaPage() {
   return (
     <PageBody>
-      <RequireModule modules="auditoria">
+      <RequireModule modules="calidad">
         <AuditoriaContent />
       </RequireModule>
     </PageBody>
   );
 }
 
+/* Alterna un valor dentro de una lista (filtros de varias opciones). */
+const alternar = <T,>(lista: T[], valor: T, encendido: boolean) => (encendido ? [...new Set([...lista, valor])] : lista.filter((v) => v !== valor));
+
 function AuditoriaContent() {
   const { token } = useSession();
+  const personas = usePersonas();
   const [search, setSearch] = useState("");
-  const [entidad, setEntidad] = useState("");
-  const [accion, setAccion] = useState("");
-  const [usuario, setUsuario] = useState("");
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
-  const [open, setOpen] = useState<Set<number>>(new Set());
-  const [integridad, setIntegridad] = useState<Integridad | null>(null);
-  const [verificando, setVerificando] = useState(false);
+  const [periodo, setPeriodo] = useState<Periodo>("30");
+  const [desdeRango, setDesdeRango] = useState("");
+  const [hastaRango, setHastaRango] = useState("");
+  const [usuarios, setUsuarios] = useState<string[]>([]);
+  const [tipos, setTipos] = useState<Categoria[]>([]);
+  const [areas, setAreas] = useState<string[]>([]);
+  const [conAccesos, setConAccesos] = useState(false);
+  const [registros, setRegistros] = useState<ApiRecord[] | null>(null);
+  const [hayMas, setHayMas] = useState(false);
+  const [cargandoMas, setCargandoMas] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [recarga, setRecarga] = useState(0);
+  const [seleccion, setSeleccion] = useState<number | null>(null);
+  const [alterada, setAlterada] = useState(false);
+  const [cuentas, setCuentas] = useState<ApiRecord[]>([]);
   const debounced = useDebouncedValue(search);
-  const debouncedUsuario = useDebouncedValue(usuario);
+  const centinela = useRef<HTMLDivElement>(null);
 
-  const resource = useResource<{ items: ApiRecord[]; summary: ApiRecord }>(
-    "auditoria",
-    async () => {
-      const query = new URLSearchParams({ search: debounced.trim(), entidad, accion, usuario: debouncedUsuario.trim(), desde, hasta, limit: "300" });
-      const [list, summary] = await Promise.all([getJsonAuth(`${API_BASE_URL}/audit?${query.toString()}`, token), getJsonAuth(`${API_BASE_URL}/audit/summary`, token).catch(() => ({}) as ApiRecord)]);
-      return { items: (list.items || []) as ApiRecord[], summary: summary as ApiRecord };
+  const hoy = hoyLocal();
+  const { desde, hasta } = useMemo(() => {
+    if (periodo === "hoy") return { desde: hoy, hasta: hoy };
+    if (periodo === "7") return { desde: sumarDias(hoy, -6), hasta: hoy };
+    if (periodo === "30") return { desde: sumarDias(hoy, -29), hasta: hoy };
+    if (periodo === "rango") return { desde: desdeRango, hasta: hastaRango };
+    return { desde: "", hasta: "" };
+  }, [periodo, hoy, desdeRango, hastaRango]);
+
+  const filtros = useMemo(() => {
+    const params = new URLSearchParams({ search: debounced.trim(), desde, hasta });
+    if (usuarios.length) params.set("usuarios", usuarios.join(","));
+    if (tipos.length) params.set("acciones", CATEGORIAS.filter((c) => tipos.includes(c.value)).flatMap((c) => c.acciones).join(","));
+    if (areas.length) params.set("entidades", AREAS.filter((a) => areas.includes(a.value)).flatMap((a) => a.entidades).join(","));
+    if (!conAccesos) params.set("sin_accesos", "1");
+    return params;
+  }, [debounced, desde, hasta, usuarios, tipos, areas, conAccesos]);
+  const claveFiltros = filtros.toString();
+
+  const pedir = useCallback(
+    async (antesDe?: number) => {
+      const params = new URLSearchParams(filtros);
+      params.set("limit", String(PAGINA));
+      if (antesDe) params.set("antes_de", String(antesDe));
+      const data = await getJsonAuth(`${API_BASE_URL}/audit?${params.toString()}`, token);
+      return (data.items || []) as ApiRecord[];
     },
-    { enabled: !!token, deps: [debounced, entidad, accion, debouncedUsuario, desde, hasta] },
+    [filtros, token],
   );
-  const items = resource.data?.items;
-  const summary = resource.data?.summary || {};
-  const rows = useMemo(() => (items || []).map(humanizeAuditEntry), [items]);
-  const toggle = (id: number) =>
-    setOpen((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+
+  // Primera pagina: se reinicia al cambiar cualquier filtro.
+  useEffect(() => {
+    if (!token) return;
+    let cancelado = false;
+    (async () => {
+      await Promise.resolve();
+      if (cancelado) return;
+      setRegistros(null);
+      setError(null);
+      setSeleccion(null);
+      try {
+        const items = await pedir();
+        if (cancelado) return;
+        setRegistros(items);
+        setHayMas(items.length >= PAGINA);
+      } catch (err) {
+        if (!cancelado) setError(err instanceof Error ? err.message : "No se pudo cargar la actividad");
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [token, claveFiltros, pedir, recarga]);
+
+  const cargarMas = useCallback(async () => {
+    if (!registros?.length || cargandoMas || !hayMas) return;
+    setCargandoMas(true);
+    try {
+      const items = await pedir(Number(registros[registros.length - 1].id));
+      setRegistros((prev) => [...(prev || []), ...items]);
+      setHayMas(items.length >= PAGINA);
+    } catch {
+      setHayMas(false);
+    } finally {
+      setCargandoMas(false);
+    }
+  }, [registros, cargandoMas, hayMas, pedir]);
+
+  // Carga progresiva: al acercarse al final de la lista se pide la pagina siguiente.
+  useEffect(() => {
+    const el = centinela.current;
+    if (!el || !hayMas) return;
+    const observer = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && void cargarMas(), { rootMargin: "400px" });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [cargarMas, hayMas]);
+
+  // Al abrir: verificacion de la cadena en segundo plano (solo se nota si falla) y personas para el filtro.
+  useEffect(() => {
+    if (!token) return;
+    let cancelado = false;
+    getJsonAuth(`${API_BASE_URL}/audit/verify`, token)
+      .then((data) => !cancelado && setAlterada(data.ok === false))
+      .catch(() => undefined);
+    getJsonAuth(`${API_BASE_URL}/cuentas/activas`, token)
+      .then((data) => !cancelado && setCuentas((data.items || []) as ApiRecord[]))
+      .catch(() => undefined);
+    return () => {
+      cancelado = true;
+    };
+  }, [token]);
+
+  const grupos = useMemo(() => agruparActividades(registros || [], { personas }), [registros, personas]);
 
   const groups: FilterGroup[] = [
-    { key: "entidad", label: "Entidad", value: entidad, defaultValue: "", onChange: setEntidad, options: [{ value: "", label: "Todas" }, ...Object.entries(AUDIT_ENTITIES).map(([value, label]) => ({ value, label }))] },
-    { key: "accion", label: "Acción", value: accion, defaultValue: "", onChange: setAccion, options: [{ value: "", label: "Todas" }, ...Object.entries(AUDIT_ACTIONS).map(([value, label]) => ({ value, label }))] },
+    {
+      key: "periodo",
+      label: "Periodo",
+      value: periodo,
+      defaultValue: "30",
+      showDefault: true,
+      options: PERIODOS,
+      onChange: (v) => setPeriodo(v as Periodo),
+      extra:
+        periodo === "rango" ? (
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex flex-col gap-1 text-[12px] text-ink-3">
+              Desde
+              <DateInput id="aud-desde" small value={desdeRango} onChange={setDesdeRango} aria-label="Desde" />
+            </label>
+            <label className="flex flex-col gap-1 text-[12px] text-ink-3">
+              Hasta
+              <DateInput id="aud-hasta" small value={hastaRango} onChange={setHastaRango} aria-label="Hasta" />
+            </label>
+          </div>
+        ) : undefined,
+    },
   ];
-
-  const verificar = async () => {
-    setVerificando(true);
-    try {
-      const data = await getJsonAuth(`${API_BASE_URL}/audit/verify`, token);
-      const result = data as Integridad;
-      setIntegridad(result);
-      if (result.ok) toast.success(`Cadena íntegra: ${fmt(result.total)} entradas verificadas`);
-      else toast.error(integridadDetalle(result));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo verificar");
-    } finally {
-      setVerificando(false);
-    }
-  };
+  const toggles: FilterToggle[] = [
+    ...cuentas.map((c) => ({ key: `persona-${String(c.email)}`, label: String(c.nombre || c.email), group: "Personas", checked: usuarios.includes(String(c.email)), onChange: (on: boolean) => setUsuarios((l) => alternar(l, String(c.email), on)) })),
+    ...CATEGORIAS.map((c) => ({ key: `tipo-${c.value}`, label: c.label, group: "Tipo de actividad", checked: tipos.includes(c.value), onChange: (on: boolean) => setTipos((l) => alternar(l, c.value, on)) })),
+    ...AREAS.map((a) => ({ key: `area-${a.value}`, label: a.label, group: "Área", checked: areas.includes(a.value), onChange: (on: boolean) => setAreas((l) => alternar(l, a.value, on)) })),
+    { key: "accesos", label: "Mostrar inicios de sesión", group: "Vista", checked: conAccesos, onChange: setConAccesos },
+  ];
+  const filtrando = !!search.trim() || periodo !== "30" || usuarios.length > 0 || tipos.length > 0 || areas.length > 0 || conAccesos;
 
   return (
     <>
-      <PageHeader
-        title="Auditoría"
-        description="Quién hizo qué, cuándo y por qué. Solo lectura: cada entrada guarda el dato anterior y el nuevo, el motivo y un sello encadenado con la entrada previa (ISO/IEC 17025 7.5.2 y 7.11)."
-        actions={
-          <>
-            {integridad ? (
-              <Badge tone={integridad.ok ? "success" : "danger"} dot>
-                {integridad.ok ? `Íntegra · ${fmt(integridad.total)} entradas` : integridadDetalle(integridad)}
-              </Badge>
-            ) : null}
-            <Button variant="secondary" icon={integridad && !integridad.ok ? <ShieldWarning size={16} /> : <ShieldCheck size={16} />} loading={verificando} onClick={verificar}>
-              Verificar integridad
-            </Button>
-          </>
-        }
-      />
+      <PageHeader title="Auditoría" description="Quién hizo qué, cuándo y por qué en la plataforma." />
 
-      <Toolbar
-        end={
-          resource.data ? (
-            <p className="tnum text-[12.5px] text-ink-3">
-              Total <span className="font-medium text-ink">{fmt(summary.total || 0)}</span> · 30 días <span className="font-medium text-ink">{fmt(summary.ultimos_30_dias || 0)}</span> · Anulaciones <span className="font-medium text-ink">{fmt(summary.anulaciones || 0)}</span> · Accesos fallidos{" "}
-              <span className={cn("font-medium", summary.accesos_fallidos_30_dias ? "text-danger" : "text-ink")}>{fmt(summary.accesos_fallidos_30_dias || 0)}</span>
-            </p>
-          ) : null
-        }
-      >
-        <SearchInput value={search} onChange={setSearch} placeholder="Folio, referencia o motivo" className="w-full md:w-[340px]" />
-        <FilterMenu groups={groups}>
-          <Field label="Usuario" htmlFor="aud-usuario">
-            <Input id="aud-usuario" value={usuario} onChange={(event) => setUsuario(event.target.value)} placeholder="Nombre o correo" />
-          </Field>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Desde" htmlFor="aud-desde">
-              <Input id="aud-desde" type="date" value={desde} onChange={(event) => setDesde(event.target.value)} />
-            </Field>
-            <Field label="Hasta" htmlFor="aud-hasta">
-              <Input id="aud-hasta" type="date" value={hasta} onChange={(event) => setHasta(event.target.value)} />
-            </Field>
-          </div>
-        </FilterMenu>
-        <FilterChips groups={groups} />
-        {usuario || desde || hasta ? (
-          <button type="button" onClick={() => { setUsuario(""); setDesde(""); setHasta(""); }} className="press inline-flex h-7 items-center gap-1 rounded-full bg-brand-soft px-2.5 text-[12.5px] font-medium text-brand-strong">
-            {[usuario ? `Usuario: ${usuario}` : null, desde ? `Desde ${fmtDate(desde)}` : null, hasta ? `Hasta ${fmtDate(hasta)}` : null].filter(Boolean).join(" · ")} <span aria-hidden="true" className="text-brand">×</span>
-          </button>
-        ) : null}
+      {alterada ? (
+        <Callout tone="danger" title="Se detectó un posible cambio no autorizado en el registro de actividad" className="mb-4">
+          Avisa a la Coordinación de Mejora Continua.
+        </Callout>
+      ) : null}
+
+      <Toolbar>
+        <SearchInput value={search} onChange={setSearch} placeholder="Buscar por folio, persona o motivo" className="w-full md:w-[340px]" />
+        <FilterMenu groups={groups} toggles={toggles} vistaAlFinal />
       </Toolbar>
 
-      <TableShell footer={items ? `${fmt(items.length)} movimientos, del más reciente al más antiguo${items.length >= 300 ? " · se muestran los 300 más recientes; acota con los filtros para ver más atrás" : ""}` : undefined}>
-        {resource.error ? (
-          <ErrorState message={resource.error} onRetry={resource.reload} />
-        ) : !items ? (
-          <TableSkeleton cols={6} />
-        ) : !rows.length ? (
-          <EmptyState title="Sin movimientos" description="No hay entradas con esos filtros." />
+      <div className="overflow-hidden rounded-card bg-surface shadow-card" aria-label="Actividades">
+        {error ? (
+          <ErrorState message={error} onRetry={() => setRecarga((n) => n + 1)} />
+        ) : !registros ? (
+          <EsqueletoLista filas={8} />
+        ) : !grupos.length ? (
+          <EmptyState title="Sin actividad" description={filtrando ? "No hay actividades con estos filtros." : "Todavía no hay actividad en este periodo."} />
         ) : (
-          <Table>
-            <THead>
-              <tr>
-                <Th>Fecha</Th>
-                <Th>Usuario</Th>
-                <Th>Acción</Th>
-                <Th>Qué pasó</Th>
-                <Th>Registro</Th>
-                <Th align="right" sticky />
-              </tr>
-            </THead>
-            <TBody>
-              {rows.map((entry) => {
-                const expanded = open.has(entry.id);
-                const hasDetails = entry.changes.length > 0;
-                const sub = [entry.motivo ? `“${entry.motivo}”` : null, ...entry.facts].filter(Boolean).join(" · ");
-                return (
-                  <Fragment key={entry.id}>
-                    <Tr interactive={hasDetails} onClick={hasDetails ? () => toggle(entry.id) : undefined} aria-expanded={hasDetails ? expanded : undefined}>
-                      <Td className="whitespace-nowrap">
-                        <CellPrimary title={entry.when ? fmtDate(entry.when) : "—"} subtitle={timeLabel(entry.when)} />
-                      </Td>
-                      <Td className="max-w-[170px]">
-                        <CellPrimary title={entry.actor || "—"} subtitle={entry.actorEmail || undefined} />
-                      </Td>
-                      <Td>
-                        <Badge tone={entry.tone} dot>
-                          {AUDIT_ACTIONS[entry.verb] || entry.verb}
-                        </Badge>
-                      </Td>
-                      <Td className="min-w-[240px] max-w-[400px]">
-                        <CellPrimary title={capitalize(entry.action)} subtitle={sub || undefined} />
-                      </Td>
-                      <Td className="min-w-[190px] max-w-[220px] whitespace-nowrap">
-                        {entry.verb === "login" || entry.verb === "login_fallido" ? (
-                          <span className="text-ink-4">—</span>
-                        ) : (
-                          <CellPrimary
-                            title={entry.entityLabel}
-                            subtitle={
-                              entry.reference ? (
-                                <span className="inline-flex items-center gap-1.5">
-                                  <span className="code">{entry.reference}</span>
-                                  {entry.href ? (
-                                    <Link href={entry.href} onClick={(event) => event.stopPropagation()} className="inline-flex items-center gap-0.5 text-brand hover:underline">
-                                      Abrir <ArrowSquareOut size={11} />
-                                    </Link>
-                                  ) : null}
-                                </span>
-                              ) : undefined
-                            }
-                          />
-                        )}
-                      </Td>
-                      <Td align="right" sticky className="whitespace-nowrap">
-                        {hasDetails ? (
-                          <span className="inline-flex items-center gap-1 text-[12.5px] font-medium text-brand">
-                            {entry.changes.length === 1 ? "1 cambio" : `${entry.changes.length} cambios`}
-                            <CaretDown size={12} weight="bold" className={cn("transition-transform", expanded && "rotate-180")} />
-                          </span>
-                        ) : (
-                          <span className="text-[12.5px] text-ink-4">Sin cambios</span>
-                        )}
-                      </Td>
-                    </Tr>
-                    {expanded ? (
-                      <tr className="bg-surface-2/50">
-                        <td colSpan={6} className="px-6 py-4">
-                          <ChangeList changes={entry.changes} />
-                          {entry.hash ? (
-                            <p className="mt-3 inline-flex items-center gap-1 text-[11px] text-ink-4" title="Sello de integridad: cada entrada firma la anterior; si alguien altera la bitácora, la cadena se rompe.">
-                              <ShieldCheck size={12} /> Sello <span className="code">{entry.hash.slice(0, 12)}</span>
-                            </p>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-            </TBody>
-          </Table>
+          <>
+            <ListaActividades grupos={grupos} seleccion={seleccion} onAbrir={setSeleccion} />
+            <div ref={centinela} />
+            {cargandoMas ? <EsqueletoLista filas={3} /> : null}
+          </>
         )}
-      </TableShell>
+      </div>
+      {registros && grupos.length ? (
+        <p className="tnum mt-2 px-1 text-[12px] text-ink-4" data-audit-resumen>
+          {fmt(registros.length)}
+          {hayMas ? "+" : ""} {registros.length === 1 ? "actividad" : "actividades"}
+        </p>
+      ) : null}
+
+      <ActividadDialog grupos={grupos} indice={seleccion} onIndice={setSeleccion} onCerrar={() => setSeleccion(null)} />
     </>
+  );
+}
+
+function EsqueletoLista({ filas }: { filas: number }) {
+  return (
+    <div className="flex flex-col divide-y divide-line" aria-hidden="true">
+      {Array.from({ length: filas }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 px-4 py-3">
+          <Skeleton className="h-8 w-8 rounded-full" />
+          <div className="flex flex-1 flex-col gap-1.5">
+            <Skeleton className={cn("h-3.5", i % 3 === 0 ? "w-3/4" : i % 3 === 1 ? "w-2/3" : "w-1/2")} />
+            <Skeleton className="h-3 w-1/4" />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
