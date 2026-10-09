@@ -6,8 +6,6 @@
  */
 
 export const EXTENSIONES_BIBLIOTECA = ["pdf", "png", "jpg", "jpeg", "webp", "tif", "tiff", "docx", "xlsx", "xls", "pptx", "csv", "txt", "md", "zip"] as const;
-export type ExtensionBiblioteca = (typeof EXTENSIONES_BIBLIOTECA)[number];
-
 /* Tipo MIME con que se sirve cada extension (nunca el que manda el navegador). */
 export const MIME_BIBLIOTECA: Record<string, string> = {
   pdf: "application/pdf",
@@ -64,10 +62,6 @@ export const TIPOS_ARCHIVO = [
   { value: "texto", label: "Texto", extensiones: ["txt", "md"] },
   { value: "zip", label: "Comprimido", extensiones: ["zip"] },
 ] as const;
-export const tipoArchivoDe = (ext: string): string => TIPOS_ARCHIVO.find((t) => (t.extensiones as readonly string[]).includes(String(ext || "").toLowerCase()))?.value || "otro";
-
-export const CATEGORIAS_SEMILLA = ["Manual de Calidad", "Procedimientos", "Instructivos", "Formatos", "Normas y regulación", "Artículos y referencias", "Otros"] as const;
-
 export const BIBLIOTECA_MAX_MB_DEFAULT = 50;
 export const MOTIVO_MIN_BIBLIOTECA = 5;
 /* Texto extraido de un PDF que se guarda para buscar (caracteres). */

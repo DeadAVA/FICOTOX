@@ -56,37 +56,6 @@ export const ALCANCES_LEGIBLES: Record<string, { opcion: string; frase: string }
 
 const unir = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}`);
 
-/* "Qué puede hacer": una frase por area con permisos (las areas sin permisos no aparecen). */
-export function quepuedeHacer(filas: unknown): Array<{ area: string; frase: string }> {
-  const porArea = new Map<string, Map<string, Accion[]>>();
-  for (const fila of Array.isArray(filas) ? (filas as PermisoFila[]) : []) {
-    if (!fila || !isModulo(fila.modulo) || !isAccion(fila.accion)) continue;
-    const grupos = porArea.get(fila.modulo) || new Map<string, Accion[]>();
-    const alcance = String(fila.alcance || "total");
-    grupos.set(alcance, [...(grupos.get(alcance) || []), fila.accion]);
-    porArea.set(fila.modulo, grupos);
-  }
-  const out: Array<{ area: string; frase: string }> = [];
-  for (const area of AREAS_PERMISOS) {
-    const grupos = porArea.get(area.clave);
-    if (!grupos) continue;
-    // Administrar todo (G total) lo incluye todo.
-    if (grupos.get("total")?.includes("G")) {
-      out.push({ area: area.nombre, frase: "puede hacer todo y administrarlo" });
-      continue;
-    }
-    const partes = [...grupos.entries()]
-      .sort(([a], [b]) => (a === "total" ? -1 : b === "total" ? 1 : 0))
-      .map(([alcance, acciones]) => {
-        const verbos = [...new Set(acciones)].sort((x, y) => ACCION_KEYS.indexOf(x) - ACCION_KEYS.indexOf(y)).map((a) => ACCIONES_LEGIBLES[a].verbo);
-        const complemento = ALCANCES_LEGIBLES[alcance]?.frase ?? "";
-        return [unir(verbos), complemento].filter(Boolean).join(" ");
-      });
-    out.push({ area: area.nombre, frase: partes.join("; ") });
-  }
-  return out;
-}
-
 /* ---------- "Qué puede hacer en la plataforma": frases por area ---------- */
 
 /* Lo que se maneja en cada area (objeto de las frases). */

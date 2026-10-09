@@ -28,7 +28,7 @@ import { safeJsonLoad } from "../helpers";
 
 const TABLE = "muestras_recepcion";
 
-export interface Etiqueta {
+interface Etiqueta {
   folio: string;
   id_interno: string;
   organismo: string;

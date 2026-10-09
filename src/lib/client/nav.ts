@@ -49,7 +49,7 @@ export const SAMPLE_TABS: NavChild[] = [
   { href: "/informes", label: "Informes", module: "informes" },
 ];
 
-export const NAV_ITEMS: NavItem[] = [
+const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Inicio", modules: [], description: "Búsqueda y lo pendiente", icon: "house" },
   { href: "/muestras", label: "Muestras", modules: ["muestras", "ensayos", "informes"], description: "Recepción, procesamiento, extracción, análisis e informes", icon: "testtube", children: [...SAMPLE_TABS, { href: "/supervision", label: "Por supervisar" }, { href: "/solicitudes", label: "Por autorizar" }] },
   {
@@ -89,7 +89,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-export function canAny(permissions: PermissionsMap, modules: Modulo[], action: ModuleAction = "V"): boolean {
+function canAny(permissions: PermissionsMap, modules: Modulo[], action: ModuleAction = "V"): boolean {
   if (!modules.length) return true;
   return modules.some((moduleKey) => !!permissions[moduleKey]?.[action]);
 }
@@ -100,7 +100,7 @@ export function isActivePath(pathname: string, href: string): boolean {
 }
 
 /* Hijos que la persona puede ver; sin `module` heredan los modulos del padre. */
-export function visibleChildren(item: NavItem, permissions: PermissionsMap): NavChild[] {
+function visibleChildren(item: NavItem, permissions: PermissionsMap): NavChild[] {
   return (item.children || []).filter((child) => {
     if (child.visible) return child.visible(permissions);
     if (!child.module) return canAny(permissions, item.modules);

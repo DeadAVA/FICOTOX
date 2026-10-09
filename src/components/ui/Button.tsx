@@ -4,8 +4,8 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { CircleNotch } from "@phosphor-icons/react";
 import { cn } from "./cn";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "soft";
-export type ButtonSize = "sm" | "md" | "lg";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "soft";
+type ButtonSize = "sm" | "md" | "lg";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;

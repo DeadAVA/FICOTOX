@@ -38,7 +38,7 @@ const MAX_BYTES = 15 * 1024 * 1024;
 /* ---------- Utilidades ---------- */
 
 /* h***@cofepris.gob.mx: el correo parcialmente oculto para la bitacora. */
-export function correoOculto(correo: string): string {
+function correoOculto(correo: string): string {
   const [usuario, dominio] = String(correo || "").split("@");
   if (!dominio) return "***";
   return `${usuario.slice(0, 1)}***@${dominio}`;
@@ -57,7 +57,7 @@ function informesDir(): string {
 }
 
 /* Configuracion SMTP: todas las variables o ninguna. */
-export function smtpConfig(): { host: string; port: number; user: string; pass: string; from: string } | null {
+function smtpConfig(): { host: string; port: number; user: string; pass: string; from: string } | null {
   const host = (process.env.SMTP_HOST || "").trim();
   const port = Number(process.env.SMTP_PORT || 0);
   const user = (process.env.SMTP_USER || "").trim();

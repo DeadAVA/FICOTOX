@@ -23,7 +23,7 @@ async function nextReportCode(s: Session, mantenimientoId: number): Promise<stri
 }
 
 /* Equivalente de werkzeug.utils.secure_filename. */
-export function secureFilename(filename: string): string {
+function secureFilename(filename: string): string {
   let value = filename.normalize("NFKD").replace(/[^\x00-\x7F]/g, "");
   value = value.replace(/[/\\]/g, " ");
   value = value

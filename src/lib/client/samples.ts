@@ -1,4 +1,3 @@
-import { SAMPLE_ANALYSIS_LABELS, SAMPLE_MATRIX_LABELS } from "./constants";
 import type { ApiRecord } from "./types";
 import { SAMPLE_STATES, SAMPLE_TERMINAL_STATES } from "../shared/sgc";
 
@@ -31,38 +30,6 @@ export const sampleStatusLabel = (status: unknown): string => {
 
 /* Un registro anulado, rechazado o cerrado ya no se edita. */
 export const isSampleReadOnly = (status: unknown): boolean => SAMPLE_TERMINAL_STATES.has(normalizeSampleStatus(status));
-
-export const getSampleAnalysisSummary = (item: ApiRecord): string => {
-  const analysis = item.analisis || {};
-  const values: string[] = Array.isArray(analysis.tipos) ? analysis.tipos : [];
-  const labels = values.map((value) => SAMPLE_ANALYSIS_LABELS[value] || value).filter(Boolean);
-  if (analysis.metodo_otro) {
-    labels.push(analysis.metodo_otro);
-  }
-  return labels.length ? labels.join(", ") : "-";
-};
-
-export const getSampleTypeSummary = (item: ApiRecord): string => {
-  const analysis = item.analisis || {};
-  const matrix: string[] = Array.isArray(analysis.tipos_muestra) ? analysis.tipos_muestra : [];
-  const matrixLabel = matrix.map((value) => SAMPLE_MATRIX_LABELS[value] || value).filter(Boolean).join(", ");
-  if (matrixLabel) {
-    return matrixLabel;
-  }
-  if (item.muestra_unica) {
-    return "Muestra única";
-  }
-  return "Lote";
-};
-
-export const samplePriorityLabel = (priority = "normal"): { normalized: string; label: string } => {
-  const normalized = String(priority || "normal").toLowerCase();
-  const labels: Record<string, string> = { normal: "Normal", alta: "Alta", urgente: "Urgente" };
-  return { normalized, label: labels[normalized] || priority };
-};
-
-/* Nombre de radio por requisito de inspeccion (btoa(unescape(encodeURIComponent(req))).slice(0, 12)). */
-export const inspectionRadioName = (requirement: string): string => `insp-${btoa(unescape(encodeURIComponent(requirement))).slice(0, 12)}`;
 
 export const getExtractionRowsFromProcessing = (processing: ApiRecord | null): ApiRecord[] => {
   if (!processing) {

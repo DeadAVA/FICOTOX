@@ -31,7 +31,7 @@ const ETIQUETA_ACCION: Record<string, string> = {
   permisos: "cambiar los permisos de un rol",
 };
 
-export function describirAccion(accion: string): string {
+function describirAccion(accion: string): string {
   const [, clave] = accion.split(":");
   return ETIQUETA_ACCION[clave] || "realizar esta acción";
 }

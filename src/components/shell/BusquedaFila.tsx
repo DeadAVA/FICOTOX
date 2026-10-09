@@ -29,8 +29,8 @@ const ICONO: Record<TipoResultado, ReactNode> = {
   ayuda: <Question size={17} />,
 };
 
-export const iconoDeConsulta = <ClockCounterClockwise size={17} />;
-export const iconoDeTipo = (tipo: TipoResultado | null | undefined): ReactNode => (tipo ? ICONO[tipo] : iconoDeConsulta);
+const iconoDeConsulta = <ClockCounterClockwise size={17} />;
+const iconoDeTipo = (tipo: TipoResultado | null | undefined): ReactNode => (tipo ? ICONO[tipo] : iconoDeConsulta);
 
 const TONO: Partial<Record<TipoResultado, string>> = {
   accion: "bg-brand-soft text-brand-strong",

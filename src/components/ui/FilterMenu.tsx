@@ -18,7 +18,7 @@ import { cn } from "./cn";
  * gris con su nota ("Proximamente").
  */
 
-export interface FilterOption<T extends string = string> {
+interface FilterOption<T extends string = string> {
   value: T;
   label: ReactNode;
   count?: number | null;

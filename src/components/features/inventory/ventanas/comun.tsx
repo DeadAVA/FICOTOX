@@ -207,7 +207,7 @@ export function IconoOrigen({ m }: { m: ApiRecord }) {
 }
 
 /* Movimientos (los ultimos de la plataforma) de un insumo, para su ventana. */
-export function useMovimientos(): { items: ApiRecord[] | null; error: string | null } {
+function useMovimientos(): { items: ApiRecord[] | null; error: string | null } {
   const { token } = useSession();
   const recurso = useResource<ApiRecord[]>(["movimientos", "movimientos-ventana"], async () => ((await getJsonAuth(`${API_BASE_URL}/inventory/movimientos`, token)).items || []) as ApiRecord[], { enabled: !!token });
   return { items: recurso.data || null, error: recurso.error || null };

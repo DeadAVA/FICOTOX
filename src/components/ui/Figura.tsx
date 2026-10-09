@@ -13,14 +13,14 @@ import { figurasPorDefecto, isAvatarKey, type AvatarKey } from "@/lib/shared/ava
  * con los selectores de firmantes. Quien no eligio figura recibe una distinta
  * a las de los demas (figurasPorDefecto), la misma en Mi cuenta y en las listas.
  */
-export function useDirectorio(): ApiRecord[] {
+function useDirectorio(): ApiRecord[] {
   const { token } = useSession();
   const recurso = useResource<ApiRecord[]>("cuentas-activas", async () => ((await getJsonAuth(`${API_BASE_URL}/cuentas/activas`, token)).items || []) as ApiRecord[], { enabled: !!token });
   return recurso.data || [];
 }
 
 /* Semilla (correo o nombre) -> figura por omision distinta. */
-export function useFigurasPorDefecto(): Map<string, AvatarKey> {
+function useFigurasPorDefecto(): Map<string, AvatarKey> {
   const personas = useDirectorio();
   return useMemo(() => figurasPorDefecto(personas), [personas]);
 }

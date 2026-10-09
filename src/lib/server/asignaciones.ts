@@ -34,7 +34,7 @@ export async function estaAsignado(s: Session, usuarioId: number, recepcionId: n
 }
 
 /* Recepciones asignadas (vigentes) a una persona. */
-export async function recepcionesAsignadas(s: Session, usuarioId: number): Promise<number[]> {
+async function recepcionesAsignadas(s: Session, usuarioId: number): Promise<number[]> {
   const filas = await s.query<{ recepcion_id: number }>(`SELECT DISTINCT recepcion_id FROM ${TABLE} WHERE usuario_id = :u AND revocado_en IS NULL`, { u: usuarioId });
   return filas.map((f) => Number(f.recepcion_id));
 }

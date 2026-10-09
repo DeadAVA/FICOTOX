@@ -33,7 +33,7 @@ const MAX_BYTES = MAX_MB * 1024 * 1024;
 const TAMANOS = [512, 128] as const;
 const FORMATO_NO_VALIDO = "Usa una foto JPG, PNG o WEBP";
 
-export const avataresDir = () => path.join(/*turbopackIgnore: true*/ getConfig().INSTANCE_DIR, "avatares");
+const avataresDir = () => path.join(/*turbopackIgnore: true*/ getConfig().INSTANCE_DIR, "avatares");
 
 /* Ruta de un tamaño; la base (<id>/<uuid>) nunca sale de la carpeta de avatares. */
 function rutaFoto(base: string, tam: number): string {

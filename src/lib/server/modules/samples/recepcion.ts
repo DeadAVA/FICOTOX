@@ -37,7 +37,7 @@ const FIRMAS_RECEPCION: RolFirma[] = [{ rol: "recibio", columnaNombre: "recibido
  */
 const CAMPOS_ESTADO = ["id", "folio_num", "tipo_registro", "solicitante", "fecha_emision", "fecha_recepcion", "hora_recepcion", "fecha_muestra", "estado", "creado_en", "anulado_en"];
 
-export function vistaEstado(row: Row): Row {
+function vistaEstado(row: Row): Row {
   const out: Row = { solo_estado: true };
   for (const campo of CAMPOS_ESTADO) if (campo in row) out[campo] = row[campo];
   return out;

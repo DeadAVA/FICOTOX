@@ -18,7 +18,7 @@ export interface DescripcionRol {
   noPuede: string[];
 }
 
-export const DESCRIPCION_ROLES: Record<string, DescripcionRol> = {
+const DESCRIPCION_ROLES: Record<string, DescripcionRol> = {
   admin_tecnico: {
     icono: "engrane",
     proposito: "Mantiene la plataforma funcionando, segura y respaldada.",
@@ -82,7 +82,7 @@ export const DESCRIPCION_ROLES: Record<string, DescripcionRol> = {
 };
 
 /* Rol personalizado (no es uno de los 10 del catalogo). */
-export const DESCRIPCION_GENERICA: DescripcionRol = {
+const DESCRIPCION_GENERICA: DescripcionRol = {
   icono: "escudo",
   proposito: "Rol personalizado del laboratorio: lo que puede hacer depende de los permisos que se le dieron.",
   responsabilidades: [],

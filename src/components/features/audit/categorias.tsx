@@ -26,7 +26,7 @@ export const CATEGORIAS: Array<{ value: Categoria; label: string; acciones: stri
 
 const POR_ACCION = new Map<string, Categoria>(CATEGORIAS.flatMap((c) => c.acciones.map((a) => [a, c.value] as [string, Categoria])));
 
-export function categoriaDe(entry: Pick<HumanEntry, "verb" | "isSystem">): Categoria {
+function categoriaDe(entry: Pick<HumanEntry, "verb" | "isSystem">): Categoria {
   if (["login", "login_fallido", "reauth_fallida", "cerrar_sesiones"].includes(entry.verb)) return "cambiar";
   const categoria = POR_ACCION.get(entry.verb) || "cambiar";
   // Lo que hace la plataforma por su cuenta (vencimientos, avisos) se pinta como sistema.

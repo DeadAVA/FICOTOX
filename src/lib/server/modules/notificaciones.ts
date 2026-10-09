@@ -16,7 +16,7 @@ import { HttpError, json, readJson, type RouteContext } from "../http";
 import { pendientesDe, type Evento } from "../pendientes";
 import { cargarAutorizacion, type Autorizacion } from "../rbac";
 
-export interface Notificacion extends Evento {
+interface Notificacion extends Evento {
   grupo: string;
   /* Tipo y titulo completos (compatibilidad con los clientes anteriores). */
   tipo: string;
@@ -46,7 +46,7 @@ const TIPO_GRUPO: Record<string, string> = {
 const DIA = 86_400_000;
 const haceDias = (n: number) => new Date(Date.now() - n * DIA).toISOString();
 
-export async function notificacionesDe(s: Session, auth: Autorizacion): Promise<{ items: Notificacion[]; anteriores: Notificacion[] }> {
+async function notificacionesDe(s: Session, auth: Autorizacion): Promise<{ items: Notificacion[]; anteriores: Notificacion[] }> {
   const grupos = await pendientesDe(s, auth);
   const eventos = grupos.flatMap((g) => g.eventos.map((e) => ({ ...e, grupo: g.key, tipo: e.tipo || TIPO_GRUPO[g.key] || g.key, titulo: `${e.frase}: ${e.registro}` })));
   const leidas = await s.query<Row>("SELECT id, clave, leida_en FROM notificaciones_leidas WHERE usuario_id = :yo", { yo: auth.userId });

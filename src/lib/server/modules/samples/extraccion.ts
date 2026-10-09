@@ -61,7 +61,7 @@ function exigirSupervisorDistinto(data: { nombre_quien_extrajo: string | null; n
   if (violacion) throw new HttpError(409, { message: violacion.mensaje, codigo: "segregacion", regla: violacion.regla, clave: violacion.clave });
 }
 
-export interface EquipoUtilizado {
+interface EquipoUtilizado {
   equipo_id: number | null;
   nombre: string | null;
   uso: string | null;

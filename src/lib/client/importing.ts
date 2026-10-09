@@ -28,7 +28,7 @@ export interface ImportPreviewRow {
   cantidad_por_pieza: number | null;
 }
 
-export const normalizeImportCell = (value: unknown): string | null => {
+const normalizeImportCell = (value: unknown): string | null => {
   if (value === null || value === undefined) {
     return null;
   }
@@ -39,7 +39,7 @@ export const normalizeImportCell = (value: unknown): string | null => {
   return trimmed ? trimmed : null;
 };
 
-export const normalizeImportInteger = (value: unknown): number | null => {
+const normalizeImportInteger = (value: unknown): number | null => {
   const normalized = normalizeImportCell(value);
   if (!normalized) {
     return null;
@@ -51,7 +51,7 @@ export const normalizeImportInteger = (value: unknown): number | null => {
 /* Dia de un Date de Excel/navegador segun sus getters locales (asi lo creo la hoja, a medianoche local). */
 const diaLocalDe = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-export const normalizeImportDate = (value: unknown): string | null => {
+const normalizeImportDate = (value: unknown): string | null => {
   const normalized = normalizeImportCell(value);
   if (!normalized) {
     return null;
@@ -79,7 +79,7 @@ export const normalizeImportDate = (value: unknown): string | null => {
   return null;
 };
 
-export const normalizeImportKey = (key: unknown): string => {
+const normalizeImportKey = (key: unknown): string => {
   const base = String(key || "")
     .replace(/^﻿/, "")
     .trim()
@@ -210,12 +210,12 @@ export const mapCsvToPreviewRows = (csvRows: string[][]): { detected: string[]; 
   return { detected, rows };
 };
 
-export const isConsumablesSheetName = (sheetName: string): boolean => {
+const isConsumablesSheetName = (sheetName: string): boolean => {
   const normalized = normalizeImportKey(sheetName);
   return normalized === "consumibles" || normalized.includes("consumible");
 };
 
-export const hasConsumablesHeaderSignature = (detectedHeaders: string[]): boolean => {
+const hasConsumablesHeaderSignature = (detectedHeaders: string[]): boolean => {
   const detected = Array.isArray(detectedHeaders) ? detectedHeaders : [];
   if (!detected.includes("producto")) {
     return false;
@@ -224,7 +224,7 @@ export const hasConsumablesHeaderSignature = (detectedHeaders: string[]): boolea
   return distinctiveFields.some((field) => detected.includes(field));
 };
 
-export const getReactivoSheetType = (sheetName: string): string => {
+const getReactivoSheetType = (sheetName: string): string => {
   const normalized = normalizeImportKey(sheetName);
   if (normalized === "consumibles" || normalized.includes("consumible")) return "";
   const aliases: Record<string, string> = {

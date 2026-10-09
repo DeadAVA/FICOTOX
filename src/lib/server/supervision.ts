@@ -42,7 +42,7 @@ interface Supervisable {
   href: (id: number) => string;
 }
 
-export const SUPERVISABLES: Record<TablaSupervisable, Supervisable> = {
+const SUPERVISABLES: Record<TablaSupervisable, Supervisable> = {
   muestras_recepcion: { modulo: "muestras", etiqueta: "Recepción", href: (id) => `/muestras/recepcion/${id}` },
   muestras_procesamiento: { modulo: "ensayos", etiqueta: "Procesamiento", href: (id) => `/muestras/procesamiento/${id}` },
   muestras_extraccion: { modulo: "ensayos", etiqueta: "Extracción", href: (id) => `/muestras/extraccion/${id}` },
@@ -62,7 +62,7 @@ const PREFIJO_FOLIO: Partial<Record<TablaSupervisable, string>> = {
   informes: "IR",
 };
 
-export function esTablaSupervisable(tabla: string): tabla is TablaSupervisable {
+function esTablaSupervisable(tabla: string): tabla is TablaSupervisable {
   return Object.prototype.hasOwnProperty.call(SUPERVISABLES, tabla);
 }
 
@@ -97,7 +97,7 @@ export async function aplicarSupervision(s: Session, tabla: TablaSupervisable, i
   );
 }
 
-export function supervisionPendiente(row: Row | null | undefined): boolean {
+function supervisionPendiente(row: Row | null | undefined): boolean {
   return !!row && Number(row.requiere_supervision || 0) === 1 && ["pendiente", "regresado"].includes(String(row.supervision_estado || ""));
 }
 

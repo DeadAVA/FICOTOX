@@ -3,7 +3,7 @@
  * con los permisos y alcances de cada persona).
  */
 
-export interface PendienteItem {
+interface PendienteItem {
   label: string;
   sub: string | null;
   href: string;

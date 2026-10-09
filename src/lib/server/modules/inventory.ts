@@ -17,7 +17,7 @@ import { autorizarEquipoA } from "../autorizaciones";
 
 /* Portado de modules/inventory/endpoints.py del backend Flask original. */
 
-export const REACTIVO_COLUMNS = [
+const REACTIVO_COLUMNS = [
   "id_reactivo",
   "codigo_interno",
   "tipo_reactivo",
@@ -361,7 +361,7 @@ function strip(value: unknown): string {
   return String(value || "").trim();
 }
 
-export function normalizeReactivoPayload(raw: Record<string, unknown> | null | undefined): Record<string, unknown> {
+function normalizeReactivoPayload(raw: Record<string, unknown> | null | undefined): Record<string, unknown> {
   const payload = raw || {};
   const tipo = strip(payload.tipo_reactivo).slice(0, 80) || null;
   const producto = strip(firstTruthy(payload.producto, payload.item_name, payload.nombre_crm, payload.nombre, "")).slice(0, 180) || null;

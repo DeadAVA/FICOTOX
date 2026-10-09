@@ -75,7 +75,7 @@ type RouteHandler = (ctx: RouteContext) => Promise<Response>;
  */
 const INTENTOS = 3;
 
-export function esConflictoReintentable(error: unknown): boolean {
+function esConflictoReintentable(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const code = String((error as { code?: unknown }).code || "");
   // SQLITE_BUSY*: otro proceso escribio la base (p. ej. SQLITE_BUSY_SNAPSHOT al pasar de lectura a escritura en WAL).

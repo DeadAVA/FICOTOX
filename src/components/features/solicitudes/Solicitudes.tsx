@@ -29,7 +29,7 @@ import { formatearFecha, formatearFechaHora } from "@/lib/shared/fechas";
  *  - la bandeja "Por autorizar" usa las mismas acciones.
  */
 
-export const KEYS_SOLICITUD = ["solicitudes", "supervision", "muestras", "informes", "documentos", "calidad", "usuarios", "roles", "reactivos", "consumibles", "equipos", "mantenimientos", "movimientos", "dashboard", "notificaciones"];
+const KEYS_SOLICITUD = ["solicitudes", "supervision", "muestras", "informes", "documentos", "calidad", "usuarios", "roles", "reactivos", "consumibles", "equipos", "mantenimientos", "movimientos", "dashboard", "notificaciones"];
 
 /* Grupo de la bandeja por entidad (filtro ?modulo= de "Por autorizar"). */
 export const GRUPO_DE_ENTIDAD: Record<string, string> = {
@@ -99,7 +99,7 @@ export function describirSolicitud(item: ApiRecord): string {
 }
 
 /* "hace 3 horas", "hace 2 días". */
-export function haceCuanto(fecha: unknown): string {
+function haceCuanto(fecha: unknown): string {
   const t = Date.parse(String(fecha || ""));
   if (!Number.isFinite(t)) return "";
   const min = Math.max(0, Math.round((Date.now() - t) / 60000));
@@ -112,7 +112,7 @@ export function haceCuanto(fecha: unknown): string {
 }
 
 /* ¿La persona de la sesion puede resolver (aprobar/rechazar) esta solicitud? Nunca quien la pidio. */
-export function usePuedeResolver(): (sol: ApiRecord | null | undefined) => boolean {
+function usePuedeResolver(): (sol: ApiRecord | null | undefined) => boolean {
   const { can, user } = useSession();
   return (sol) => {
     if (!sol || String(sol.estado || "pendiente") !== "pendiente") return false;

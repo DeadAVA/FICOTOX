@@ -31,7 +31,7 @@ import { EXTENSIONES_BIBLIOTECA, MIME_BIBLIOTECA, MOTIVO_MIN_BIBLIOTECA, TEXTO_M
 const T = { doc: "biblioteca_documentos", ver: "biblioteca_versiones", cat: "biblioteca_categorias", vis: "biblioteca_visibilidad_roles" };
 const ENTIDAD = "biblioteca_documentos";
 
-export const bibliotecaDir = () => path.join(/*turbopackIgnore: true*/ getConfig().INSTANCE_DIR, "biblioteca");
+const bibliotecaDir = () => path.join(/*turbopackIgnore: true*/ getConfig().INSTANCE_DIR, "biblioteca");
 const ahora = () => new Date().toISOString();
 
 /* ---------- Acceso ---------- */
@@ -526,9 +526,4 @@ export async function editarCategoria({ request, s, params }: RouteContext): Pro
   await registrarAuditoria(s, user, { accion: "categoria", entidad: "biblioteca_categorias", entidadId: id, referencia: nombre, antes: { nombre: antes.nombre, orden: antes.orden, activa: Number(antes.activa) ? "sí" : "no" }, despues: { nombre, orden, activa: activa ? "sí" : "no" } });
   await s.commit();
   return json({ message: "Categoría actualizada" });
-}
-
-/* Para respaldos y verificaciones: todas las versiones con su archivo. */
-export async function versionesParaVerificar(s: Session): Promise<Row[]> {
-  return s.query<Row>(`SELECT id, documento_id, numero, nombre_almacenado, sha256 FROM ${T.ver} ORDER BY id`);
 }

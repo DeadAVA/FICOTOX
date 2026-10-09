@@ -195,23 +195,8 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
   );
 });
 
-export interface RadioProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "type"> {
-  label?: ReactNode;
-}
-
 export const radioClass =
   "h-[18px] w-[18px] shrink-0 cursor-pointer appearance-none rounded-full border border-line-strong bg-surface transition-[border-color,border-width,transform] duration-150 ease-[var(--ease-spring)] checked:border-[6px] checked:border-brand hover:border-ink-4 active:scale-95 focus-visible:shadow-[var(--shadow-focus)]";
-
-export const Radio = forwardRef<HTMLInputElement, RadioProps>(function Radio({ label, className, id, ...rest }, ref) {
-  const autoId = useId();
-  const inputId = id || autoId;
-  return (
-    <label htmlFor={inputId} className={cn("inline-flex cursor-pointer items-center gap-2 text-[14px] text-ink", rest.disabled && "cursor-not-allowed opacity-60", className)}>
-      <input ref={ref} id={inputId} type="radio" className={radioClass} {...rest} />
-      {label ? <span>{label}</span> : null}
-    </label>
-  );
-});
 
 export interface SwitchProps {
   checked: boolean;

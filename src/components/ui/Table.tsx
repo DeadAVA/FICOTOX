@@ -77,10 +77,6 @@ export function Td({ className, children, align, muted, mono, sticky, ...rest }:
   );
 }
 
-export function RowActions({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("flex items-center justify-end gap-0.5 opacity-80 transition-opacity group-hover:opacity-100 focus-within:opacity-100", className)}>{children}</div>;
-}
-
 /*
  * Con `lineas={2}` (listas de Muestras e Informes) el texto ocupa hasta 2 líneas antes
  * de recortarse con "…", y el texto completo (o `tooltip`) sale al pasar el cursor.
@@ -103,13 +99,3 @@ export const FILA_LISTA = "h-[64px]";
 export const SOLO_ANCHO = "hidden min-[1500px]:table-cell";
 /* Fechas: ancho fijo y una sola línea. */
 export const COL_FECHA = "w-[112px] whitespace-nowrap";
-
-export function TableMessage({ colSpan, children }: { colSpan: number; children: ReactNode }) {
-  return (
-    <tr>
-      <td colSpan={colSpan} className="px-4 py-10 text-center text-[13px] text-ink-3">
-        {children}
-      </td>
-    </tr>
-  );
-}

@@ -41,17 +41,6 @@ export interface FormSectionDef {
   optionalNote?: string;
 }
 
-/* Secciones obligatorias con datos faltantes: con ellas el formato no se guarda. */
-export function missingSections(sections: FormSectionDef[]): FormSectionDef[] {
-  return sections.filter((section) => !section.optional && section.complete === false);
-}
-
-/* Mensaje para el usuario cuando falta información obligatoria. */
-export function missingMessage(missing: FormSectionDef[]): string {
-  const labels = missing.map((section) => section.label);
-  return labels.length === 1 ? `Falta información en “${labels[0]}”` : `Falta información en: ${labels.join(", ")}`;
-}
-
 interface FormPageContextValue {
   sections: FormSectionDef[];
   /* Secciones que ya se abrieron: solo en ellas se señalan los faltantes. */
@@ -80,11 +69,6 @@ export function useFormReadOnly(): boolean {
 export function EditableScope({ children }: { children: ReactNode }) {
   const ctx = useContext(FormPageContext);
   return ctx ? <FormPageContext.Provider value={{ ...ctx, readOnly: false }}>{children}</FormPageContext.Provider> : <>{children}</>;
-}
-
-/* Abre (si esta plegada) y enfoca una seccion del formato; lo usan las validaciones al guardar. */
-export function openFormSection(id: string) {
-  window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: id }));
 }
 
 function readShowAll(): boolean | null {

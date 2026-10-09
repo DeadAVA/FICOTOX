@@ -33,7 +33,7 @@ export async function referenciaDe(s: Session, entidad: string, id: number): Pro
   return referenciaDeFila(entidad, row);
 }
 
-export function referenciaDeFila(entidad: string, row: Row): string {
+function referenciaDeFila(entidad: string, row: Row): string {
   if (MUESTRAS.has(entidad)) return folioLabel(entidad as SampleTable, row);
   if (entidad === "informes") return `IR ${pad(row.folio_num)}${Number(row.version || 1) > 1 ? ` v${row.version}` : ""}`;
   if (entidad === "equipos") return `${row.nombre || `Equipo #${row.id}`}${row.clave_bitacora ? ` (${row.clave_bitacora})` : ""}`;

@@ -127,20 +127,6 @@ export function Avatar({ id, name, email, avatar, size = "md", className, animad
   return <AvatarArt avatar={figura} seed={seed} size={px} animado={animado} className={cn("rounded-full shadow-card", className)} />;
 }
 
-export function Stat({ label, value, hint, tone = "neutral", icon, className }: { label: ReactNode; value: ReactNode; hint?: ReactNode; tone?: "neutral" | "brand" | "warning" | "danger" | "success"; icon?: ReactNode; className?: string }) {
-  const valueTone = { neutral: "text-ink", brand: "text-brand-strong", warning: "text-warning-text", danger: "text-danger", success: "text-success-text" }[tone];
-  return (
-    <div className={cn("flex flex-col gap-1.5 rounded-card bg-surface p-4 shadow-card", className)}>
-      <div className="flex items-center justify-between gap-2 text-[13px] text-ink-3">
-        <span>{label}</span>
-        {icon ? <span className="text-ink-4">{icon}</span> : null}
-      </div>
-      <p className={cn("tnum text-[26px] font-semibold leading-none tracking-[-0.02em]", valueTone)}>{value}</p>
-      {hint ? <p className="text-[12.5px] text-ink-3">{hint}</p> : null}
-    </div>
-  );
-}
-
 /*
  * Medidor de existencia. Recibe la cantidad real, el máximo (capacidad o stock
  * de referencia) y el mínimo, y muestra: barra animada con color según el estado
@@ -181,10 +167,6 @@ export function StockMeter({ current, max, min, unit, low, size = "sm", label, c
 }
 
 const fmtNumber = (value: number) => value.toLocaleString("es-MX", { maximumFractionDigits: 3 });
-
-export function Divider({ className }: { className?: string }) {
-  return <hr className={cn("border-0 border-t border-line", className)} />;
-}
 
 /* Fila "etiqueta · valor" para fichas de detalle (estilo lista de ajustes). */
 export function DetailRow({ label, children, className }: { label: ReactNode; children: ReactNode; className?: string }) {

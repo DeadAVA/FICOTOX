@@ -23,7 +23,7 @@ import { formatearFecha, formatearFechaCorta, formatearFechaHora, formatearHora,
  * salida con el registro de origen enlazado).
  */
 
-export const mantenimientoVencido = (m: ApiRecord) => m.estado === "vencido" || (["programado", "en_proceso"].includes(String(m.estado)) && String(m.fecha_programada || "").slice(0, 10) < hoyLocal());
+const mantenimientoVencido = (m: ApiRecord) => m.estado === "vencido" || (["programado", "en_proceso"].includes(String(m.estado)) && String(m.fecha_programada || "").slice(0, 10) < hoyLocal());
 
 export function MantenimientoVentana({ items, indice, onIndice, onCerrar, puedeEditar, puedeCancelar, editar, cancelar }: { items: ApiRecord[]; indice: number | null; onIndice: (i: number) => void; onCerrar: () => void; puedeEditar: boolean; puedeCancelar: boolean; editar: (m: ApiRecord) => void; cancelar: (m: ApiRecord) => void }) {
   const { token } = useSession();

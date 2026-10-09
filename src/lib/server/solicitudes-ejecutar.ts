@@ -30,7 +30,7 @@ const referenciaDe = async (ctx: Parameters<NonNullable<Ejecutores["anular_regis
   return row;
 };
 
-export const EJECUTORES: Ejecutores = {
+const EJECUTORES: Ejecutores = {
   anular_registro: async (ctx) => {
     if (!TABLAS_MUESTRAS.has(ctx.solicitud.entidad)) throw new HttpError(409, { message: "La solicitud no corresponde a un registro del flujo de muestras" });
     const table = ctx.solicitud.entidad as SampleTable;

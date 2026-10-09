@@ -48,7 +48,7 @@ export function agruparActividades(registros: ApiRecord[], ctx: ContextoActivida
 }
 
 /* Grupos por dia ("Hoy", "Ayer", "Miércoles 24 de septiembre"). */
-export function porDia(grupos: GrupoActividad[]): Array<[string, GrupoActividad[]]> {
+function porDia(grupos: GrupoActividad[]): Array<[string, GrupoActividad[]]> {
   const dias = new Map<string, GrupoActividad[]>();
   for (const grupo of grupos) {
     const dia = dayLabel(grupo.entradas[0].when);
@@ -82,7 +82,7 @@ export function usePersonas(): Map<number, string> | undefined {
 }
 
 /* Un renglon: icono, la frase en una linea y debajo la hora y el area. */
-export function FilaActividad({ grupo, activa, onAbrir }: { grupo: GrupoActividad; activa?: boolean; onAbrir: () => void }) {
+function FilaActividad({ grupo, activa, onAbrir }: { grupo: GrupoActividad; activa?: boolean; onAbrir: () => void }) {
   const entry = grupo.entradas[0];
   const veces = grupo.entradas.length;
   const conMotivo = grupo.entradas.some((e) => e.motivo);

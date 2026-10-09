@@ -22,8 +22,6 @@ export const TIPOS_EVIDENCIA = [
   { value: "foto", label: "Fotografía" },
   { value: "otro", label: "Otro" },
 ] as const;
-export type TipoEvidencia = (typeof TIPOS_EVIDENCIA)[number]["value"];
-
 export const TIPO_EVIDENCIA_LABEL: Record<string, string> = Object.fromEntries(TIPOS_EVIDENCIA.map((t) => [t.value, t.label]));
 
 /* Articulo para las frases de la bitacora: "adjuntó el cromatograma", "adjuntó la hoja de cálculo". */
@@ -60,8 +58,6 @@ export const MIME_EVIDENCIA: Record<string, string> = {
  * TIFF se descarga (Chrome y Firefox no lo muestran y la hoja quedaria vacia).
  */
 export const VISTA_PREVIA = new Set(["pdf", "png", "jpg", "jpeg"]);
-
-export const EVIDENCIA_MAX_MB_DEFAULT = 25;
 export const DESCRIPCION_MIN = 5;
 export const MOTIVO_MIN = 5;
 
@@ -96,7 +92,7 @@ const empiezaCon = (bytes: Uint8Array, firma: number[], desde = 0) => firma.ever
 const ascii = (bytes: Uint8Array, n: number) => Array.from(bytes.slice(0, n), (b) => String.fromCharCode(b)).join("");
 
 /* Contenido peligroso aunque se renombre: ejecutables, scripts, HTML y SVG. */
-export function contenidoPeligroso(bytes: Uint8Array): string | null {
+function contenidoPeligroso(bytes: Uint8Array): string | null {
   if (empiezaCon(bytes, [0x4d, 0x5a])) return "un ejecutable de Windows";
   if (empiezaCon(bytes, [0x7f, 0x45, 0x4c, 0x46])) return "un ejecutable";
   const macho = [[0xfe, 0xed, 0xfa, 0xce], [0xfe, 0xed, 0xfa, 0xcf], [0xce, 0xfa, 0xed, 0xfe], [0xcf, 0xfa, 0xed, 0xfe], [0xca, 0xfe, 0xba, 0xbe]];
@@ -111,7 +107,7 @@ export function contenidoPeligroso(bytes: Uint8Array): string | null {
 }
 
 /* HTML, SVG o script en cualquier parte de un archivo de texto. */
-export function marcadoActivo(bytes: Uint8Array): boolean {
+function marcadoActivo(bytes: Uint8Array): boolean {
   let texto = "";
   for (let i = 0; i < bytes.length; i += 65536) texto += String.fromCharCode(...bytes.subarray(i, Math.min(i + 65536, bytes.length)));
   // Entidades numericas decodificadas (java&#x73;cript:) y sin espacios de relleno antes de buscar.

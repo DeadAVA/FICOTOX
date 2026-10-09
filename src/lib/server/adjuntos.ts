@@ -25,7 +25,7 @@ const TABLE = "adjuntos";
 const TIPOS = new Set<string>(TIPOS_EVIDENCIA.map((t) => t.value));
 
 /* Carpeta raiz de las evidencias (dentro de la instancia). */
-export function evidenciasDir(): string {
+function evidenciasDir(): string {
   return path.join(/*turbopackIgnore: true*/ getConfig().INSTANCE_DIR, "evidencias");
 }
 
@@ -38,11 +38,11 @@ export function rutaEn(raizDir: string, nombreAlmacenado: unknown): string {
 }
 
 /* Ruta absoluta de un adjunto; el nombre almacenado nunca sale de la carpeta de evidencias. */
-export function rutaAdjunto(row: Row): string {
+function rutaAdjunto(row: Row): string {
   return rutaEn(evidenciasDir(), row.nombre_almacenado);
 }
 
-export const maxBytes = () => getConfig().EVIDENCIA_MAX_MB * 1024 * 1024;
+const maxBytes = () => getConfig().EVIDENCIA_MAX_MB * 1024 * 1024;
 
 export function serializarAdjunto(row: Row, extra: Record<string, unknown> = {}): Row {
   const { nombre_almacenado: _almacenado, ...resto } = row;

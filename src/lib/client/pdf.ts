@@ -22,7 +22,7 @@ export function cargarPdfjs(): Promise<Pdfjs> {
   return cargando;
 }
 
-export const PDF_OPCIONES = {
+const PDF_OPCIONES = {
   cMapUrl: "/vendor/pdfjs/cmaps/",
   cMapPacked: true,
   standardFontDataUrl: "/vendor/pdfjs/standard_fonts/",

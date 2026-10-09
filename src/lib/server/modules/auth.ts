@@ -4,7 +4,7 @@ import { createAccessToken, requireUser, type CurrentUser } from "../auth";
 import { registrarAuditoria } from "../audit";
 import { getConfig } from "../config";
 import { isOperationalError, type Row, type Session } from "../db";
-import { HttpError, json, readJson, type RouteContext } from "../http";
+import { json, readJson, type RouteContext } from "../http";
 import { cargarAutorizacion, cuentaVigente, filasDeRoles, hoy, MENSAJE_CUENTA_NO_VIGENTE } from "../rbac";
 import { emitirReauth, estadoAcceso, ipDe, MENSAJE_ACCESO_FALLIDO, registrarIntento } from "../seguridad";
 import { hashPassword, validatePasswordStrength } from "../password";
@@ -304,4 +304,3 @@ export async function fijarCargoPredeterminado({ request, s }: RouteContext): Pr
   return json({ message: "Cargo predeterminado guardado", cargo_predeterminado: rolId });
 }
 
-export { HttpError };

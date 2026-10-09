@@ -34,7 +34,7 @@ function safeParse(value: unknown): Record<string, unknown> | null {
 
 const docRef = (row: Row | null | undefined): string => (row ? `${row.clave}-${row.revision}` : "");
 
-export function serializeDocumento(row: Row): Row {
+function serializeDocumento(row: Row): Row {
   const item: Row = { ...row, excepciones: excepcionesDe(row), excepciones_json: undefined };
   for (const key of ["elaboro", "reviso", "aprobo", "revision_tecnica", "publico"]) {
     item[key] = safeParse(item[`${key}_json`]);

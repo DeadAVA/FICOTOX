@@ -9,7 +9,7 @@
  * la zona del navegador ni la del servidor.
  */
 
-export const ZONA_LABORATORIO = "America/Tijuana";
+const ZONA_LABORATORIO = "America/Tijuana";
 
 const SOLO_FECHA = /^(\d{4})-(\d{2})-(\d{2})$/;
 const CON_FECHA = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -138,8 +138,6 @@ export function sumarMeses(fecha: string, meses: number): string {
   const d = new Date(Date.UTC(anio, mes0, Math.min(Number(m[3]), ultimo)));
   return `${d.getUTCFullYear()}-${dos(d.getUTCMonth() + 1)}-${dos(d.getUTCDate())}`;
 }
-export const sumarAnios = (fecha: string, anios: number) => sumarMeses(fecha, anios * 12);
-
 /* Dias enteros de `desde` a `hasta` (fechas solas o instantes, por dia local). Positivo si hasta es despues. */
 export function diasEntre(desde: unknown, hasta: unknown = hoyLocal()): number | null {
   const a = SOLO_FECHA.exec(fechaSola(desde));

@@ -9,8 +9,6 @@ import { diasEntre, fechaSola, formatearFecha, hoyLocal } from "../shared/fechas
  * sesion de pagina, igual que en el app.js de la interfaz original.
  */
 
-export type InsumoTipo = "reactivo" | "consumible" | "equipo";
-
 export interface InsumoOption {
   ref: string;
   label: string;
@@ -131,7 +129,7 @@ export const equipoAlert = (option: InsumoOption | null | undefined, today: stri
   return null;
 };
 
-export const normalizeInsumoText = (value: unknown): string =>
+const normalizeInsumoText = (value: unknown): string =>
   String(value || "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")

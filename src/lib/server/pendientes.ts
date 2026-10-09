@@ -25,7 +25,7 @@ import { permisoDe, type Autorizacion } from "./rbac";
 import { porAutorizarDe } from "./solicitudes";
 import { contarPorSupervisar } from "./supervision";
 
-export type Tono = "danger" | "warning" | "info";
+type Tono = "danger" | "warning" | "info";
 
 export interface Evento {
   clave: string;

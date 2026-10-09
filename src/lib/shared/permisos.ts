@@ -24,7 +24,7 @@ export const MODULOS = [
 ] as const;
 
 export type Modulo = (typeof MODULOS)[number]["clave"];
-export const MODULO_KEYS: Modulo[] = MODULOS.map((m) => m.clave);
+const MODULO_KEYS: Modulo[] = MODULOS.map((m) => m.clave);
 
 export const ACCIONES = [
   { clave: "V", nombre: "Visualizar" },
@@ -72,11 +72,11 @@ export const ALCANCES = [
 ] as const;
 
 export type Alcance = (typeof ALCANCES)[number]["clave"];
-export const ALCANCE_KEYS: Alcance[] = ALCANCES.map((a) => a.clave);
-export const ALCANCES_DIFERIDOS = new Set<Alcance>(ALCANCES.filter((a) => a.fase !== null).map((a) => a.clave));
+const ALCANCE_KEYS: Alcance[] = ALCANCES.map((a) => a.clave);
+const ALCANCES_DIFERIDOS = new Set<Alcance>(ALCANCES.filter((a) => a.fase !== null).map((a) => a.clave));
 
 /* Modulos donde un alcance diferido NO abre datos mientras no se aplica. */
-export const MODULOS_DIFERIDO_RESTRINGIDO: Record<string, "sin_acceso" | "propio"> = {
+const MODULOS_DIFERIDO_RESTRINGIDO: Record<string, "sin_acceso" | "propio"> = {
   calidad: "sin_acceso",
   usuarios: "propio",
 };
@@ -101,12 +101,6 @@ export function isAccion(value: unknown): value is Accion {
 }
 export function isAlcance(value: unknown): value is Alcance {
   return typeof value === "string" && (ALCANCE_KEYS as string[]).includes(value);
-}
-
-export function alcanceLabel(alcance: string): string {
-  const meta = ALCANCES.find((a) => a.clave === alcance);
-  if (!meta) return alcance;
-  return meta.fase ? `${meta.nombre} (se aplica en Fase ${meta.fase})` : meta.nombre;
 }
 
 /* Fila de permiso tal como se guarda (rol_acciones). */
@@ -166,7 +160,7 @@ function rango(alcance: Alcance): number {
   return 2;
 }
 
-export function alcanceMasAmplio(alcances: readonly Alcance[]): Alcance {
+function alcanceMasAmplio(alcances: readonly Alcance[]): Alcance {
   return [...alcances].sort((a, b) => rango(a) - rango(b))[0];
 }
 
@@ -246,25 +240,6 @@ export function permite(efectivos: PermisosEfectivos, modulo: Modulo, accion: Ac
   if (!lista?.length) return false;
   if (!ctx) return lista.some((alcance) => !ALCANCES_SOLO_CON_OBJETO.has(alcance));
   return lista.some((alcance) => alcancePermite(alcance, ctx));
-}
-
-/*
- * Formato compacto del catalogo (scripts/roles-catalogo.json):
- *   { "muestras": { "C": "recepcion", "E": "recepcion" }, "calidad": { "V": "total" } }
- */
-export type PermisosCatalogo = Partial<Record<Modulo, Partial<Record<Accion, Alcance>>>>;
-
-export function filasDesdeCatalogo(permisos: PermisosCatalogo): PermisoFila[] {
-  const filas: PermisoFila[] = [];
-  for (const modulo of MODULO_KEYS) {
-    const acciones = permisos[modulo];
-    if (!acciones) continue;
-    for (const accion of ACCION_KEYS) {
-      const alcance = acciones[accion];
-      if (alcance) filas.push({ modulo, accion, alcance });
-    }
-  }
-  return filas;
 }
 
 /* Clave estable de un conjunto de filas, para comparar matrices. */

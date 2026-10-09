@@ -32,30 +32,3 @@ export async function openProtectedFile(url: string, token: string, filename?: s
     toast.error(err instanceof Error ? err.message : "No se pudo abrir el archivo");
   }
 }
-
-/* Descarga un archivo protegido por token (listas de incidencias y NC, actas de restauracion). La bitacora no se exporta. */
-export async function descargarCsv(url: string, token: string, filename: string): Promise<boolean> {
-  try {
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) {
-      let message = `No se pudo exportar (${res.status})`;
-      try {
-        const data = await res.json();
-        if (data?.message) message = String(data.message);
-      } catch {
-        /* sin cuerpo JSON */
-      }
-      throw new Error(message);
-    }
-    const objectUrl = URL.createObjectURL(await res.blob());
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = filename;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
-    return true;
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : "No se pudo exportar");
-    return false;
-  }
-}

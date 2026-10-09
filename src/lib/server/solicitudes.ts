@@ -147,7 +147,7 @@ async function excepcionPendiente(s: Session, nueva: NuevaSolicitud, solicitante
  * ignora aqui; la marca el barrido (vencerSolicitudes) o cargarPendiente, fuera
  * de la transaccion de la accion.
  */
-export async function solicitudPendiente(s: Session, entidad: string, entidadId: number | string): Promise<Solicitud | null> {
+async function solicitudPendiente(s: Session, entidad: string, entidadId: number | string): Promise<Solicitud | null> {
   const fila = await s.queryOne<Solicitud>("SELECT * FROM solicitudes_autorizacion WHERE entidad = :entidad AND entidad_id = :id AND estado = 'pendiente' AND tipo <> 'excepcion_segregacion' AND vence_en > :ahora ORDER BY id DESC LIMIT 1", { entidad, id: String(entidadId), ahora: ahoraIso() });
   return fila || null;
 }
@@ -194,7 +194,7 @@ export interface ContextoEjecucion {
   datos: Record<string, unknown>;
   motivo: string;
 }
-export type Ejecutor = (ctx: ContextoEjecucion) => Promise<Record<string, unknown>>;
+type Ejecutor = (ctx: ContextoEjecucion) => Promise<Record<string, unknown>>;
 export type Ejecutores = Partial<Record<TipoSolicitud, Ejecutor>>;
 
 /* ---------- Bandeja ---------- */

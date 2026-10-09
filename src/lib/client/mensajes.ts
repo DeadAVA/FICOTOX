@@ -67,7 +67,7 @@ const MODULO: Record<string, string> = {
 const ACCION: Record<string, string> = { V: "ver", C: "registrar", E: "editar", R: "revisar", A: "aprobar", AN: "anular", G: "administrar" };
 
 /* Quita lo tecnico de un mensaje del servidor: "ensayos:E" -> "editar en procesamiento, extracción y análisis". */
-export function limpiarMensaje(texto: string): string {
+function limpiarMensaje(texto: string): string {
   let t = String(texto || "").trim();
   t = t.replace(/Permiso denegado para ([a-z_]+):([A-Z]{1,2})/g, (_m, mod, acc) => `No tienes permiso para ${ACCION[acc] || "hacer esto"} en ${MODULO[mod] || mod}`);
   t = t.replace(/Tu alcance en ([a-z_]+):([A-Z]{1,2}) no cubre esta operación/g, (_m, mod, acc) => `Tu permiso para ${ACCION[acc] || "hacer esto"} en ${MODULO[mod] || mod} no cubre este registro`);
@@ -161,4 +161,3 @@ export function explicarError(err: unknown, fallback = "No se pudo completar la 
   return { que, hacer };
 }
 
-export { ApiError };

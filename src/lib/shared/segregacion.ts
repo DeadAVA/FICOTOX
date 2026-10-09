@@ -13,35 +13,6 @@
 
 export const VERSION_SEGREGACION = "2026-10-03.1";
 
-export type AccionSegregada = "revisar" | "aprobar" | "autorizar" | "supervisar" | "aprobar_solicitud" | "evaluar" | "verificar" | "cerrar" | "reanudar";
-
-export interface Regla {
-  numero: number;
-  clave: string;
-  titulo: string;
-  /* Que se evalua, en palabras, para la documentacion y la interfaz. */
-  descripcion: string;
-  /* Regla retirada: se conserva su numero (las bitacoras viejas la citan) pero ya no se evalua. */
-  retirada?: string;
-}
-
-export const REGLAS_SEGREGACION: Regla[] = [
-  { numero: 1, clave: "analisis", titulo: "Analisis: quien lo elaboro no lo revisa ni lo aprueba", descripcion: "Revisor y aprobador pueden ser la misma persona, pero ninguno de los dos elaboro el analisis." },
-  { numero: 2, clave: "informe", titulo: "Informe: quien lo elaboro, o elaboro un analisis incluido, no lo revisa ni lo autoriza", descripcion: "El Analista no valida ni libera su propio resultado." },
-  { numero: 3, clave: "supervision_captura", titulo: "Procesamiento y extraccion: quien firma como supervisor no proceso, extrajo ni hizo la limpieza", descripcion: "Se comparan los nombres firmados en el formato." },
-  { numero: 4, clave: "visto_bueno", titulo: "Supervision: el supervisor no da visto bueno a lo que el mismo capturo", descripcion: "Aplica al alcance supervisado y a las cuentas temporales." },
-  // Regla 5 retirada (2026-10-03) por decision del laboratorio: Calidad › Documentos es una biblioteca de consulta, sin revision ni aprobacion.
-  { numero: 5, clave: "documentos", titulo: "Documentos SGC: quien elaboro no revisa ni aprueba (retirada)", descripcion: "Ya no se evalua: la Biblioteca no tiene revision ni aprobacion de documentos.", retirada: "2026-10-03" },
-  { numero: 6, clave: "segundo_usuario", titulo: "Segundo usuario: quien solicita una accion critica no la aprueba", descripcion: "La aprobacion de una solicitud la da otra persona con el permiso que exige la accion." },
-  // Fase 11: incidencias, no conformidades y acciones correctivas (ISO/IEC 17025 7.10 y 8.7).
-  { numero: 7, clave: "evaluar_incidencia", titulo: "Incidencias: quien reporto una incidencia no la evalua", descripcion: "Cerrarla sin NC o escalarla la decide otra persona con calidad:R." },
-  { numero: 8, clave: "verificar_eficacia", titulo: "Acciones correctivas: el responsable de una accion no verifica su eficacia", descripcion: "La verificacion de eficacia de la NC la hace alguien que no es ni fue responsable de ninguna de sus acciones ni las implemento." },
-  { numero: 9, clave: "cerrar_nc", titulo: "No conformidades: el responsable de la NC no la cierra", descripcion: "La cierra otra persona con calidad:A (tampoco quien fue responsable antes de una reasignacion)." },
-  { numero: 10, clave: "reanudar_trabajo", titulo: "Suspensiones: quien suspendio un metodo o equipo no lo reanuda", descripcion: "Reanudar el trabajo (7.10.1 f) lo autoriza otra persona con calidad:A." },
-];
-
-export const reglaPorClave = (clave: string): Regla | undefined => REGLAS_SEGREGACION.find((r) => r.clave === clave);
-
 export interface Violacion {
   regla: number;
   clave: string;
@@ -79,7 +50,7 @@ export function evaluarInforme(usuarioId: number, elaboradoresInforme: Iterable<
 }
 
 /* Nombre normalizado para comparar personas firmadas en un formato. */
-export const nombreNormalizado = (value: unknown): string =>
+const nombreNormalizado = (value: unknown): string =>
   String(value || "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")

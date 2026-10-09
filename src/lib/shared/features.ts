@@ -8,7 +8,5 @@ export const FEATURES = {
   documentos: true,
 } as const;
 
-export type FeatureKey = keyof typeof FEATURES;
-
 /* Módulos de permisos que hoy no tienen pantalla: se ocultan de menús y roles. */
 export const HIDDEN_MODULES = new Set<string>(FEATURES.documentos ? [] : ["documentos"]);

@@ -27,7 +27,7 @@ interface VersionInforme {
 }
 
 /* ¿Tiene PDF final el informe? (se escribe al liberarlo; lo conservan los sustituidos y anulados). */
-export const tienePdfFinal = (item: ApiRecord | undefined | null): boolean => !!item?.archivo_pdf;
+const tienePdfFinal = (item: ApiRecord | undefined | null): boolean => !!item?.archivo_pdf;
 
 /*
  * Pantalla de lectura del PDF final de un informe: el mismo visor de la

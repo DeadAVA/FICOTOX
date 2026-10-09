@@ -43,7 +43,7 @@ const reduceMotion = () => typeof window !== "undefined" && window.matchMedia?.(
 const FOCUSABLE = "input:not([type=hidden]):not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled), [tabindex]:not([tabindex='-1'])";
 
 /* Abre la seccion (evento de FormPage), desplaza al campo y le pone el foco. */
-export function irAlCampo(p: Pick<Problema, "campo" | "seccion">, opciones: { enfocar?: boolean } = {}): void {
+function irAlCampo(p: Pick<Problema, "campo" | "seccion">, opciones: { enfocar?: boolean } = {}): void {
   if (typeof window === "undefined") return;
   if (p.seccion) window.dispatchEvent(new CustomEvent("ficotox:form-open", { detail: p.seccion }));
   window.setTimeout(

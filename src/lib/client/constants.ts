@@ -1,5 +1,3 @@
-import type { PageKey } from "./types";
-import { LEGACY_RECEPTION_METHODS, LEGACY_RECEPTION_SAMPLE_TYPES, RECEPTION_ANALYSIS_TYPES, RECEPTION_INSPECTION_REQUIREMENTS, RECEPTION_METHODS, RECEPTION_SAMPLE_TYPES } from "../shared/sgc";
 
 /* Catalogos y metadatos de la interfaz; los de recepcion salen del formato oficial (src/lib/shared/sgc.ts). */
 
@@ -14,9 +12,6 @@ export const IMPORT_COLUMNS = [
   "piezas",
   "cantidad_por_pieza",
 ] as const;
-
-/* Texto integro del formato FX-TCF-GMR (los registros viejos con el texto anterior se muestran tal cual). */
-export const INSPECCION_REQUIREMENTS = RECEPTION_INSPECTION_REQUIREMENTS;
 
 export interface ReactivoTypeConfig {
   value: string;
@@ -145,65 +140,6 @@ export const REACTIVO_SHEET_TYPE_LABELS: Record<string, string> = {
   columnas_cromatograficas: "Columnas cromatográficas",
 };
 
-export const PAGE_MODULE_MAP: Record<PageKey, string> = {
-  dashboard: "dashboard",
-  reactivos: "reactivos",
-  consumibles: "consumibles",
-  equipos: "equipos",
-  muestras: "muestras",
-  movimientos: "movimientos",
-  mantenimiento: "mantenimiento",
-  documentos: "documentos",
-  reportes: "documentos",
-  roles: "roles",
-  usuarios: "usuarios",
-};
-
-export const PAGE_LABELS: Record<PageKey, string> = {
-  dashboard: "Dashboard",
-  reactivos: "Reactivos",
-  consumibles: "Consumibles",
-  equipos: "Equipos",
-  muestras: "Muestras",
-  movimientos: "Movimientos",
-  mantenimiento: "Mantenimiento",
-  documentos: "Documentos SGC",
-  reportes: "Reportes Mantenimiento",
-  roles: "Roles",
-  usuarios: "Usuarios",
-};
-
-export const PREFERRED_PAGE_ORDER: PageKey[] = [
-  "dashboard",
-  "reactivos",
-  "consumibles",
-  "equipos",
-  "muestras",
-  "movimientos",
-  "mantenimiento",
-  "documentos",
-  "roles",
-  "usuarios",
-];
-
-export interface ModuleCardConfig {
-  page: PageKey;
-  label: string;
-  desc: string;
-  icon: string;
-  color: string;
-}
-
-export const MODULE_CARDS_CONFIG: ModuleCardConfig[] = [
-  { page: "reactivos", label: "Reactivos", desc: "Gestiona el catálogo de reactivos del laboratorio", icon: "bi-prescription2", color: "" },
-  { page: "consumibles", label: "Consumibles", desc: "Control de materiales consumibles", icon: "bi-box-seam", color: "amber" },
-  { page: "equipos", label: "Equipos", desc: "Registro y calibración de equipos", icon: "bi-magic", color: "violet" },
-  { page: "muestras", label: "Muestras", desc: "Recepción y seguimiento de muestras", icon: "bi-eyedropper", color: "green" },
-  { page: "movimientos", label: "Movimientos", desc: "Historial de entradas y salidas de inventario", icon: "bi-journal-text", color: "sky" },
-  { page: "mantenimiento", label: "Mantenimiento", desc: "Programación y registro de mantenimientos", icon: "bi-wrench-adjustable-circle", color: "rose" },
-  { page: "documentos", label: "Documentos SGC", desc: "Gestión documental del sistema de calidad", icon: "bi-file-earmark-text", color: "slate" },
-];
-
 /* Nombres cortos para las listas (el nombre completo queda en el tooltip y en la ventana); no cambian los datos guardados. */
 export const ANALYSIS_NAME_SHORT: Record<string, string> = {
   acido_domoico: "Ácido domoico (ASP)",
@@ -215,36 +151,4 @@ export const ANALYSIS_METHOD_SHORT: Record<string, string> = {
   hplc_ms_ms: "HPLC-MS/MS",
   hplc_fld: "HPLC-FLD",
   bioensayo_raton: "Bioensayo en ratón",
-};
-
-export const SAMPLE_ANALYSIS_LABELS: Record<string, string> = Object.fromEntries(RECEPTION_ANALYSIS_TYPES.map((item) => [item.value, item.label]));
-
-export const SAMPLE_METHOD_LABELS: Record<string, string> = { ...LEGACY_RECEPTION_METHODS, ...Object.fromEntries(RECEPTION_METHODS.map((item) => [item.value, item.label])) };
-
-export const SAMPLE_MATRIX_LABELS: Record<string, string> = { ...LEGACY_RECEPTION_SAMPLE_TYPES, ...Object.fromEntries(RECEPTION_SAMPLE_TYPES.map((item) => [item.value, item.label])) };
-
-export interface StatusMeta {
-  label: string;
-  className: string;
-  icon: string;
-}
-
-export const EQUIPO_STATUS_META: Record<string, StatusMeta> = {
-  operativo: { label: "Operativo", className: "active", icon: "bi-check-circle" },
-  mantenimiento: { label: "En Mantenimiento", className: "warning", icon: "bi-wrench-adjustable" },
-  calibracion_pendiente: { label: "Calibracion Pendiente", className: "info", icon: "bi-clock-history" },
-  fuera_servicio: { label: "Fuera de Servicio", className: "danger", icon: "bi-exclamation-triangle" },
-};
-
-export const MANTENIMIENTO_STATUS_META: Record<string, StatusMeta> = {
-  programado: { label: "Programado", className: "neutral", icon: "bi-calendar-event" },
-  en_proceso: { label: "En Proceso", className: "info", icon: "bi-clock-history" },
-  completado: { label: "Completado", className: "active", icon: "bi-check-circle" },
-  vencido: { label: "Vencido", className: "danger", icon: "bi-exclamation-triangle" },
-};
-
-export const MANTENIMIENTO_TYPE_META: Record<string, { label: string; className: string }> = {
-  preventivo: { label: "Preventivo", className: "outline" },
-  correctivo: { label: "Correctivo", className: "warning" },
-  calibracion: { label: "Calibracion", className: "purple" },
 };

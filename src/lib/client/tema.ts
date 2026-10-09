@@ -14,13 +14,11 @@ import { CLAVE_TEMA as CLAVE, COLORES_BARRA as COLOR_BARRA } from "@/lib/shared/
  */
 
 export type Tema = "claro" | "oscuro" | "auto";
-export const TEMAS: Tema[] = ["claro", "oscuro", "auto"];
-
 const EVENTO = "ficotox-tema";
 
 const esTema = (v: unknown): v is Tema => v === "claro" || v === "oscuro" || v === "auto";
 
-export function leerTema(): Tema {
+function leerTema(): Tema {
   try {
     const v = window.localStorage.getItem(CLAVE);
     return esTema(v) ? v : "auto";
@@ -30,10 +28,10 @@ export function leerTema(): Tema {
 }
 
 const sistemaOscuro = () => typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
-export const resolverTema = (t: Tema): "light" | "dark" => (t === "oscuro" || (t === "auto" && sistemaOscuro()) ? "dark" : "light");
+const resolverTema = (t: Tema): "light" | "dark" => (t === "oscuro" || (t === "auto" && sistemaOscuro()) ? "dark" : "light");
 
 /* Pone el tema en <html>. Con `animar`, los colores cambian juntos en ~200 ms (sin parpadeos uno por uno). */
-export function aplicarTema(t: Tema, animar = false): void {
+function aplicarTema(t: Tema, animar = false): void {
   const raiz = document.documentElement;
   const resuelto = resolverTema(t);
   if (animar) {

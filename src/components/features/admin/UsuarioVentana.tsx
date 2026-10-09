@@ -18,12 +18,11 @@ import { Avatar, Badge, Skeleton, type Tone } from "@/components/ui/Primitives";
 import { cn } from "@/components/ui/cn";
 import { VentanaCentrada, VentanaTitulo } from "@/components/ui/VentanaCentrada";
 import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
-import { haceCuanto } from "@/lib/client/audit-humanize";
 import { API_BASE_URL, armarReauth, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
 import { msg, type Problema } from "@/lib/client/mensajes";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
-import { diasEntre, formatearFecha, formatearFechaCorta, formatearFechaHora, formatearHora, hoyLocal, instanteDe } from "@/lib/shared/fechas";
+import { diasEntre, formatearFecha, formatearFechaCorta, formatearFechaHora, formatearHora, hoyLocal } from "@/lib/shared/fechas";
 import { ColumnasVentana, DatoLateral, DatosRapidos, TarjetaLateral, VentanaEncabezado } from "@/components/ui/Ventana";
 import { haceCuantoCorto } from "@/lib/client/tiempo";
 import { descripcionDeRol } from "@/lib/shared/roles-descripcion";
@@ -45,14 +44,8 @@ export function estadoCuenta(item: ApiRecord): { label: string; tone: Tone } {
   return { label: "Activo", tone: "success" };
 }
 
-/* "hace 2 h" (o "Nunca ha entrado"). */
-export function ultimoAcceso(item: ApiRecord): string {
-  const cuando = instanteDe(item.ultimo_acceso);
-  return cuando ? haceCuanto(cuando) : "Nunca ha entrado";
-}
-
 /* "quedan 89 días", "vence hoy", "venció hace 3 días". */
-export function quedan(hasta: unknown): string | null {
+function quedan(hasta: unknown): string | null {
   const dias = diasEntre(hoyLocal(), hasta);
   if (dias === null) return null;
   if (dias > 1) return `quedan ${dias} días`;
@@ -62,7 +55,7 @@ export function quedan(hasta: unknown): string | null {
 }
 
 /* Barra de tiempo: cuanto de la vigencia ya paso (y cuanto queda). */
-export function BarraVigencia({ desde, hasta, className }: { desde: unknown; hasta: unknown; className?: string }) {
+function BarraVigencia({ desde, hasta, className }: { desde: unknown; hasta: unknown; className?: string }) {
   const total = diasEntre(desde, hasta);
   const pasado = diasEntre(desde, hoyLocal());
   if (total === null || pasado === null || total <= 0) return null;

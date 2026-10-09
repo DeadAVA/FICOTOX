@@ -1,5 +1,5 @@
 import type { ApiRecord } from "@/lib/client/types";
-import { ACCION_KEYS, MODULOS, alcanceLabel, isAccion, isModulo } from "@/lib/shared/permisos";
+import { ACCION_KEYS, isAccion, isModulo } from "@/lib/shared/permisos";
 import { ACCEPTANCE_DECISIONS, ANALYSIS_METHODS, ANALYSIS_STATES, ANALYSIS_TYPES, CLIENT_CONTACT_MEDIA, DISPOSAL_TYPES, DOCUMENT_STATES, RECEPTION_ANALYSIS_TYPES, RECEPTION_DELIVERY_MEDIA, RECEPTION_METHODS, RECEPTION_SAMPLE_TYPES, REPORT_DELIVERY_MEDIA, REPORT_STATES, SAMPLE_STATES, STORAGE_PLACES } from "@/lib/shared/sgc";
 import { TIPO_EVIDENCIA_ART } from "@/lib/shared/adjuntos";
 import { ACTIVIDADES_AUTORIZABLES, METODOS_AUTORIZABLES } from "@/lib/shared/autorizaciones";
@@ -115,7 +115,7 @@ const ENTITY_ROUTE: Partial<Record<string, (id: string, referencia: string) => s
 };
 
 /* Acciones de sesion: sin ficha ni area de registro. */
-export const ACCIONES_DE_SESION = new Set(["login", "login_fallido", "reauth_fallida", "cerrar_sesiones"]);
+const ACCIONES_DE_SESION = new Set(["login", "login_fallido", "reauth_fallida", "cerrar_sesiones"]);
 
 /* ---------------------------------------------------------------------------
  * Datos: etiqueta legible (con articulo) y formato
@@ -349,7 +349,7 @@ const LONG_FIELDS = new Set(["descripcion", "observaciones", "observaciones_gene
 const QUANTITY_FIELDS = new Set(["cantidad_actual", "cantidad", "piezas", "stock_minimo", "stock_maximo"]);
 
 const sinArticulo = (n: string) => n.replace(/^(el|la|los|las) /, "");
-export const fieldLabel = (key: string): string | null => (FIELD[key] ? cap(sinArticulo(FIELD[key])) : null);
+const fieldLabel = (key: string): string | null => (FIELD[key] ? cap(sinArticulo(FIELD[key])) : null);
 
 const catalogo = (items: Array<{ value: string; label: string }>, value: unknown) => items.find((item) => item.value === String(value))?.label;
 
@@ -376,7 +376,7 @@ const numero = (n: number) => n.toLocaleString("es-MX", { maximumFractionDigits:
  * Valor legible de un dato, o null si no se puede decir en palabras (un id
  * que no se conoce, un objeto sin etiquetas): entonces no se muestra.
  */
-export function valorLegible(key: string, value: unknown, entidad: string, ctx: ContextoActividad = {}): string | null {
+function valorLegible(key: string, value: unknown, entidad: string, ctx: ContextoActividad = {}): string | null {
   if (esVacio(value)) return null;
   if (value === "[firma]") return "firma registrada";
   if (PERSON_FIELDS.has(key)) return ctx.personas?.get(Number(value)) || null;
@@ -532,36 +532,6 @@ function frasesDeLista(key: string, antes: unknown[], despues: unknown[], entida
     }
   }
   return frases.map((f) => (prefijo ? `${prefijo}${f.charAt(0).toLowerCase()}${f.slice(1)}` : f));
-}
-
-/*
- * Permisos de un rol (filas { modulo, accion, alcance }) en lenguaje llano, por
- * modulo: "Muestras: C, E (Recepción)". Se usa en Administración › Roles.
- */
-export function resumenPermisos(filas: unknown): Map<string, string> {
-  const porModulo = new Map<string, Map<string, string[]>>();
-  for (const fila of Array.isArray(filas) ? filas : []) {
-    if (!fila || typeof fila !== "object") continue;
-    const { modulo, accion, alcance } = fila as ApiRecord;
-    if (!isModulo(modulo) || !isAccion(accion)) continue;
-    const grupos = porModulo.get(modulo) || new Map<string, string[]>();
-    const clave = String(alcance || "total");
-    grupos.set(clave, [...(grupos.get(clave) || []), accion]);
-    porModulo.set(modulo, grupos);
-  }
-  const out = new Map<string, string>();
-  for (const modulo of MODULOS) {
-    const grupos = porModulo.get(modulo.clave);
-    if (!grupos) continue;
-    const partes = [...grupos.entries()]
-      .sort(([a], [b]) => (a === "total" ? -1 : b === "total" ? 1 : a.localeCompare(b)))
-      .map(([alcance, acciones]) => {
-        const lista = acciones.sort((x, y) => ACCION_KEYS.indexOf(x as never) - ACCION_KEYS.indexOf(y as never)).join(", ");
-        return alcance === "total" ? lista : `${lista} (${alcanceLabel(alcance)})`;
-      });
-    out.set(modulo.nombre, partes.join("; "));
-  }
-  return out;
 }
 
 /* Permisos en palabras para la bitacora: "en Muestras puede ver, registrar y editar". */

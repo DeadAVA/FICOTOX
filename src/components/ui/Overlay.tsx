@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
-import { Dialog as RadixDialog, DropdownMenu as RadixDropdown, HoverCard as RadixHoverCard, Tooltip as RadixTooltip } from "radix-ui";
+import { Dialog as RadixDialog, DropdownMenu as RadixDropdown, Tooltip as RadixTooltip } from "radix-ui";
 import { DotsThreeCircle, X } from "@phosphor-icons/react";
 import { Button, IconButton } from "./Button";
 import { cn } from "./cn";
@@ -401,22 +401,3 @@ export function Tooltip({ content, children, side = "top" }: { content: ReactNod
 }
 
 /* ---------- HoverCard ---------- */
-
-/*
- * Tarjeta al pasar el cursor (y al enfocar con teclado): detalle de un
- * elemento sin abrirlo. Sale del propio disparador (transform-origin) y se
- * materializa como una capa translúcida; en pantallas táctiles no aparece,
- * el enlace del disparador basta.
- */
-export function HoverCard({ content, children, side = "left", align = "center", width = 320, openDelay = 220 }: { content: ReactNode; children: ReactNode; side?: "top" | "bottom" | "left" | "right"; align?: "start" | "center" | "end"; width?: number; openDelay?: number }) {
-  return (
-    <RadixHoverCard.Root openDelay={openDelay} closeDelay={120}>
-      <RadixHoverCard.Trigger asChild>{children}</RadixHoverCard.Trigger>
-      <RadixHoverCard.Portal>
-        <RadixHoverCard.Content side={side} align={align} sideOffset={10} collisionPadding={12} style={{ width }} className="material z-50 origin-[var(--radix-hover-card-content-transform-origin)] rounded-[16px] p-1 shadow-panel outline-none data-[state=open]:animate-materialize data-[state=closed]:animate-dematerialize">
-          {content}
-        </RadixHoverCard.Content>
-      </RadixHoverCard.Portal>
-    </RadixHoverCard.Root>
-  );
-}

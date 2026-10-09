@@ -14,7 +14,7 @@
  * `construirIndice`. El `grupo` decide en qué encabezado aparece.
  */
 import { ESTADOS_INCIDENCIA, ESTADOS_NC, folioNc } from "../../shared/calidad";
-import { GRUPO_TITULO, norm, type Comando, type GrupoClave, type TipoResultado } from "../../shared/busqueda";
+import { norm, type Comando, type GrupoClave, type TipoResultado } from "../../shared/busqueda";
 import { fmtDate } from "../../client/format";
 import { formatReactivoName, getReactivoStockInfo } from "../../client/reactivos";
 import { formatExtractionFolio, formatProcessingFolio, formatSampleFolio, sampleStatusLabel } from "../../client/samples";
@@ -329,6 +329,4 @@ export async function construirIndice(request: Request, s: Session): Promise<Ind
   if (cache.size > 200) for (const [k, v] of cache) if (Date.now() - v.at > TTL_MS) cache.delete(k);
   return indice;
 }
-
-export const tituloDeGrupo = (grupo: GrupoClave) => GRUPO_TITULO[grupo];
 export { leer, items };

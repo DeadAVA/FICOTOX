@@ -37,7 +37,7 @@ const SINONIMOS: Record<string, string[]> = {
 
 const FOLIO_CONSULTA = /^(inc|nc|ir|e-?a|e-?d|r|p|a)?[\s-]*0*(\d{1,7})$/;
 
-export function parseFolioConsulta(q: string): { p: string | null; n: number } | null {
+function parseFolioConsulta(q: string): { p: string | null; n: number } | null {
   const m = FOLIO_CONSULTA.exec(q);
   if (!m) return null;
   return { p: m[1] ? m[1].replace("-", "") : null, n: Number(m[2]) };

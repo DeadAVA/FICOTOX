@@ -885,4 +885,3 @@ export async function violacionParaExcepcionSuspension(s: Session, user: Current
   return { violacion: evaluarReanudacion(userIdFromClaims(user) as number, su.suspendida_por), row: su, referencia: `${su.tipo === "metodo" ? `Método ${su.clave}` : `Equipo #${su.clave}`} (${folioNc(su.nc_folio)})` };
 }
 
-export { CLASIFICACION_NC_LABEL };

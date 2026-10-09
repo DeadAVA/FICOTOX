@@ -50,7 +50,7 @@ export function informeFolio(row: Row | null | undefined): string {
   return `IR ${String(row?.folio_num || 0).padStart(7, "0")}`;
 }
 
-export function serializeInforme(row: Row): Row {
+function serializeInforme(row: Row): Row {
   const item: Row = { ...row };
   item.excepciones = excepcionesDe(row);
   delete item.excepciones_json;
@@ -560,7 +560,7 @@ export function exigirSinRequiereEnmienda(row: Row, que: string): void {
 }
 
 /* Fase 6: compara el SHA-256 del PDF en disco con el guardado al liberar. */
-export async function integridadPdf(row: Row): Promise<"ok" | "alterado" | "faltante" | null> {
+async function integridadPdf(row: Row): Promise<"ok" | "alterado" | "faltante" | null> {
   if (!row.archivo_pdf || !row.pdf_sha256) return null;
   const ruta = path.join(informesDir(), String(row.archivo_pdf));
   if (!fs.existsSync(ruta)) return "faltante";

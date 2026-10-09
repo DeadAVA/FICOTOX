@@ -12,7 +12,7 @@ import type { Problema } from "@/lib/client/mensajes";
  * formulario (`ExtractionForm`) es comun a todos los protocolos.
  */
 
-export interface StepDef {
+interface StepDef {
   key: string;
   /* Texto que se guarda en pasos.checklist (los registros ASP viejos dependen de el). */
   value: string;
@@ -38,7 +38,7 @@ export interface FixedField {
   placeholder: string;
 }
 
-export interface EquipoField {
+interface EquipoField {
   /* Clave dentro de pasos_json donde se guarda el id del equipo. */
   key: string;
   label: string;

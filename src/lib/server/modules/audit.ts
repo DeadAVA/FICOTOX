@@ -215,11 +215,6 @@ export async function alertaBitacora(s: Session): Promise<Row | null> {
   return (await s.queryOne<Row>("SELECT id, reportada_en FROM incidencias WHERE clave_automatica LIKE :prefijo AND estado IN ('reportada', 'en_evaluacion') ORDER BY id LIMIT 1", { prefijo: `alerta_integridad:${PREFIJO_ALERTA_BITACORA}%` })) ?? null;
 }
 
-export async function alertaBitacoraAbierta(s: Session): Promise<boolean> {
-  const fila = await s.scalar("SELECT id FROM incidencias WHERE clave_automatica LIKE :prefijo AND estado IN ('reportada', 'en_evaluacion') LIMIT 1", { prefijo: `alerta_integridad:${PREFIJO_ALERTA_BITACORA}%` });
-  return !!fila;
-}
-
 /*
  * Integridad de la cadena de hashes (ISO/IEC 17025 7.11.3). Corre en segundo
  * plano al abrir Auditoría; si encuentra una alteracion, la registra y crea la

@@ -43,7 +43,7 @@ export const IMPACTOS: Opcion[] = [
 ];
 export const IMPACTO_LABEL = etiquetas(IMPACTOS);
 
-export const ORIGENES_AUTOMATICOS: Opcion[] = [
+const ORIGENES_AUTOMATICOS: Opcion[] = [
   { value: "desviacion_recepcion", label: "Recepción aceptada con desviación" },
   { value: "rechazo_recepcion", label: "Recepción rechazada" },
   { value: "equipo_no_apto", label: "Uso de un equipo no apto o con calibración vencida" },
@@ -113,11 +113,6 @@ export const ESTADOS_ACCION: Record<string, { label: string; tone: "neutral" | "
   cancelada: { label: "Cancelada", tone: "danger" },
 };
 
-export const RESULTADOS_VERIFICACION: Opcion[] = [
-  { value: "eficaz", label: "Eficaz" },
-  { value: "no_eficaz", label: "No eficaz" },
-];
-
 export const MEDIOS_COMUNICACION: Opcion[] = [
   { value: "correo", label: "Correo electrónico" },
   { value: "telefono", label: "Teléfono" },
@@ -128,20 +123,12 @@ export const MEDIOS_COMUNICACION: Opcion[] = [
 export const MEDIO_COMUNICACION_LABEL = etiquetas(MEDIOS_COMUNICACION);
 
 /* ---------- Suspensiones ---------- */
-
-export const TIPOS_SUSPENSION: Opcion[] = [
-  { value: "metodo", label: "Método" },
-  { value: "equipo", label: "Equipo" },
-];
 /* Metodos que se pueden suspender (los del catalogo FX-THF-AP). */
 export const METODOS_SUSPENDIBLES = ["ASP", "DSP", "PSP", "pigmentos", "plancton", "otro"] as const;
 
 /* Folios: "INC 0000001", "NC 0000001". */
 export const folioIncidencia = (n: unknown) => `INC ${String(Number(n) || 0).padStart(7, "0")}`;
 export const folioNc = (n: unknown) => `NC ${String(Number(n) || 0).padStart(7, "0")}`;
-
-/* Objetos de alcance: con alcance "incidencias" solo se opera sobre estos. */
-export const OBJETOS_CALIDAD = ["incidencia", "nc", "accion_correctiva"] as const;
 
 /* Clave del formato "Registro de no conformidad" (por confirmar con Mejora Continua; configurable con NC_FORMATO_CLAVE). */
 export const NC_FORMATO_CLAVE_DEFAULT = "FX-MC-NC (por confirmar)";

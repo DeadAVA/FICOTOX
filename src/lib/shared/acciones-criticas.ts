@@ -51,10 +51,10 @@ export const TIPOS_SOLICITUD = Object.keys(ACCIONES_CRITICAS) as TipoSolicitud[]
  * Las solicitudes viejas que queden en la base se muestran con esta etiqueta,
  * sin botones de aprobar o rechazar, hasta que venzan.
  */
-export const ACCIONES_RETIRADAS: Record<string, { etiqueta: string; pendiente: string }> = {
+const ACCIONES_RETIRADAS: Record<string, { etiqueta: string; pendiente: string }> = {
   obsoletar_documento: { etiqueta: "Acción retirada (declarar documento obsoleto)", pendiente: "Acción retirada" },
 };
-export const ETIQUETA_ACCION_RETIRADA = "Acción retirada";
+const ETIQUETA_ACCION_RETIRADA = "Acción retirada";
 export const esTipoActivo = (tipo: unknown): tipo is TipoSolicitud => TIPOS_SOLICITUD.includes(String(tipo) as TipoSolicitud);
 /* Etiquetas de una solicitud, activa o retirada. */
 export function etiquetasDeSolicitud(tipo: unknown): { etiqueta: string; pendiente: string } {
@@ -63,7 +63,7 @@ export function etiquetasDeSolicitud(tipo: unknown): { etiqueta: string; pendien
 }
 
 /* Modulo del permiso de los registros tecnicos (recepcion = muestras; el resto = ensayos). */
-export const MODULO_DE_ENTIDAD: Record<string, Modulo> = {
+const MODULO_DE_ENTIDAD: Record<string, Modulo> = {
   muestras_recepcion: "muestras",
   muestras_procesamiento: "ensayos",
   muestras_extraccion: "ensayos",

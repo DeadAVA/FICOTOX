@@ -34,7 +34,7 @@ const LABEL: Record<SampleTable, string> = {
 };
 
 /* Las tablas heredadas usan el femenino ("anulada"); el analisis, el masculino. */
-export const ANULADO_VALUE: Record<SampleTable, string> = {
+const ANULADO_VALUE: Record<SampleTable, string> = {
   muestras_recepcion: "anulada",
   muestras_procesamiento: "anulada",
   muestras_extraccion: "anulada",
@@ -98,12 +98,12 @@ export function folioLabel(table: SampleTable, row: Row | null | undefined): str
   return `${prefix} ${String(row.folio_num || 0).padStart(7, "0")}${version}`;
 }
 
-export function isAnulado(table: SampleTable, row: Row | null | undefined): boolean {
+function isAnulado(table: SampleTable, row: Row | null | undefined): boolean {
   return !!row && String(row.estado || "") === ANULADO_VALUE[table];
 }
 
 /* Un registro anulado, rechazado, cerrado o aprobado no se edita. */
-export function assertEditable(row: Row | null | undefined, table: SampleTable): void {
+function assertEditable(row: Row | null | undefined, table: SampleTable): void {
   if (!row) throw new HttpError(404, { message: "Registro no encontrado" });
   const estado = String(row.estado || "");
   if (isAnulado(table, row)) throw new HttpError(409, { message: `El registro ${folioLabel(table, row)} esta anulado y no se puede modificar` });

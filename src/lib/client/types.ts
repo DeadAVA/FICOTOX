@@ -47,17 +47,4 @@ export interface AuthConfig {
   sesion?: { inactividad_min?: number; expira_horas?: number };
 }
 
-export type PageKey =
-  | "dashboard"
-  | "reactivos"
-  | "consumibles"
-  | "equipos"
-  | "muestras"
-  | "movimientos"
-  | "mantenimiento"
-  | "documentos"
-  | "reportes"
-  | "roles"
-  | "usuarios";
-
 
