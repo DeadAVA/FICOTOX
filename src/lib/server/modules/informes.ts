@@ -271,6 +271,8 @@ export async function getInforme({ request, s, params }: RouteContext): Promise<
   item.recepcion = recepcion ? { id: recepcion.id, folio_num: recepcion.folio_num, solicitante: recepcion.solicitante, fecha_recepcion: recepcion.fecha_recepcion, estado: recepcion.estado, decision_aceptacion: recepcion.decision_aceptacion } : null;
   // Fase 6: integridad del PDF final (su SHA-256 contra el guardado al liberar).
   item.pdf_integridad = await integridadPdf(row);
+  // Versiones del mismo informe (enmiendas) para el visor del PDF.
+  item.versiones = (await s.query<Row>(`SELECT id, version, estado, sustituye_a, archivo_pdf FROM ${TABLE} WHERE folio_num = :folio ORDER BY version`, { folio: row.folio_num })).map((v) => ({ id: v.id, version: v.version, estado: v.estado, sustituye_a: v.sustituye_a, tiene_pdf: !!v.archivo_pdf }));
   // Fase 11: retenciones activas por no conformidad (no se libera ni se envia mientras existan).
   // El motivo es de la NC: solo con calidad:V total (a los demas, el folio de la NC y la fecha bastan para saber por que no se libera).
   const calidadTotal = !!permisoDe(await cargarAutorizacion(s, user), "calidad", "V", { objeto: "nc" })?.alcances.includes("total");
@@ -715,22 +717,36 @@ export async function amendInforme({ request, s, params }: RouteContext): Promis
   return json({ message: "Enmienda creada en borrador", id: nuevoId, version: maxVersion + 1 }, 201);
 }
 
+/*
+ * GET /api/informes/:id/pdf. Sin parametros (o modo=descargar): el PDF final,
+ * o una vista previa si aun no se libera, y queda "descargar" en la bitacora.
+ * modo=ver (visor de la plataforma): solo el PDF final, en linea y sin
+ * bitacora (leer no se registra); si el archivo falta o no coincide con su
+ * huella SHA-256 se registra la alerta y la incidencia automatica como al descargar.
+ */
 export async function getInformePdf({ request, s, params }: RouteContext): Promise<Response> {
   const id = intParam(params.id);
   const user = await requireUser(request);
   await requirePermission(s, user, "informes", "V");
   const row = await snapshotRow(s, TABLE, id);
   if (!row) return json({ message: "Informe no encontrado" }, 404);
+  const ver = new URL(request.url).searchParams.get("modo") === "ver";
+  if (ver && !row.archivo_pdf) return json({ message: "Este informe todavía no tiene PDF final", codigo: "sin_pdf" }, 404);
   let pdf: Buffer;
   const integridad = await integridadPdf(row);
+  const alertar = async (motivo: string, clave: string, descripcion: string, detalle: Record<string, unknown>) => {
+    await registrarAuditoria(s, user, { accion: "alerta_integridad", entidad: TABLE, entidadId: id, referencia: informeFolio(row), motivo, detalle });
+    // Fase 11: incidencia automatica (la reporta el sistema; una por PDF alterado).
+    await incidenciaPorAlertaIntegridad(s, { clave, descripcion, registros: [{ entidad: TABLE, entidad_id: id, referencia: informeFolio(row) }] });
+  };
   if (row.archivo_pdf && fs.existsSync(path.join(informesDir(), String(row.archivo_pdf)))) {
     pdf = await fs.promises.readFile(path.join(informesDir(), String(row.archivo_pdf)));
     // Fase 6: si la huella no coincide con la guardada al liberar, se avisa en la bitacora (y en la ficha).
-    if (integridad === "alterado") {
-      await registrarAuditoria(s, user, { accion: "alerta_integridad", entidad: TABLE, entidadId: id, referencia: informeFolio(row), motivo: "El SHA-256 del PDF no coincide con el guardado al liberar", detalle: { esperado: row.pdf_sha256, obtenido: createHash("sha256").update(pdf).digest("hex") } });
-      // Fase 11: incidencia automatica (la reporta el sistema; una por PDF alterado).
-      await incidenciaPorAlertaIntegridad(s, { clave: `informe:${id}:${row.pdf_sha256}`, descripcion: `El PDF final del informe ${informeFolio(row)} no coincide con su huella SHA-256 registrada al liberarlo (alerta de integridad).`, registros: [{ entidad: TABLE, entidad_id: id, referencia: informeFolio(row) }] });
-    }
+    if (integridad === "alterado") await alertar("El SHA-256 del PDF no coincide con el guardado al liberar", `informe:${id}:${row.pdf_sha256}`, `El PDF final del informe ${informeFolio(row)} no coincide con su huella SHA-256 registrada al liberarlo (alerta de integridad).`, { esperado: row.pdf_sha256, obtenido: createHash("sha256").update(pdf).digest("hex") });
+  } else if (ver) {
+    await alertar("El PDF final del informe no está en el servidor", `informe:${id}:faltante:${row.pdf_sha256}`, `El PDF final del informe ${informeFolio(row)} no está en el servidor (alerta de integridad).`, { esperado: row.pdf_sha256, archivo: row.archivo_pdf });
+    await s.commit();
+    return json({ message: "El PDF del informe no está en el servidor; se registró una alerta de integridad", codigo: "archivo_faltante" }, 404);
   } else {
     // Borrador: vista previa generada al vuelo, marcada como tal.
     const analyses = await loadAnalyses(s, safeJsonLoad<number[]>(String(row.analisis_ids_json || "[]"), []));
@@ -738,11 +754,11 @@ export async function getInformePdf({ request, s, params }: RouteContext): Promi
     render.declaraciones = { ...render.declaraciones, opiniones: [render.declaraciones.opiniones, "VISTA PREVIA — informe no liberado"].filter(Boolean).join("\n") };
     pdf = await renderInformePdf(render);
   }
-  await registrarAuditoria(s, user, { accion: "descargar", entidad: TABLE, entidadId: id, referencia: informeFolio(row) });
+  if (!ver) await registrarAuditoria(s, user, { accion: "descargar", entidad: TABLE, entidadId: id, referencia: informeFolio(row) });
   await s.commit();
   return new Response(new Uint8Array(pdf), {
     status: 200,
-    headers: { "Content-Type": "application/pdf", "Content-Length": String(pdf.length), "X-Integridad-Pdf": integridad || "sin_pdf_final", "Content-Disposition": `inline; filename="${informeFolio(row).replace(/\s+/g, "-")}-v${row.version}.pdf"` },
+    headers: { "Content-Type": "application/pdf", "Content-Length": String(pdf.length), "X-Integridad-Pdf": integridad || "sin_pdf_final", "Content-Disposition": `inline; filename="${informeFolio(row).replace(/\s+/g, "-")}-v${row.version}.pdf"`, ...(ver ? { "Cache-Control": "private, no-store" } : {}) },
   });
 }
 

@@ -38,7 +38,12 @@ export function useArchivoVersion(versionId: number | null): { datos: ArrayBuffe
 
 /* Descarga una version (modo descargar: queda en la bitacora). */
 export async function descargarVersion(versionId: number, token: string, nombre: string): Promise<void> {
-  const res = await fetch(urlArchivoVersion(versionId, "descargar"), { headers: { Authorization: `Bearer ${token}` } });
+  return descargarUrl(urlArchivoVersion(versionId, "descargar"), token, nombre);
+}
+
+/* Descarga un archivo protegido por URL con el nombre dado. */
+export async function descargarUrl(urlArchivo: string, token: string, nombre: string): Promise<void> {
+  const res = await fetch(urlArchivo, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new ApiError(res.status, data, "No se pudo descargar el archivo");
@@ -55,7 +60,11 @@ export async function descargarVersion(versionId: number, token: string, nombre:
 
 /* Imprime un PDF: blob en un iframe oculto y print() del visor del navegador. */
 export async function imprimirPdf(versionId: number, token: string): Promise<void> {
-  const res = await fetch(urlArchivoVersion(versionId), { headers: { Authorization: `Bearer ${token}` } });
+  return imprimirPdfUrl(urlArchivoVersion(versionId), token);
+}
+
+export async function imprimirPdfUrl(urlArchivo: string, token: string): Promise<void> {
+  const res = await fetch(urlArchivo, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new ApiError(res.status, data, "No se pudo preparar la impresión");

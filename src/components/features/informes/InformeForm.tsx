@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ArrowsClockwise, FilePdf, FloppyDisk, LockKey, PaperPlaneTilt, Prohibit, SealCheck } from "@phosphor-icons/react";
+import { ArrowsClockwise, BookOpenText, FilePdf, FloppyDisk, LockKey, PaperPlaneTilt, Prohibit, SealCheck } from "@phosphor-icons/react";
 import { IncidenciasFormCard } from "@/components/features/calidad/IncidenciasDelRegistro";
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
 import { BotonSegregado, FolioChip, SegregacionCallout, SolicitudCallout, SupervisionCallout } from "@/components/features/samples/status";
@@ -335,7 +335,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
 
   // Acciones secundarias (PDF, enmienda, anulación) van en un menú para que la cabecera solo muestre el siguiente paso.
   const moreItems: MenuItem[] = [];
-  if (editing) moreItems.push({ label: estado === "borrador" || estado === "en_revision" ? "Vista previa del PDF" : "Ver PDF", description: "Abre el documento en una pestaña nueva", icon: <FilePdf size={16} weight="duotone" />, tone: "brand", onSelect: verPdf });
+  if (editing) moreItems.push({ label: item?.archivo_pdf ? "Descargar PDF" : estado === "borrador" || estado === "en_revision" ? "Vista previa del PDF" : "Ver PDF", description: "Abre el documento en una pestaña nueva", icon: <FilePdf size={16} weight="duotone" />, tone: "brand", onSelect: verPdf });
   if (editing && ["autorizado", "liberado", "enviado", "anulado"].includes(estado) && can("informes", "C")) moreItems.push({ label: "Emitir enmienda…", description: "Nueva versión que sustituye a esta", icon: <ArrowsClockwise size={16} weight="duotone" />, onSelect: enmendar });
   if (editing && estado !== "anulado" && can("informes", "AN")) moreItems.push({ label: "Anular informe…", description: "El PDF queda sin validez", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: anular });
 
@@ -375,6 +375,11 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
           <Button variant="secondary" onClick={() => router.push("/informes")}>
             {draft ? "Cancelar" : "Volver"}
           </Button>
+          {editing && item?.archivo_pdf ? (
+            <Button variant="secondary" icon={<BookOpenText size={16} />} onClick={() => router.push(`/informes/${item.id}/ver`)}>
+              Ver informe
+            </Button>
+          ) : null}
           {moreItems.length ? <ActionMenu items={moreItems} label="Más acciones" header={editing ? String(item!.folio) : undefined} /> : null}
           {editing && estado === "borrador" && canReview ? (
             <BotonSegregado bloqueo={segregacion.revisar} onSolicitar={() => solicitarExcepcion("revisar")}>

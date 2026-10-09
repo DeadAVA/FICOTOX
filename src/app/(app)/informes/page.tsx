@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { ArrowSquareOut, FilePdf, FileText, Plus } from "@phosphor-icons/react";
+import { ArrowSquareOut, BookOpenText, FilePdf, FileText, Plus } from "@phosphor-icons/react";
 import { useMenuReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { FolioChip, StateBadge, SolicitudBadge, SupervisionBadge } from "@/components/features/samples/status";
 import { PageBody } from "@/components/shell/AppShell";
@@ -95,7 +95,8 @@ function InformesContent() {
   const reportar = useMenuReportar();
   const menuFor = (item: ApiRecord): MenuItem[] => [
     { label: "Abrir", description: "Ver el informe y su historial", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/informes/${item.id}`) },
-    { label: "Ver PDF", description: ["liberado", "enviado", "sustituido", "anulado"].includes(String(item.estado)) ? "Documento liberado con SHA-256" : "Vista previa (sin validez)", icon: <FilePdf size={16} weight="duotone" />, onSelect: () => openProtectedFile(`${API_BASE_URL}/informes/${item.id}/pdf`, token, `${String(item.folio || "informe").replace(/\s+/g, "-")}.pdf`) },
+    ...(item.archivo_pdf ? [{ label: "Ver informe", description: "Leer el PDF final en la plataforma", icon: <BookOpenText size={16} weight="duotone" />, onSelect: () => router.push(`/informes/${item.id}/ver`) } as MenuItem] : []),
+    { label: item.archivo_pdf ? "Descargar PDF" : "Ver PDF", description: ["liberado", "enviado", "sustituido", "anulado"].includes(String(item.estado)) ? "Documento liberado con SHA-256" : "Vista previa (sin validez)", icon: <FilePdf size={16} weight="duotone" />, onSelect: () => openProtectedFile(`${API_BASE_URL}/informes/${item.id}/pdf`, token, `${String(item.folio || "informe").replace(/\s+/g, "-")}.pdf`) },
     ...reportar("informes", item.id, String(item.folio || "Informe")),
   ];
 

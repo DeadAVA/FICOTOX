@@ -38,10 +38,18 @@ export const urlArchivoVersion = (versionId: number | string, modo: "ver" | "des
  * (Range) y solo baja las paginas que se ven.
  */
 export async function abrirPdfVersion(versionId: number | string, token: string): Promise<PdfDocumento> {
+  return abrirPdfUrl(urlArchivoVersion(versionId), token);
+}
+
+/* Abre un PDF protegido por URL (mismo visor para la biblioteca y los informes). */
+export async function abrirPdfUrl(url: string, token: string): Promise<PdfDocumento> {
   const pdfjs = await cargarPdfjs();
-  const tarea = pdfjs.getDocument({ url: urlArchivoVersion(versionId), httpHeaders: { Authorization: `Bearer ${token}` }, disableAutoFetch: true, rangeChunkSize: 256 * 1024, ...PDF_OPCIONES });
+  const tarea = pdfjs.getDocument({ url, httpHeaders: { Authorization: `Bearer ${token}` }, disableAutoFetch: true, rangeChunkSize: 256 * 1024, ...PDF_OPCIONES });
   return tarea.promise;
 }
+
+/* URL del PDF final de un informe para el visor (en linea, sin bitacora). */
+export const urlPdfInforme = (informeId: number | string) => `${API_BASE_URL}/informes/${informeId}/pdf?modo=ver`;
 
 /* PDF desde bytes (archivo elegido para subir). */
 export async function abrirPdfBytes(datos: ArrayBuffer): Promise<PdfDocumento> {

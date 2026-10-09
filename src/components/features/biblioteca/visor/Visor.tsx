@@ -25,7 +25,7 @@ import { VisorPdf } from "./VisorPdf";
 import { VisorTexto } from "./VisorTexto";
 
 /* Pantalla amplia (panel de informacion al lado) o angosta (panel en hoja). */
-function useAncho(minimo: number): boolean {
+export function useAncho(minimo: number): boolean {
   const [ancho, setAncho] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia(`(min-width: ${minimo}px)`);
@@ -37,7 +37,7 @@ function useAncho(minimo: number): boolean {
   return ancho;
 }
 
-const ESTILOS_IMPRESION = `
+export const ESTILOS_IMPRESION = `
 @media print {
   body * { visibility: hidden !important; }
   [data-visor-contenido], [data-visor-contenido] * { visibility: visible !important; }

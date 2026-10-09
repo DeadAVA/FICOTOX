@@ -8,7 +8,7 @@ import { cn } from "@/components/ui/cn";
 import { ErrorState, Skeleton } from "@/components/ui/Primitives";
 import { API_BASE_URL, sendJsonAuth } from "@/lib/client/api";
 import { explicarError } from "@/lib/client/mensajes";
-import { abrirPdfVersion, cargarPdfjs, textoDePdf, type PdfDocumento } from "@/lib/client/pdf";
+import { abrirPdfUrl, abrirPdfVersion, cargarPdfjs, textoDePdf, type PdfDocumento } from "@/lib/client/pdf";
 
 /*
  * Visor de PDF de la biblioteca con pdf.js (carga progresiva por rangos):
@@ -49,7 +49,7 @@ const ESTILOS = `
 .visor-resaltado-actual { background: color-mix(in srgb, var(--color-bloom) 60%, transparent); box-shadow: 0 0 0 1px var(--color-bloom); }
 `;
 
-const claveUltimaPagina = (usuario: unknown, docId: number) => `ficotox.biblioteca.pagina.${String(usuario || "anon")}.${docId}`;
+const claveUltimaPagina = (usuario: unknown, docId: number | string, ambito: string) => `ficotox.${ambito}.pagina.${String(usuario || "anon")}.${docId}`;
 const leerUltimaPagina = (clave: string): number => {
   try {
     return Number(window.localStorage.getItem(clave)) || 1;
@@ -232,7 +232,11 @@ function Indice({ nodos, onIr, nivel = 0 }: { nodos: NodoIndice[]; onIr: (dest: 
   );
 }
 
-export function VisorPdf({ versionId, docId, conTexto, compacto }: { versionId: number; docId: number; conTexto: boolean; compacto: boolean }) {
+/*
+ * `versionId`: version de la biblioteca. Para otro origen (informes) se da `url` y
+ * `ambito` (clave de la ultima pagina leida); entonces no se extrae texto para el indice.
+ */
+export function VisorPdf({ versionId, url, ambito = "biblioteca", docId, conTexto, compacto }: { versionId?: number; url?: string; ambito?: string; docId: number | string; conTexto: boolean; compacto: boolean }) {
   const { token, user } = useSession();
   const [pdf, setPdf] = useState<PdfDocumento | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -257,7 +261,7 @@ export function VisorPdf({ versionId, docId, conTexto, compacto }: { versionId: 
   const buscarRef = useRef<HTMLInputElement | null>(null);
   const textos = useRef<Map<number, string[]>>(new Map());
   const marcasPorPagina = useRef<Map<number, HTMLElement[]>>(new Map());
-  const clavePagina = claveUltimaPagina(user?.id || user?.email, docId);
+  const clavePagina = claveUltimaPagina(user?.id || user?.email, docId, ambito);
   const restaurada = useRef(false);
 
   // Cargar el PDF (progresivo) y su indice.
@@ -267,7 +271,7 @@ export function VisorPdf({ versionId, docId, conTexto, compacto }: { versionId: 
     let doc: PdfDocumento | null = null;
     (async () => {
       try {
-        doc = await abrirPdfVersion(versionId, token);
+        doc = url ? await abrirPdfUrl(url, token) : await abrirPdfVersion(versionId as number, token);
         if (!vivo) return;
         const p1 = await doc.getPage(1);
         const v = p1.getViewport({ scale: 1 });
@@ -283,11 +287,11 @@ export function VisorPdf({ versionId, docId, conTexto, compacto }: { versionId: 
       vivo = false;
       void doc?.loadingTask.destroy();
     };
-  }, [versionId, token]);
+  }, [versionId, url, token]);
 
   // Texto para buscar en la biblioteca: si la version aun no lo tiene, se extrae aqui y se envia una vez.
   useEffect(() => {
-    if (!pdf || conTexto || !token) return;
+    if (!pdf || conTexto || !token || !versionId) return;
     let vivo = true;
     const t = window.setTimeout(async () => {
       try {
