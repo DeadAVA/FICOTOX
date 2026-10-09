@@ -197,12 +197,6 @@ function assertDraft(row: Row | null): Row {
   return row;
 }
 
-export async function getNextFolio({ request, s }: RouteContext): Promise<Response> {
-  const user = await requireUser(request);
-  await requirePermission(s, user, "informes", "V");
-  return json({ next_folio: await nextFolioNum(s, TABLE) });
-}
-
 export async function listInformes({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   const permiso = await requirePermission(s, user, "informes", "V");

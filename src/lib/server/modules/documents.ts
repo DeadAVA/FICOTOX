@@ -37,23 +37,6 @@ function secureFilename(filename: string): string {
   return value;
 }
 
-export async function documentsSummary({ request, s }: RouteContext): Promise<Response> {
-  const user = await requireUser(request);
-  await requirePermission(s, user, "equipos", "V");
-
-  const summary = await s.queryOne(
-    `
-    SELECT
-      (SELECT COUNT(*) FROM reportes_mantenimiento) AS total_documentos,
-      (SELECT COUNT(*) FROM reportes_mantenimiento WHERE estado = 'borrador') AS borrador,
-      (SELECT COUNT(*) FROM reportes_mantenimiento WHERE estado = 'en_revision') AS en_revision,
-      (SELECT COUNT(*) FROM reportes_mantenimiento WHERE estado = 'aprobado') AS aprobados,
-      (SELECT COUNT(*) FROM reportes_mantenimiento WHERE estado = 'publicado') AS publicados
-    `,
-  );
-  return json(summary || {});
-}
-
 export async function listDocuments({ request, s }: RouteContext): Promise<Response> {
   const user = await requireUser(request);
   await requirePermission(s, user, "equipos", "V");
