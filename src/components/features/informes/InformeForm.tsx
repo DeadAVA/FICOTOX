@@ -21,7 +21,7 @@ import { DateInput } from "@/components/ui/DateInput";
 import { ActionMenu, usePrompt, type MenuItem } from "@/components/ui/Overlay";
 import { Badge, EmptyState } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
-import { openProtectedFile } from "@/lib/client/files";
+import { descargarPdfInforme } from "@/lib/client/informes-pdf";
 import { fmtDate, isoDate, parseIntOrNull, todayIso } from "@/lib/client/format";
 import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
@@ -283,7 +283,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
 
   const verPdf = () => {
     if (!item) return;
-    void openProtectedFile(`${API_BASE_URL}/informes/${item.id}/pdf`, token, `${String(item.folio || "informe").replace(/\s+/g, "-")}.pdf`);
+    router.push(`/informes/${item.id}/ver`);
   };
 
   const toggleAnalisis = (id: number, checked: boolean) => patch({ analisisIds: checked ? Array.from(new Set([...form.analisisIds, id])) : form.analisisIds.filter((v) => v !== id) });
@@ -336,7 +336,8 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
 
   // Acciones secundarias (PDF, enmienda, anulación) van en un menú para que la cabecera solo muestre el siguiente paso.
   const moreItems: MenuItem[] = [];
-  if (editing) moreItems.push({ label: item?.archivo_pdf ? "Descargar PDF" : estado === "borrador" || estado === "en_revision" ? "Vista previa del PDF" : "Ver PDF", description: "Abre el documento en una pestaña nueva", icon: <FilePdf size={16} weight="duotone" />, tone: "brand", onSelect: verPdf });
+  if (editing) moreItems.push({ label: item?.archivo_pdf ? "Ver informe" : estado === "borrador" || estado === "en_revision" ? "Vista previa del PDF" : "Ver PDF", description: item?.archivo_pdf ? "Leer el PDF final en la plataforma" : "Vista previa (sin validez) en la plataforma", icon: <FilePdf size={16} weight="duotone" />, tone: "brand", onSelect: verPdf });
+  if (editing && item?.archivo_pdf) moreItems.push({ label: "Descargar PDF", description: "Documento liberado con SHA-256", icon: <FilePdf size={16} weight="duotone" />, onSelect: () => void descargarPdfInforme(item, token) });
   if (editing && ["autorizado", "liberado", "enviado", "anulado"].includes(estado) && can("informes", "C")) moreItems.push({ label: "Emitir enmienda…", description: "Nueva versión que sustituye a esta", icon: <ArrowsClockwise size={16} weight="duotone" />, onSelect: enmendar });
   if (editing && estado !== "anulado" && can("informes", "AN")) moreItems.push({ label: "Anular informe…", description: "El PDF queda sin validez", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: anular });
 

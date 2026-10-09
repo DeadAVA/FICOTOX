@@ -17,6 +17,7 @@ import { ABRIR_MIS_AUTORIZACIONES, AccountSheet, EVENTO_ABRIR_CUENTA } from "./A
 import { usePendientesPorResolver } from "@/components/features/solicitudes/Solicitudes";
 import { Campana } from "./Campana";
 import { CommandPalette } from "./CommandPalette";
+import { VisorPdfFlotante } from "./VisorPdfFlotante";
 
 /*
  * Shell de la aplicacion: barra lateral con seis destinos; los que agrupan
@@ -213,6 +214,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <ReportarIncidenciaHost />
+      <VisorPdfFlotante />
       {accountOpen ? <AccountSheet open={accountOpen} abrirClave={cuentaClave} onClose={() => setAccountOpen(false)} /> : null}
     </div>
   );

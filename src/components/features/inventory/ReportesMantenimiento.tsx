@@ -5,7 +5,7 @@ import { useSession } from "@/components/session/SessionProvider";
 import { ListaCuadricula, type ColumnaLista } from "@/components/ui/ListaCuadricula";
 import { Badge, type Tone } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
-import { openProtectedFile } from "@/lib/client/files";
+import { verPdf } from "@/lib/client/files";
 import { fmt } from "@/lib/client/format";
 import { formatearFechaCorta } from "@/lib/shared/fechas";
 import { useResource } from "@/lib/client/store";
@@ -37,7 +37,7 @@ export function ReportesMantenimiento() {
   const abrir = (item: ApiRecord) => {
     const raw = String(item.archivo_url || "");
     const url = raw.startsWith("/") ? raw : `${API_BASE_URL}/documents/files/${raw.split("/").pop()}`;
-    void openProtectedFile(url, token, String(item.codigo || "reporte"));
+    verPdf(url, `${String(item.codigo || "reporte")}.pdf`, String(item.codigo || "Reporte de mantenimiento"));
   };
   const items = recurso.data || [];
   return (

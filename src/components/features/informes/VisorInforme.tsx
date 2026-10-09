@@ -26,12 +26,13 @@ interface VersionInforme {
   tiene_pdf: boolean;
 }
 
-/* ¿Tiene PDF final el informe? (se escribe al liberarlo; lo conservan los sustituidos y anulados). */
+/* ¿Tiene PDF final el informe? (se escribe al liberarlo; lo conservan los sustituidos y anulados). Sin él, el visor muestra la vista previa sin validez. */
 const tienePdfFinal = (item: ApiRecord | undefined | null): boolean => !!item?.archivo_pdf;
 
 /*
- * Pantalla de lectura del PDF final de un informe: el mismo visor de la
- * biblioteca (pdf.js) con un encabezado compacto. Leerlo no se registra en la
+ * Pantalla de lectura del PDF de un informe, liberado o en vista previa (borrador,
+ * en revisión, autorizado): el mismo visor de la biblioteca (pdf.js) con un
+ * encabezado compacto. Es el unico camino para ver un informe. Leerlo no se registra en la
  * bitacora; descargarlo si, igual que la descarga de siempre.
  */
 export function VisorInforme({ item }: { item: ApiRecord }) {
@@ -76,7 +77,7 @@ export function VisorInforme({ item }: { item: ApiRecord }) {
   const descargar = async () => {
     setDescargando(true);
     try {
-      await descargarUrl(`${API_BASE_URL}/informes/${id}/pdf`, token, `${folio.replace(/\s+/g, "-")}-v${version}.pdf`);
+      await descargarUrl(`${API_BASE_URL}/informes/${id}/pdf`, token, `${folio.replace(/\s+/g, "-")}-v${version}${tienePdf ? "" : "-vista-previa"}.pdf`);
     } catch (err) {
       const e = explicarError(err, "No se pudo descargar el PDF");
       toast.error(e.que, { description: e.hacer });
@@ -93,17 +94,7 @@ export function VisorInforme({ item }: { item: ApiRecord }) {
   };
   const volver = () => (window.history.length > 1 ? router.back() : router.push(fichaHref));
 
-  if (!tienePdf) {
-    return (
-      <div className="p-6">
-        <Callout tone="warning" title="Sin PDF final">
-          Este informe todavía no tiene PDF final. <Link href={fichaHref} className="font-medium text-brand-strong underline underline-offset-2">Abrir la ficha del informe</Link>
-        </Callout>
-      </div>
-    );
-  }
-
-  const hayAvisos = integridad === "alterado" || integridad === "faltante" || estado === "sustituido" || estado === "anulado";
+  const hayAvisos = !tienePdf || integridad === "alterado" || integridad === "faltante" || estado === "sustituido" || estado === "anulado";
   return (
     <div ref={raiz} className={cn("flex flex-col overflow-hidden bg-canvas", completa ? "h-dvh" : "-mx-4 -my-6 h-[calc(100dvh-56px)] sm:-mx-8 sm:-my-8 lg:h-dvh")} data-visor data-visor-informe>
       <style>{ESTILOS_IMPRESION}</style>
@@ -161,6 +152,11 @@ export function VisorInforme({ item }: { item: ApiRecord }) {
 
       {hayAvisos ? (
         <div className="flex flex-col gap-2 border-b border-line bg-surface px-3 py-2 sm:px-4">
+          {!tienePdf ? (
+            <Callout tone="warning" title="Vista previa sin validez">
+              Este informe todavía no se libera: el PDF es solo una vista previa. <Link href={fichaHref} className="font-medium text-brand-strong underline underline-offset-2">Abrir la ficha del informe</Link>
+            </Callout>
+          ) : null}
           {integridad === "alterado" || integridad === "faltante" ? (
             <div data-testid="visor-aviso-integridad">
               <Callout tone="danger" title={integridad === "faltante" ? "El PDF no está en el servidor" : "El PDF no coincide con su huella SHA-256"}>

@@ -16,7 +16,7 @@ import { Checkbox, controlClassSm, Field, FormGrid, Input, Select, Switch, Texta
 import { ActionMenu, Sheet, type MenuItem } from "@/components/ui/Overlay";
 import { Badge, DetailRow } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
-import { openProtectedFile } from "@/lib/client/files";
+import { verPdf } from "@/lib/client/files";
 import { fmtDate, fmtDateTime } from "@/lib/client/format";
 import { useDebouncedValue } from "@/lib/client/hooks";
 import { usePersonal } from "@/lib/client/personal";
@@ -54,7 +54,7 @@ const SIGUIENTE: Record<string, { a: string; label: string }> = {
 };
 
 export function NcForm({ item }: { item: ApiRecord }) {
-  const { token, prompt, enviar, solicitarExcepcion } = useAccionCalidad();
+  const { prompt, enviar, solicitarExcepcion } = useAccionCalidad();
   const personal = usePersonal();
   const puede = (item.puede || {}) as ApiRecord;
   const segregacion = (item.segregacion || {}) as Record<string, string | null>;
@@ -168,7 +168,7 @@ export function NcForm({ item }: { item: ApiRecord }) {
     const motivo = await prompt({ critico: true, tone: "danger", title: `Anular ${item.folio}`, description: "La NC deja de contar, pero se conserva. La anulación la autoriza un segundo usuario con calidad:AN.", confirmLabel: "Solicitar anulación" });
     if (motivo) await enviar("POST", `/calidad/nc/${item.id}/anular`, { motivo });
   };
-  const pdf = (actual: boolean) => openProtectedFile(`${API_BASE_URL}/calidad/nc/${item.id}/pdf${actual ? "?actual=1" : ""}`, token, `${String(item.folio).replace(" ", "-")}.pdf`);
+  const pdf = (actual: boolean) => verPdf(`${API_BASE_URL}/calidad/nc/${item.id}/pdf${actual ? "?actual=1" : ""}`, `${String(item.folio).replace(" ", "-")}.pdf`, String(item.folio));
 
   // Completitud por seccion con las mismas reglas que el guardado y el avance de etapa.
   const sections: FormSectionDef[] = [

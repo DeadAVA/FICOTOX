@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/Primitives";
 import { cn } from "@/components/ui/cn";
 import { ColumnasVentana, DatoLateral, DatosLista, DatosRapidos, TarjetaLateral, VentanaAcciones, VentanaCentrada, VentanaEncabezado, VentanaSeccion, VentanaTarjeta, VentanaTitulo } from "@/components/ui/Ventana";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
-import { openProtectedFile } from "@/lib/client/files";
+import { verPdf } from "@/lib/client/files";
 import type { ApiRecord } from "@/lib/client/types";
 import { IMPACTO_LABEL, ORIGEN_AUTOMATICO_LABEL, ORIGENES_NC, RANGO_NC, TIPO_INCIDENCIA_LABEL } from "@/lib/shared/calidad";
 import { formatearFecha, formatearFechaCorta, formatearFechaHora } from "@/lib/shared/fechas";
@@ -271,7 +271,7 @@ export function NcVentana({ ids, indice, onIndice, onCerrar, etiquetas = ["NC an
 
 function FichaNc({ id, onCerrar }: { id: number; onCerrar: () => void }) {
   const router = useRouter();
-  const { token, prompt, enviar } = useAccionCalidad();
+  const { prompt, enviar } = useAccionCalidad();
   const { item, error, cargar } = useRegistro(`/calidad/nc/${id}`);
   if (error) return <ErrorVentana error={error} />;
   if (!item) return <Cargando />;
@@ -291,7 +291,7 @@ function FichaNc({ id, onCerrar }: { id: number; onCerrar: () => void }) {
     const motivo = await prompt({ critico: true, tone: "danger", title: `Anular ${item.folio}`, description: "La NC deja de contar, pero se conserva. La anulación la autoriza un segundo usuario con calidad:AN.", confirmLabel: "Solicitar anulación" });
     if (motivo && (await enviar("POST", `/calidad/nc/${id}/anular`, { motivo }))) await cargar();
   };
-  const pdf = () => openProtectedFile(`${API_BASE_URL}/calidad/nc/${id}/pdf`, token, `${String(item.folio).replace(" ", "-")}.pdf`);
+  const pdf = () => verPdf(`${API_BASE_URL}/calidad/nc/${id}/pdf`, `${String(item.folio).replace(" ", "-")}.pdf`, String(item.folio));
   let paso = 0;
   return (
     <div className="flex flex-col gap-6" data-nc-ventana={id}>

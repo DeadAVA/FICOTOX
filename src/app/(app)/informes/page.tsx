@@ -18,7 +18,7 @@ import { FranjaPendientes } from "@/components/features/solicitudes/Solicitudes"
 import { StatusCell, StatusFlag } from "@/components/ui/StatusFlag";
 import { CellPrimary, COL_FECHA, FILA_LISTA, SOLO_ANCHO, Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
-import { openProtectedFile } from "@/lib/client/files";
+import { descargarPdfInforme } from "@/lib/client/informes-pdf";
 import { cn } from "@/components/ui/cn";
 import { contar, fmt, fmtDate } from "@/lib/client/format";
 import { useDebouncedValue, useParamChange, useInitialParam } from "@/lib/client/hooks";
@@ -95,8 +95,8 @@ function InformesContent() {
   const reportar = useMenuReportar();
   const menuFor = (item: ApiRecord): MenuItem[] => [
     { label: "Abrir", description: "Ver el informe y su historial", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/informes/${item.id}`) },
-    ...(item.archivo_pdf ? [{ label: "Ver informe", description: "Leer el PDF final en la plataforma", icon: <BookOpenText size={16} weight="duotone" />, onSelect: () => router.push(`/informes/${item.id}/ver`) } as MenuItem] : []),
-    { label: item.archivo_pdf ? "Descargar PDF" : "Ver PDF", description: ["liberado", "enviado", "sustituido", "anulado"].includes(String(item.estado)) ? "Documento liberado con SHA-256" : "Vista previa (sin validez)", icon: <FilePdf size={16} weight="duotone" />, onSelect: () => openProtectedFile(`${API_BASE_URL}/informes/${item.id}/pdf`, token, `${String(item.folio || "informe").replace(/\s+/g, "-")}.pdf`) },
+    { label: item.archivo_pdf ? "Ver informe" : "Ver PDF", description: item.archivo_pdf ? "Leer el PDF final en la plataforma" : "Vista previa (sin validez) en la plataforma", icon: <BookOpenText size={16} weight="duotone" />, onSelect: () => router.push(`/informes/${item.id}/ver`) },
+    ...(item.archivo_pdf ? [{ label: "Descargar PDF", description: "Documento liberado con SHA-256", icon: <FilePdf size={16} weight="duotone" />, onSelect: () => void descargarPdfInforme(item, token) } as MenuItem] : []),
     ...reportar("informes", item.id, String(item.folio || "Informe")),
   ];
 

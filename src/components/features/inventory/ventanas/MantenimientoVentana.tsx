@@ -3,13 +3,12 @@
 import Link from "next/link";
 import { CalendarBlank, CheckCircle, FilePdf, PencilSimple, Prohibit, Toolbox, User, Wrench } from "@phosphor-icons/react";
 import { MANTENIMIENTO_ESTADOS, MANTENIMIENTO_TIPOS, metaFor } from "@/components/features/inventory/meta";
-import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
 import { FiguraPersona } from "@/components/ui/FiguraPersona";
 import { Badge } from "@/components/ui/Primitives";
 import { ColumnasVentana, DatoLateral, DatosLista, DatosRapidos, TarjetaLateral, VentanaAcciones, VentanaCentrada, VentanaEncabezado, VentanaSeccion, VentanaTarjeta, VentanaTitulo } from "@/components/ui/Ventana";
 import { API_BASE_URL } from "@/lib/client/api";
-import { openProtectedFile } from "@/lib/client/files";
+import { verPdf } from "@/lib/client/files";
 import { fmt } from "@/lib/client/format";
 import { cantidadMovimiento, fechaDelMovimiento, origenDeMovimiento, esEntrada, tipoMovimiento, IconoEquipo, IconoMantenimiento, IconoMovimientoInsumo, IconoOrigen, moverEn } from "./comun";
 import { cn } from "@/components/ui/cn";
@@ -26,7 +25,6 @@ import { formatearFecha, formatearFechaCorta, formatearFechaHora, formatearHora,
 const mantenimientoVencido = (m: ApiRecord) => m.estado === "vencido" || (["programado", "en_proceso"].includes(String(m.estado)) && String(m.fecha_programada || "").slice(0, 10) < hoyLocal());
 
 export function MantenimientoVentana({ items, indice, onIndice, onCerrar, puedeEditar, puedeCancelar, editar, cancelar }: { items: ApiRecord[]; indice: number | null; onIndice: (i: number) => void; onCerrar: () => void; puedeEditar: boolean; puedeCancelar: boolean; editar: (m: ApiRecord) => void; cancelar: (m: ApiRecord) => void }) {
-  const { token } = useSession();
   const m = indice !== null ? items[indice] : undefined;
   const mover = (paso: number) => {
     const siguiente = moverEn(indice, items.length, paso);
@@ -74,7 +72,7 @@ export function MantenimientoVentana({ items, indice, onIndice, onCerrar, puedeE
                         onClick={() => {
                           const raw = String(m.reporte_pdf_url || "");
                           const url = raw.startsWith("/") ? raw : `${API_BASE_URL}/documents/files/${raw.split("/").pop()}`;
-                          void openProtectedFile(url, token, String(m.reporte_codigo || "reporte"));
+                          verPdf(url, `${String(m.reporte_codigo || "reporte")}.pdf`, String(m.reporte_codigo || "Reporte de mantenimiento"));
                         }}
                       >
                         Abrir reporte {String(m.reporte_codigo)}
