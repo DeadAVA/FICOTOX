@@ -40,7 +40,7 @@ Todo lo que dice se tomó del código (`src/lib/server/db.ts`, `config.ts`, `mig
 | Archivo | `instance/ficotox.sqlite3` por omisión (se cambia con `SQLITE_PATH` o `DATABASE_URL`). |
 | Tamaño de la base | La decisión de motor (Fase 12) registró 0,4 MB en la base real de entonces; ver sección 13 para la advertencia sobre ese dato. |
 | Tablas | **44 tablas de datos** + 2 de control de migraciones (`schema_migraciones`, `schema_migraciones_bloqueo`). Ver sección 3. |
-| Versión del esquema | **18** (la última migración es la `0018`; la primera es la `0009`). |
+| Versión del esquema | **19** (la última migración es la `0019`; la primera es la `0009`). |
 | Dentro de la base | Datos capturados, usuarios, roles y permisos, folios, estados, bitácora de auditoría, huellas SHA-256 de los archivos. |
 | Fuera de la base | PDF de informes y evidencias de envío, evidencias de análisis, Biblioteca, PDF de no conformidades, fotos de perfil, reportes de mantenimiento, la llave de la bitácora (`auditoria.key`, si se usa) y los registros del servidor. Ver sección 8. |
 
@@ -822,10 +822,10 @@ Antes de las migraciones versionadas, el sistema creaba las tablas «al vuelo».
 
 **Ejemplo:** guardar la «clave del lote» en cada extracción (una columna nueva `muestras_extraccion.lote_clave`) y una tabla nueva `lotes_reactivo`.
 
-1. **Crea el archivo** `src/lib/server/migraciones/0019_lote_clave.mjs` con el número siguiente a la última (`0018`). Mira `0014_tema.mjs` o `0017_busqueda_recientes.mjs` como modelo. Debe exportar `version`, `nombre` y `pasos`, y la función `up` que ejecuta los pasos. Esquema de ejemplo:
+1. **Crea el archivo** `src/lib/server/migraciones/0020_lote_clave.mjs` con el número siguiente a la última (`0019`). Mira `0014_tema.mjs` o `0017_busqueda_recientes.mjs` como modelo. Debe exportar `version`, `nombre` y `pasos`, y la función `up` que ejecuta los pasos. Esquema de ejemplo:
 
    ```js
-   // 0019_lote_clave.mjs (ejemplo; sigue la forma de 0014_tema.mjs)
+   // 0020_lote_clave.mjs (ejemplo; sigue la forma de 0014_tema.mjs)
    import { ejecutarPasos } from "./pasos.mjs";
 
    export const version = 19;

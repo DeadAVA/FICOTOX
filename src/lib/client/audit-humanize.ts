@@ -277,6 +277,13 @@ const FIELD: Record<string, string> = {
   caducidad: "la caducidad",
   lote: "el lote",
   localizacion: "la localización",
+  caducidad_indefinida: "si la caducidad es indefinida",
+  capacidad: "la capacidad por envase",
+  unidad_capacidad: "la unidad de la capacidad",
+  catalogo: "el número de catálogo",
+  parte: "el número de parte",
+  serie: "el número de serie",
+  nuevo_usado: "la condición",
   sub_localizacion: "la sublocalización",
   presentacion: "la presentación",
   contenedor: "el contenedor",
@@ -742,6 +749,12 @@ function redactar(record: ApiRecord, actor: string, sistema: boolean): Partes {
     case "eliminar":
       return { accion: `eliminó ${O}`, quePaso: `${quien} eliminó ${O}.` };
     case "reponer": {
+      const mov = String(d.tipo || "entrada");
+      if (mov === "salida" || mov === "consumo") {
+        const c = Number(d.cantidad) ? ` de ${numero(Number(d.cantidad))}` : "";
+        return { accion: `registró ${mov === "consumo" ? "un consumo" : "una salida"} de ${ref || meta.noun} del inventario`, quePaso: `${quien} registró ${mov === "consumo" ? "un consumo" : "una salida"}${c} de ${ref || `un ${meta.noun}`} del inventario.` };
+      }
+      if (mov === "ajuste") return { accion: `ajustó la existencia de ${ref || meta.noun} por conteo físico`, quePaso: `${quien} ajustó la existencia de ${ref || `un ${meta.noun}`} por conteo físico${Number.isFinite(Number(d.existencia_nueva)) && d.existencia_nueva !== null ? ` (quedó en ${numero(Number(d.existencia_nueva))})` : ""}.` };
       const cant = Number(d.cantidad) ? ` de ${numero(Number(d.cantidad))} ${Number(d.cantidad) === 1 ? "unidad" : "unidades"}` : "";
       return { accion: `registró una entrada de ${ref || meta.noun} al inventario`, quePaso: `${quien} registró una entrada${cant} de ${ref || `un ${meta.noun}`} al inventario.` };
     }

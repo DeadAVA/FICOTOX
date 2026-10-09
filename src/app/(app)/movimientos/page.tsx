@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ArrowsLeftRight } from "@phosphor-icons/react";
-import { esEntrada, IconoMovimientoInsumo, origenDeMovimiento } from "@/components/features/inventory/ventanas/comun";
+import { cantidadMovimiento, esEntrada, IconoMovimientoInsumo, origenDeMovimiento, tipoMovimiento } from "@/components/features/inventory/ventanas/comun";
 import { MovimientoVentana, nombreInsumo } from "@/components/features/inventory/ventanas/MantenimientoVentana";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
@@ -26,7 +26,7 @@ import { useInitialParam, useParamChange } from "@/lib/client/hooks";
  */
 
 type Origin = "todos" | "reactivos" | "consumibles";
-type Tipo = "" | "entrada" | "salida";
+type Tipo = "" | "entrada" | "salida" | "consumo" | "ajuste";
 type Orden = "reciente" | "antiguo" | "cantidad";
 
 const COLUMNAS: ColumnaLista[] = [
@@ -67,13 +67,12 @@ function MovimientosContent() {
     const term = normalizeText(search);
     const filtrados = list.filter((item) => {
       if (origin !== "todos" && item.tabla_origen !== origin) return false;
-      if (tipo === "entrada" && !esEntrada(item)) return false;
-      if (tipo === "salida" && esEntrada(item)) return false;
+      if (tipo && String(item.tipo || "").toLowerCase() !== tipo) return false;
       if (!term) return true;
       return normalizeText(`${nombreInsumo(item)} ${item.item_codigo || ""} ${item.referencia || ""} ${item.motivo || ""}`).includes(term);
     });
     if (orden === "antiguo") return [...filtrados].reverse();
-    if (orden === "cantidad") return [...filtrados].sort((a, b) => Number(b.cantidad || 0) - Number(a.cantidad || 0));
+    if (orden === "cantidad") return [...filtrados].sort((a, b) => cantidadMovimiento(b) - cantidadMovimiento(a));
     return filtrados;
   }, [resource.data, origin, tipo, orden, search]);
 
@@ -101,6 +100,8 @@ function MovimientosContent() {
         { value: "", label: "Todos" },
         { value: "entrada", label: "Entradas" },
         { value: "salida", label: "Salidas" },
+        { value: "consumo", label: "Consumos" },
+        { value: "ajuste", label: "Ajustes por conteo" },
       ],
     },
   ];
@@ -130,13 +131,14 @@ function MovimientosContent() {
         <span className="flex min-w-0 flex-col">
           <span className="text-[14.5px] leading-tight font-semibold text-ink">{nombreInsumo(item)}</span>
           <span className="text-[12.5px] text-ink-3">
-            {entrada ? "Entrada" : "Salida"} · {item.tabla_origen === "reactivos" ? "Reactivo" : item.tabla_origen === "consumibles" ? "Consumible" : "Insumo"}
+            {tipoMovimiento(item)} · {item.tabla_origen === "reactivos" ? "Reactivo" : item.tabla_origen === "consumibles" ? "Consumible" : "Insumo"}
           </span>
         </span>
       </span>,
       <span key="c" className={entrada ? "text-[14px] font-semibold text-success-text" : "text-[14px] font-semibold text-warning-text"}>
         {entrada ? "+" : "−"}
-        {fmt(item.cantidad)}
+        {fmt(cantidadMovimiento(item))}
+        {item.unidad ? <span className="ml-1 text-[12px] font-normal">{String(item.unidad)}</span> : null}
       </span>,
       <span key="m" className="text-[13.5px] text-ink-2">{origen.texto}</span>,
       <span key="w" className="text-[13px] text-ink-2" title={formatearFechaHora(item.fecha_hora)}>
@@ -147,7 +149,7 @@ function MovimientosContent() {
 
   return (
     <PageBody>
-      <PageHeader title="Movimientos" description="Entradas y salidas de reactivos y consumibles, incluidas las generadas al procesar muestras." />
+      <PageHeader title="Movimientos" description="Entradas, salidas, consumos y ajustes por conteo de reactivos y consumibles, incluidos los generados al procesar muestras." />
 
       <Toolbar
         end={

@@ -34,7 +34,8 @@ function celdasConsumible(item: ApiRecord) {
   const pieces = parseNumberOrNull(item.piezas) ?? 0;
   const max = parseNumberOrNull(item.stock_maximo) || pieces;
   const inactive = Number(item.activo ?? 1) === 0;
-  const ubicacion = item.ubicacion || item.localizacion;
+  const ubicacion = item.localizacion || item.ubicacion;
+  const minimo = parseNumberOrNull(item.stock_minimo) || 5;
   return [
     <span key="p" className={inactive ? "flex min-w-0 items-center gap-3 opacity-60" : "flex min-w-0 items-center gap-3"}>
       <IconoConsumible producto={item.producto} />
@@ -48,7 +49,7 @@ function celdasConsumible(item: ApiRecord) {
     </span>,
     <span key="u" className="text-[13.5px] text-ink-2">{ubicacion ? String(ubicacion) : <span className="text-ink-4">—</span>}</span>,
     <Caducidad key="c" value={item.caducidad} />,
-    <StockMeter key="e" current={pieces} max={max} min={5} unit="piezas" low={pieces <= 5} />,
+    <StockMeter key="e" current={pieces} max={max} min={minimo} unit="piezas" low={pieces <= minimo} />,
   ];
 }
 
@@ -103,7 +104,7 @@ function ConsumiblesContent() {
 
   const visible = useMemo(() => {
     let list = items || [];
-    if (filter === "bajo") list = list.filter((item) => piecesOf(item) <= 5);
+    if (filter === "bajo") list = list.filter((item) => piecesOf(item) <= (parseNumberOrNull(item.stock_minimo) || 5));
     if (filter === "agotado") list = list.filter((item) => piecesOf(item) <= 0);
     if (orden === "existencia") return [...list].sort((a, b) => piecesOf(a) - piecesOf(b));
     return [...list].sort((a, b) => String(a.producto || "").localeCompare(String(b.producto || ""), "es"));
@@ -161,7 +162,7 @@ function ConsumiblesContent() {
       onChange: (v) => setFilter(v as Filter),
       options: [
         { value: "todos", label: "Todos" },
-        { value: "bajo", label: "5 piezas o menos" },
+        { value: "bajo", label: "Stock bajo" },
         { value: "agotado", label: "Agotados" },
       ],
     },
@@ -189,7 +190,7 @@ function ConsumiblesContent() {
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const inactive = Number(item.activo ?? 1) === 0;
     const list: MenuItem[] = [];
-    if (canRellenar && !inactive) list.push({ label: "Reponer", description: "Registrar una entrada de piezas", icon: <ArrowsClockwise size={16} weight="duotone" />, tone: "success", onSelect: () => reponer(item) });
+    if (canRellenar && !inactive) list.push({ label: "Registrar movimiento", description: "Entrada, salida, consumo o ajuste por conteo", icon: <ArrowsClockwise size={16} weight="duotone" />, tone: "success", onSelect: () => reponer(item) });
     if (canEditar) list.push({ label: "Editar", description: "Cambiar datos del consumible", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => editConsumable(Number(item.id)) });
     list.push(...reportar("consumibles", item.id, String(item.producto || "Consumible")));
     if (inactive ? canReactivar : canBaja) {

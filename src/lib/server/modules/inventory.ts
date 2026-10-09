@@ -10,6 +10,7 @@ import { cargarAutorizacion, recortarPorModulo, requirePermission } from "../rba
 import { exigirReauth } from "../seguridad";
 import { aplicarSupervision, exigirSinSupervisionPendiente, marcaSupervision } from "../supervision";
 
+import { interpretarMovimiento } from "../inventory-movimientos";
 import { firstTruthy, isTruthy, searchParam, toFloatOrNull, toIntOrNull, toStrOrNull, utcTimestampReference } from "./helpers";
 
 import { finDiaLocal, hoyLocal, inicioDiaLocal, sumarDias } from "../../shared/fechas";
@@ -82,6 +83,7 @@ const REACTIVO_COLUMNS = [
   "fecha_vencimiento",
   "stock_minimo",
   "stock_maximo",
+  "caducidad_indefinida",
 ];
 
 const REACTIVO_SHEET_TYPES: Record<string, string> = {
@@ -361,7 +363,7 @@ function strip(value: unknown): string {
   return String(value || "").trim();
 }
 
-function normalizeReactivoPayload(raw: Record<string, unknown> | null | undefined): Record<string, unknown> {
+function normalizeReactivoLegacy(raw: Record<string, unknown> | null | undefined): Record<string, unknown> {
   const payload = raw || {};
   const tipo = strip(payload.tipo_reactivo).slice(0, 80) || null;
   const producto = strip(firstTruthy(payload.producto, payload.item_name, payload.nombre_crm, payload.nombre, "")).slice(0, 180) || null;
@@ -479,6 +481,124 @@ function normalizeReactivoPayload(raw: Record<string, unknown> | null | undefine
   return data;
 }
 
+/* Catálogos del formulario de Reactivos (Inventario General del laboratorio). */
+const UNIDADES_REACTIVO = ["L", "mL", "kg", "g"];
+const CONDICIONES_COLUMNA = ["Nueva", "Usada"];
+const METODOS_COLUMNA = ["PSP", "DSP", "ASP", "Otro"];
+
+class ReactivoInvalido extends Error {}
+
+function numeroNoNegativo(valor: unknown, etiqueta: string): number | null {
+  if (valor === null || valor === undefined || String(valor).trim() === "") return null;
+  const n = toFloatOrNull(valor);
+  if (n === null || n < 0) throw new ReactivoInvalido(`«${etiqueta}» debe ser un número mayor o igual a cero`);
+  return n;
+}
+
+/*
+ * Reactivos con el conjunto de campos vigente. Las columnas cromatográficas no
+ * llevan cantidad ni existencias. Las columnas heredadas del Excel no se capturan:
+ * si el registro ya las tenía (`raw` viene mezclado con lo guardado) se conservan tal cual.
+ * La existencia (`cantidad_actual`) solo se inicializa al crear (capacidad × piezas);
+ * después cambia únicamente con movimientos.
+ */
+function normalizeReactivoPayload(raw: Record<string, unknown> | null | undefined, antes?: Record<string, unknown> | null): Record<string, unknown> {
+  const payload = raw || {};
+  const tipo = strip(payload.tipo_reactivo).slice(0, 80) || null;
+  const producto = strip(firstTruthy(payload.producto, payload.item_name, payload.nombre_crm, payload.nombre, "")).slice(0, 180) || null;
+  const esColumna = tipo === "columnas_cromatograficas";
+  const idInterno = toStrOrNull(firstTruthy(payload.id_interno, payload.codigo_interno, payload.id_reactivo), 120);
+  const localizacion = toStrOrNull(firstTruthy(payload.localizacion, payload.ubicacion), 180);
+  const data: Record<string, unknown> = {};
+  for (const column of REACTIVO_COLUMNS) data[column] = payload[column] === undefined ? null : payload[column];
+
+  const indefinida = [1, true, "1", "true", "on"].includes(payload.caducidad_indefinida as never);
+  const caducidad = indefinida ? null : toStrOrNull(firstTruthy(payload.caducidad, payload.expiration_date, payload.fecha_vencimiento), 20);
+  Object.assign(data, {
+    tipo_reactivo: tipo,
+    categoria: tipo,
+    producto,
+    nombre: producto,
+    item_name: null,
+    nombre_crm: null,
+    id_interno: idInterno,
+    id_reactivo: idInterno,
+    codigo_interno: idInterno,
+    marca: toStrOrNull(payload.marca, 120),
+    proveedor: toStrOrNull(payload.proveedor, 180),
+    localizacion,
+    ubicacion: localizacion,
+    lote: toStrOrNull(firstTruthy(payload.lote, payload.lot_number), 120),
+    fecha_ingreso: toStrOrNull(payload.fecha_ingreso, 20),
+    fecha_apertura: toStrOrNull(payload.fecha_apertura, 20),
+    observaciones: toStrOrNull(payload.observaciones, 4000),
+    caducidad_indefinida: !esColumna && indefinida ? 1 : 0,
+    caducidad: esColumna ? null : caducidad,
+    expiration_date: esColumna ? null : caducidad,
+    fecha_vencimiento: esColumna ? null : caducidad,
+    extra_json: JSON.stringify(payload.extra && typeof payload.extra === "object" ? payload.extra : {}),
+  });
+
+  if (esColumna) {
+    const condicion = toStrOrNull(payload.nuevo_usado, 30);
+    const metodo = toStrOrNull(payload.metodo, 120);
+    if (condicion && !CONDICIONES_COLUMNA.includes(condicion)) throw new ReactivoInvalido("La condición de la columna debe ser Nueva o Usada");
+    if (metodo && !METODOS_COLUMNA.includes(metodo)) throw new ReactivoInvalido("El método debe ser PSP, DSP, ASP u Otro");
+    const parte = toStrOrNull(firstTruthy(payload.parte, payload.numero_parte), 120);
+    Object.assign(data, {
+      parte,
+      numero_parte: parte,
+      serie: toStrOrNull(payload.serie, 120),
+      descripcion: toStrOrNull(payload.descripcion, 1000),
+      nuevo_usado: condicion,
+      metodo,
+      cas: null,
+      numero_cas: null,
+      catalogo: null,
+      contenedor: null,
+      capacidad: null,
+      unidad_capacidad: null,
+      piezas: null,
+      stock_minimo: null,
+    });
+  } else {
+    const cas = toStrOrNull(firstTruthy(payload.cas, payload.cas_number, payload.numero_cas), 120);
+    const unidadCapacidad = toStrOrNull(payload.unidad_capacidad, 40);
+    if (unidadCapacidad && !UNIDADES_REACTIVO.includes(unidadCapacidad)) throw new ReactivoInvalido("La unidad de la capacidad debe ser L, mL, kg o g");
+    const capacidad = numeroNoNegativo(payload.capacidad, "Capacidad por envase");
+    if (capacidad !== null && !unidadCapacidad) throw new ReactivoInvalido("Elige la unidad de la capacidad por envase");
+    const piezas = numeroNoNegativo(payload.piezas, "Piezas");
+    const stockMinimo = numeroNoNegativo(payload.stock_minimo, "Stock mínimo");
+    const total = capacidad !== null && piezas !== null ? Math.round(capacidad * piezas * 1e6) / 1e6 : null;
+    Object.assign(data, {
+      catalogo: toStrOrNull(payload.catalogo, 120),
+      cas,
+      numero_cas: cas,
+      contenedor: toStrOrNull(payload.contenedor, 120),
+      capacidad,
+      unidad_capacidad: unidadCapacidad,
+      piezas,
+      stock_minimo: stockMinimo,
+      cantidad_total: total,
+      unidad_total: total !== null ? unidadCapacidad : toStrOrNull(payload.unidad_total, 40),
+      unidad: unidadCapacidad || toStrOrNull(payload.unidad, 40),
+    });
+    if (antes) {
+      // La existencia solo cambia con movimientos; la referencia del medidor nunca baja de la existencia.
+      const actual = toFloatOrNull(antes.cantidad_actual);
+      data.cantidad_actual = actual;
+      data.stock_maximo = firstTruthy(total !== null && actual !== null ? Math.max(total, actual) : total, toFloatOrNull(antes.stock_maximo), actual);
+    } else {
+      data.cantidad_actual = total !== null ? total : 0;
+      data.stock_maximo = total;
+    }
+  }
+  for (const [key, value] of Object.entries(data)) {
+    if (typeof value === "string") data[key] = value.trim() || null;
+  }
+  return data;
+}
+
 const REACTIVO_INSERT_COLUMNS = REACTIVO_COLUMNS.join(", ");
 const REACTIVO_INSERT_VALUES = REACTIVO_COLUMNS.map((column) => `:${column}`).join(", ");
 const REACTIVO_UPDATE_ASSIGNMENTS = REACTIVO_COLUMNS.map((column) => `${column} = :${column}`).join(", ");
@@ -511,7 +631,7 @@ export async function inventorySummary({ request, s }: RouteContext): Promise<Re
       (
         SELECT COUNT(*)
         FROM consumibles
-        WHERE COALESCE(activo, 1) = 1 AND COALESCE(piezas, 0) <= 5
+        WHERE COALESCE(activo, 1) = 1 AND COALESCE(piezas, 0) <= CASE WHEN COALESCE(stock_minimo, 0) > 0 THEN stock_minimo ELSE 5 END
       ) AS consumibles_stock_bajo,
       (
         SELECT COUNT(*)
@@ -546,7 +666,7 @@ export async function listReactivos({ request, s }: RouteContext): Promise<Respo
            formula, id_interno, physical_state, estado_fisico, presentacion,
            tipo_sustancia, numero_cas, categoria, cantidad_actual,
            unidad, ubicacion, fecha_vencimiento, stock_minimo, stock_maximo,
-           activo, baja_motivo, baja_en
+           activo, baja_motivo, baja_en, caducidad_indefinida
     FROM reactivos
     WHERE (:incluir_bajas = 1 OR COALESCE(activo, 1) = 1)
       AND (:search = ''
@@ -556,6 +676,10 @@ export async function listReactivos({ request, s }: RouteContext): Promise<Respo
        OR nombre_crm LIKE :search_like
        OR tipo_reactivo LIKE :search_like
        OR id_interno LIKE :search_like
+       OR lote LIKE :search_like
+       OR cas LIKE :search_like
+       OR catalogo LIKE :search_like
+       OR localizacion LIKE :search_like
        OR catalogo_parte_cas_lote LIKE :search_like)
     ORDER BY COALESCE(nombre, producto, item_name, nombre_crm) ASC
     LIMIT 500
@@ -581,13 +705,27 @@ export async function createReactivo({ request, s }: RouteContext): Promise<Resp
   const user = await requireUser(request);
   const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" }));
 
-  const data = normalizeReactivoPayload(await readJson(request));
+  let data: Record<string, unknown>;
+  try {
+    data = normalizeReactivoPayload(await readJson(request));
+  } catch (err) {
+    if (err instanceof ReactivoInvalido) return json({ message: err.message }, 400);
+    throw err;
+  }
   if (!data.tipo_reactivo || !data.nombre) {
     return json({ message: "Tipo de reactivo y producto son obligatorios" }, 400);
   }
 
   const result = await s.execute(`INSERT INTO reactivos (${REACTIVO_INSERT_COLUMNS}) VALUES (${REACTIVO_INSERT_VALUES})`, data);
   const id = result.lastrowid as number;
+  const inicial = toFloatOrNull(data.cantidad_total);
+  if (inicial !== null && inicial > 0) {
+    await s.execute(
+      `INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario, unidad)
+       VALUES ('entrada', 'reactivos', :id, :cantidad, 'Existencia inicial', :referencia, :id_usuario, :unidad)`,
+      { id, cantidad: inicial, referencia: `reactivo-inicial-${id}`, id_usuario: userIdFromClaims(user), unidad: data.unidad_total },
+    );
+  }
   await aplicarSupervision(s, "reactivos", id, supervision, userIdFromClaims(user));
   await registrarAuditoria(s, user, { accion: "crear", entidad: "reactivos", entidadId: id, referencia: reactivoRef(data), despues: await snapshotRow(s, "reactivos", id) });
   await s.commit();
@@ -615,7 +753,13 @@ export async function updateReactivo({ request, s, params }: RouteContext): Prom
     delete merged.producto;
     delete merged.nombre;
   }
-  const data = normalizeReactivoPayload(merged);
+  let data: Record<string, unknown>;
+  try {
+    data = normalizeReactivoPayload(merged, antes);
+  } catch (err) {
+    if (err instanceof ReactivoInvalido) return json({ message: err.message }, 400);
+    throw err;
+  }
   if (!data.tipo_reactivo || !data.nombre) {
     return json({ message: "Tipo de reactivo y producto son obligatorios" }, 400);
   }
@@ -636,25 +780,24 @@ export async function refillReactivo({ request, s, params }: RouteContext): Prom
   const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "movimiento" }));
 
   const payload = await readJson(request);
-  const amount = toFloatOrNull(payload.cantidad);
-  if (amount === null || amount <= 0) {
-    return json({ message: "Captura una cantidad mayor a cero" }, 400);
-  }
-
   const row = await s.queryOne<Row>("SELECT * FROM reactivos WHERE id = :id LIMIT 1", { id: reactivoId });
   if (!row) {
     return json({ message: "Reactivo no encontrado" }, 404);
   }
+  if (row.tipo_reactivo === "columnas_cromatograficas") {
+    return json({ message: "Las columnas cromatográficas no llevan existencias" }, 400);
+  }
 
   // `cantidad_actual` es la existencia canónica; las columnas heredadas solo se acompañan
   // cuando ya la reflejaban (mismo valor), para no inventar existencias en piezas o volumen.
-  const updates = ["cantidad_actual = COALESCE(cantidad_actual, 0) + :cantidad"];
   const current = toFloatOrNull(row.cantidad_actual) || 0;
+  const mov = await interpretarMovimiento(s, payload, current);
+  const updates = ["cantidad_actual = COALESCE(cantidad_actual, 0) + :delta"];
   for (const legacy of ["restante_190126", "amount_in_stock"]) {
     const value = toFloatOrNull(row[legacy]);
-    if (value !== null && Math.abs(value - current) < 1e-9) updates.push(`${legacy} = COALESCE(${legacy}, 0) + :cantidad`);
+    if (value !== null && Math.abs(value - current) < 1e-9) updates.push(`${legacy} = COALESCE(${legacy}, 0) + :delta`);
   }
-  const currentAfter = current + amount;
+  const currentAfter = current + mov.delta;
   updates.push(
     `
     stock_maximo = CASE
@@ -666,28 +809,31 @@ export async function refillReactivo({ request, s, params }: RouteContext): Prom
 
   await s.execute(`UPDATE reactivos SET ${updates.join(", ")} WHERE id = :id`, {
     id: reactivoId,
-    cantidad: amount,
+    delta: mov.delta,
     current_after: currentAfter,
   });
 
-  const motivo = String(payload.motivo || "Relleno manual de stock").trim();
   await s.execute(
     `
-    INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario)
-    VALUES ('entrada', 'reactivos', :id, :cantidad, :motivo, :referencia, :id_usuario)
+    INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario, unidad, vinculo_tipo, vinculo_id)
+    VALUES (:tipo, 'reactivos', :id, :cantidad, :motivo, :referencia, :id_usuario, :unidad, :vinculo_tipo, :vinculo_id)
     `,
     {
+      tipo: mov.tipo,
       id: reactivoId,
-      cantidad: amount,
-      motivo,
-      referencia: `reactivo-refill-${reactivoId}-${utcTimestampReference()}`,
+      cantidad: mov.cantidad,
+      motivo: mov.motivo,
+      referencia: `reactivo-${mov.tipo}-${reactivoId}-${utcTimestampReference()}`,
       id_usuario: userIdFromClaims(user),
+      unidad: row.unidad || null,
+      vinculo_tipo: mov.vinculoTipo,
+      vinculo_id: mov.vinculoId,
     },
   );
   await aplicarSupervision(s, "reactivos", reactivoId, supervision, userIdFromClaims(user));
-  await registrarAuditoria(s, user, { accion: "reponer", entidad: "reactivos", entidadId: reactivoId, referencia: reactivoRef(row), motivo, antes: row, despues: await snapshotRow(s, "reactivos", reactivoId), detalle: { cantidad: amount } });
+  await registrarAuditoria(s, user, { accion: "reponer", entidad: "reactivos", entidadId: reactivoId, referencia: reactivoRef(row), motivo: mov.motivo, antes: row, despues: await snapshotRow(s, "reactivos", reactivoId), detalle: { tipo: mov.tipo, cantidad: mov.cantidad, existencia_anterior: current, existencia_nueva: currentAfter } });
   await s.commit();
-  return json({ message: "Stock de reactivo rellenado" });
+  return json({ message: mov.tipo === "ajuste" ? "Existencia ajustada" : "Movimiento registrado" });
 }
 
 export async function importReactivos({ request, s }: RouteContext): Promise<Response> {
@@ -760,7 +906,7 @@ export async function importReactivos({ request, s }: RouteContext): Promise<Res
           continue;
         }
 
-        const data = normalizeReactivoPayload(mapped);
+        const data = normalizeReactivoLegacy(mapped);
         if (!data.tipo_reactivo || !data.nombre) {
           processedSheet.ignorados += 1;
           summary.filas_ignoradas += 1;
@@ -1021,8 +1167,9 @@ export async function listConsumiblesInventory({ request, s }: RouteContext): Pr
 
   const rows = await s.query(
     `
-    SELECT id, producto, marca, proveedor, catalogo_parte_cas,
-           fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza
+    SELECT id, id_interno, producto, marca, proveedor, catalogo_parte_cas, lote,
+           fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza,
+           localizacion, stock_minimo, observaciones
     FROM consumibles
     ORDER BY producto ASC
     LIMIT 200
@@ -1038,12 +1185,14 @@ export async function listMovimientos({ request, s }: RouteContext): Promise<Res
   const rows = await s.query(
     `
     SELECT m.id, m.referencia, m.tipo, m.tabla_origen, m.id_item, m.cantidad,
-           m.motivo, m.creado_en AS fecha_hora,
+           m.motivo, m.creado_en AS fecha_hora, m.unidad, m.vinculo_tipo, m.vinculo_id,
+           u.nombre AS usuario,
            COALESCE(r.nombre, r.producto, r.item_name, r.nombre_crm, c.producto) AS item_nombre,
-           COALESCE(r.codigo_interno, r.id_interno, r.catalogo, r.catalogo_parte_cas_lote, c.catalogo_parte_cas) AS item_codigo
+           COALESCE(r.codigo_interno, r.id_interno, c.id_interno, r.catalogo, r.catalogo_parte_cas_lote, c.catalogo_parte_cas) AS item_codigo
     FROM movimientos m
     LEFT JOIN reactivos r ON m.tabla_origen = 'reactivos' AND m.id_item = r.id
     LEFT JOIN consumibles c ON m.tabla_origen = 'consumibles' AND m.id_item = c.id
+    LEFT JOIN usuarios u ON u.id = m.id_usuario
     ORDER BY m.creado_en DESC
     LIMIT 200
     `,

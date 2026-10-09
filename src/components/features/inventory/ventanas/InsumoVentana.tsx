@@ -50,7 +50,7 @@ function Acciones({ item, acciones }: { item: ApiRecord; acciones: AccionesInsum
   if (acciones.puedeReponer && !inactivo)
     botones.push(
       <Button key="r" icon={<ArrowsClockwise size={16} />} onClick={() => acciones.reponer(item)}>
-        Reponer
+        Registrar movimiento
       </Button>,
     );
   if (acciones.puedeEditar)
@@ -112,15 +112,28 @@ function TarjetaExistencia({ actual, maximo, minimo, unidad, baja, vacia, nota }
 function FichaReactivo({ item, acciones }: { item: ApiRecord; acciones: AccionesInsumo }) {
   const nombre = formatReactivoName(item);
   const stock = getReactivoStockState(item);
-  const cad = caducidadDe(getReactivoExpiry(item));
+  const esColumna = (item.tipo_reactivo || item.categoria) === "columnas_cromatograficas";
+  const indefinida = Number(item.caducidad_indefinida) === 1;
+  const cad = indefinida ? null : caducidadDe(getReactivoExpiry(item));
   const inactivo = Number(item.activo ?? 1) === 0;
   const unidad = stock.unit || "";
-  const datos: DatoRapido[] = [
-    { icono: <Gauge size={17} weight="duotone" />, etiqueta: "Existencia", valor: stock.current !== null ? `${fmt(stock.current)} ${unidad}`.trim() : "Sin registro", tono: stock.empty ? "danger" : stock.low ? "warning" : "brand" },
-    { icono: <WarningCircle size={17} weight="duotone" />, etiqueta: "Mínimo", valor: stock.min ? `${fmt(stock.min)} ${unidad}`.trim() : "20 %", titulo: stock.min ? undefined : "Sin mínimo: avisa al 20 % de la capacidad" },
-    { icono: <CalendarBlank size={17} weight="duotone" />, etiqueta: "Caducidad", valor: cad ? cad.texto : "Sin fecha", tono: cad?.tono || "brand", titulo: cad?.detalle || undefined },
-    { icono: <Tag size={17} weight="duotone" />, etiqueta: "Lote", valor: item.lote ? String(item.lote) : "—" },
-  ];
+  const capacidad = parseNumberOrNull(item.capacidad);
+  const piezas = parseNumberOrNull(item.piezas);
+  const total = capacidad !== null && piezas !== null ? capacidad * piezas : null;
+  const textoCaducidad = indefinida ? "Indefinida" : cad ? cad.texto : "Sin fecha";
+  const datos: DatoRapido[] = esColumna
+    ? [
+        { icono: <Tag size={17} weight="duotone" />, etiqueta: "Lote", valor: item.lote ? String(item.lote) : "—" },
+        { icono: <Barcode size={17} weight="duotone" />, etiqueta: "Parte", valor: item.parte || item.numero_parte ? String(item.parte || item.numero_parte) : "—" },
+        { icono: <Barcode size={17} weight="duotone" />, etiqueta: "Serie", valor: item.serie ? String(item.serie) : "—" },
+        { icono: <Gauge size={17} weight="duotone" />, etiqueta: "Condición", valor: item.nuevo_usado ? String(item.nuevo_usado) : "—" },
+      ]
+    : [
+        { icono: <Gauge size={17} weight="duotone" />, etiqueta: "Existencia", valor: stock.current !== null ? `${fmt(stock.current)} ${unidad}`.trim() : "Sin registro", tono: stock.empty ? "danger" : stock.low ? "warning" : "brand" },
+        { icono: <WarningCircle size={17} weight="duotone" />, etiqueta: "Mínimo", valor: stock.min ? `${fmt(stock.min)} ${unidad}`.trim() : "20 %", titulo: stock.min ? undefined : "Sin mínimo: avisa al 20 % de la capacidad" },
+        { icono: <CalendarBlank size={17} weight="duotone" />, etiqueta: "Caducidad", valor: textoCaducidad, tono: cad?.tono || "brand", titulo: cad?.detalle || undefined },
+        { icono: <Tag size={17} weight="duotone" />, etiqueta: "Lote", valor: item.lote ? String(item.lote) : "—" },
+      ];
   const ubicacion = getReactivoLocation(item);
   return (
     <div className="flex flex-col gap-6" data-insumo-ventana={String(item.id)}>
@@ -140,10 +153,20 @@ function FichaReactivo({ item, acciones }: { item: ApiRecord; acciones: Acciones
       <ColumnasVentana
         principal={
           <>
-            <TarjetaExistencia actual={stock.current} maximo={stock.max ?? null} minimo={stock.min ?? null} unidad={unidad} baja={stock.low} vacia={stock.empty} nota={stock.min ? `Aviso de existencia baja al llegar a ${fmt(stock.min)} ${unidad}` : "Aviso de existencia baja al 20 % de la capacidad"} />
-            <VentanaSeccion titulo="Movimientos recientes" i={2}>
-              <MovimientosRecientes tabla="reactivos" id={item.id} unidad={unidad} />
-            </VentanaSeccion>
+            {esColumna ? null : <TarjetaExistencia actual={stock.current} maximo={stock.max ?? null} minimo={stock.min ?? null} unidad={unidad} baja={stock.low} vacia={stock.empty} nota={stock.min ? `Aviso de existencia baja al llegar a ${fmt(stock.min)} ${unidad}` : "Aviso de existencia baja al 20 % de la capacidad"} />}
+            {esColumna ? null : (
+              <VentanaSeccion titulo="Movimientos recientes" i={2}>
+                <MovimientosRecientes tabla="reactivos" id={item.id} unidad={unidad} />
+              </VentanaSeccion>
+            )}
+            {item.descripcion || item.observaciones ? (
+              <VentanaSeccion titulo="Notas" i={2}>
+                <VentanaTarjeta className="flex flex-col gap-2 text-[13.5px] text-ink-2">
+                  {item.descripcion ? <p className="break-words whitespace-pre-line"><b className="font-medium text-ink">Descripción:</b> {String(item.descripcion)}</p> : null}
+                  {item.observaciones ? <p className="break-words whitespace-pre-line"><b className="font-medium text-ink">Observaciones:</b> {String(item.observaciones)}</p> : null}
+                </VentanaTarjeta>
+              </VentanaSeccion>
+            ) : null}
             <VentanaSeccion titulo="Incidencias" i={3}>
               <IncidenciasDelRegistro entidad="reactivos" id={item.id} etiqueta={nombre} />
             </VentanaSeccion>
@@ -154,17 +177,24 @@ function FichaReactivo({ item, acciones }: { item: ApiRecord; acciones: Acciones
             <TarjetaLateral icono={<Barcode size={15} weight="duotone" />} titulo="Identificación" i={0}>
               <DatoLateral etiqueta="Tipo">{getReactivoTypeLabel(item.tipo_reactivo || item.categoria) || "—"}</DatoLateral>
               {item.id_interno ? <DatoLateral etiqueta="ID interno">{String(item.id_interno)}</DatoLateral> : null}
-              {item.numero_cas || item.cas_number ? <DatoLateral etiqueta="Número CAS">{String(item.numero_cas || item.cas_number)}</DatoLateral> : null}
-              {item.catalogo || item.catalogo_parte_cas_lote ? <DatoLateral etiqueta="Catálogo">{String(item.catalogo || item.catalogo_parte_cas_lote)}</DatoLateral> : null}
+              {item.numero_cas || item.cas || item.cas_number ? <DatoLateral etiqueta="CAS">{String(item.cas || item.numero_cas || item.cas_number)}</DatoLateral> : null}
+              {item.catalogo ? <DatoLateral etiqueta="Número de catálogo">{String(item.catalogo)}</DatoLateral> : null}
               {item.lote ? <DatoLateral etiqueta="Lote">{String(item.lote)}</DatoLateral> : null}
+              {item.parte || item.numero_parte ? <DatoLateral etiqueta="Número de parte">{String(item.parte || item.numero_parte)}</DatoLateral> : null}
+              {item.serie ? <DatoLateral etiqueta="Número de serie">{String(item.serie)}</DatoLateral> : null}
+              {item.nuevo_usado ? <DatoLateral etiqueta="Condición">{String(item.nuevo_usado)}</DatoLateral> : null}
+              {item.metodo ? <DatoLateral etiqueta="Método">{String(item.metodo)}</DatoLateral> : null}
               {item.proveedor || item.vendor ? <DatoLateral etiqueta="Proveedor">{String(item.proveedor || item.vendor)}</DatoLateral> : null}
             </TarjetaLateral>
             <TarjetaLateral icono={<MapPin size={15} weight="duotone" />} titulo="Dónde está" i={1}>
               <DatoLateral etiqueta="Ubicación">{ubicacion || "Sin ubicación"}</DatoLateral>
               {item.contenedor ? <DatoLateral etiqueta="Contenedor">{String(item.contenedor)}</DatoLateral> : null}
+              {capacidad !== null ? <DatoLateral etiqueta="Capacidad por envase">{`${fmt(capacidad)} ${item.unidad_capacidad || ""}`.trim()}</DatoLateral> : null}
+              {piezas !== null ? <DatoLateral etiqueta="Piezas">{fmt(piezas)}</DatoLateral> : null}
+              {total !== null ? <DatoLateral etiqueta="Total inicial">{`${fmt(total)} ${item.unidad_capacidad || ""}`.trim()}</DatoLateral> : null}
             </TarjetaLateral>
             <TarjetaLateral icono={<CalendarBlank size={15} weight="duotone" />} titulo="Fechas" tono={cad?.tono || "neutral"} i={2}>
-              <DatoLateral etiqueta="Caducidad">{cad ? `${formatearFecha(getReactivoExpiry(item))}${cad.detalle ? ` · ${cad.detalle}` : ""}` : "Sin fecha de caducidad"}</DatoLateral>
+              {esColumna ? null : <DatoLateral etiqueta="Caducidad">{indefinida ? "Indefinida" : cad ? `${formatearFecha(getReactivoExpiry(item))}${cad.detalle ? ` · ${cad.detalle}` : ""}` : "Sin fecha de caducidad"}</DatoLateral>}
               {item.fecha_apertura ? <DatoLateral etiqueta="Abierto el">{formatearFecha(item.fecha_apertura)}</DatoLateral> : null}
               {item.fecha_ingreso ? <DatoLateral etiqueta="Ingresó el">{formatearFecha(item.fecha_ingreso)}</DatoLateral> : null}
             </TarjetaLateral>
@@ -181,10 +211,12 @@ function FichaConsumible({ item, acciones }: { item: ApiRecord; acciones: Accion
   const piezas = parseNumberOrNull(item.piezas) ?? 0;
   const maximo = parseNumberOrNull(item.stock_maximo) || piezas;
   const inactivo = Number(item.activo ?? 1) === 0;
+  const minimo = parseNumberOrNull(item.stock_minimo) || 5;
+  const porPieza = parseNumberOrNull(item.cantidad_por_pieza);
   const cad = caducidadDe(item.caducidad);
   const datos: DatoRapido[] = [
-    { icono: <Gauge size={17} weight="duotone" />, etiqueta: "Existencia", valor: `${fmt(piezas)} ${piezas === 1 ? "pieza" : "piezas"}`, tono: piezas <= 0 ? "danger" : piezas <= 5 ? "warning" : "brand" },
-    { icono: <WarningCircle size={17} weight="duotone" />, etiqueta: "Mínimo", valor: "5 piezas", titulo: "Aviso de existencia baja con 5 piezas o menos" },
+    { icono: <Gauge size={17} weight="duotone" />, etiqueta: "Existencia", valor: `${fmt(piezas)} ${piezas === 1 ? "pieza" : "piezas"}`, tono: piezas <= 0 ? "danger" : piezas <= minimo ? "warning" : "brand" },
+    { icono: <WarningCircle size={17} weight="duotone" />, etiqueta: "Mínimo", valor: `${fmt(minimo)} piezas`, titulo: item.stock_minimo ? undefined : "Sin mínimo propio: avisa con 5 piezas o menos" },
     { icono: <CalendarBlank size={17} weight="duotone" />, etiqueta: "Caducidad", valor: cad ? cad.texto : "Sin fecha", tono: cad?.tono || "brand" },
     { icono: <Tag size={17} weight="duotone" />, etiqueta: "Lote", valor: item.lote ? String(item.lote) : "—" },
   ];
@@ -201,10 +233,15 @@ function FichaConsumible({ item, acciones }: { item: ApiRecord; acciones: Accion
       <ColumnasVentana
         principal={
           <>
-            <TarjetaExistencia actual={piezas} maximo={maximo || null} minimo={5} unidad="piezas" baja={piezas <= 5} vacia={piezas <= 0} nota="Aviso de existencia baja con 5 piezas o menos" />
+            <TarjetaExistencia actual={piezas} maximo={maximo || null} minimo={minimo} unidad="piezas" baja={piezas <= minimo} vacia={piezas <= 0} nota={`Aviso de existencia baja con ${fmt(minimo)} piezas o menos`} />
             <VentanaSeccion titulo="Movimientos recientes" i={2}>
               <MovimientosRecientes tabla="consumibles" id={item.id} unidad="piezas" />
             </VentanaSeccion>
+            {item.observaciones ? (
+              <VentanaSeccion titulo="Observaciones" i={2}>
+                <VentanaTarjeta className="text-[13.5px] break-words whitespace-pre-line text-ink-2">{String(item.observaciones)}</VentanaTarjeta>
+              </VentanaSeccion>
+            ) : null}
             <VentanaSeccion titulo="Incidencias" i={3}>
               <IncidenciasDelRegistro entidad="consumibles" id={item.id} etiqueta={nombre} />
             </VentanaSeccion>
@@ -214,14 +251,17 @@ function FichaConsumible({ item, acciones }: { item: ApiRecord; acciones: Accion
           <>
             <TarjetaLateral icono={<Package size={15} weight="duotone" />} titulo="Presentación" i={0}>
               {item.tamano_capacidad ? <DatoLateral etiqueta="Tamaño o capacidad">{String(item.tamano_capacidad)}</DatoLateral> : null}
-              {item.cantidad_por_pieza ? <DatoLateral etiqueta="Cantidad por pieza">{fmt(item.cantidad_por_pieza)}</DatoLateral> : null}
+              {porPieza ? <DatoLateral etiqueta="Cantidad por pieza">{fmt(porPieza)}</DatoLateral> : null}
+              {porPieza ? <DatoLateral etiqueta="Total">{`${fmt(piezas * porPieza)} unidades`}</DatoLateral> : null}
               {item.contenedor ? <DatoLateral etiqueta="Contenedor">{String(item.contenedor)}</DatoLateral> : null}
-              {item.catalogo_parte_cas ? <DatoLateral etiqueta="Catálogo">{String(item.catalogo_parte_cas)}</DatoLateral> : null}
+              {item.id_interno ? <DatoLateral etiqueta="ID interno">{String(item.id_interno)}</DatoLateral> : null}
+              {item.catalogo_parte_cas ? <DatoLateral etiqueta="Catálogo / parte">{String(item.catalogo_parte_cas)}</DatoLateral> : null}
+              {item.lote ? <DatoLateral etiqueta="Lote">{String(item.lote)}</DatoLateral> : null}
               {item.marca ? <DatoLateral etiqueta="Marca">{String(item.marca)}</DatoLateral> : null}
               {item.proveedor ? <DatoLateral etiqueta="Proveedor">{String(item.proveedor)}</DatoLateral> : null}
             </TarjetaLateral>
             <TarjetaLateral icono={<MapPin size={15} weight="duotone" />} titulo="Dónde está" i={1}>
-              <DatoLateral etiqueta="Ubicación">{String(item.ubicacion || item.localizacion || "Sin ubicación")}</DatoLateral>
+              <DatoLateral etiqueta="Localización">{String(item.localizacion || item.ubicacion || "Sin localización")}</DatoLateral>
             </TarjetaLateral>
             <TarjetaLateral icono={<CalendarBlank size={15} weight="duotone" />} titulo="Fechas" tono={cad?.tono || "neutral"} i={2}>
               <DatoLateral etiqueta="Caducidad">{cad ? `${formatearFecha(item.caducidad)}${cad.detalle ? ` · ${cad.detalle}` : ""}` : "Sin fecha de caducidad"}</DatoLateral>

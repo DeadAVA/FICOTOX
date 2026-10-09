@@ -7,42 +7,72 @@ import { darDeBaja, reactivarItem } from "../inventory-baja";
 import { requirePermission } from "../rbac";
 import { aplicarSupervision, marcaSupervision } from "../supervision";
 
-import { searchParam, toIntOrNull, utcTimestampReference } from "./helpers";
+import { interpretarMovimiento } from "../inventory-movimientos";
+import { searchParam, toFloatOrNull, toStrOrNull, utcTimestampReference } from "./helpers";
 
 /* Portado de modules/inventory/consumables.py del backend Flask original. */
 
 interface ConsumablePayload {
+  id_interno: string | null;
   producto: string;
-  marca: unknown;
-  proveedor: unknown;
-  catalogo_parte_cas: unknown;
-  fecha_ingreso: unknown;
-  tamano_capacidad: unknown;
-  contenedor: unknown;
+  marca: string | null;
+  proveedor: string | null;
+  catalogo_parte_cas: string | null;
+  lote: string | null;
+  fecha_ingreso: string | null;
+  tamano_capacidad: string | null;
+  contenedor: string | null;
   piezas: number | null;
   cantidad_por_pieza: number | null;
-  stock_maximo: number | null;
+  localizacion: string | null;
+  stock_minimo: number | null;
+  observaciones: string | null;
 }
 
-function orNull(value: unknown): unknown {
-  return value ? value : null;
+class ConsumibleInvalido extends Error {}
+
+function numeroNoNegativo(value: unknown, etiqueta: string): number | null {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const n = toFloatOrNull(value);
+  if (n === null || n < 0) throw new ConsumibleInvalido(`«${etiqueta}» debe ser un número mayor o igual a cero`);
+  return n;
+}
+
+/* Fecha de ingreso opcional: vacío o "s/f" (sin fecha) se guarda vacío. */
+function fechaOpcional(value: unknown): string | null {
+  const text = String(value ?? "").trim();
+  return !text || /^s\/?f$/i.test(text) ? null : text.slice(0, 20);
 }
 
 function normalizePayload(raw: Record<string, unknown> | null | undefined): ConsumablePayload {
   const data = raw || {};
+  const contenedor = toStrOrNull(data.contenedor, 120);
   return {
+    id_interno: toStrOrNull(data.id_interno, 120),
     producto: String(data.producto || "").trim(),
-    marca: orNull(data.marca),
-    proveedor: orNull(data.proveedor),
-    catalogo_parte_cas: orNull(data.catalogo_parte_cas),
-    fecha_ingreso: orNull(data.fecha_ingreso),
-    tamano_capacidad: orNull(data.tamano_capacidad),
-    contenedor: orNull(data.contenedor),
-    piezas: toIntOrNull(data.piezas),
-    cantidad_por_pieza: toIntOrNull(data.cantidad_por_pieza),
-    /* Stock de referencia para el medidor; si no se captura, las piezas iniciales. */
-    stock_maximo: toIntOrNull(data.stock_maximo),
+    marca: toStrOrNull(data.marca, 120),
+    proveedor: toStrOrNull(data.proveedor, 180),
+    catalogo_parte_cas: toStrOrNull(data.catalogo_parte_cas, 180),
+    lote: toStrOrNull(data.lote, 120),
+    fecha_ingreso: fechaOpcional(data.fecha_ingreso),
+    tamano_capacidad: toStrOrNull(data.tamano_capacidad, 120),
+    contenedor,
+    piezas: numeroNoNegativo(data.piezas, "Piezas"),
+    cantidad_por_pieza: numeroNoNegativo(data.cantidad_por_pieza, "Cantidad por pieza"),
+    localizacion: toStrOrNull(data.localizacion, 180),
+    stock_minimo: numeroNoNegativo(data.stock_minimo, "Stock mínimo"),
+    observaciones: toStrOrNull(data.observaciones, 4000),
   };
+}
+
+/* Importacion: una fila con un numero invalido se omite en vez de detener la carga. */
+function normalizarOmitiendo(raw: Record<string, unknown>): ConsumablePayload | null {
+  try {
+    return normalizePayload(raw);
+  } catch (err) {
+    if (err instanceof ConsumibleInvalido) return null;
+    throw err;
+  }
 }
 
 function normalizeKey(key: unknown): string {
@@ -174,9 +204,9 @@ function parseCsvRecords(text: string, delimiter: string): Record<string, string
 }
 
 const SELECT_COLUMNS = `
-  SELECT id, producto, marca, proveedor, catalogo_parte_cas,
+  SELECT id, id_interno, producto, marca, proveedor, catalogo_parte_cas, lote,
          fecha_ingreso, tamano_capacidad, contenedor, piezas,
-         cantidad_por_pieza, stock_maximo, activo, baja_motivo, baja_en, creado_por, creado_en
+         cantidad_por_pieza, localizacion, stock_minimo, observaciones, stock_maximo, activo, baja_motivo, baja_en, creado_por, creado_en
   FROM consumibles
 `;
 
@@ -188,7 +218,7 @@ export async function getConsumables({ request, s }: RouteContext): Promise<Resp
   const rows = await s.query(
     `${SELECT_COLUMNS}
     WHERE (:incluir_bajas = 1 OR COALESCE(activo, 1) = 1)
-      AND (producto LIKE :search OR marca LIKE :search)
+      AND (producto LIKE :search OR marca LIKE :search OR id_interno LIKE :search OR lote LIKE :search OR catalogo_parte_cas LIKE :search OR localizacion LIKE :search)
     ORDER BY producto ASC
     `,
     { search: `%${search}%`, incluir_bajas: searchParam(request, "bajas") === "1" ? 1 : 0 },
@@ -200,22 +230,36 @@ export async function createConsumable({ request, s }: RouteContext): Promise<Re
   const user = await requireUser(request);
   const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" }));
 
-  const data = normalizePayload(await readJson(request));
+  let data: ConsumablePayload;
+  try {
+    data = normalizePayload(await readJson(request));
+  } catch (err) {
+    if (err instanceof ConsumibleInvalido) return json({ message: err.message }, 400);
+    throw err;
+  }
   if (!data.producto) {
     return json({ message: "El campo 'producto' es obligatorio" }, 400);
   }
 
   const result = await s.execute(
     `
-    INSERT INTO consumibles (producto, marca, proveedor, catalogo_parte_cas, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza, stock_maximo, creado_por)
-    VALUES (:producto, :marca, :proveedor, :catalogo_parte_cas, :fecha_ingreso, :tamano_capacidad, :contenedor, :piezas, :cantidad_por_pieza, COALESCE(:stock_maximo, :piezas), :creado_por)
+    INSERT INTO consumibles (id_interno, producto, marca, proveedor, catalogo_parte_cas, lote, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza, localizacion, stock_minimo, observaciones, stock_maximo, creado_por)
+    VALUES (:id_interno, :producto, :marca, :proveedor, :catalogo_parte_cas, :lote, :fecha_ingreso, :tamano_capacidad, :contenedor, COALESCE(:piezas, 0), :cantidad_por_pieza, :localizacion, :stock_minimo, :observaciones, :piezas, :creado_por)
     `,
     { ...data, creado_por: userIdFromClaims(user) },
   );
-  await aplicarSupervision(s, "consumibles", result.lastrowid as number, supervision, userIdFromClaims(user));
-  await registrarAuditoria(s, user, { accion: "crear", entidad: "consumibles", entidadId: result.lastrowid, referencia: String(data.producto), despues: await snapshotRow(s, "consumibles", result.lastrowid) });
+  const id = result.lastrowid as number;
+  if (data.piezas && data.piezas > 0) {
+    await s.execute(
+      `INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario, unidad)
+       VALUES ('entrada', 'consumibles', :id, :cantidad, 'Existencia inicial', :referencia, :id_usuario, 'piezas')`,
+      { id, cantidad: data.piezas, referencia: `consumible-inicial-${id}`, id_usuario: userIdFromClaims(user) },
+    );
+  }
+  await aplicarSupervision(s, "consumibles", id, supervision, userIdFromClaims(user));
+  await registrarAuditoria(s, user, { accion: "crear", entidad: "consumibles", entidadId: id, referencia: String(data.producto), despues: await snapshotRow(s, "consumibles", id) });
   await s.commit();
-  return json({ message: "Consumible creado", id: result.lastrowid }, 201);
+  return json({ message: "Consumible creado", id }, 201);
 }
 
 export async function getConsumable({ request, s, params }: RouteContext): Promise<Response> {
@@ -235,22 +279,28 @@ export async function updateConsumable({ request, s, params }: RouteContext): Pr
   const user = await requireUser(request);
   const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "E", { objeto: "catalogo_inventario" }));
 
-  const data = normalizePayload(await readJson(request));
+  let data: ConsumablePayload;
+  try {
+    data = normalizePayload(await readJson(request));
+  } catch (err) {
+    if (err instanceof ConsumibleInvalido) return json({ message: err.message }, 400);
+    throw err;
+  }
   if (!data.producto) {
     return json({ message: "El campo 'producto' es obligatorio" }, 400);
   }
 
+  // Las piezas en existencia solo cambian con movimientos (entrada, salida, consumo o ajuste).
   const antes = await snapshotRow(s, "consumibles", consumableId);
   const result = await s.execute(
     `
     UPDATE consumibles
-    SET producto = :producto, marca = :marca, proveedor = :proveedor, catalogo_parte_cas = :catalogo_parte_cas,
-        fecha_ingreso = :fecha_ingreso, tamano_capacidad = :tamano_capacidad, contenedor = :contenedor,
-        piezas = :piezas, cantidad_por_pieza = :cantidad_por_pieza,
-        stock_maximo = COALESCE(:stock_maximo, stock_maximo, :piezas)
+    SET id_interno = :id_interno, producto = :producto, marca = :marca, proveedor = :proveedor, catalogo_parte_cas = :catalogo_parte_cas,
+        lote = :lote, fecha_ingreso = :fecha_ingreso, tamano_capacidad = :tamano_capacidad, contenedor = :contenedor,
+        cantidad_por_pieza = :cantidad_por_pieza, localizacion = :localizacion, stock_minimo = :stock_minimo, observaciones = :observaciones
     WHERE id = :id
     `,
-    { ...data, id: consumableId },
+    { id_interno: data.id_interno, producto: data.producto, marca: data.marca, proveedor: data.proveedor, catalogo_parte_cas: data.catalogo_parte_cas, lote: data.lote, fecha_ingreso: data.fecha_ingreso, tamano_capacidad: data.tamano_capacidad, contenedor: data.contenedor, cantidad_por_pieza: data.cantidad_por_pieza, localizacion: data.localizacion, stock_minimo: data.stock_minimo, observaciones: data.observaciones, id: consumableId },
   );
   if (result.rowcount === 0) {
     await s.rollback();
@@ -268,50 +318,49 @@ export async function refillConsumable({ request, s, params }: RouteContext): Pr
   const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "movimiento" }));
 
   const data = await readJson(request);
-  const amount = toIntOrNull(data.cantidad);
-  if (amount === null || amount <= 0) {
-    return json({ message: "Captura una cantidad mayor a cero" }, 400);
-  }
-
-  const userId = userIdFromClaims(user);
-  const motivo = String(data.motivo || "Relleno manual de stock").trim();
-
-  const result = await s.execute(
-    `
-    UPDATE consumibles
-    SET stock_maximo = CASE
-            WHEN stock_maximo IS NULL OR stock_maximo < COALESCE(piezas, 0) + :cantidad
-            THEN COALESCE(piezas, 0) + :cantidad
-            ELSE stock_maximo
-        END,
-        piezas = COALESCE(piezas, 0) + :cantidad
-    WHERE id = :id
-    `,
-    { id: consumableId, cantidad: amount },
-  );
-  if (result.rowcount === 0) {
-    await s.rollback();
+  const row = await s.queryOne<Record<string, unknown>>("SELECT piezas, stock_maximo FROM consumibles WHERE id = :id LIMIT 1", { id: consumableId });
+  if (!row) {
     return json({ message: "Consumible no encontrado" }, 404);
   }
+  const existencia = toFloatOrNull(row.piezas) || 0;
+  const mov = await interpretarMovimiento(s, data, existencia);
+  const userId = userIdFromClaims(user);
 
   await s.execute(
     `
-    INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario)
-    VALUES ('entrada', 'consumibles', :id, :cantidad, :motivo, :referencia, :id_usuario)
+    UPDATE consumibles
+    SET stock_maximo = CASE
+            WHEN stock_maximo IS NULL OR stock_maximo < COALESCE(piezas, 0) + :delta
+            THEN COALESCE(piezas, 0) + :delta
+            ELSE stock_maximo
+        END,
+        piezas = COALESCE(piezas, 0) + :delta
+    WHERE id = :id
+    `,
+    { id: consumableId, delta: mov.delta },
+  );
+
+  await s.execute(
+    `
+    INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario, unidad, vinculo_tipo, vinculo_id)
+    VALUES (:tipo, 'consumibles', :id, :cantidad, :motivo, :referencia, :id_usuario, 'piezas', :vinculo_tipo, :vinculo_id)
     `,
     {
+      tipo: mov.tipo,
       id: consumableId,
-      cantidad: amount,
-      motivo,
-      referencia: `consumible-refill-${consumableId}-${utcTimestampReference()}`,
+      cantidad: mov.cantidad,
+      motivo: mov.motivo,
+      referencia: `consumible-${mov.tipo}-${consumableId}-${utcTimestampReference()}`,
       id_usuario: userId,
+      vinculo_tipo: mov.vinculoTipo,
+      vinculo_id: mov.vinculoId,
     },
   );
   await aplicarSupervision(s, "consumibles", consumableId, supervision, userId);
   const despues = await snapshotRow(s, "consumibles", consumableId);
-  await registrarAuditoria(s, user, { accion: "reponer", entidad: "consumibles", entidadId: consumableId, referencia: String(despues?.producto || consumableId), motivo, despues, detalle: { cantidad: amount } });
+  await registrarAuditoria(s, user, { accion: "reponer", entidad: "consumibles", entidadId: consumableId, referencia: String(despues?.producto || consumableId), motivo: mov.motivo, despues, detalle: { tipo: mov.tipo, cantidad: mov.cantidad, existencia_anterior: existencia, existencia_nueva: existencia + mov.delta } });
   await s.commit();
-  return json({ message: "Stock de consumible rellenado" });
+  return json({ message: mov.tipo === "ajuste" ? "Existencia ajustada" : "Movimiento registrado" });
 }
 
 /* Baja logica: conserva movimientos y registros que citan al consumible. */
@@ -330,8 +379,8 @@ export async function reactivarConsumable({ request, s, params }: RouteContext):
 }
 
 const IMPORT_INSERT = `
-  INSERT INTO consumibles (producto, marca, proveedor, catalogo_parte_cas, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza, stock_maximo)
-  VALUES (:producto, :marca, :proveedor, :catalogo_parte_cas, :fecha_ingreso, :tamano_capacidad, :contenedor, :piezas, :cantidad_por_pieza, :piezas)
+  INSERT INTO consumibles (id_interno, producto, marca, proveedor, catalogo_parte_cas, lote, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza, localizacion, stock_minimo, observaciones, stock_maximo)
+  VALUES (:id_interno, :producto, :marca, :proveedor, :catalogo_parte_cas, :lote, :fecha_ingreso, :tamano_capacidad, :contenedor, COALESCE(:piezas, 0), :cantidad_por_pieza, :localizacion, :stock_minimo, :observaciones, :piezas)
 `;
 
 export async function importConsumables({ request, s }: RouteContext): Promise<Response> {
@@ -347,8 +396,8 @@ export async function importConsumables({ request, s }: RouteContext): Promise<R
   if (jsonPayload && Array.isArray(jsonPayload.rows)) {
     for (const row of jsonPayload.rows) {
       if (!row || typeof row !== "object" || Array.isArray(row)) continue;
-      const data = normalizePayload(row as Record<string, unknown>);
-      if (!data.producto) continue;
+      const data = normalizarOmitiendo(row as Record<string, unknown>);
+      if (!data || !data.producto) continue;
       await s.execute(IMPORT_INSERT, { ...data });
       inserted += 1;
     }
@@ -372,8 +421,8 @@ export async function importConsumables({ request, s }: RouteContext): Promise<R
     const delimiter = (sample.match(/;/g) || []).length > (sample.match(/,/g) || []).length ? ";" : ",";
 
     for (const record of parseCsvRecords(decoded, delimiter)) {
-      const data = normalizePayload(canonicalizeRowKeys(record));
-      if (!data.producto) continue;
+      const data = normalizarOmitiendo(canonicalizeRowKeys(record));
+      if (!data || !data.producto) continue;
       await s.execute(IMPORT_INSERT, { ...data });
       inserted += 1;
     }

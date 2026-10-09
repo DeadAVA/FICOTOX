@@ -11,7 +11,7 @@ import { ColumnasVentana, DatoLateral, DatosLista, DatosRapidos, TarjetaLateral,
 import { API_BASE_URL } from "@/lib/client/api";
 import { openProtectedFile } from "@/lib/client/files";
 import { fmt } from "@/lib/client/format";
-import { origenDeMovimiento, esEntrada, IconoEquipo, IconoMantenimiento, IconoMovimientoInsumo, IconoOrigen, moverEn } from "./comun";
+import { cantidadMovimiento, origenDeMovimiento, esEntrada, tipoMovimiento, IconoEquipo, IconoMantenimiento, IconoMovimientoInsumo, IconoOrigen, moverEn } from "./comun";
 import { cn } from "@/components/ui/cn";
 import { haceCuantoCorto } from "@/lib/client/tiempo";
 import type { ApiRecord } from "@/lib/client/types";
@@ -164,7 +164,7 @@ function FichaMovimiento({ m }: { m: ApiRecord }) {
         titulo={nombreInsumo(m)}
         insignia={
           <Badge tone={entrada ? "success" : "warning"} dot>
-            {entrada ? "Entrada" : "Salida"}
+            {tipoMovimiento(m)}
           </Badge>
         }
         subtitulo={tipoInsumo}
@@ -176,7 +176,8 @@ function FichaMovimiento({ m }: { m: ApiRecord }) {
             <span className="text-[12.5px] text-ink-3">{entrada ? "Entró al inventario" : "Salió del inventario"}</span>
             <span className={cn("tnum text-[30px] leading-none font-semibold tracking-[-0.02em]", entrada ? "text-success-text" : "text-warning-text")}>
               {entrada ? "+" : "−"}
-              {fmt(m.cantidad)}
+              {fmt(cantidadMovimiento(m))}
+              {m.unidad ? <span className="ml-1.5 text-[15px] font-medium">{String(m.unidad)}</span> : null}
             </span>
           </div>
           <div className="flex flex-col items-end gap-0.5 text-right">
@@ -194,7 +195,8 @@ function FichaMovimiento({ m }: { m: ApiRecord }) {
             datos={[
               { etiqueta: tipoInsumo, valor: fichaInsumo ? <Link href={fichaInsumo} className="font-medium text-brand hover:underline">{nombreInsumo(m)}</Link> : nombreInsumo(m) },
               m.item_codigo && m.item_codigo !== m.item_nombre ? { etiqueta: "Código", valor: String(m.item_codigo) } : null,
-              { etiqueta: "Tipo", valor: entrada ? "Entrada al inventario" : "Salida del inventario" },
+              { etiqueta: "Tipo", valor: tipoMovimiento(m) },
+              m.usuario ? { etiqueta: "Registró", valor: String(m.usuario) } : null,
               m.motivo ? { etiqueta: "Motivo", valor: String(m.motivo) } : null,
               { etiqueta: "Fecha y hora", valor: formatearFechaHora(m.fecha_hora) },
             ]}

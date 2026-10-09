@@ -34,6 +34,7 @@ const COLUMNAS: ColumnaLista[] = [
 function celdasReactivo(item: ApiRecord) {
   const stock = getReactivoStockState(item);
   const inactive = Number(item.activo ?? 1) === 0;
+  const esColumna = (item.tipo_reactivo || item.categoria) === "columnas_cromatograficas";
   return [
     <span key="p" className={inactive ? "flex min-w-0 items-center gap-3 opacity-60" : "flex min-w-0 items-center gap-3"}>
       <IconoCategoria categoria={item.tipo_reactivo || item.categoria} />
@@ -46,8 +47,12 @@ function celdasReactivo(item: ApiRecord) {
       </span>
     </span>,
     <span key="u" className="text-[13.5px] text-ink-2">{getReactivoLocation(item) === "-" ? <span className="text-ink-4">—</span> : getReactivoLocation(item)}</span>,
-    <Caducidad key="c" value={expiryOf(item)} />,
-    <StockMeter key="e" current={stock.current} max={stock.max} min={stock.min} unit={stock.unit} low={stock.low} />,
+    esColumna ? <span key="c" className="text-[13px] text-ink-4">—</span> : Number(item.caducidad_indefinida) === 1 ? <span key="c" className="text-[13.5px] text-ink-2">Indefinida</span> : <Caducidad key="c" value={expiryOf(item)} />,
+    esColumna ? (
+      <span key="e" className="text-[13px] text-ink-3">{[item.lote ? `Lote ${item.lote}` : null, item.nuevo_usado].filter(Boolean).join(" · ") || "Sin existencias"}</span>
+    ) : (
+      <StockMeter key="e" current={stock.current} max={stock.max} min={stock.min} unit={stock.unit} low={stock.low} />
+    ),
   ];
 }
 
@@ -204,7 +209,7 @@ function ReactivosContent() {
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const inactive = Number(item.activo ?? 1) === 0;
     const list: MenuItem[] = [];
-    if (canRellenar && !inactive) list.push({ label: "Reponer", description: "Registrar una entrada", icon: <ArrowsClockwise size={16} weight="duotone" />, tone: "success", onSelect: () => reponer(item) });
+    if (canRellenar && !inactive) list.push({ label: "Registrar movimiento", description: "Entrada, salida, consumo o ajuste por conteo", icon: <ArrowsClockwise size={16} weight="duotone" />, tone: "success", onSelect: () => reponer(item) });
     if (canEditar) list.push({ label: "Editar", description: "Cambiar datos del reactivo", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => editReactivo(Number(item.id)) });
     list.push(...reportar("reactivos", item.id, formatReactivoName(item)));
     if (inactive ? canReactivar : canBaja) {

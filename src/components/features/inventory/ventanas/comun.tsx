@@ -168,11 +168,24 @@ export function origenDeMovimiento(m: ApiRecord): { texto: string; href: string 
   if (ext) return { texto: motivo.replace(/^Extraccion/, "Extracción") || "Extracción", href: `/muestras/extraccion/${ext[1]}` };
   if (proc) return { texto: motivo.replace(/^Procesamiento/, "Procesamiento") || "Procesamiento", href: `/muestras/procesamiento/${proc[1]}` };
   if (ana) return { texto: motivo || "Análisis", href: `/muestras/analisis/${ana[1]}` };
+  const vinculo = RUTA_VINCULO[String(m.vinculo_tipo || "")];
+  if (vinculo && m.vinculo_id) return { texto: motivo || vinculo[0], href: `${vinculo[1]}/${m.vinculo_id}` };
   if (/^(reactivo|consumible)-/.test(ref)) return { texto: motivo || "Entrada al inventario", href: null };
   return { texto: motivo || "Movimiento de inventario", href: null };
 }
 
-export const esEntrada = (m: ApiRecord) => String(m.tipo || "").toLowerCase() === "entrada";
+/* Entra al inventario: una entrada o un ajuste que sube la existencia. */
+export const esEntrada = (m: ApiRecord) => {
+  const tipo = String(m.tipo || "").toLowerCase();
+  return tipo === "entrada" || (tipo === "ajuste" && Number(m.cantidad) > 0);
+};
+
+/* Cantidad sin signo (el signo lo da la flecha y el color) y rotulo del tipo. */
+export const cantidadMovimiento = (m: ApiRecord): number => Math.abs(Number(m.cantidad) || 0);
+export const TIPO_MOVIMIENTO: Record<string, string> = { entrada: "Entrada", salida: "Salida", consumo: "Consumo", ajuste: "Ajuste por conteo" };
+export const tipoMovimiento = (m: ApiRecord): string => TIPO_MOVIMIENTO[String(m.tipo || "").toLowerCase()] || (esEntrada(m) ? "Entrada" : "Salida");
+
+const RUTA_VINCULO: Record<string, [string, string]> = { recepcion: ["Recepción", "/muestras/recepcion"], procesamiento: ["Procesamiento", "/muestras/procesamiento"], extraccion: ["Extracción", "/muestras/extraccion"], analisis: ["Análisis", "/muestras/analisis"] };
 
 /*
  * Icono de un movimiento: la figura del insumo (reactivo: matraz; consumible:
@@ -236,8 +249,8 @@ export function MovimientosRecientes({ tabla, id, unidad }: { tabla: "reactivos"
             <IconoMovimientoInsumo m={m} />
             <div className="flex min-w-0 flex-1 flex-col">
               <span className="text-[13.5px] font-medium text-ink">
-                {esEntrada(m) ? "Entrada" : "Salida"} de {fmt(m.cantidad)}
-                {unidad ? ` ${unidad}` : ""}
+                {tipoMovimiento(m)} de {fmt(cantidadMovimiento(m))}
+                {unidad || m.unidad ? ` ${unidad || m.unidad}` : ""}
               </span>
               <span className="break-words text-[12.5px] text-ink-3">
                 {origen.href ? (

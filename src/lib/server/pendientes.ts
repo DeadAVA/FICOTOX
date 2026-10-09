@@ -203,8 +203,8 @@ export async function pendientesDe(s: Session, auth: Autorizacion): Promise<Grup
       const vencido = String(r.caducidad).slice(0, 10) < hoy;
       return { clave: `caducidad:reactivo${r.id}:${String(r.caducidad).slice(0, 10)}:${vencido ? "vencido" : "pronto"}`, frase: vencido ? "Reactivo caducado" : "Caduca pronto", registro: String(r.nombre), detalle: `${vencido ? "Caducó" : "Caduca"} el ${fmt(r.caducidad)}`, href: `/inventario/reactivos?abrir=${r.id}`, tono: (vencido ? "danger" : "warning") as Tono, cuando: vencido ? String(r.caducidad).slice(0, 10) : null };
     }));
-    const cons = await s.query<Row>(`SELECT t.id, t.producto, t.piezas, ${reponer("consumibles")} AS repuesto FROM consumibles t WHERE COALESCE(t.activo, 1) = 1 AND COALESCE(t.piezas, 0) <= 5 ORDER BY t.piezas ASC LIMIT ${MAX}`);
-    agregar("consumibles_bajos", "Consumibles con 5 piezas o menos", "warning", "/inventario/consumibles?filtro=bajo", cons.map((c) => {
+    const cons = await s.query<Row>(`SELECT t.id, t.producto, t.piezas, ${reponer("consumibles")} AS repuesto FROM consumibles t WHERE COALESCE(t.activo, 1) = 1 AND COALESCE(t.piezas, 0) <= CASE WHEN COALESCE(t.stock_minimo, 0) > 0 THEN t.stock_minimo ELSE 5 END ORDER BY t.piezas ASC LIMIT ${MAX}`);
+    agregar("consumibles_bajos", "Consumibles con poca existencia", "warning", "/inventario/consumibles?filtro=bajo", cons.map((c) => {
       const agotado = Number(c.piezas || 0) <= 0;
       return { clave: `stock_bajo:consumible${c.id}:${agotado ? "agotado" : "bajo"}:${c.repuesto || 0}`, frase: agotado ? "Consumible agotado" : "Pocas piezas", registro: String(c.producto || "Consumible"), detalle: agotado ? "Agotado" : `${Number(c.piezas)} pieza${Number(c.piezas) === 1 ? "" : "s"}`, href: `/inventario/consumibles?abrir=${c.id}`, tono: "warning" as Tono, cuando: null };
     }));
