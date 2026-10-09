@@ -18,7 +18,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import sharp, { type Metadata } from "sharp";
+import type { Metadata } from "sharp";
 import { requireUser } from "../auth";
 import { registrarAuditoria } from "../audit";
 import { getConfig } from "../config";
@@ -73,6 +73,8 @@ async function procesar(request: Request): Promise<Record<number, Buffer>> {
   const bytes = Buffer.from(await archivo.arrayBuffer());
   if (!bytes.length || bytes.length > MAX_BYTES) throw new HttpError(bytes.length ? 413 : 400, { message: bytes.length ? `La foto pesa más de ${MAX_MB} MB` : "La foto está vacía" });
   if (!tipoReal(bytes)) throw new HttpError(400, { message: FORMATO_NO_VALIDO, codigo: "formato_no_permitido" });
+  // sharp solo se carga al procesar una foto.
+  const { default: sharp } = await import("sharp");
   let meta: Metadata;
   try {
     meta = await sharp(bytes, { limitInputPixels: 40_000_000 }).metadata();
