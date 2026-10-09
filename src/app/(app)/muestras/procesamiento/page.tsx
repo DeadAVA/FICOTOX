@@ -23,6 +23,7 @@ import { contar, fmtDate } from "@/lib/client/format";
 import { useDebouncedValue, useInitialParam, useParamChange } from "@/lib/client/hooks";
 import { formatProcessingFolio, normalizeSampleStatus } from "@/lib/client/samples";
 import { useResource } from "@/lib/client/store";
+import { estaHabilitada, motivoDe, seOfrece, usePuedeCrear } from "@/lib/client/puede";
 import type { ApiRecord } from "@/lib/client/types";
 
 export default function ProcesamientoListPage() {
@@ -59,9 +60,10 @@ function ProcesamientoList() {
   );
   const items = resource.data;
 
-  const canCreate = can("ensayos", "C", { objeto: "procesamiento", borrador: true });
+  const puedeCrear = usePuedeCrear();
+  const canCreate = puedeCrear("procesamiento", can("ensayos", "C", { objeto: "procesamiento", borrador: true }));
   const canEdit = (item: ApiRecord) => can("ensayos", "E", { objeto: "procesamiento", borrador: String(item.estado || "registrada") === "registrada" });
-  const canExtraer = can("ensayos", "C", { objeto: "extraccion", borrador: true });
+  const canExtraer = puedeCrear("extraccion", can("ensayos", "C", { objeto: "extraccion", borrador: true }));
   const canDelete = can("ensayos", "AN");
 
   const organismoDe = (item: ApiRecord) => (Array.isArray(item.tipo_organismo) ? String(item.tipo_organismo[0] || "") : String(item.tipo_organismo || ""));
@@ -102,7 +104,7 @@ function ProcesamientoList() {
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulada = item.estado === "anulada";
     const list: MenuItem[] = [{ label: "Abrir", description: "Ver el formato completo", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/muestras/procesamiento/${item.id}`) }];
-    if (canEdit(item) && !anulada) list.push({ label: "Editar", description: "Corregir pasos, pesos o resguardo", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/procesamiento/${item.id}`) });
+    if (seOfrece(item, "editar", canEdit(item)) && !anulada) list.push({ label: "Editar", description: motivoDe(item, "editar") || "Corregir pasos, pesos o resguardo", disabled: !estaHabilitada(item, "editar", canEdit(item)), icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/procesamiento/${item.id}`) });
     if (canExtraer && !anulada) list.push({ label: "Extraer", description: "Nueva extracción ASP o DSP de esta molienda", icon: <Drop size={16} weight="duotone" />, tone: "success", onSelect: () => router.push(`/muestras/extraccion/nueva?procesamiento=${item.id}`) });
     list.push(...reportar("muestras_procesamiento", item.id, formatProcessingFolio(item)));
     if (canDelete) {

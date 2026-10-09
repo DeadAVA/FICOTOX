@@ -24,6 +24,7 @@ import { useDebouncedValue, useInitialParam, useParamChange } from "@/lib/client
 import { ETAPAS_FLUJO, esEtapaFlujo, type EtapaFlujo } from "@/lib/client/flujo";
 import { formatSampleFolio, normalizeSampleStatus } from "@/lib/client/samples";
 import { useResource } from "@/lib/client/store";
+import { estaHabilitada, motivoDe, seOfrece, usePuedeCrear } from "@/lib/client/puede";
 import type { ApiRecord } from "@/lib/client/types";
 import { ACCEPTANCE_DECISIONS, RECEPTION_ANALYSIS_TYPES, RECEPTION_STATE_ORDER, SAMPLE_STATES } from "@/lib/shared/sgc";
 import { recepcionAsignable, useAccionesRecepcion } from "@/components/features/samples/RecepcionAcciones";
@@ -80,9 +81,10 @@ function RecepcionList() {
     { enabled: !!token && !!flujo, deps: [flujo] },
   );
 
-  const canCreate = can("muestras", "C", { objeto: "recepcion", borrador: true });
+  const puedeCrear = usePuedeCrear();
+  const canCreate = puedeCrear("recepcion", can("muestras", "C", { objeto: "recepcion", borrador: true }));
   const canEdit = (item: ApiRecord) => can("muestras", "E", { objeto: "recepcion", borrador: String(item.estado || "registrada") === "registrada" });
-  const canProcesar = can("ensayos", "C", { objeto: "procesamiento", borrador: true });
+  const canProcesar = puedeCrear("procesamiento", can("ensayos", "C", { objeto: "procesamiento", borrador: true }));
   const canDelete = can("muestras", "AN");
   const canAsignar = can("muestras", "A");
   const acciones = useAccionesRecepcion(() => resource.reload());
@@ -157,7 +159,7 @@ function RecepcionList() {
     const puedeProcesar = canProcesar && !anulada && ["aceptada", "aceptada_con_desviacion"].includes(String(item.decision_aceptacion || "")) && !["rechazada", "cerrada", "liberada"].includes(estado);
     const list: MenuItem[] = [{ label: "Abrir", description: "Ver el formato completo", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/muestras/recepcion/${item.id}`) }];
     if (canAsignar && recepcionAsignable(item)) list.push({ label: "Asignar…", description: "Quién trabaja esta muestra", icon: <UserPlus size={16} weight="duotone" />, onSelect: () => acciones.asignar(item) });
-    if (canEdit(item) && !anulada && !terminada) list.push({ label: "Editar", description: "Cambiar datos o decidir la aceptación", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/recepcion/${item.id}`) });
+    if (seOfrece(item, "editar", canEdit(item)) && !anulada && !terminada) list.push({ label: "Editar", description: motivoDe(item, "editar") || "Cambiar datos o decidir la aceptación", disabled: !estaHabilitada(item, "editar", canEdit(item)), icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/recepcion/${item.id}`) });
     if (!anulada) list.push({ label: "Imprimir etiqueta", description: "Una etiqueta por muestra del lote", icon: <Printer size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/recepcion/${item.id}/etiquetas`) });
     if (!anulada && !terminada && can("muestras", "E", { objeto: "recepcion" })) list.push({ label: "Cambiar folio…", description: "Con motivo; lo autoriza la Coord. Técnica", icon: <Hash size={16} weight="duotone" />, onSelect: () => acciones.cambiarFolio(item) });
     if (["cerrada", "rechazada"].includes(estado) && can("muestras", "E", { objeto: "recepcion" })) list.push({ label: "Reabrir…", description: "Vuelve al estado previo, con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", onSelect: () => acciones.reabrir(item) });

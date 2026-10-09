@@ -1,4 +1,5 @@
 import { formatearFolio } from "../../../shared/folios";
+import { conSolicitudesYPuede } from "../../puede-registro";
 import { requireUser, userIdFromClaims, type CurrentUser } from "../../auth";
 import { incidenciaPorDecisionRecepcion } from "../calidad/automaticas";
 import { actorDe } from "../calidad/comun";
@@ -10,7 +11,7 @@ import { exigirReauth } from "../../seguridad";
 import { crearSolicitud, detalleSolicitud, exigirSinSolicitudPendiente, respuestaSolicitud, serializarSolicitud, type ContextoEjecucion } from "../../solicitudes";
 import { aplicarSupervision, exigirSinSupervisionPendiente, filtroSupervision, marcaSupervision } from "../../supervision";
 
-import { anularOSolicitar, assertEditableAsync, conSolicitudes, deletionNotAllowed, folioLabel, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
+import { anularOSolicitar, assertEditableAsync, deletionNotAllowed, folioLabel, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
 import { ACCEPTANCE_DECISIONS, DISPOSAL_TYPES, RECEPTION_STATE_RANK } from "../../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
 
@@ -189,7 +190,7 @@ export async function listReceptionSamples({ request, s }: RouteContext): Promis
     { search, search_like: `%${search}%`, incluir_anuladas: includeAnuladas ? 1 : 0, ...supFiltro.params, ...asignadas.params },
   );
   return json({
-    items: (await conSolicitudes(s, TABLE, rows)).map((row) => {
+    items: (await conSolicitudesYPuede(s, user, TABLE, rows)).map((row) => {
       if (soloEstado(permiso)) return vistaEstado(row);
       const item: Row = { ...row, analisis: safeJsonLoad(row.analisis_json, {}) };
       delete item.analisis_json;
@@ -212,7 +213,7 @@ export async function getReceptionSample({ request, s, params }: RouteContext): 
   if (soloEstado(permiso)) return json({ item: vistaEstado(row) });
   // Etapas derivadas, para mostrar la cadena completa desde la recepcion.
   const procesamientos = await s.query("SELECT id, folio_num, estado FROM muestras_procesamiento WHERE recepcion_id = :id ORDER BY folio_num", { id: sampleId });
-  return json({ item: { ...(await conSolicitudes(s, TABLE, [serializeRow(row)]))[0], procesamientos } });
+  return json({ item: { ...(await conSolicitudesYPuede(s, user, TABLE, [serializeRow(row)]))[0], procesamientos } });
 }
 
 export async function createReceptionSample({ request, s }: RouteContext): Promise<Response> {

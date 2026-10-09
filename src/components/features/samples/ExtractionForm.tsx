@@ -21,6 +21,7 @@ import { formatExtractionFolio, getExtractionRowsFromProcessing, isSampleReadOnl
 import { RecordHistory } from "@/components/features/audit/RecordHistory";
 import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
+import { seOfrece, usePuedeCrear } from "@/lib/client/puede";
 import type { ApiRecord } from "@/lib/client/types";
 import { EXTRACTION_TYPES, type ExtractionType } from "@/lib/shared/extraction";
 import { Callout, ChoiceCard, ChoiceGrid, FieldGroup, FormCard, FormPage, PersonCard, StepRow, personaId, type FormSectionDef } from "./FormLayout";
@@ -449,6 +450,7 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
   const router = useRouter();
   const confirm = useConfirm();
   const { token, can } = useSession();
+  const puedeCrear = usePuedeCrear();
   const protocol = PROTOCOLS[(item?.tipo_registro as ExtractionType) || tipo || "E-A"] || ASP_PROTOCOL;
   const meta = EXTRACTION_TYPES[protocol.tipo];
   const [form, setForm] = useState<ExtractionState>(() => (item ? formFromItem(item, protocol) : defaultForm(protocol)));
@@ -459,7 +461,7 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
   const [submitting, setSubmitting] = useState(false);
   const detailCache = useRef(new Map<number, ApiRecord>());
   const editing = !!item?.id;
-  const canEdit = editing ? can("ensayos", "E", { objeto: "extraccion", borrador: String(item?.estado || "registrada") === "registrada" }) : can("ensayos", "C", { objeto: "extraccion", borrador: true });
+  const canEdit = editing ? seOfrece(item, "editar", can("ensayos", "E", { objeto: "extraccion", borrador: String(item?.estado || "registrada") === "registrada" })) : puedeCrear("extraccion", can("ensayos", "C", { objeto: "extraccion", borrador: true }));
   // Con una solicitud de autorizacion pendiente (Fase 3) el registro no se edita.
   const readOnly = editing && (isSampleReadOnly(item?.estado) || !canEdit || !!item?.solicitud_pendiente);
   const patch = (changes: Partial<ExtractionState>) => setForm((prev) => ({ ...prev, ...changes }));

@@ -120,6 +120,8 @@ function usePuedeResolver(): (sol: ApiRecord | null | undefined) => boolean {
     if (sol.retirada || !esTipoActivo(sol.tipo)) return false;
     if (typeof sol.puedo_aprobar === "boolean") return sol.puedo_aprobar;
     if (Number(sol.solicitado_por) === Number(user?.id)) return false;
+    // Regla 6: nadie aprueba un cambio de acceso sobre su propia cuenta.
+    if (sol.entidad === "usuarios" && String(sol.entidad_id) === String(user?.id)) return false;
     const { modulo, accion } = permisoParaAprobar(String(sol.tipo) as TipoSolicitud, String(sol.entidad || ""));
     return can(modulo, accion);
   };

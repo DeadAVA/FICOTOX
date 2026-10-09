@@ -22,6 +22,7 @@ import { contar, fmtDate } from "@/lib/client/format";
 import { useDebouncedValue, useInitialParam, useParamChange } from "@/lib/client/hooks";
 import { formatExtractionFolio, normalizeSampleStatus } from "@/lib/client/samples";
 import { useResource } from "@/lib/client/store";
+import { estaHabilitada, motivoDe, seOfrece, usePuedeCrear } from "@/lib/client/puede";
 import type { ApiRecord } from "@/lib/client/types";
 import { EXTRACTION_TYPE_LIST, PLANNED_EXTRACTION_TYPES, extractionTypeMeta, normalizeExtractionType, type ExtractionType } from "@/lib/shared/extraction";
 
@@ -67,9 +68,10 @@ function ExtraccionList() {
   );
   const items = resource.data;
 
-  const canCreate = can("ensayos", "C", { objeto: "extraccion", borrador: true });
+  const puedeCrear = usePuedeCrear();
+  const canCreate = puedeCrear("extraccion", can("ensayos", "C", { objeto: "extraccion", borrador: true }));
   const canEdit = (item: ApiRecord) => can("ensayos", "E", { objeto: "extraccion", borrador: String(item.estado || "registrada") === "registrada" });
-  const canAnalizar = can("ensayos", "C", { objeto: "analisis", borrador: true });
+  const canAnalizar = puedeCrear("analisis", can("ensayos", "C", { objeto: "analisis", borrador: true }));
   const canDelete = can("ensayos", "AN");
   const newItems: MenuItem[] = [
     ...EXTRACTION_TYPE_LIST.map((meta) => ({ label: meta.label, description: meta.clave, icon: <Flask size={16} weight="duotone" />, tone: "brand" as const, onSelect: () => router.push(`/muestras/extraccion/nueva?tipo=${meta.tipo}`) })),
@@ -123,7 +125,7 @@ function ExtraccionList() {
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulada = item.estado === "anulada";
     const list: MenuItem[] = [{ label: "Abrir", description: "Ver el formato completo", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/muestras/extraccion/${item.id}`) }];
-    if (canEdit(item) && !anulada) list.push({ label: "Editar", description: "Corregir pasos, pesos o equipos", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/extraccion/${item.id}`) });
+    if (seOfrece(item, "editar", canEdit(item)) && !anulada) list.push({ label: "Editar", description: motivoDe(item, "editar") || "Corregir pasos, pesos o equipos", disabled: !estaHabilitada(item, "editar", canEdit(item)), icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/extraccion/${item.id}`) });
     if (canAnalizar && !anulada) list.push({ label: "Analizar", description: "Registrar el análisis de este extracto", icon: <TestTube size={16} weight="duotone" />, tone: "success", onSelect: () => router.push(`/muestras/analisis/nuevo?extraccion=${item.id}`) });
     list.push(...reportar("muestras_extraccion", item.id, formatExtractionFolio(item)));
     if (canDelete) {

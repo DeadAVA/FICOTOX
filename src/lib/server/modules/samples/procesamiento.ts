@@ -1,4 +1,5 @@
 import { requireUser, userIdFromClaims } from "../../auth";
+import { conSolicitudesYPuede } from "../../puede-registro";
 import { registrarAuditoria, snapshotRow } from "../../audit";
 import { type Row, type Session } from "../../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../../http";
@@ -9,7 +10,7 @@ import { evaluarSupervisionCaptura } from "../../../shared/segregacion";
 import { respuestaSolicitud } from "../../solicitudes";
 import { aplicarSupervision, filtroSupervision, marcaSupervision } from "../../supervision";
 
-import { advanceState, anularOSolicitar, applyStageInventory, assertEditableAsync, assertOrigin, conSolicitudes, deletionNotAllowed, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
+import { advanceState, anularOSolicitar, applyStageInventory, assertEditableAsync, assertOrigin, deletionNotAllowed, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
 
 import { exigirAutorizaciones } from "../../autorizaciones";
@@ -133,7 +134,7 @@ export async function listProcessingSamples({ request, s }: RouteContext): Promi
     { search, search_like: `%${search}%`, incluir_anuladas: includeAnuladas ? 1 : 0, ...supFiltro.params },
   );
   return json({
-    items: (await conSolicitudes(s, TABLE, rows)).map((row) => {
+    items: (await conSolicitudesYPuede(s, user, TABLE, rows)).map((row) => {
       const item: Row = { ...row, tipo_organismo: safeJsonLoad(row.tipo_organismo_json, []) };
       delete item.tipo_organismo_json;
       return item;
@@ -170,7 +171,7 @@ export async function getProcessingSample({ request, s, params }: RouteContext):
   if (!row) {
     return json({ message: "Registro no encontrado" }, 404);
   }
-  return json({ item: (await conSolicitudes(s, TABLE, [serializeRow(row)]))[0] });
+  return json({ item: (await conSolicitudesYPuede(s, user, TABLE, [serializeRow(row)]))[0] });
 }
 
 export async function createProcessingSample({ request, s }: RouteContext): Promise<Response> {

@@ -1,4 +1,5 @@
 import { formatearFolio } from "../../../shared/folios";
+import { conSolicitudesYPuede } from "../../puede-registro";
 import { requireUser, userIdFromClaims } from "../../auth";
 import { registrarAuditoria, snapshotRow } from "../../audit";
 
@@ -12,7 +13,7 @@ import { respuestaSolicitud } from "../../solicitudes";
 import { aplicarSupervision, filtroSupervision, marcaSupervision } from "../../supervision";
 import { recordBitacoraFolios } from "../inventory";
 
-import { advanceState, anularOSolicitar, applyStageInventory, recepcionDe, assertEditableAsync, assertOrigin, avanzarRecepcion, conSolicitudes, deletionNotAllowed, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
+import { advanceState, anularOSolicitar, applyStageInventory, recepcionDe, assertEditableAsync, assertOrigin, avanzarRecepcion, deletionNotAllowed, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
 import { EXTRACTION_TYPES, claveForType, normalizeExtractionType, parseExtractionFolioSearch, type ExtractionType } from "../../../shared/extraction";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toIntOrNull } from "../helpers";
 
@@ -234,7 +235,7 @@ export async function listExtractionSamples({ request, s }: RouteContext): Promi
       ...supFiltro.params,
     },
   );
-  return json({ items: await conSolicitudes(s, TABLE, rows), total: rows.length });
+  return json({ items: await conSolicitudesYPuede(s, user, TABLE, rows), total: rows.length });
 }
 
 export async function getExtractionSample({ request, s, params }: RouteContext): Promise<Response> {
@@ -263,7 +264,7 @@ export async function getExtractionSample({ request, s, params }: RouteContext):
   if (!row) {
     return json({ message: "Registro no encontrado" }, 404);
   }
-  return json({ item: (await conSolicitudes(s, TABLE, [serializeRow(row)]))[0] });
+  return json({ item: (await conSolicitudesYPuede(s, user, TABLE, [serializeRow(row)]))[0] });
 }
 
 export async function createExtractionSample({ request, s }: RouteContext): Promise<Response> {

@@ -21,6 +21,7 @@ import { fmtDate, isoDate, parseFloatOrNull, parseIntOrNull, todayIso } from "@/
 import { findInsumoOption, findUniqueOperativeEquipo, loadInsumoOptions, nextBitacoraFolio } from "@/lib/client/insumos";
 import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
+import { seOfrece, usePuedeCrear } from "@/lib/client/puede";
 import type { ApiRecord } from "@/lib/client/types";
 import { ANALYSIS_METHODS, ANALYSIS_STATES, ANALYSIS_TYPES, CONFORMITY_OPTIONS } from "@/lib/shared/sgc";
 import { Callout, ChoiceCard, ChoiceGrid, FieldGroup, FlowSteps, FormCard, FormPage, Panel, PersonCard, SignoffCard, personaId, type FormSectionDef } from "./FormLayout";
@@ -192,6 +193,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
   const prompt = usePrompt();
   const confirm = useConfirm();
   const { token, can, user } = useSession();
+  const puedeCrear = usePuedeCrear();
   const [form, setForm] = useState<AnalysisFormState>(() => (item ? formFromItem(item) : defaultForm()));
   // Fase 5: el analista se liga a una cuenta (con su contraseña si no es la sesión).
   const [analistaCuenta, setAnalistaCuenta] = useState<FirmanteState>(() => firmanteDe(item, "analista"));
@@ -204,7 +206,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
   const editing = !!item?.id;
   const estado = String(item?.estado || "registrado");
   // E solo mientras el análisis está registrado (Fase 1): revisado y aprobado se leen, no se editan.
-  const canEdit = editing ? can("ensayos", "E", { objeto: "analisis", borrador: estado === "registrado" }) && estado === "registrado" : can("ensayos", "C", { objeto: "analisis", borrador: true });
+  const canEdit = editing ? seOfrece(item, "editar", can("ensayos", "E", { objeto: "analisis", borrador: estado === "registrado" })) && estado === "registrado" : puedeCrear("analisis", can("ensayos", "C", { objeto: "analisis", borrador: true }));
   // Con una solicitud de autorizacion pendiente (Fase 3) el registro no se edita.
   // Fase 5: enviado a revision ya no se edita; un aprobado se corrige con enmienda.
   const readOnly = editing && (["en_revision", "aprobado", "revisado", "sustituido", "anulado", "anulada"].includes(estado) || !canEdit || !!item?.solicitud_pendiente);
@@ -424,8 +426,9 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
   };
 
   const ext = extracciones.find((e) => String(e.id) === form.extraccionId);
-  const canReview = can("ensayos", "R");
-  const canApprove = can("ensayos", "A");
+  // Banderas del servidor: rol + autorización FX-THF-AP; la segregación se explica abajo (botón deshabilitado + excepción).
+  const canReview = seOfrece(item, "revisar", can("ensayos", "R"));
+  const canApprove = seOfrece(item, "aprobar", can("ensayos", "A"));
   // Segregacion (Fase 3): por que la persona actual no puede revisar o aprobar este analisis (null = puede).
   const segregacion = (item?.segregacion || {}) as { revisar?: string | null; aprobar?: string | null };
   const excepciones = (item?.excepciones || []) as Array<{ solicitud_id: number; accion: string }>;
@@ -497,8 +500,8 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
 
   const anulado = ["anulado", "anulada"].includes(estado);
   const moreItems: MenuItem[] = [];
-  if (editing && !anulado && can("ensayos", "AN")) moreItems.push({ label: "Anular análisis…", description: "Queda en la bitácora con motivo", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", onSelect: async () => (await anular(item!)) && router.push("/muestras/analisis") });
-  if (editing && anulado && can("ensayos", "AN")) moreItems.push({ label: "Restaurar análisis", description: "Vuelve a la lista con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", onSelect: async () => (await restaurar(item!)) && router.push("/muestras/analisis") });
+  if (editing && !anulado && seOfrece(item, "anular", can("ensayos", "AN"))) moreItems.push({ label: "Anular análisis…", description: "Queda en la bitácora con motivo", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", onSelect: async () => (await anular(item!)) && router.push("/muestras/analisis") });
+  if (editing && anulado && seOfrece(item, "anular", can("ensayos", "AN"))) moreItems.push({ label: "Restaurar análisis", description: "Vuelve a la lista con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", onSelect: async () => (await restaurar(item!)) && router.push("/muestras/analisis") });
 
   return (
     <FormPage
@@ -584,7 +587,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
               Devolver con observaciones
             </Button>
           ) : null}
-          {editing && estado === "aprobado" && can("ensayos", "C", { objeto: "analisis", borrador: true }) ? (
+          {editing && estado === "aprobado" && seOfrece(item, "enmendar", can("ensayos", "C", { objeto: "analisis", borrador: true })) ? (
             <Button variant="secondary" icon={<PencilLine size={16} />} onClick={enmendar} loading={flujo}>
               Enmendar…
             </Button>

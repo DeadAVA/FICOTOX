@@ -25,6 +25,7 @@ import { descargarPdfInforme } from "@/lib/client/informes-pdf";
 import { fmtDate, isoDate, parseIntOrNull, todayIso } from "@/lib/client/format";
 import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
+import { seOfrece } from "@/lib/client/puede";
 import type { ApiRecord } from "@/lib/client/types";
 import { folioNc } from "@/lib/shared/calidad";
 import { ANALYSIS_METHODS, ANALYSIS_TYPES, REPORT_DEFAULT_STATEMENTS, REPORT_STATES } from "@/lib/shared/sgc";
@@ -131,7 +132,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
   const editing = !!item?.id;
   const estado = String(item?.estado || "borrador");
   // E solo en borrador (Fase 1): en revisión o después se corrige por enmienda o anulación.
-  const canEdit = editing ? can("informes", "E", { objeto: "informe", borrador: true }) && estado === "borrador" : can("informes", "C", { objeto: "informe", borrador: true });
+  const canEdit = editing ? seOfrece(item, "editar", can("informes", "E", { objeto: "informe", borrador: true })) && estado === "borrador" : can("informes", "C", { objeto: "informe", borrador: true });
   // Con una solicitud de autorizacion pendiente (Fase 3) el informe no se edita.
   const draft = !editing || (canEdit && !item?.solicitud_pendiente);
   const patch = (changes: Partial<InformeState>) => setForm((prev) => ({ ...prev, ...changes }));
@@ -287,8 +288,11 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
   };
 
   const toggleAnalisis = (id: number, checked: boolean) => patch({ analisisIds: checked ? Array.from(new Set([...form.analisisIds, id])) : form.analisisIds.filter((v) => v !== id) });
-  const canReview = can("informes", "R");
-  const canAuthorize = can("informes", "A");
+  // Banderas del servidor: rol + autorización FX-THF-AP de cada actividad; la segregación se explica en el botón.
+  const canReview = seOfrece(item, "revisar", can("informes", "R"));
+  const canAuthorize = seOfrece(item, "autorizar", can("informes", "A"));
+  const canLiberar = seOfrece(item, "liberar", can("informes", "A"));
+  const canEnviar = seOfrece(item, "enviar", can("informes", "A"));
   // Segregacion (Fase 3): por que la persona actual no puede revisar o autorizar este informe (null = puede).
   const segregacion = (item?.segregacion || {}) as { revisar?: string | null; autorizar?: string | null };
   const excepciones = (item?.excepciones || []) as Array<{ solicitud_id: number; accion: string }>;
@@ -338,8 +342,8 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
   const moreItems: MenuItem[] = [];
   if (editing) moreItems.push({ label: item?.archivo_pdf ? "Ver informe" : estado === "borrador" || estado === "en_revision" ? "Vista previa del PDF" : "Ver PDF", description: item?.archivo_pdf ? "Leer el PDF final en la plataforma" : "Vista previa (sin validez) en la plataforma", icon: <FilePdf size={16} weight="duotone" />, tone: "brand", onSelect: verPdf });
   if (editing && item?.archivo_pdf) moreItems.push({ label: "Descargar PDF", description: "Documento liberado con SHA-256", icon: <FilePdf size={16} weight="duotone" />, onSelect: () => void descargarPdfInforme(item, token) });
-  if (editing && ["autorizado", "liberado", "enviado", "anulado"].includes(estado) && can("informes", "C")) moreItems.push({ label: "Emitir enmienda…", description: "Nueva versión que sustituye a esta", icon: <ArrowsClockwise size={16} weight="duotone" />, onSelect: enmendar });
-  if (editing && estado !== "anulado" && can("informes", "AN")) moreItems.push({ label: "Anular informe…", description: "El PDF queda sin validez", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: anular });
+  if (editing && ["autorizado", "liberado", "enviado", "anulado"].includes(estado) && seOfrece(item, "enmendar", can("informes", "C"))) moreItems.push({ label: "Emitir enmienda…", description: "Nueva versión que sustituye a esta", icon: <ArrowsClockwise size={16} weight="duotone" />, onSelect: enmendar });
+  if (editing && estado !== "anulado" && seOfrece(item, "anular", can("informes", "AN"))) moreItems.push({ label: "Anular informe…", description: "El PDF queda sin validez", icon: <Prohibit size={16} weight="duotone" />, tone: "danger", separatorBefore: true, onSelect: anular });
 
   const failedLabel = estado === "anulado" ? "Anulado" : estado === "sustituido" ? "Sustituido por enmienda" : undefined;
 
@@ -360,7 +364,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
             {/* Fase 6: los envíos se registran con el informe ya en solo lectura (fuera del fieldset desactivado). */}
             <FormCard id="sec-envios" title="Envíos por correo" description="A quién, cuándo y cómo se envió el informe liberado, con la evidencia de cada envío.">
               {editing && enviable && token ? (
-                <EnviosPanel item={item!} token={token} puedeEnviar={canAuthorize} bloqueo={bloqueoEnmienda} onCambio={() => router.refresh()} />
+                <EnviosPanel item={item!} token={token} puedeEnviar={canEnviar} bloqueo={bloqueoEnmienda} onCambio={() => router.refresh()} />
               ) : (
                 <Callout tone="info">{estado === "autorizado" ? "Libera el informe para generar el PDF final; después se registra su envío por correo." : "El envío por correo se registra una vez liberado el informe."}</Callout>
               )}
@@ -397,7 +401,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
               </Button>
             </BotonSegregado>
           ) : null}
-          {editing && estado === "autorizado" && canAuthorize ? (
+          {editing && estado === "autorizado" && canLiberar ? (
             <Button icon={<LockKey size={16} />} onClick={() => setSign("liberar")} disabled={!!bloqueoEnmienda} title={bloqueoEnmienda || undefined}>
               Liberar
             </Button>
@@ -442,7 +446,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
       ) : null}
       {editing && estado === "borrador" && canReview ? <AvisoAutorizacion requisitos={requisitosInforme("revisar")} accion="revisar este informe" /> : null}
       {editing && estado === "en_revision" && canAuthorize ? <AvisoAutorizacion requisitos={requisitosInforme("autorizar")} accion="autorizar este informe" /> : null}
-      {editing && estado === "autorizado" && canAuthorize ? <AvisoAutorizacion requisitos={requisitosInforme("liberar")} accion="liberar este informe" /> : null}
+      {editing && estado === "autorizado" && canLiberar ? <AvisoAutorizacion requisitos={requisitosInforme("liberar")} accion="liberar este informe" /> : null}
       <SegregacionCallout bloqueo={editing && estado === "borrador" && canReview ? segregacion.revisar : editing && estado === "en_revision" && canAuthorize ? segregacion.autorizar : null} accion={estado === "en_revision" ? "autorizar" : "revisar"} onSolicitar={() => solicitarExcepcion(estado === "en_revision" ? "autorizar" : "revisar")} />
       {item?.motivo_anulacion ? (
         <Callout tone="danger" title="Informe anulado">

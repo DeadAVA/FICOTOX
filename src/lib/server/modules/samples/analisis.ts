@@ -1,9 +1,10 @@
 import { requireUser, userIdFromClaims, type CurrentUser } from "../../auth";
+import { banderasPuede, conSolicitudesYPuede } from "../../puede-registro";
 import { registrarAuditoria, snapshotRow } from "../../audit";
 import { isSqlite, type Row, type Session } from "../../db";
 import { HttpError, intParam, json, readJson, type RouteContext } from "../../http";
 import { restoreInventoryUsage } from "../../inventory-usage";
-import { cargoActuante, requirePermission } from "../../rbac";
+import { cargarAutorizacion, cargoActuante, requirePermission } from "../../rbac";
 import { exigirReauth } from "../../seguridad";
 import { exigirSinSolicitudPendiente, pendientesDe, respuestaSolicitud, serializarSolicitud } from "../../solicitudes";
 import { detalleExcepcion, elaboradoresDe, excepcionesDe, exigirSegregacion } from "../../segregacion";
@@ -11,7 +12,7 @@ import { evaluarAnalisis, excepcionPara, type Violacion } from "../../../shared/
 import { aplicarSupervision, exigirSinSupervisionPendiente, filtroSupervision, marcaSupervision } from "../../supervision";
 import { recordBitacoraFolios } from "../inventory";
 
-import { advanceState, anularOSolicitar, validarRecepcionSiCompleta, applyStageInventory, assertEditableAsync, assertOrigin, conSolicitudes, deletionNotAllowed, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
+import { advanceState, anularOSolicitar, validarRecepcionSiCompleta, applyStageInventory, assertEditableAsync, assertOrigin, deletionNotAllowed, exigirUsoDeRecursos, folioLabel, insumosDeclarados, isFolioConflict, nextFolioNum, readMotivo, restaurarOSolicitar } from "../../samples-flow";
 import { ANALYSIS_METHODS, ANALYSIS_TYPES, CONFORMITY_OPTIONS } from "../../../shared/sgc";
 import { jsonText, safeJsonLoad, searchParam, strippedOrNull, toFloatOrNull, toIntOrNull } from "../helpers";
 
@@ -243,7 +244,7 @@ export async function listAnalyses({ request, s }: RouteContext): Promise<Respon
     { search, search_like: `%${search}%`, estado, recepcion_id: recepcionId, extraccion_id: extraccionId, incluir_anulados: includeAnulados ? 1 : 0, ...supFiltro.params },
   );
   return json({
-    items: (await conSolicitudes(s, TABLE, rows)).map((row) => {
+    items: (await conSolicitudesYPuede(s, user, TABLE, rows)).map((row) => {
       const resultados = safeJsonLoad<ResultadoRow[]>(row.resultados_json, []);
       const item: Row = { ...row, muestras: resultados.length, no_conformes: resultados.filter((entry) => entry.cumple === "no_cumple").length };
       delete item.resultados_json;
@@ -274,7 +275,8 @@ export async function getAnalysis({ request, s, params }: RouteContext): Promise
   };
   // Fase 10: resumen de la evidencia instrumental (la lista completa esta en /adjuntos).
   const adjuntos = { ...(await resumenAdjuntos(s, "analisis", id)), obligatoria: getConfig().EVIDENCIA_OBLIGATORIA_ANALISIS };
-  return json({ item: { ...serializeAnalysis(row), informes, adjuntos, solicitud_pendiente: pendiente ? serializarSolicitud(pendiente) : null, segregacion: { revisar: bloqueo("revisar"), aprobar: bloqueo("aprobar") } } });
+  const puede = (await banderasPuede(s, await cargarAutorizacion(s, user), TABLE, [id], new Set(pendiente ? [id] : []), true)).get(id) || {};
+  return json({ item: { ...serializeAnalysis(row), informes, adjuntos, puede, solicitud_pendiente: pendiente ? serializarSolicitud(pendiente) : null, segregacion: { revisar: bloqueo("revisar"), aprobar: bloqueo("aprobar") } } });
 }
 
 export async function createAnalysis({ request, s }: RouteContext): Promise<Response> {

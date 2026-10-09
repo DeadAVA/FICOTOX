@@ -19,6 +19,7 @@ import { filterManualInventario, findInsumoByAutoQuery, findInsumoOption, findUn
 import { formatProcessingFolio, isSampleReadOnly, sampleStatusLabel } from "@/lib/client/samples";
 import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
+import { seOfrece, usePuedeCrear } from "@/lib/client/puede";
 import type { ApiRecord } from "@/lib/client/types";
 import { Callout, ChoiceCard, ChoiceGrid, FormCard, FormPage, FormTable, PersonCard, StepRow, formTd, formTh, personaId, type FormSectionDef } from "./FormLayout";
 import { CampoValidado, MensajeCampo, useValidacion } from "@/components/ui/Validacion";
@@ -265,6 +266,7 @@ const SECTIONS: FormSectionDef[] = [
 export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord | null; prefillReceptionId?: number | null }) {
   const router = useRouter();
   const { token, can } = useSession();
+  const puedeCrear = usePuedeCrear();
   const [form, setForm] = useState<ProcessingForm>(() => (item ? formFromItem(item) : defaultForm()));
   // Fase 5: firmas ligadas a cuentas (procesó, supervisó).
   const [firmantes, setFirmantes] = useState<Record<string, FirmanteState>>(() => ({ proceso: firmanteDe(item, "proceso"), superviso: firmanteDe(item, "superviso") }));
@@ -274,7 +276,7 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
   const [submitting, setSubmitting] = useState(false);
   const detailCache = useRef(new Map<number, ApiRecord>());
   const editing = !!item?.id;
-  const canEdit = editing ? can("ensayos", "E", { objeto: "procesamiento", borrador: String(item?.estado || "registrada") === "registrada" }) : can("ensayos", "C", { objeto: "procesamiento", borrador: true });
+  const canEdit = editing ? seOfrece(item, "editar", can("ensayos", "E", { objeto: "procesamiento", borrador: String(item?.estado || "registrada") === "registrada" })) : puedeCrear("procesamiento", can("ensayos", "C", { objeto: "procesamiento", borrador: true }));
   // Con una solicitud de autorizacion pendiente (Fase 3) el registro no se edita.
   const readOnly = editing && (isSampleReadOnly(item?.estado) || !canEdit || !!item?.solicitud_pendiente);
   const patch = (changes: Partial<ProcessingForm>) => setForm((prev) => ({ ...prev, ...changes }));

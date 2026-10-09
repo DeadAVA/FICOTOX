@@ -17,6 +17,7 @@ import { fmtDate, isoDate, parseIntOrNull, todayIso } from "@/lib/client/format"
 import { formatSampleFolio, isSampleReadOnly, sampleStatusLabel } from "@/lib/client/samples";
 import { formatActiveUserSignature } from "@/lib/client/session";
 import { invalidate } from "@/lib/client/store";
+import { seOfrece, usePuedeCrear } from "@/lib/client/puede";
 import type { ApiRecord } from "@/lib/client/types";
 import { ACCEPTANCE_DECISIONS, DISPOSAL_TYPES, LEGACY_INSPECTION_REQUIREMENTS, LEGACY_RECEPTION_METHODS, LEGACY_RECEPTION_SAMPLE_TYPES, RECEPTION_ANALYSIS_TYPES, RECEPTION_INSPECTION_REQUIREMENTS, RECEPTION_METHODS, RECEPTION_SAMPLE_TYPES, CLIENT_CONTACT_MEDIA, RECEPTION_DELIVERY_MEDIA, STORAGE_PLACES } from "@/lib/shared/sgc";
 import { Callout, ChoiceCard, ChoiceGrid, EditableScope, FieldGroup, FormCard, FormPage, Panel, PersonCard, personaId, type FormSectionDef } from "./FormLayout";
@@ -256,6 +257,7 @@ function LegacyChips({ values, catalog, labels, onRemove }: { values: string[]; 
 export function ReceptionForm({ item }: { item: ApiRecord | null }) {
   const router = useRouter();
   const { token, can } = useSession();
+  const puedeCrear = usePuedeCrear();
   const [form, setForm] = useState<SampleForm>(() => (item ? formFromItem(item) : defaultForm()));
   // Fase 5: quien recibe se liga a una cuenta (por omisión la sesión; otra persona confirma con su contraseña).
   const [recibio, setRecibio] = useState<FirmanteState>(() => firmanteDe(item, "recibio"));
@@ -263,7 +265,8 @@ export function ReceptionForm({ item }: { item: ApiRecord | null }) {
   const [disposicion, setDisposicion] = useState({ tipo: "", tipoOtro: "", fecha: todayIso(), responsable: formatActiveUserSignature(), remanentes: "", observaciones: "", firma: "" });
   const [savingDisposicion, setSavingDisposicion] = useState(false);
   const editing = !!item?.id;
-  const canEdit = editing ? can("muestras", "E", { objeto: "recepcion", borrador: String(item?.estado || "registrada") === "registrada" }) : can("muestras", "C", { objeto: "recepcion", borrador: true });
+  // Con las banderas del servidor (rol + autorización FX-THF-AP + asignación); sin ellas, solo el rol.
+  const canEdit = editing ? seOfrece(item, "editar", can("muestras", "E", { objeto: "recepcion", borrador: String(item?.estado || "registrada") === "registrada" })) : puedeCrear("recepcion", can("muestras", "C", { objeto: "recepcion", borrador: true }));
   // Con una solicitud de autorizacion pendiente (Fase 3) el registro no se edita.
   const readOnly = editing && (isSampleReadOnly(item?.estado) || !canEdit || !!item?.solicitud_pendiente);
   // Fase 5: asignar, cambiar folio y reabrir (sin muestras:A quedan como solicitud para la Coord. Tecnica).

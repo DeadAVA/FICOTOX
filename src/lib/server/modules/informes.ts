@@ -1,4 +1,5 @@
 import { formatearFolio } from "../../shared/folios";
+import { banderasPuede } from "../puede-registro";
 import { createHash } from "node:crypto";
 
 import { exigirSinRetencion, retencionesActivas } from "./calidad/bloqueos";
@@ -227,9 +228,11 @@ export async function listInformes({ request, s }: RouteContext): Promise<Respon
     { search, search_like: `%${search}%`, estado, recepcion_id: recepcionId, incluir_anulados: includeAnulados ? 1 : 0, ...supFiltro.params },
   );
   const pendientes = await pendientesDe(s, TABLE, rows.map((r) => Number(r.id)));
+  const banderas = await banderasPuede(s, permiso.auth, TABLE, rows.map((r) => Number(r.id)), new Set(rows.filter((r) => pendientes.has(String(r.id))).map((r) => Number(r.id))));
   return json({
     items: rows.map((row) => {
       const item: Row = { ...row, folio: informeFolio(row), solicitud_pendiente: pendientes.has(String(row.id)) ? serializarSolicitud(pendientes.get(String(row.id))!) : null, cliente: safeJsonLoad(row.cliente_json, {}), analisis: safeJsonLoad<number[]>(row.analisis_ids_json, []).length, entrega: safeJsonLoad(row.entrega_json, null) };
+      item.puede = banderas.get(Number(row.id)) || {};
       delete item.cliente_json;
       delete item.analisis_ids_json;
       delete item.entrega_json;
@@ -256,6 +259,7 @@ export async function getInforme({ request, s, params }: RouteContext): Promise<
     return v && !excepcionPara(excepcionesDe(row), yo, accion) ? v.mensaje : null;
   };
   item.segregacion = { revisar: await bloqueo("revisar"), autorizar: await bloqueo("autorizar") };
+  item.puede = (await banderasPuede(s, await cargarAutorizacion(s, user), TABLE, [id], new Set(pendiente ? [id] : []), true)).get(id) || {};
   // En borrador los analisis se leen en vivo; autorizado, del congelado.
   if (["borrador", "en_revision"].includes(String(row.estado))) {
     const analyses = await loadAnalyses(s, item.analisis_ids as number[]);

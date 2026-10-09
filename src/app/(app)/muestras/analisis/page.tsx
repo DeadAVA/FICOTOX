@@ -24,6 +24,7 @@ import { ANALYSIS_METHOD_SHORT, ANALYSIS_NAME_SHORT } from "@/lib/client/constan
 import { contar, fmt, fmtDate } from "@/lib/client/format";
 import { useDebouncedValue, useInitialParam, useParamChange } from "@/lib/client/hooks";
 import { useResource } from "@/lib/client/store";
+import { estaHabilitada, motivoDe, seOfrece, usePuedeCrear } from "@/lib/client/puede";
 import type { ApiRecord } from "@/lib/client/types";
 import { ANALYSIS_METHODS, ANALYSIS_TYPES } from "@/lib/shared/sgc";
 
@@ -73,7 +74,8 @@ function AnalisisList() {
   );
   const items = (resource.data || []).filter((item) => !tipoFilter || item.tipo_analisis === tipoFilter);
   const loaded = !!resource.data;
-  const canCreate = can("ensayos", "C", { objeto: "analisis", borrador: true });
+  const puedeCrear = usePuedeCrear();
+  const canCreate = puedeCrear("analisis", can("ensayos", "C", { objeto: "analisis", borrador: true }));
   const canEdit = (item: ApiRecord) => can("ensayos", "E", { objeto: "analisis", borrador: item.estado === "registrado" });
   const canDelete = can("ensayos", "AN");
   const count = (predicate: (item: ApiRecord) => boolean) => (resource.data ? resource.data.filter(predicate).length : null);
@@ -109,9 +111,9 @@ function AnalisisList() {
   const reportar = useMenuReportar();
   const menuFor = (item: ApiRecord): MenuItem[] => {
     const anulado = item.estado === "anulado";
-    const editable = canEdit(item) && !anulado && item.estado === "registrado";
+    const editable = seOfrece(item, "editar", canEdit(item)) && !anulado && item.estado === "registrado";
     const list: MenuItem[] = [{ label: "Abrir", description: item.estado === "aprobado" ? "Solo lectura: análisis aprobado" : "Ver resultados, controles y revisión", icon: <ArrowSquareOut size={16} weight="duotone" />, tone: "brand", onSelect: () => router.push(`/muestras/analisis/${item.id}`) }];
-    if (editable) list.push({ label: "Editar", description: "Corregir resultados antes de la revisión", icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/analisis/${item.id}`) });
+    if (editable) list.push({ label: "Editar", description: motivoDe(item, "editar") || "Corregir resultados antes de la revisión", disabled: !estaHabilitada(item, "editar", canEdit(item)), icon: <PencilSimple size={16} weight="duotone" />, onSelect: () => router.push(`/muestras/analisis/${item.id}`) });
     list.push(...reportar("muestras_analisis", item.id, folioA(item)));
     if (canDelete) {
       if (anulado) list.push({ label: "Restaurar análisis", description: "Vuelve a la lista con motivo", icon: <ArrowCounterClockwise size={16} weight="duotone" />, tone: "warning", separatorBefore: true, onSelect: () => restaurar(item) });

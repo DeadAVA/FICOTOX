@@ -202,7 +202,9 @@ export type Ejecutores = Partial<Record<TipoSolicitud, Ejecutor>>;
 function puedeAprobar(auth: Autorizacion, solicitud: Solicitud): boolean {
   if (!esTipoActivo(solicitud.tipo)) return false;
   const permiso = permisoParaAprobar(solicitud.tipo, solicitud.entidad);
-  return !!permisoDe(auth, permiso.modulo, permiso.accion) && Number(solicitud.solicitado_por) !== auth.userId;
+  // Regla 6: ni quien pidio la accion ni la persona afectada (cambios de acceso sobre su propia cuenta) la aprueban.
+  const sobreMiCuenta = solicitud.entidad === "usuarios" && String(solicitud.entidad_id) === String(auth.userId);
+  return !!permisoDe(auth, permiso.modulo, permiso.accion) && Number(solicitud.solicitado_por) !== auth.userId && !sobreMiCuenta;
 }
 
 /*

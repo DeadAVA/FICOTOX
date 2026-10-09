@@ -102,7 +102,8 @@
       "es_sistemico": false,
       "permisos": {
         "usuarios": {
-          "V": "total"
+          "V": "total",
+          "A": "total"
         },
         "documentos": {
           "G": "total",
@@ -146,7 +147,8 @@
       "es_sistemico": false,
       "permisos": {
         "usuarios": {
-          "V": "total"
+          "V": "total",
+          "A": "total"
         },
         "documentos": {
           "C": "tecnico",
@@ -247,8 +249,7 @@
           "V": "propio"
         },
         "documentos": {
-          "V": "total",
-          "C": "borrador"
+          "V": "total"
         },
         "muestras": {
           "V": "asignado",
@@ -317,8 +318,7 @@
           "V": "limitado"
         },
         "documentos": {
-          "V": "administrativo",
-          "C": "administrativo"
+          "V": "administrativo"
         },
         "muestras": {
           "V": "estado"
