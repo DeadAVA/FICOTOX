@@ -191,7 +191,7 @@ export function NcForm({ item }: { item: ApiRecord }) {
 
   return (
     <FormPage
-      backHref="/calidad/incidencias?tab=nc"
+      backHref="/calidad/incidencias?tipos=nc"
       backLabel="Incidencias y NC"
       code="Registro de no conformidad"
       title={String(item.folio)}

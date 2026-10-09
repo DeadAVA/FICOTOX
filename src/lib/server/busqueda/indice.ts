@@ -239,16 +239,16 @@ async function fuenteCalidad(request: Request, s: Session): Promise<Hit[]> {
   for (const i of incidencias) {
     const folio = String(i.folio || "");
     const estado = ESTADOS_INCIDENCIA[String(i.estado)]?.label || String(i.estado || "");
-    out.push(hit({ clave: `inc-${i.id}`, tipo: "incidencia", grupo: "calidad", titulo: folio, sub: join(estado, recortar(i.descripcion)), href: `/calidad/incidencias/${i.id}`, mono: true, etiqueta: "Incidencia", lista: "/calidad/incidencias", palabras: [folio, folio.replace(/\s/g, ""), i.descripcion, i.tipo, i.reportada_nombre, estado, "incidencia"] }));
+    out.push(hit({ clave: `inc-${i.id}`, tipo: "incidencia", grupo: "calidad", titulo: folio, sub: join(estado, recortar(i.descripcion)), href: `/calidad/incidencias/${i.id}`, mono: true, etiqueta: "Incidencia", lista: "/calidad/incidencias?tipos=incidencia", palabras: [folio, folio.replace(/\s/g, ""), i.descripcion, i.tipo, i.reportada_nombre, estado, "incidencia"] }));
   }
   for (const n of ncs) {
     const folio = folioNc(n.folio_num);
     const estado = ESTADOS_NC[String(n.estado)]?.label || String(n.estado || "");
-    out.push(hit({ clave: `nc-${n.id}`, tipo: "nc", grupo: "calidad", titulo: folio, sub: join(estado, recortar(n.descripcion)), href: `/calidad/nc/${n.id}`, mono: true, etiqueta: "NC", lista: "/calidad/incidencias?tab=nc", palabras: [folio, folio.replace(/\s/g, ""), n.descripcion, n.origen, n.clasificacion, n.responsable_nombre, estado, "nc no conformidad"] }));
+    out.push(hit({ clave: `nc-${n.id}`, tipo: "nc", grupo: "calidad", titulo: folio, sub: join(estado, recortar(n.descripcion)), href: `/calidad/nc/${n.id}`, mono: true, etiqueta: "NC", lista: "/calidad/incidencias?tipos=nc", palabras: [folio, folio.replace(/\s/g, ""), n.descripcion, n.origen, n.clasificacion, n.responsable_nombre, estado, "nc no conformidad"] }));
   }
   for (const a of acciones) {
     const nc = a.nc_folio ? folioNc(a.nc_folio) : "NC";
-    out.push(hit({ clave: `ac-${a.id}`, tipo: "accion_correctiva", grupo: "calidad", titulo: recortar(a.descripcion, 60) || "Acción correctiva", sub: join(nc, a.estado, a.responsable_nombre), href: `/calidad/nc/${a.nc_id}`, etiqueta: "Acción correctiva", lista: "/calidad/incidencias?tab=acciones", palabras: [a.descripcion, nc, a.responsable_nombre, a.estado, "accion correctiva"] }));
+    out.push(hit({ clave: `ac-${a.id}`, tipo: "accion_correctiva", grupo: "calidad", titulo: recortar(a.descripcion, 60) || "Acción correctiva", sub: join(nc, a.estado, a.responsable_nombre), href: `/calidad/nc/${a.nc_id}`, etiqueta: "Acción correctiva", lista: "/calidad/incidencias?tipos=nc", palabras: [a.descripcion, nc, a.responsable_nombre, a.estado, "accion correctiva"] }));
   }
   return out;
 }

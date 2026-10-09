@@ -1,50 +1,10 @@
-/*
- * Indicadores de calidad (Fase 11; FX-MO-2-1 seccion 4: Mejora Continua
- * administra indicadores, el Responsable General los revisa) y avisos para el
- * Inicio y la campana.
- */
-import { requireUser } from "../../auth";
+/* Avisos de calidad para el Inicio y la campana (Fase 11). */
 import { type Row, type Session } from "../../db";
-import { HttpError, json, type RouteContext } from "../../http";
 import { permisoDe, type Autorizacion } from "../../rbac";
-import { CLASIFICACION_NC_LABEL, TIPO_INCIDENCIA_LABEL, accionVencida, folioIncidencia, folioNc } from "../../../shared/calidad";
+import { TIPO_INCIDENCIA_LABEL, accionVencida, folioIncidencia, folioNc } from "../../../shared/calidad";
 import { formatearFecha, hoyLocal, sumarDias } from "../../../shared/fechas";
-import { accesoCalidad, previosDe, T } from "./comun";
+import { previosDe, T } from "./comun";
 import { suspensionesActivas } from "./bloqueos";
-
-/* GET /api/calidad/indicadores (calidad:V total) */
-export async function indicadores({ request, s }: RouteContext): Promise<Response> {
-  const user = await requireUser(request);
-  const acc = await accesoCalidad(s, user, "nc");
-  if (!acc.total) throw new HttpError(403, { message: "El tablero de indicadores requiere calidad:V total" });
-  const hoy = hoyLocal();
-  const ncs = await s.query<Row>(`SELECT n.id, n.estado, n.clasificacion, n.origen, n.creada_en, n.cerrada_en, n.reaperturas, (SELECT i.tipo FROM ${T.incidencias} i WHERE i.nc_id = n.id ORDER BY i.id LIMIT 1) AS tipo_incidencia FROM ${T.nc} n WHERE n.estado <> 'anulada'`);
-  const acciones = await s.query<Row>(`SELECT a.estado, a.fecha_compromiso FROM ${T.acciones} a JOIN ${T.nc} n ON n.id = a.nc_id WHERE n.estado <> 'anulada'`);
-  const incidencias = await s.query<Row>(`SELECT estado, tipo, origen_automatico FROM ${T.incidencias} WHERE estado <> 'anulada'`);
-  const cerradas = ncs.filter((n) => n.estado === "cerrada");
-  const dias = cerradas.map((n) => (Date.parse(String(n.cerrada_en)) - Date.parse(String(n.creada_en))) / 86_400_000).filter((d) => Number.isFinite(d) && d >= 0);
-  const contar = (filas: Row[], campo: string, etiquetas?: Record<string, string>) => {
-    const out: Record<string, { label: string; total: number }> = {};
-    for (const f of filas) {
-      const clave = String(f[campo] || "sin_dato");
-      out[clave] ||= { label: etiquetas?.[clave] || (clave === "sin_dato" ? "Sin dato" : clave), total: 0 };
-      out[clave].total += 1;
-    }
-    return Object.entries(out).map(([clave, v]) => ({ clave, ...v })).sort((a, b) => b.total - a.total);
-  };
-  return json({
-    nc_abiertas: ncs.length - cerradas.length,
-    nc_cerradas: cerradas.length,
-    dias_promedio_cierre: dias.length ? Math.round((dias.reduce((a, b) => a + b, 0) / dias.length) * 10) / 10 : null,
-    reaperturas: ncs.reduce((t, n) => t + Number(n.reaperturas || 0), 0),
-    acciones_vencidas: acciones.filter((a) => accionVencida(a, hoy)).length,
-    acciones_abiertas: acciones.filter((a) => ["pendiente", "en_proceso"].includes(String(a.estado))).length,
-    por_clasificacion: contar(ncs, "clasificacion", CLASIFICACION_NC_LABEL),
-    por_tipo: contar(ncs.map((n) => ({ ...n, tipo: n.tipo_incidencia || `origen_${n.origen}` })), "tipo", { ...TIPO_INCIDENCIA_LABEL, origen_queja: "Queja (sin incidencia)", origen_auditoria_interna: "Auditoría interna", origen_revision: "Revisión", origen_otro: "Otro origen" }),
-    incidencias_por_estado: contar(incidencias, "estado"),
-    incidencias_automaticas: incidencias.filter((i) => i.origen_automatico).length,
-  });
-}
 
 export interface AvisoCalidad {
   tipo: string;

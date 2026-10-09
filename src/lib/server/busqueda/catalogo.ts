@@ -83,9 +83,9 @@ const VISTAS: Def[] = [
   { titulo: "Mantenimientos vencidos", sub: "Programados y no realizados a tiempo", href: "/inventario/mantenimiento?filtro=vencido", permiso: (a) => a.can("equipos"), kw: "mantenimientos vencidos atrasados" },
   { titulo: "Mantenimientos próximos", sub: "En los próximos 30 días", href: "/inventario/mantenimiento?filtro=proximo", permiso: (a) => a.can("equipos"), kw: "mantenimientos proximos calendario 30 dias" },
   { titulo: "Mantenimientos completados", sub: "Historial por equipo", href: "/inventario/mantenimiento?filtro=completado", permiso: (a) => a.can("equipos"), kw: "mantenimientos completados historial" },
-  { titulo: "Incidencias por evaluar", sub: "Reportadas o en evaluación", href: "/calidad/incidencias?filtro=por_evaluar", permiso: (a) => a.can("calidad", "R", ctx("incidencia")), kw: "incidencias evaluar calidad pendientes" },
-  { titulo: "No conformidades abiertas", sub: "Sin cerrar, por etapa", href: "/calidad/incidencias?tab=nc", permiso: (a) => a.can("calidad", "V", ctx("nc")) && a.alcance("calidad") !== "bitacora", kw: "nc no conformidades abiertas acciones correctivas" },
-  { titulo: "Mis acciones correctivas", sub: "Pendientes o en proceso a tu nombre", href: "/calidad/incidencias?tab=acciones", permiso: (a) => a.can("calidad", "V", ctx("accion_correctiva")) && a.alcance("calidad") !== "bitacora", kw: "acciones correctivas mias pendientes vencidas" },
+  { titulo: "Incidencias por evaluar", sub: "Reportadas o en evaluación", href: "/calidad/incidencias?estado_inc=reportada,en_evaluacion", permiso: (a) => a.can("calidad", "R", ctx("incidencia")), kw: "incidencias evaluar calidad pendientes" },
+  { titulo: "No conformidades abiertas", sub: "Sin cerrar, por etapa", href: "/calidad/incidencias?tipos=nc&etapa_nc=abierta,en_analisis,acciones_en_curso,en_verificacion", permiso: (a) => a.can("calidad", "V", ctx("nc")) && a.alcance("calidad") !== "bitacora", kw: "nc no conformidades abiertas acciones correctivas" },
+  { titulo: "Mis acciones correctivas", sub: "Pendientes o en proceso a tu nombre", href: "/calidad/incidencias?mias=responsable", permiso: (a) => a.can("calidad", "V", ctx("accion_correctiva")) && a.alcance("calidad") !== "bitacora", kw: "acciones correctivas mias pendientes vencidas" },
 ];
 
 const ACCIONES: Def[] = [

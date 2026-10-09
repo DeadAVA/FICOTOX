@@ -96,10 +96,9 @@ try {
       await page.locator(`[data-incidencia="${incidenciaId}"]`).waitFor();
       const filas = await page.locator("[data-incidencia]").count();
       const propias = ((await api("GET", "/calidad/incidencias", undefined, t.luis)).data?.items || []).length;
-      const indicadores = await page.getByRole("radio", { name: "Indicadores" }).count();
       const aside = page.locator('aside[aria-label="Navegación principal"]');
       const hrefs = await aside.locator("a").evaluateAll((links) => links.map((a) => new URL(a.href).pathname));
-      check("Luis ve solo sus incidencias, sin Indicadores; el menú tiene Incidencias y NC pero no Auditoría", filas === propias && indicadores === 0 && hrefs.includes("/calidad/incidencias") && !hrefs.includes("/auditoria"), `${filas}/${propias} ${indicadores}`);
+      check("Luis ve solo sus incidencias; el menú tiene Incidencias y NC pero no Auditoría", filas === propias && hrefs.includes("/calidad/incidencias") && !hrefs.includes("/auditoria"), `${filas}/${propias}`);
     } catch (err) {
       await captura(page);
       check("flujo de Luis sin errores", false, err instanceof Error ? err.message : String(err));
@@ -186,17 +185,17 @@ try {
     }
   }
 
-  /* ---------- Auditor (indicadores) y Admin tecnico (sin acceso) ---------- */
+  /* ---------- Auditor (lista unificada) y Admin tecnico (sin acceso) ---------- */
   {
     const { context, page } = await nueva();
     try {
       await entrar(page, "hector");
-      await page.goto(`${BASE}/calidad/incidencias?tab=indicadores`);
-      await page.locator("[data-indicadores]").waitFor();
-      check("el Auditor (calidad:V total) ve el tablero de indicadores", true);
+      await page.goto(`${BASE}/calidad/incidencias`);
+      await page.locator("[data-incidencia], [data-nc]").first().waitFor();
+      check("el Auditor (calidad:V total) ve la lista unificada", true);
     } catch (err) {
       await captura(page);
-      check("indicadores del Auditor", false, err instanceof Error ? err.message : String(err));
+      check("lista unificada del Auditor", false, err instanceof Error ? err.message : String(err));
     } finally {
       await context.close();
     }

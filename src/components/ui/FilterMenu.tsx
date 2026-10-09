@@ -83,9 +83,9 @@ function FilterSection({ title, children, first }: { title: string; children: Re
   );
 }
 
-export function FilterMenu({ groups = [], toggles = [], children, className, label = "Filtros", vistaAlFinal = false, gruposFinales = [] }: { groups?: FilterGroup[]; toggles?: FilterToggle[]; children?: ReactNode; className?: string; label?: string; vistaAlFinal?: boolean; gruposFinales?: FilterGroup[] }) {
-  // `gruposFinales` (p. ej. "Ordenar por") van despues de las demas secciones.
-  const todosGrupos = [...groups, ...gruposFinales];
+export function FilterMenu({ groups = [], toggles = [], children, className, label = "Filtros", vistaAlFinal = false, gruposFinales = [], gruposAntesDeVista = [] }: { groups?: FilterGroup[]; toggles?: FilterToggle[]; children?: ReactNode; className?: string; label?: string; vistaAlFinal?: boolean; gruposFinales?: FilterGroup[]; gruposAntesDeVista?: FilterGroup[] }) {
+  // `gruposFinales` (p. ej. "Ordenar por") van despues de las demas secciones; `gruposAntesDeVista` (con `vistaAlFinal`) justo antes de "Vista".
+  const todosGrupos = [...groups, ...gruposAntesDeVista, ...gruposFinales];
   const active = todosGrupos.filter((g) => g.value !== g.defaultValue).length + toggles.filter((t) => t.checked).length;
   const reset = () => {
     todosGrupos.forEach((g) => g.onChange(g.defaultValue));
@@ -145,11 +145,17 @@ export function FilterMenu({ groups = [], toggles = [], children, className, lab
               </FilterSection>
             ))}
             {groups.map((group) => grupo(group))}
-            {otras.map((section) => (
+            {otras.filter((section) => section !== VISTA || !gruposAntesDeVista.length).map((section) => (
               <FilterSection key={section} title={section} first={index++ === 0}>
                 {togglesOf(section).map(toggleRow)}
               </FilterSection>
             ))}
+            {gruposAntesDeVista.map((group) => grupo(group))}
+            {gruposAntesDeVista.length ? otras.filter((section) => section === VISTA).map((section) => (
+              <FilterSection key={section} title={section} first={index++ === 0}>
+                {togglesOf(section).map(toggleRow)}
+              </FilterSection>
+            )) : null}
             {gruposFinales.map((group) => grupo(group))}
             {children ? <div className={cn("flex flex-col gap-3 px-2", index > 0 && "border-t border-line pt-3")}>{children}</div> : null}
           </div>

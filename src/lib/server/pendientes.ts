@@ -221,12 +221,12 @@ export async function pendientesDe(s: Session, auth: Autorizacion): Promise<Grup
   // Calidad: incidencias por evaluar, mis acciones, verificaciones, informes retenidos, suspensiones y reasignaciones.
   const calidad = await avisosCalidad(s, auth);
   const GRUPOS_CALIDAD: Array<[string, string, Tono, string, string[]]> = [
-    ["calidad_incidencias", "Incidencias por evaluar", "warning", "/calidad/incidencias?filtro=por_evaluar", ["incidencia_por_evaluar"]],
-    ["calidad_acciones", "Mis acciones correctivas", "info", "/calidad/incidencias?tab=acciones&mias=1", ["accion_mia", "accion_vencida"]],
-    ["calidad_verificaciones", "Verificaciones de eficacia pendientes", "warning", "/calidad/incidencias?tab=nc&estado=en_verificacion", ["verificacion_pendiente"]],
-    ["calidad_retenidos", "Informes retenidos por NC", "danger", "/calidad/incidencias?tab=nc", ["informe_retenido"]],
-    ["calidad_suspensiones", "Métodos y equipos suspendidos", "danger", "/calidad/incidencias?tab=nc", ["suspension"]],
-    ["calidad_reasignar", "Acciones por reasignar", "warning", "/calidad/incidencias?tab=acciones", ["responsable_no_vigente"]],
+    ["calidad_incidencias", "Incidencias por evaluar", "warning", "/calidad/incidencias?estado_inc=reportada,en_evaluacion", ["incidencia_por_evaluar"]],
+    ["calidad_acciones", "Mis acciones correctivas", "info", "/calidad/incidencias?mias=responsable", ["accion_mia", "accion_vencida"]],
+    ["calidad_verificaciones", "Verificaciones de eficacia pendientes", "warning", "/calidad/incidencias?etapa_nc=en_verificacion", ["verificacion_pendiente"]],
+    ["calidad_retenidos", "Informes retenidos por NC", "danger", "/calidad/incidencias?situacion=retenido", ["informe_retenido"]],
+    ["calidad_suspensiones", "Métodos y equipos suspendidos", "danger", "/calidad/incidencias?situacion=suspension", ["suspension"]],
+    ["calidad_reasignar", "Acciones por reasignar", "warning", "/calidad/incidencias?tipos=nc", ["responsable_no_vigente"]],
   ];
   for (const [key, label, tone, href, tipos] of GRUPOS_CALIDAD) {
     agregar(key, label, tone, href, calidad.filter((a) => tipos.includes(a.tipo)).map((a) => ({ tipo: a.tipo, clave: a.clave, frase: a.titulo.split(":")[0], registro: a.registro, detalle: a.detalle || null, href: a.href, tono: a.tono, cuando: a.cuando })));

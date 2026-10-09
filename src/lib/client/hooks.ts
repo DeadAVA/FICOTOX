@@ -62,6 +62,24 @@ export function useParamChange(name: string, onChange: (value: string) => void):
   }, [value]);
 }
 
+/* Como `useParamChange`, pero para varios parametros a la vez (avisa una vez por cambio de cualquiera de ellos). */
+export function useParamsChange(names: string[], onChange: () => void): void {
+  const params = useSearchParams();
+  const firma = names.map((name) => params.get(name) || "").join("\u0001");
+  const first = useRef(true);
+  const handler = useRef(onChange);
+  useEffect(() => {
+    handler.current = onChange;
+  });
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    handler.current();
+  }, [firma]);
+}
+
 export function useOpenState<T = null>() {
   const [state, setState] = useState<{ isOpen: boolean; key: number; payload: T | null }>({ isOpen: false, key: 0, payload: null });
   const open = useCallback((payload: T | null = null) => setState((prev) => ({ isOpen: true, key: prev.key + 1, payload })), []);
