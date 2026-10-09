@@ -19,7 +19,7 @@
  *   llave/llave-bitacora.txt  (separada; solo en el respaldo local) la llave del
  *                           sello de la bitacora. Nunca JWT_SECRET, SMTP ni otros secretos.
  * MySQL/MariaDB: se respalda con mysqldump (scripts/backup_ficotox.py y
- * docs/RESPALDO_Y_RECUPERACION.md); esta implementacion es solo para SQLite.
+ * README.md); esta implementacion es solo para SQLite.
  */
 import { VERSION_ACTUAL } from "../server/migraciones/motor.mjs";
 import { createHash, createHmac } from "node:crypto";
@@ -291,7 +291,7 @@ export async function crearRespaldo(opciones) {
 }
 
 export async function iniciarRespaldo({ Sqlite, sqlitePath, instanceDir, respaldosDir, secretKey, baseDir, incluirLlave = true, etiqueta = null, ahora = new Date() }) {
-  if (!sqlitePath) throw new Error("Esta instalación usa MySQL/MariaDB: respalda la base con mysqldump (ver docs/RESPALDO_Y_RECUPERACION.md)");
+  if (!sqlitePath) throw new Error("Esta instalación usa MySQL/MariaDB: respalda la base con mysqldump (ver README.md)");
   if (!fs.existsSync(sqlitePath)) throw new Error(`No existe la base SQLite: ${sqlitePath}`);
   fs.mkdirSync(respaldosDir, { recursive: true });
   const { id, tmp, final } = reservarId(respaldosDir, ahora);

@@ -46,7 +46,7 @@ export const ACCION_KEYS: Accion[] = ACCIONES.map((a) => a.clave);
  *   dan ningun permiso y en usuarios equivalen a V "propio" (solo su cuenta);
  * - en los demas modulos se comportan como "total" (son necesarios para el
  *   trabajo diario y no exponen datos fuera del laboratorio). Ver
- *   docs/CATALOGO_PERMISOS.md.
+ *   README.md.
  */
 export const ALCANCES = [
   { clave: "total", nombre: "Total", fase: null, descripcion: "Sin limite" },

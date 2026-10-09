@@ -104,7 +104,7 @@ const bloqueoVivo = (instanceDir) => bloqueoCompartido(path.join(instanceDir, "s
 
 if (modoReal) {
   if (!confirmar) salir("Modo real rechazado: restaurar sobre la instancia real exige --destino instance --confirmar.");
-  if (entorno.motor !== "sqlite") salir("Modo real rechazado: esta instalación usa MySQL/MariaDB (restaura con mysql < respaldo.sql; ver docs/RESPALDO_Y_RECUPERACION.md).");
+  if (entorno.motor !== "sqlite") salir("Modo real rechazado: esta instalación usa MySQL/MariaDB (restaura con mysql < respaldo.sql; ver README.md).");
   const vivo = bloqueoVivo(entorno.instanceDir);
   if (vivo) salir(`Modo real rechazado: el servidor está encendido (archivo de bloqueo ${path.join(entorno.instanceDir, "servidor.lock")}, pid ${vivo.pid}). Detenlo y vuelve a intentarlo.`);
   if (await puertoOcupado(entorno.puerto)) {
