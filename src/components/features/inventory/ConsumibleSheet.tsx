@@ -1,18 +1,14 @@
 "use client";
 
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { toast } from "sonner";
-import { FileCsv, X } from "@phosphor-icons/react";
 import { useSession } from "@/components/session/SessionProvider";
-import { Button, IconButton } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { Field, FormGrid, Input, Select, Textarea } from "@/components/ui/Field";
 import { DateInput } from "@/components/ui/DateInput";
 import { Sheet } from "@/components/ui/Overlay";
-import { Badge } from "@/components/ui/Primitives";
-import { Table, TBody, Td, Th, THead, Tr, TableShell } from "@/components/ui/Table";
 import { API_BASE_URL, sendJsonAuth } from "@/lib/client/api";
 import { CONTENEDORES_CONSUMIBLE } from "@/lib/client/constants";
-import { detectCsvDelimiter, mapCsvToPreviewRows, parseCsvText, readCsvFileText, workbookToConsumableRows, type ImportPreviewRow } from "@/lib/client/importing";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
@@ -172,170 +168,6 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
         </Field>
       </form>
       </ValidacionAmbito>
-    </Sheet>
-  );
-}
-
-/* Importacion de consumibles: CSV/XLSX leido en el navegador, vista previa y alta de filas validas. */
-export function ImportConsumiblesSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { token } = useSession();
-  const [rows, setRows] = useState<ImportPreviewRow[]>([]);
-  const [detected, setDetected] = useState<string[]>([]);
-  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  // Nombre del archivo elegido (en estado: leer el ref durante el render no se actualiza ni es valido en React 19).
-  const [nombreArchivo, setNombreArchivo] = useState("");
-
-  const handleFile = async () => {
-    const file = fileRef.current?.files?.[0];
-    setNombreArchivo(file?.name || "");
-    if (!file) {
-      setRows([]);
-      setDetected([]);
-      return;
-    }
-    try {
-      const ext = (file.name.split(".").pop() || "").toLowerCase();
-      if (ext === "xlsx" || ext === "xls") {
-        const result = await workbookToConsumableRows(file);
-        setDetected(result.detected);
-        setRows(result.rows);
-        if (!result.validSheets) setMessage({ text: "El Excel no contiene hojas de consumibles reconocidas", error: true });
-        else if (!result.rows.length) setMessage({ text: "Las hojas de consumibles no contienen filas válidas", error: true });
-        else setMessage({ text: `${result.validSheets} hoja(s) leídas · ${result.ignoredSheets.length} descartadas`, error: false });
-        return;
-      }
-      const text = await readCsvFileText(file);
-      const mapped = mapCsvToPreviewRows(parseCsvText(text, detectCsvDelimiter(text)));
-      setDetected(mapped.detected);
-      setRows(mapped.rows);
-      setMessage(mapped.rows.length ? { text: "Archivo cargado", error: false } : { text: "El archivo no contiene filas para importar", error: true });
-    } catch {
-      setRows([]);
-      setDetected([]);
-      setMessage({ text: "No se pudo leer el archivo", error: true });
-    }
-  };
-
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    const valid = rows.filter((row) => row._valid);
-    if (!valid.length) {
-      setMessage({ text: "No hay filas válidas para importar", error: true });
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const result = await sendJsonAuth("POST", `${API_BASE_URL}/consumables/import`, token, {
-        rows: valid.map((row) => ({
-          producto: row.producto,
-          marca: row.marca,
-          proveedor: row.proveedor,
-          catalogo_parte_cas: row.catalogo_parte_cas,
-          fecha_ingreso: row.fecha_ingreso,
-          tamano_capacidad: row.tamano_capacidad,
-          contenedor: row.contenedor,
-          piezas: row.piezas,
-          cantidad_por_pieza: row.cantidad_por_pieza,
-        })),
-      });
-      toast.success(`Importación completada: ${Number(result.insertados || 0)} registros`);
-      invalidate("consumibles", "dashboard");
-      onClose();
-    } catch (err) {
-      setMessage({ text: err instanceof Error ? err.message : "No se pudo importar el archivo", error: true });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const validCount = rows.filter((row) => row._valid).length;
-
-  return (
-    <Sheet
-      open={open}
-      onOpenChange={(value) => !value && onClose()}
-      title="Importar consumibles"
-      description="Acepta CSV, XLSX y XLS. Revisa la vista previa antes de dar de alta."
-      size="xl"
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button type="submit" form="import-consumibles-form" loading={submitting} disabled={!validCount}>
-            Dar de alta {validCount ? `${validCount} filas` : ""}
-          </Button>
-        </>
-      }
-    >
-      <form id="import-consumibles-form" onSubmit={handleSubmit} className="flex flex-col gap-6">
-        <Field label="Archivo" htmlFor="import-consumibles-file" hint="Columnas esperadas: producto, marca, proveedor, catalogo_parte_cas, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza.">
-          <label htmlFor="import-consumibles-file" className="flex cursor-pointer items-center gap-3 rounded-card border border-dashed border-line-strong bg-surface-2/50 px-4 py-4 transition-colors hover:border-brand hover:bg-brand-faint">
-            <FileCsv size={26} className="text-brand" />
-            <span className="flex flex-col">
-              <span className="text-[13.5px] font-medium text-ink">{nombreArchivo || "Elegir archivo CSV o Excel"}</span>
-              <span className="text-[12.5px] text-ink-3">Se lee en tu navegador antes de enviarlo.</span>
-            </span>
-            <input ref={fileRef} id="import-consumibles-file" type="file" className="sr-only" accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={handleFile} />
-          </label>
-        </Field>
-
-        {detected.length ? (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="mr-1 text-[12.5px] text-ink-3">Campos detectados</span>
-            {detected.map((field) => (
-              <Badge key={field} tone="neutral">
-                {field}
-              </Badge>
-            ))}
-          </div>
-        ) : null}
-
-        {message ? <p className={message.error ? "text-[13px] text-danger" : "text-[13px] text-success-text"}>{message.text}</p> : null}
-
-        {rows.length ? (
-          <TableShell footer={`${validCount} filas válidas · ${rows.length - validCount} descartables`}>
-            <Table>
-              <THead>
-                <tr>
-                  <Th>Producto</Th>
-                  <Th>Marca</Th>
-                  <Th>Proveedor</Th>
-                  <Th>Catálogo</Th>
-                  <Th>Ingreso</Th>
-                  <Th align="right">Piezas</Th>
-                  <Th align="right">Cant./pieza</Th>
-                  <Th>Estado</Th>
-                  <Th />
-                </tr>
-              </THead>
-              <TBody>
-                {rows.map((row, index) => (
-                  <Tr key={`${row._rowIndex}-${index}`}>
-                    <Td className="font-medium">{row.producto || "-"}</Td>
-                    <Td muted>{row.marca || "-"}</Td>
-                    <Td muted>{row.proveedor || "-"}</Td>
-                    <Td mono>{row.catalogo_parte_cas || "-"}</Td>
-                    <Td muted>{row.fecha_ingreso || "-"}</Td>
-                    <Td align="right">{row.piezas ?? "-"}</Td>
-                    <Td align="right">{row.cantidad_por_pieza ?? "-"}</Td>
-                    <Td>
-                      <Badge tone={row._valid ? "success" : "warning"}>{row._valid ? "Lista" : "Inválida"}</Badge>
-                    </Td>
-                    <Td align="right">
-                      <IconButton label="Quitar fila" size="sm" onClick={() => setRows((prev) => prev.filter((_, i) => i !== index))}>
-                        <X size={14} />
-                      </IconButton>
-                    </Td>
-                  </Tr>
-                ))}
-              </TBody>
-            </Table>
-          </TableShell>
-        ) : null}
-      </form>
     </Sheet>
   );
 }

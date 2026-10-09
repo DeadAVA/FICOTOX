@@ -2,11 +2,11 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ArrowCounterClockwise, ArrowsClockwise, Package, PencilSimple, Plus, Trash, UploadSimple } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, ArrowsClockwise, Package, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
 import { useMenuReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { Caducidad, IconoConsumible } from "@/components/features/inventory/ventanas/comun";
 import { InsumoVentana } from "@/components/features/inventory/ventanas/InsumoVentana";
-import { ConsumibleSheet, ImportConsumiblesSheet } from "@/components/features/inventory/ConsumibleSheet";
+import { ConsumibleSheet } from "@/components/features/inventory/ConsumibleSheet";
 import { StockRefillSheet, type StockRefillTarget } from "@/components/features/inventory/StockRefillSheet";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
@@ -77,7 +77,6 @@ function ConsumiblesContent() {
   const debounced = useDebouncedValue(search);
   const [showBajas, setShowBajas] = useState(initialFilter === "bajas");
   const modal = useOpenState<ApiRecord>();
-  const importSheet = useOpenState();
   const refill = useOpenState<StockRefillTarget>();
   const [abierta, setAbierta] = useState<number | null>(null);
   const [orden, setOrden] = useState<Orden>("nombre");
@@ -206,11 +205,6 @@ function ConsumiblesContent() {
         end={
           <>
             {canCreate ? (
-              <Button variant="secondary" icon={<UploadSimple size={16} />} onClick={() => importSheet.open()}>
-                Importar
-              </Button>
-            ) : null}
-            {canCreate ? (
               <Button icon={<Plus size={16} weight="bold" />} onClick={() => modal.open(null)}>
                 Nuevo consumible
               </Button>
@@ -242,7 +236,7 @@ function ConsumiblesContent() {
         vacio={{
           icono: <Package size={20} />,
           titulo: search || filter !== "todos" ? "Sin coincidencias" : "Aún no hay consumibles",
-          descripcion: search || filter !== "todos" ? "Prueba con otro término o cambia el filtro." : "Crea el primero o importa desde CSV o Excel.",
+          descripcion: search || filter !== "todos" ? "Prueba con otro término o cambia el filtro." : "Crea el primero con «Nuevo consumible».",
           accion: canCreate && !search && filter === "todos" ? <Button onClick={() => modal.open(null)}>Nuevo consumible</Button> : undefined,
         }}
       />
@@ -258,7 +252,6 @@ function ConsumiblesContent() {
       />
 
       {modal.key ? <ConsumibleSheet key={`modal-${modal.key}`} open={modal.isOpen} item={modal.payload} onClose={modal.close} /> : null}
-      {importSheet.key ? <ImportConsumiblesSheet key={`import-${importSheet.key}`} open={importSheet.isOpen} onClose={importSheet.close} /> : null}
       {refill.key ? <StockRefillSheet key={`refill-${refill.key}`} open={refill.isOpen} target={refill.payload} onClose={refill.close} /> : null}
     </>
   );

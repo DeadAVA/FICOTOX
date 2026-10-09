@@ -8,11 +8,23 @@ import { useArchivoVersion } from "./usarArchivo";
 
 /*
  * xlsx, xls y csv: tabla de solo lectura con una pestaña por hoja. Usa SheetJS
- * vendorizado (public/vendor/xlsx, el mismo de las importaciones; lo carga el
+ * vendorizado (public/vendor/xlsx; lo carga el
  * layout). Se muestran hasta MAX_FILAS filas por hoja.
  */
 const MAX_FILAS = 2000;
 type Celda = string | number | boolean | Date | null;
+
+/* SheetJS vendorizado (public/vendor/xlsx): lo carga el layout y deja `window.XLSX`. */
+declare global {
+  interface Window {
+    XLSX?: {
+      read: (data: ArrayBuffer, options: Record<string, unknown>) => { SheetNames: string[]; Sheets: Record<string, unknown> };
+      utils: {
+        sheet_to_json: (sheet: unknown, options: Record<string, unknown>) => unknown[];
+      };
+    };
+  }
+}
 
 async function esperarXlsx(): Promise<NonNullable<Window["XLSX"]>> {
   for (let i = 0; i < 100 && !window.XLSX; i += 1) await new Promise((r) => setTimeout(r, 100));

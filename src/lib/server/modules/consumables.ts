@@ -1,7 +1,7 @@
 import { requireUser, userIdFromClaims } from "../auth";
 import { registrarAuditoria, snapshotRow } from "../audit";
 
-import { HttpError, intParam, json, readJson, type RouteContext } from "../http";
+import { intParam, json, readJson, type RouteContext } from "../http";
 import { darDeBaja, reactivarItem } from "../inventory-baja";
 
 import { requirePermission } from "../rbac";
@@ -10,7 +10,6 @@ import { aplicarSupervision, marcaSupervision } from "../supervision";
 import { interpretarMovimiento, tipoDeMovimiento } from "../inventory-movimientos";
 import { searchParam, toFloatOrNull, toStrOrNull, utcTimestampReference } from "./helpers";
 
-/* Portado de modules/inventory/consumables.py del backend Flask original. */
 
 interface ConsumablePayload {
   id_interno: string | null;
@@ -63,144 +62,6 @@ function normalizePayload(raw: Record<string, unknown> | null | undefined): Cons
     stock_minimo: numeroNoNegativo(data.stock_minimo, "Stock mínimo"),
     observaciones: toStrOrNull(data.observaciones, 4000),
   };
-}
-
-/* Importacion: una fila con un numero invalido se omite en vez de detener la carga. */
-function normalizarOmitiendo(raw: Record<string, unknown>): ConsumablePayload | null {
-  try {
-    return normalizePayload(raw);
-  } catch (err) {
-    if (err instanceof ConsumibleInvalido) return null;
-    throw err;
-  }
-}
-
-function normalizeKey(key: unknown): string {
-  if (key === null || key === undefined) return "";
-  let normalized = String(key).trim().toLowerCase().replace(/﻿/g, "");
-  normalized = normalized
-    .replace(/á/g, "a")
-    .replace(/é/g, "e")
-    .replace(/í/g, "i")
-    .replace(/ó/g, "o")
-    .replace(/ú/g, "u")
-    .replace(/ñ/g, "n");
-  for (const ch of [" ", "#", "/", ".", "-"]) {
-    normalized = normalized.split(ch).join("_");
-  }
-  while (normalized.includes("__")) {
-    normalized = normalized.replace("__", "_");
-  }
-  return normalized.replace(/^_+|_+$/g, "");
-}
-
-function canonicalizeRowKeys(row: Record<string, unknown>): Record<string, unknown> {
-  const aliases: Record<string, string> = {
-    producto: "producto",
-    marca: "marca",
-    proveedor: "proveedor",
-    catalogo_parte_cas: "catalogo_parte_cas",
-    catalogo_parte_c_a_s: "catalogo_parte_cas",
-    catalogo_parte: "catalogo_parte_cas",
-    fecha_de_ingreso: "fecha_ingreso",
-    fecha_ingreso: "fecha_ingreso",
-    tamano_capacidad: "tamano_capacidad",
-    tama_o_capacidad: "tamano_capacidad",
-    contenedor: "contenedor",
-    piezas: "piezas",
-    cantidad_por_pieza: "cantidad_por_pieza",
-    cantidad_por_pieza_: "cantidad_por_pieza",
-  };
-
-  const canon: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(row || {})) {
-    const norm = normalizeKey(key);
-    let target = aliases[norm];
-    if (!target) {
-      if (norm.includes("catalogo") && norm.includes("parte") && norm.includes("cas")) {
-        target = "catalogo_parte_cas";
-      } else if (norm.includes("tam") && norm.includes("capacidad")) {
-        target = "tamano_capacidad";
-      } else if (["producto", "marca", "proveedor", "fecha_ingreso", "contenedor", "piezas"].includes(norm)) {
-        target = norm;
-      }
-    }
-    if (target) canon[target] = value;
-  }
-  return canon;
-}
-
-/*
- * Intenta primero UTF-8 (con/sin BOM) y luego latin-1/cp1252.
- * Muchos CSV de Excel en Windows llegan en ANSI (cp1252/latin-1).
- */
-function decodeCsvBytes(bytes: Uint8Array): string {
-  for (const encoding of ["utf-8", "windows-1252", "iso-8859-1"]) {
-    try {
-      return new TextDecoder(encoding, { fatal: true, ignoreBOM: false }).decode(bytes);
-    } catch {
-      continue;
-    }
-  }
-  return new TextDecoder("utf-8").decode(bytes);
-}
-
-/* Lector CSV equivalente a csv.DictReader (comillas dobles, delimitador configurable). */
-function parseCsvRecords(text: string, delimiter: string): Record<string, string>[] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') {
-          cell += '"';
-          i += 1;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        cell += ch;
-      }
-      continue;
-    }
-    if (ch === '"') {
-      inQuotes = true;
-      continue;
-    }
-    if (ch === delimiter) {
-      row.push(cell);
-      cell = "";
-      continue;
-    }
-    if (ch === "\n") {
-      row.push(cell);
-      rows.push(row);
-      row = [];
-      cell = "";
-      continue;
-    }
-    if (ch !== "\r") {
-      cell += ch;
-    }
-  }
-  if (cell.length > 0 || row.length > 0) {
-    row.push(cell);
-    rows.push(row);
-  }
-
-  if (!rows.length) return [];
-  const headers = rows[0];
-  return rows.slice(1).map((cells) => {
-    const record: Record<string, string> = {};
-    headers.forEach((header, index) => {
-      record[header] = cells[index] ?? "";
-    });
-    return record;
-  });
 }
 
 const SELECT_COLUMNS = `
@@ -378,59 +239,4 @@ export async function reactivarConsumable({ request, s, params }: RouteContext):
   const user = await requireUser(request);
   await requirePermission(s, user, "inventario", "G");
   return reactivarItem(s, user, "consumibles", consumableId, await readJson(request), "Consumible", request);
-}
-
-const IMPORT_INSERT = `
-  INSERT INTO consumibles (id_interno, producto, marca, proveedor, catalogo_parte_cas, lote, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza, localizacion, stock_minimo, observaciones, stock_maximo)
-  VALUES (:id_interno, :producto, :marca, :proveedor, :catalogo_parte_cas, :lote, :fecha_ingreso, :tamano_capacidad, :contenedor, COALESCE(:piezas, 0), :cantidad_por_pieza, :localizacion, :stock_minimo, :observaciones, :piezas)
-`;
-
-export async function importConsumables({ request, s }: RouteContext): Promise<Response> {
-  const user = await requireUser(request);
-  // La importacion masiva no se hace bajo supervision (no hay visto bueno por fila).
-  if (marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "catalogo_inventario" }))) throw new HttpError(403, { message: "La importación masiva no está disponible para capturas bajo supervisión" });
-  let inserted = 0;
-
-  const contentType = request.headers.get("content-type") || "";
-  const jsonPayload = contentType.includes("application/json") ? await readJson(request) : null;
-
-  // Permite importar filas preprocesadas desde frontend (preview + depuracion).
-  if (jsonPayload && Array.isArray(jsonPayload.rows)) {
-    for (const row of jsonPayload.rows) {
-      if (!row || typeof row !== "object" || Array.isArray(row)) continue;
-      const data = normalizarOmitiendo(row as Record<string, unknown>);
-      if (!data || !data.producto) continue;
-      await s.execute(IMPORT_INSERT, { ...data });
-      inserted += 1;
-    }
-  } else {
-    let form: FormData;
-    try {
-      form = await request.formData();
-    } catch {
-      form = new FormData();
-    }
-    const file = form.get("file");
-    if (!(file instanceof File)) {
-      return json({ message: "No se proporciono archivo" }, 400);
-    }
-    if (!file.name || !file.name.toLowerCase().endsWith(".csv")) {
-      return json({ message: "Formato invalido. Solo CSV" }, 400);
-    }
-
-    const decoded = decodeCsvBytes(new Uint8Array(await file.arrayBuffer()));
-    const sample = decoded ? decoded.split(/\r\n|\r|\n/)[0] : "";
-    const delimiter = (sample.match(/;/g) || []).length > (sample.match(/,/g) || []).length ? ";" : ",";
-
-    for (const record of parseCsvRecords(decoded, delimiter)) {
-      const data = normalizarOmitiendo(canonicalizeRowKeys(record));
-      if (!data || !data.producto) continue;
-      await s.execute(IMPORT_INSERT, { ...data });
-      inserted += 1;
-    }
-  }
-
-  await registrarAuditoria(s, user, { accion: "importar", entidad: "consumibles", referencia: "importacion Excel/CSV", detalle: { insertados: inserted } });
-  await s.commit();
-  return json({ message: "Importacion completada", insertados: inserted });
 }

@@ -2,11 +2,11 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ArrowCounterClockwise, ArrowsClockwise, Flask, PencilSimple, Plus, Trash, UploadSimple } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, ArrowsClockwise, Flask, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
 import { useMenuReportar } from "@/components/features/calidad/ReportarIncidencia";
 import { Caducidad, IconoCategoria } from "@/components/features/inventory/ventanas/comun";
 import { InsumoVentana } from "@/components/features/inventory/ventanas/InsumoVentana";
-import { ImportReactivosSheet, ReactivoSheet } from "@/components/features/inventory/ReactivoSheet";
+import { ReactivoSheet } from "@/components/features/inventory/ReactivoSheet";
 import { StockRefillSheet, type StockRefillTarget } from "@/components/features/inventory/StockRefillSheet";
 import { RequireModule } from "@/components/session/RequireModule";
 import { useSession } from "@/components/session/SessionProvider";
@@ -69,7 +69,7 @@ export default function ReactivosPage() {
 type Filter = "todos" | "bajo" | "vencer";
 type Orden = "nombre" | "caducidad" | "existencia";
 
-/* Algunos registros importados traen "-" como caducidad: se trata como vacío. */
+/* Un "-" como caducidad se trata como vacío. */
 const expiryOf = (item: ApiRecord): unknown => {
   const value = getReactivoExpiry(item);
   return value && String(value).trim() !== "-" ? value : null;
@@ -88,7 +88,6 @@ function ReactivosContent() {
   const [showBajas, setShowBajas] = useState(initialFilter === "bajas");
   const debounced = useDebouncedValue(search);
   const modal = useOpenState<ApiRecord>();
-  const importSheet = useOpenState();
   const refill = useOpenState<StockRefillTarget>();
   const [abierta, setAbierta] = useState<number | null>(null);
   const [orden, setOrden] = useState<Orden>("nombre");
@@ -225,11 +224,6 @@ function ReactivosContent() {
         end={
           <>
             {canCreate ? (
-              <Button variant="secondary" icon={<UploadSimple size={16} />} onClick={() => importSheet.open()}>
-                Importar Excel
-              </Button>
-            ) : null}
-            {canCreate ? (
               <Button icon={<Plus size={16} weight="bold" />} onClick={() => modal.open(null)}>
                 Nuevo reactivo
               </Button>
@@ -261,7 +255,7 @@ function ReactivosContent() {
         vacio={{
           icono: <Flask size={20} />,
           titulo: search || filter !== "todos" ? "Sin coincidencias" : "Aún no hay reactivos",
-          descripcion: search || filter !== "todos" ? "Prueba con otro término o cambia el filtro." : "Crea el primero o importa el inventario desde Excel.",
+          descripcion: search || filter !== "todos" ? "Prueba con otro término o cambia el filtro." : "Crea el primero con «Nuevo reactivo.",
           accion: canCreate && !search && filter === "todos" ? <Button onClick={() => modal.open(null)}>Nuevo reactivo</Button> : undefined,
         }}
       />
@@ -277,7 +271,6 @@ function ReactivosContent() {
       />
 
       {modal.key ? <ReactivoSheet key={`modal-${modal.key}`} open={modal.isOpen} item={modal.payload} onClose={modal.close} /> : null}
-      {importSheet.key ? <ImportReactivosSheet key={`import-${importSheet.key}`} open={importSheet.isOpen} onClose={importSheet.close} /> : null}
       {refill.key ? <StockRefillSheet key={`refill-${refill.key}`} open={refill.isOpen} target={refill.payload} onClose={refill.close} /> : null}
     </>
   );
