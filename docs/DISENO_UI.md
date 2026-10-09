@@ -112,8 +112,7 @@ Clases utilitarias: `.display` (700, tracking −0.03em, leading 1.05), `.title-
 | Destino | Subdestinos |
 | --- | --- |
 | Inicio | — |
-| Muestras | Recepción · Procesamiento · Extracción · Análisis |
-| Informes | — |
+| Muestras | Recepción · Procesamiento · Extracción · Análisis · Informes |
 | Inventario | Reactivos · Consumibles · Equipos · Mantenimiento · Movimientos |
 | Calidad | Incidencias y NC · Biblioteca · Auditoría |
 | Administración | Usuarios · Roles |
