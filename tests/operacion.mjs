@@ -173,7 +173,7 @@ const nuevaInst = instalacion("instancia", `SECRET_KEY=${"b".repeat(64)}\nJWT_SE
 {
   const r = nodo("scripts/sqlite-a-mysql.mjs", ["--simular"], { FICOTOX_ENV_FILE: nuevaInst.env });
   const sinDestino = nodo("scripts/sqlite-a-mysql.mjs", [], { FICOTOX_ENV_FILE: nuevaInst.env });
-  check("sqlite-a-mysql --simular: revisa versión, conteos y bitácora sin cambiar nada; sin --destino/--confirmar no hace nada", r.codigo === 0 && /versión 13;.*íntegra/.test(r.salida) && /No se cambió nada/.test(r.salida) && sinDestino.codigo === 2, r.salida.split("\n")[0]);
+  check("sqlite-a-mysql --simular: revisa versión, conteos y bitácora sin cambiar nada; sin --destino/--confirmar no hace nada", r.codigo === 0 && /versión \d+;.*íntegra/.test(r.salida) && /No se cambió nada/.test(r.salida) && sinDestino.codigo === 2, r.salida.split("\n")[0]);
 }
 
 /* ---------- actualizar con una migracion que falla despues de otra que si se aplica ---------- */

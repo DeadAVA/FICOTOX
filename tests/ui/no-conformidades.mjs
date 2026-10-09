@@ -112,9 +112,10 @@ try {
     const { context, page } = await nueva();
     try {
       await entrar(page, "ricardo");
-      await page.goto(`${BASE}/`);
-      await page.getByText("Incidencias por evaluar").first().waitFor();
-      check("Inicio de Ricardo: aviso de incidencias por evaluar", true);
+      // El aviso del Inicio ("Por evaluar") lleva a la lista unificada con el filtro de incidencias por evaluar; el Inicio solo muestra las 4 mas urgentes, asi que se prueba el destino.
+      await page.goto(`${BASE}/calidad/incidencias?estado_inc=reportada,en_evaluacion`);
+      await page.locator(`[data-incidencia="${incidenciaId}"]`).waitFor();
+      check("Ricardo: la lista «por evaluar» (destino del aviso del Inicio) trae la incidencia", true);
       await page.goto(`${BASE}/calidad/incidencias/${incidenciaId}`);
       await page.locator("[data-evaluar]").click();
       await page.locator("#eval-just").fill("La falla pudo afectar la extracción del lote");

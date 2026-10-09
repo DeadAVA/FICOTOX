@@ -51,6 +51,10 @@ export function Busqueda({ modo, onCerrar, alAbrirVentana, className }: { modo: 
   const enfoqueAutomatico = useRef(false);
   const escrito = query.trim().length > 0;
   const sinResultados = escrito && !cargando && buscado === query.trim() && grupos.length === 0;
+  // El primer resultado queda seleccionado cada vez que cambian los resultados (llegan del servidor despues de escribir; cmdk solo preselecciona los que ya estaban).
+  const primero = escrito ? (grupos[0]?.resultados[0] ? `${grupos[0].clave}-${grupos[0].resultados[0].clave}` : "") : recientes[0] ? `reciente-${recientes[0].id}` : "";
+  const [elegido, setElegido] = useState({ para: "", valor: "" });
+  const seleccion = elegido.para === primero ? elegido.valor : primero;
   const abierto = modo === "ventana" ? true : enfocada && (escrito ? grupos.length > 0 || sinResultados : mostrar && recientes.length > 0);
 
   useEffect(() => {
@@ -192,7 +196,7 @@ export function Busqueda({ modo, onCerrar, alAbrirVentana, className }: { modo: 
         }
       }}
     >
-      <Command label="Buscar" shouldFilter={false} loop className="w-full">
+      <Command label="Buscar" shouldFilter={false} loop value={seleccion} onValueChange={(valor) => setElegido({ para: primero, valor })} className="w-full">
         <div className={cn("flex items-center gap-3.5", modo === "pagina" ? cn("rounded-[22px] bg-surface pr-4 pl-6 shadow-raised ring-1 ring-line/60 transition-shadow duration-300 ease-[var(--ease-spring)]", enfocada && "shadow-[var(--shadow-panel)]") : "px-5")}>
           <MagnifyingGlass size={modo === "pagina" ? 24 : 22} className={cn("shrink-0 transition-colors", enfocada || modo === "ventana" ? "text-brand" : "text-ink-3")} />
           <Command.Input

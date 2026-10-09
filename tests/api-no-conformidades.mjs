@@ -206,7 +206,7 @@ let accLuis, accRicardo, suspEquipo;
   check("la bitácora de la NC registra cada paso", ["crear", "editar", "retener", "suspender", "avanzar", "implementar", "verificar", "reabrir", "reanudar", "liberar_retencion", "comunicar", "cerrar", "descargar"].every((a) => acciones.has(a)), [...acciones].join(","));
 }
 
-/* ================= Permisos: crear NC, anular, indicadores ================= */
+/* ================= Permisos: crear NC, anular ================= */
 {
   const luis = await api("POST", "/calidad/nc", { origen: "auditoria_interna", descripcion: "Hallazgo de auditoría interna sobre registros" }, t.luis);
   const gab = await api("POST", "/calidad/nc", { origen: "auditoria_interna", descripcion: "Hallazgo de auditoría interna sobre registros" }, t.gabriela);

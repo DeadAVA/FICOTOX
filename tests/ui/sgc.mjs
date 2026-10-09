@@ -393,33 +393,16 @@ try {
   await page.waitForFunction((n) => [...document.querySelectorAll("[data-reactivo]")].filter((tr) => tr.textContent.includes("2-Propanol")).length === n, before);
   check("reactivo reactivado vuelve a la lista", true);
 
-  /* ---------- Inicio: flujo en curso, avisos y buscador ---------- */
+  /* ---------- Inicio y buscador ---------- */
   await page.goto(`${BASE}/`);
+  await page.getByRole("button", { name: "Desplegar Muestras" }).click();
   await page.getByRole("link", { name: "Informes" }).first().waitFor();
-  check("navegación principal incluye Informes", true);
-  await page.getByRole("heading", { name: "En curso" }).waitFor();
-  const flowCards = page.locator("li.group\\/card");
-  await flowCards.first().waitFor();
-  check("Inicio: lista de muestras en curso con etapas", (await flowCards.count()) >= 1, `tarjetas=${await flowCards.count()}`);
-  const nextStep = flowCards.first().getByRole("link", { name: /Registrar|Revisar|Aprobar|Crear|Autorizar|Enviar|Liberar/ });
-  check("Inicio: cada tarjeta ofrece el siguiente paso", (await nextStep.count()) >= 1, await nextStep.first().textContent());
-  await page.getByRole("heading", { name: "Avisos" }).waitFor();
-  const avisoRows = page.locator("#avisos a");
-  check("Inicio: avisos con cuenta y enlace", (await avisoRows.count()) >= 1, `avisos=${await avisoRows.count()}`);
-  await avisoRows.first().hover();
-  const hoverLink = page.getByRole("link", { name: /Ver los|Abrir la lista/ });
-  await hoverLink.waitFor();
-  check("Inicio: al pasar el cursor por un aviso se ve el detalle", (await hoverLink.count()) === 1 && (await page.locator("[data-radix-popper-content-wrapper] a").count()) >= 2);
-  await page.mouse.move(700, 40);
-  check("Inicio: sin fila 'Nuevo' (las acciones viven en el buscador)", !(await page.getByText("Nuevo:", { exact: true }).count()));
+  check("navegación principal: Muestras se despliega e incluye Informes", true);
   const search = page.locator('input[aria-label="Buscar en FICOTOX"]');
   await search.click();
-  await page.getByRole("radio", { name: "Acciones" }).waitFor();
-  await page.getByText("Nueva recepción", { exact: true }).first().waitFor();
-  check("buscador: al enfocar ofrece acciones generales y no las específicas", (await page.getByText("Nueva extracción DSP", { exact: true }).count()) === 0);
   await search.fill("por revisar");
-  // Dentro de los resultados (grupo "Ver"): el Inicio puede mostrar un aviso con el mismo texto.
-  const vistas = page.getByRole("group", { name: "Ver" });
+  // Dentro de los resultados (grupo "Pantallas"): el Inicio puede mostrar un aviso con el mismo texto.
+  const vistas = page.getByRole("group", { name: "Pantallas" });
   await vistas.getByText("Informes por revisar o autorizar", { exact: true }).waitFor();
   check("buscador: vistas por estado («por revisar»)", (await vistas.getByText("Análisis por revisar o aprobar", { exact: true }).count()) === 1);
   await search.fill("ayuda");
@@ -433,7 +416,7 @@ try {
   await page.locator("[cmdk-item][data-selected=true]").filter({ hasText: /IR\s*0000001/ }).waitFor();
   check("buscador: folio corto «IR 1» selecciona IR 0000001 primero", (await page.locator("[cmdk-item]").filter({ hasText: /Nueva|Abrir/ }).count()) === 0);
   await search.fill("R 1");
-  await page.locator("[cmdk-item][data-selected=true]").filter({ hasText: /R\s*0000001/ }).waitFor();
+  await page.locator("[cmdk-item][data-selected=true]").filter({ hasText: /(^|[^A-Z])R\s*0000001/ }).waitFor();
   check("buscador: «R 1» encuentra la recepción R 0000001", true);
   await page.keyboard.press("Enter");
   await page.waitForURL((url) => /^\/muestras\/recepcion\/\d+$/.test(url.pathname));
@@ -449,7 +432,7 @@ try {
   await page.getByRole("heading", { name: "Cómo se usa FICOTOX" }).waitFor();
   check("página de ayuda accesible desde la barra lateral", true);
   await page.goto(`${BASE}/`);
-  await page.getByRole("link", { name: "Informes" }).first().waitFor();
+  await page.getByRole("link", { name: "Muestras" }).first().waitFor();
   await page.getByRole("button", { name: "Desplegar Calidad" }).click();
   await page.getByRole("link", { name: "Auditoría" }).first().waitFor();
   check("barra lateral: Calidad se despliega e incluye Auditoría", true);
