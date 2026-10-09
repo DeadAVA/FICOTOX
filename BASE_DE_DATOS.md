@@ -822,13 +822,13 @@ Antes de las migraciones versionadas, el sistema creaba las tablas «al vuelo».
 
 **Ejemplo:** guardar la «clave del lote» en cada extracción (una columna nueva `muestras_extraccion.lote_clave`) y una tabla nueva `lotes_reactivo`.
 
-1. **Crea el archivo** `src/lib/server/migraciones/0018_lote_clave.mjs` con el número siguiente a la última (`0017`). Mira `0014_tema.mjs` o `0017_busqueda_recientes.mjs` como modelo. Debe exportar `version`, `nombre` y `pasos`, y la función `up` que ejecuta los pasos. Esquema de ejemplo:
+1. **Crea el archivo** `src/lib/server/migraciones/0019_lote_clave.mjs` con el número siguiente a la última (`0018`). Mira `0014_tema.mjs` o `0017_busqueda_recientes.mjs` como modelo. Debe exportar `version`, `nombre` y `pasos`, y la función `up` que ejecuta los pasos. Esquema de ejemplo:
 
    ```js
-   // 0018_lote_clave.mjs (ejemplo; sigue la forma de 0014_tema.mjs)
+   // 0019_lote_clave.mjs (ejemplo; sigue la forma de 0014_tema.mjs)
    import { ejecutarPasos } from "./pasos.mjs";
 
-   export const version = 18;
+   export const version = 19;
    export const nombre = "Clave de lote en extracciones y tabla de lotes de reactivo";
    export const pasos = [
      { tipo: "columna", tabla: "muestras_extraccion", columna: "lote_clave",
@@ -845,10 +845,10 @@ Antes de las migraciones versionadas, el sistema creaba las tablas «al vuelo».
 
    *(Es un ejemplo ilustrativo; los nombres `lote_clave` y `lotes_reactivo` no existen en el proyecto. Copia la forma de una migración real, por ejemplo `0014_tema.mjs`.)*
 
-2. **Regístrala** en `motor.mjs`: agrega el `import * as m0018 …` y súmala a la lista `MIGRACIONES`. `VERSION_ACTUAL` sube sola a 18 (es la versión de la última de la lista).
+2. **Regístrala** en `motor.mjs`: agrega el `import * as m0019 …` y súmala a la lista `MIGRACIONES`. `VERSION_ACTUAL` sube sola a 19 (es la versión de la última de la lista).
 3. **Actualiza el código** que use la columna o tabla nuevas (los módulos del servidor y, si aplica, las listas de tablas de respaldo en `respaldo.mjs`: `TABLAS_PRINCIPALES` y `CARPETAS_ARCHIVOS`).
 4. **Prueba** con una copia, nunca con la base real: `npm run migrar -- --simular` y `npm run migrar` sobre la copia; después `npm test` (hay pruebas de migraciones, esquema y línea base). `npm run test:mysql` si tienes un servidor MySQL de pruebas.
-5. **Haz commit.** Al actualizar una instalación, `npm run actualizar` (o simplemente arrancar el servidor) respalda (`pre-migracion`), aplica la 18 y la deja en la bitácora.
+5. **Haz commit.** Al actualizar una instalación, `npm run actualizar` (o simplemente arrancar el servidor) respalda (`pre-migracion`), aplica la 19 y la deja en la bitácora.
 
 ### 11.8 Qué NO hacer
 
