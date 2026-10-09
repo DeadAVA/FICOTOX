@@ -54,7 +54,7 @@ export function EquipoSheet({ open, item, onClose }: { open: boolean; item: ApiR
     modelo: String(item?.modelo || ""),
     ubicacion: String(item?.ubicacion || ""),
     responsable: item?.id_responsable ? String(item.id_responsable) : "",
-    calibracion: toDateOnly(item?.fecha_prox_calibracion),
+    calibracion: isoDate(item?.fecha_prox_calibracion),
     estado: String(item?.estado || "operativo"),
     claveBitacora: String(item?.clave_bitacora || ""),
   });
@@ -206,8 +206,8 @@ export function MantenimientoSheet({ open, item, onClose }: { open: boolean; ite
   const [form, setForm] = useState({
     equipo: item?.id_equipo ? String(item.id_equipo) : "",
     tipo: String(item?.tipo || "preventivo"),
-    fechaProgramada: toDateOnly(item?.fecha_programada),
-    fechaRealizado: toDateOnly(item?.fecha_realizado),
+    fechaProgramada: isoDate(item?.fecha_programada),
+    fechaRealizado: isoDate(item?.fecha_realizado),
     tecnico: String(item?.tecnico_proveedor || ""),
     responsable: item?.id_responsable ? String(item.id_responsable) : "",
     estado: String(item?.estado || "programado"),
