@@ -41,6 +41,8 @@ const TIPO_GRUPO: Record<string, string> = {
   accesos_vencen: "acceso",
   autorizaciones_vencen: "autorizacion",
   bitacora_alterada: "bitacora_alterada",
+  respaldo_viejo: "respaldo",
+  prueba_vieja: "respaldo",
 };
 
 const DIA = 86_400_000;

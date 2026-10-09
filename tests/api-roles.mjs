@@ -58,22 +58,22 @@ for (let i = 0; i < 60; i += 1) {
 
 /* ---------- Matriz esperada (seccion 4 del prompt de la Fase 1) ---------- */
 
-const MODULOS = ["usuarios", "documentos", "muestras", "ensayos", "informes", "equipos", "inventario", "calidad", "compras"];
+const MODULOS = ["usuarios", "documentos", "muestras", "ensayos", "informes", "equipos", "inventario", "calidad", "respaldos", "compras"];
 const ACCIONES = ["V", "C", "E", "R", "A", "AN", "G"];
 /* Fase 2: "supervisado" ya se aplica (queda pendiente del visto bueno), no es diferido. Fase 11: "incidencias" tampoco. */
 const DIFERIDOS = new Set(["asignado", "proyecto", "tecnico", "investigacion", "autorizados", "administrativo", "limitado", "auditoria"]);
 const f = (modulo, acciones, alcance = "total") => acciones.split(" ").map((accion) => ({ modulo, accion, alcance }));
 
 const MATRIZ = {
-  "Administrador técnico del sistema": { email: "jorge.ramirez@ficotox.local", filas: [...f("usuarios", "G"), ...f("documentos", "V", "tecnico"), ...f("muestras", "V", "estado"), ...f("equipos", "V"), ...f("calidad", "V", "bitacora")] },
+  "Administrador técnico del sistema": { email: "jorge.ramirez@ficotox.local", filas: [...f("usuarios", "G"), ...f("documentos", "V", "tecnico"), ...f("muestras", "V", "estado"), ...f("equipos", "V"), ...f("calidad", "V", "bitacora"), ...f("respaldos", "V G")] },
   "Responsable General": {
     email: "patricia.luna@ficotox.local",
     // Fase 3: el Responsable General aprueba los cambios de acceso (usuarios = V A).
-    filas: [...f("usuarios", "V A"), ...f("documentos", "V R A AN"), ...f("muestras", "V AN"), ...f("ensayos", "V R AN"), ...f("informes", "V R A AN"), ...f("equipos", "V AN"), ...f("inventario", "V AN"), ...f("calidad", "V R A AN"), ...f("compras", "V A")],
+    filas: [...f("usuarios", "V A"), ...f("documentos", "V R A AN"), ...f("muestras", "V AN"), ...f("ensayos", "V R AN"), ...f("informes", "V R A AN"), ...f("equipos", "V AN"), ...f("inventario", "V AN"), ...f("calidad", "V R A AN"), ...f("respaldos", "V"), ...f("compras", "V A")],
   },
   "Coordinador/a de Mejora Continua": {
     email: "ana.torres@ficotox.local",
-    filas: [...f("usuarios", "V"), ...f("documentos", "G R A AN"), ...f("muestras", "V"), ...f("ensayos", "V"), ...f("informes", "V"), ...f("equipos", "V"), ...f("inventario", "V"), ...f("calidad", "G R A AN"), ...f("compras", "V")],
+    filas: [...f("usuarios", "V"), ...f("documentos", "G R A AN"), ...f("muestras", "V"), ...f("ensayos", "V"), ...f("informes", "V"), ...f("equipos", "V"), ...f("inventario", "V"), ...f("calidad", "G R A AN"), ...f("respaldos", "V"), ...f("compras", "V")],
   },
   "Coordinador/a del Área Técnica": {
     email: "ricardo.medina@ficotox.local",
@@ -166,7 +166,7 @@ check("login QA (rol de prueba con G en todos los modulos)", qaLogin.status === 
 
 const catalogo = (await api("GET", "/admin/permissions", undefined, QA)).data || {};
 const modulosApi = (catalogo.modulos || []).map((m) => m.clave);
-check("catalogo de modulos: exactamente los 9 de la Fase 1 (sin 'aprobaciones')", modulosApi.join(",") === MODULOS.join(",") && !modulosApi.includes("aprobaciones"), modulosApi.join(","));
+check("catalogo de modulos: los 9 de la Fase 1 más respaldos (sin 'aprobaciones')", modulosApi.join(",") === MODULOS.join(",") && !modulosApi.includes("aprobaciones"), modulosApi.join(","));
 check("catalogo de acciones V C E R A AN G", (catalogo.acciones || []).map((a) => a.clave).join(" ") === ACCIONES.join(" "));
 
 const roles = (await api("GET", "/admin/roles", undefined, QA)).data?.items || [];

@@ -7,7 +7,8 @@ import { ACCION_KEYS, isAccion, isModulo, type Accion, type PermisoFila } from "
  */
 
 /* Areas en el orden en que se muestran (clave del modulo -> nombre). */
-export const AREAS_PERMISOS: Array<{ clave: string; nombre: string; detalle: string }> = [
+/* `acciones`: solo esas columnas aplican al área (Respaldos: ver y administrar); `soloTotal`: sin alcances intermedios. */
+export const AREAS_PERMISOS: Array<{ clave: string; nombre: string; detalle: string; acciones?: Accion[]; soloTotal?: boolean }> = [
   { clave: "muestras", nombre: "Muestras", detalle: "Recepción, custodia y disposición final" },
   { clave: "ensayos", nombre: "Ensayos", detalle: "Procesamiento, extracción y análisis" },
   { clave: "informes", nombre: "Informes", detalle: "Informes de resultados" },
@@ -16,6 +17,7 @@ export const AREAS_PERMISOS: Array<{ clave: string; nombre: string; detalle: str
   { clave: "calidad", nombre: "Calidad", detalle: "Registro de actividad, incidencias y no conformidades" },
   { clave: "documentos", nombre: "Biblioteca", detalle: "Documentos de consulta" },
   { clave: "usuarios", nombre: "Usuarios", detalle: "Cuentas, roles y autorizaciones" },
+  { clave: "respaldos", nombre: "Respaldos", detalle: "Copias de seguridad y pruebas de restauración", acciones: ["V", "G"], soloTotal: true },
   { clave: "compras", nombre: "Compras", detalle: "Todavía sin pantallas" },
 ];
 
@@ -68,6 +70,7 @@ const OBJETO_AREA: Record<string, string> = {
   calidad: "incidencias, no conformidades y el registro de actividad",
   documentos: "documentos de la biblioteca",
   usuarios: "cuentas, roles y autorizaciones",
+  respaldos: "los respaldos y las pruebas de restauración",
   compras: "compras",
 };
 

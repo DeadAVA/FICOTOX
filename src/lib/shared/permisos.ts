@@ -20,6 +20,7 @@ export const MODULOS = [
   { clave: "equipos", nombre: "Equipos", descripcion: "Equipos y mantenimientos" },
   { clave: "inventario", nombre: "Inventario", descripcion: "Reactivos, consumibles y movimientos" },
   { clave: "calidad", nombre: "Calidad", descripcion: "Bitacora de auditoria, incidencias, no conformidades y acciones correctivas (auditorias internas en una fase posterior)" },
+  { clave: "respaldos", nombre: "Respaldos", descripcion: "Calidad › Respaldos: ver los respaldos y las pruebas de restauración (V) y crear respaldos o probar la restauración (G)" },
   { clave: "compras", nombre: "Compras", descripcion: "Sin pantallas todavia (Fase 8)" },
 ] as const;
 

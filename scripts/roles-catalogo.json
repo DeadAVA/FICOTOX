@@ -1,5 +1,5 @@
 {
-  "_comentario": "Matriz de permisos de la Fase 1 (FX-MO-2-1, seccion 5 y decisiones anotadas; ver README.md). Por rol: { modulo: { accion: alcance } }. Acciones V C E R A AN G; un modulo o accion ausente = sin permiso. 'clave' es estable (reglas de combinacion). Lo usa scripts/seed-roles-usuarios.mjs.",
+  "_comentario": "Matriz de permisos de la Fase 1 (FX-MO-2-1, seccion 5 y decisiones anotadas; ver README.md). Por rol: { modulo: { accion: alcance } }. Acciones V C E R A AN G; un modulo o accion ausente = sin permiso. 'clave' es estable (reglas de combinacion). Lo usa scripts/seed-roles-usuarios.mjs. Respaldos (Calidad › Respaldos): admin_tecnico V y G; responsable_general, mejora_continua y auditor_interno solo V.",
   "version": "fase-1",
   "modulos": [
     "usuarios",
@@ -10,6 +10,7 @@
     "equipos",
     "inventario",
     "calidad",
+    "respaldos",
     "compras"
   ],
   "roles": [
@@ -33,6 +34,10 @@
         },
         "calidad": {
           "V": "bitacora"
+        },
+        "respaldos": {
+          "V": "total",
+          "G": "total"
         }
       }
     },
@@ -81,6 +86,9 @@
           "A": "total",
           "AN": "total"
         },
+        "respaldos": {
+          "V": "total"
+        },
         "compras": {
           "V": "total",
           "A": "total"
@@ -122,6 +130,9 @@
           "R": "total",
           "A": "total",
           "AN": "total"
+        },
+        "respaldos": {
+          "V": "total"
         },
         "compras": {
           "V": "total"
@@ -359,6 +370,9 @@
           "V": "total",
           "C": "auditoria",
           "E": "auditoria"
+        },
+        "respaldos": {
+          "V": "total"
         },
         "compras": {
           "V": "total"

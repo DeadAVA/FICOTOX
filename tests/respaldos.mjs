@@ -104,12 +104,13 @@ const sufijo = Date.now().toString(36).toUpperCase().slice(-5);
   check("datos: un analisis con evidencia en disco", r.status === 201, `${r.status}`);
 }
 
-/* ---------- Respaldo por linea de comandos (la pantalla Respaldos se retiro) ---------- */
+/* ---------- Respaldo por linea de comandos y permisos de Calidad › Respaldos ---------- */
 let respaldoId = null;
 {
-  const retirada = await api("GET", "/respaldos", undefined, tJ);
-  const crearRetirado = await api("POST", "/respaldos", {}, tJ);
-  check("la pantalla y el endpoint de Respaldos están retirados (410)", retirada.status === 410 && crearRetirado.status === 410, `${retirada.status} ${crearRetirado.status}`);
+  const lista = await api("GET", "/respaldos", undefined, tJ);
+  const sinPermiso = await api("GET", "/respaldos", undefined, QA);
+  const crearSinPermiso = await api("POST", "/respaldos", {}, QA);
+  check("Calidad › Respaldos: el administrador técnico (respaldos:V) ve la lista; quien no tiene el permiso recibe 403 al ver y al crear", lista.status === 200 && Array.isArray(lista.data?.respaldos) && lista.data?.puede_gestionar === true && sinPermiso.status === 403 && crearSinPermiso.status === 403, `${lista.status} ${sinPermiso.status} ${crearSinPermiso.status}`);
   // Con el servidor encendido: npm run respaldar (snapshot en linea).
   const r = script("respaldar-ficotox.mjs", ["--json"]);
   try {
@@ -119,7 +120,8 @@ let respaldoId = null;
   }
   check("con el servidor encendido, npm run respaldar crea un respaldo", r.code === 0 && !!respaldoId, `${r.code} ${r.out.slice(0, 160)}`);
   const noti = (await api("GET", "/notificaciones", undefined, tJ)).data?.items || [];
-  check("la campana ya no avisa de respaldos", !noti.some((n) => n.tipo === "respaldo" || n.tipo === "prueba_restauracion"), `${noti.map((n) => n.tipo).join(",")}`);
+  const notiSin = (await api("GET", "/notificaciones", undefined, QA)).data?.items || [];
+  check("la campana avisa de respaldos solo a quien tiene respaldos:V (aquí: la prueba de restauración pendiente)", noti.some((n) => n.tipo === "respaldo") && !notiSin.some((n) => n.tipo === "respaldo"), `${noti.map((n) => n.tipo).join(",")} | ${notiSin.map((n) => n.tipo).join(",")}`);
 }
 
 const carpeta = path.join(BACKUPS, respaldoId || "sin-id");

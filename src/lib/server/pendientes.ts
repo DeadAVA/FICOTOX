@@ -21,6 +21,7 @@ import { autorizacionesPorVencer, permisoAdministrar } from "./autorizaciones";
 import { type Row, type Session } from "./db";
 import { avisosCalidad } from "./modules/calidad/tablero";
 import { alertaBitacora } from "./modules/audit";
+import { avisosDeRespaldos } from "./modules/respaldos";
 import { vencimientosProximos } from "./modules/admin";
 import { permisoDe, type Autorizacion } from "./rbac";
 import { porAutorizarDe } from "./solicitudes";
@@ -90,6 +91,9 @@ export async function pendientesDe(s: Session, auth: Autorizacion): Promise<Grup
     const alerta = await alertaBitacora(s);
     if (alerta) agregar("bitacora_alterada", "Posible cambio no autorizado", "danger", "/auditoria", [{ clave: `bitacora_alterada:${alerta.id}`, frase: "Posible cambio no autorizado", registro: "Registro de actividad", detalle: "Avisa a la Coordinación de Mejora Continua", href: "/auditoria", tono: "danger", cuando: (alerta.reportada_en as string | null) ?? null }]);
   }
+
+  // Respaldos: mas de 24 h sin respaldo y mas de 90 dias sin prueba de restauracion (solo a quien tiene respaldos:V).
+  for (const a of avisosDeRespaldos(auth)) agregar(a.tipo, a.frase, a.tono, "/calidad/respaldos", [{ clave: a.clave, frase: a.frase, registro: "Respaldos", detalle: a.detalle, href: "/calidad/respaldos", tono: a.tono, cuando: a.cuando }]);
 
   // Por supervisar: registros que esperan el visto bueno de la persona (su supervisor asignado).
   const INVENTARIO_HREF: Record<string, (id: number) => string> = { equipos: (id) => `/inventario/equipos?abrir=${id}`, mantenimientos: (id) => `/inventario/mantenimiento?abrir=${id}`, reactivos: (id) => `/inventario/reactivos?abrir=${id}`, consumibles: (id) => `/inventario/consumibles?abrir=${id}` };

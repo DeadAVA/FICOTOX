@@ -58,6 +58,7 @@ const PANTALLAS: Def[] = [
   { titulo: "Movimientos de inventario", href: "/movimientos", permiso: (a) => a.can("inventario"), kw: "movimientos entradas salidas" },
   { titulo: "Biblioteca", href: "/calidad/biblioteca", permiso: (a) => a.can("documentos"), kw: "biblioteca documentos manual procedimientos instructivos formatos normas calidad" },
   { titulo: "Incidencias y no conformidades", href: "/calidad/incidencias", permiso: (a) => a.can("calidad", "V", ctx("incidencia")) && a.alcance("calidad") !== "bitacora", kw: "calidad incidencias no conformidades nc acciones correctivas" },
+  { titulo: "Respaldos", sub: "Copias de seguridad y pruebas de restauración", href: "/calidad/respaldos", permiso: (a) => a.can("respaldos"), kw: "respaldos copias seguridad backup restauracion recuperar" },
   { titulo: "Auditoría", sub: "Bitácora de actividad", href: "/auditoria", permiso: (a) => a.can("calidad", "V", ctx("bitacora")), kw: "auditoria bitacora historial actividad trazabilidad" },
   { titulo: "Usuarios", href: "/administracion/usuarios", permiso: (a) => a.can("usuarios"), kw: "administracion usuarios cuentas personas" },
   { titulo: "Roles y permisos", href: "/administracion/roles", permiso: (a) => a.can("usuarios") && a.alcance("usuarios") !== "propio", kw: "administracion roles permisos" },

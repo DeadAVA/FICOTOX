@@ -62,7 +62,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/auditoria",
     label: "Calidad",
-    modules: ["documentos", "calidad"],
+    modules: ["documentos", "calidad", "respaldos"],
     description: "Incidencias y no conformidades, biblioteca de documentos y bitácora de auditoría",
     icon: "seal",
     children: [
@@ -72,6 +72,8 @@ const NAV_ITEMS: NavItem[] = [
       { href: "/calidad/biblioteca", label: "Biblioteca", module: "documentos" },
       // Con el alcance "incidencias" no se ve la bitacora.
       { href: "/auditoria", label: "Auditoría", module: "calidad", hideForScopes: ["incidencias"] },
+      // Copias de seguridad y pruebas de restauración (respaldos:V; solo el administrador técnico las gestiona).
+      { href: "/calidad/respaldos", label: "Respaldos", module: "respaldos" },
     ],
   },
   {

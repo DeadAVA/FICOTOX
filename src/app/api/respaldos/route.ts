@@ -1,10 +1,6 @@
-import { pantallaRetirada } from "@/lib/server/retirado";
+import { apiRoute } from "@/lib/server/http";
+import { crearRespaldoPost, listarRespaldosApi } from "@/lib/server/modules/respaldos";
 
-/*
- * La pantalla Administración › Respaldos se retiró: los respaldos y las pruebas de
- * restauración se hacen por línea de comandos (npm run respaldar, npm run restaurar,
- * tarea programada) y su estado se revisa con npm run verificar-instalacion.
- */
-const retirada = () => pantallaRetirada("los respaldos se hacen y se revisan por línea de comandos");
-export const GET = retirada;
-export const POST = retirada;
+export const GET = apiRoute(listarRespaldosApi);
+/* No pasa por apiRoute: la sesion de la base solo se retiene mientras se toma la foto de la base. */
+export const POST = (request: Request) => crearRespaldoPost(request);

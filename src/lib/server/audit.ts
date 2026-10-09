@@ -91,6 +91,8 @@ export type AuditAction =
   | "adjuntar"
   | "anular_adjunto"
   | "respaldar"
+  | "respaldo_fallido"
+  | "probar_restauracion"
   | "restaurar_respaldo"
   | "reportar"
   | "evaluar"

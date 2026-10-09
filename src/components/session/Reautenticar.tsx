@@ -29,6 +29,8 @@ const ETIQUETA_ACCION: Record<string, string> = {
   baja: "dar de baja una cuenta",
   reactivar: "reactivar una cuenta",
   permisos: "cambiar los permisos de un rol",
+  crear: "crear un respaldo",
+  probar: "probar la restauración de un respaldo",
 };
 
 function describirAccion(accion: string): string {

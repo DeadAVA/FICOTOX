@@ -22,19 +22,19 @@ const DESCRIPCION_ROLES: Record<string, DescripcionRol> = {
   admin_tecnico: {
     icono: "engrane",
     proposito: "Mantiene la plataforma funcionando, segura y respaldada.",
-    responsabilidades: ["Crea y da de baja las cuentas de acceso", "Asigna los roles autorizados", "Configura la plataforma", "Hace los respaldos y las pruebas de recuperación"],
+    responsabilidades: ["Crea y da de baja las cuentas de acceso", "Asigna los roles autorizados", "Configura la plataforma", "Crea los respaldos y prueba la restauración (Calidad › Respaldos)"],
     noPuede: ["Aprobar documentos", "Modificar resultados ni validar ensayos", "Liberar informes", "Alterar el registro de actividad"],
   },
   responsable_general: {
     icono: "corona",
     proposito: "Dirige el laboratorio y responde por su funcionamiento y por los informes que emite.",
-    responsabilidades: ["Consulta toda la información del laboratorio", "Aprueba accesos y cambios importantes", "Autoriza y libera informes", "Aprueba anulaciones excepcionales", "Revisa el desempeño del laboratorio"],
+    responsabilidades: ["Consulta toda la información del laboratorio", "Aprueba accesos y cambios importantes", "Autoriza y libera informes", "Aprueba anulaciones excepcionales", "Revisa el desempeño del laboratorio", "Consulta los respaldos y sus pruebas de restauración"],
     noPuede: ["Sustituir la revisión técnica", "Modificar registros técnicos ya cerrados"],
   },
   mejora_continua: {
     icono: "medalla",
     proposito: "Cuida y mejora el sistema de calidad del laboratorio.",
-    responsabilidades: ["Administra la biblioteca de documentos", "Atiende incidencias y no conformidades con sus acciones correctivas", "Organiza las auditorías", "Da seguimiento a la calidad"],
+    responsabilidades: ["Administra la biblioteca de documentos", "Atiende incidencias y no conformidades con sus acciones correctivas", "Organiza las auditorías", "Da seguimiento a la calidad", "Consulta los respaldos y sus pruebas de restauración"],
     noPuede: ["Modificar resultados técnicos", "Validar resultados técnicos"],
   },
   coord_area_tecnica: {
@@ -70,7 +70,7 @@ const DESCRIPCION_ROLES: Record<string, DescripcionRol> = {
   auditor_interno: {
     icono: "lupa",
     proposito: "Verifica de forma objetiva que se cumpla el sistema de calidad.",
-    responsabilidades: ["Consulta documentos, registros y la actividad de la plataforma", "Prepara y lleva a cabo las auditorías internas"],
+    responsabilidades: ["Consulta documentos, registros y la actividad de la plataforma", "Consulta los respaldos y sus pruebas de restauración", "Prepara y lleva a cabo las auditorías internas"],
     noPuede: ["Modificar la información que audita", "Aprobar la información que audita"],
   },
   estudiante: {

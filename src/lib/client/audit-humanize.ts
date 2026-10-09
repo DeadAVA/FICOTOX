@@ -537,7 +537,7 @@ function frasesDeLista(key: string, antes: unknown[], despues: unknown[], entida
 
 /* Permisos en palabras para la bitacora: "en Muestras puede ver, registrar y editar". */
 const VERBO_PERMISO: Record<string, string> = { V: "ver", C: "registrar", E: "editar", R: "revisar", A: "aprobar", AN: "anular", G: "administrar" };
-const NOMBRE_MODULO: Record<string, string> = { usuarios: "Usuarios y accesos", documentos: "Biblioteca", muestras: "Muestras", ensayos: "Ensayos", informes: "Informes", equipos: "Equipos", inventario: "Inventario", calidad: "Calidad", compras: "Compras" };
+const NOMBRE_MODULO: Record<string, string> = { usuarios: "Usuarios y accesos", documentos: "Biblioteca", muestras: "Muestras", ensayos: "Ensayos", informes: "Informes", equipos: "Equipos", inventario: "Inventario", calidad: "Calidad", respaldos: "Respaldos", compras: "Compras" };
 const unirConY = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}`);
 function permisosEnPalabras(filas: unknown): Map<string, string> {
   const out = new Map<string, string>();
@@ -898,6 +898,13 @@ function redactar(record: ApiRecord, actor: string, sistema: boolean): Partes {
       return sistema
         ? { accion: "Se creó un respaldo automático", quePaso: "La plataforma guardó automáticamente una copia de seguridad de toda su información.", sinActor: true }
         : { accion: "creó un respaldo", quePaso: `${quien} guardó una copia de seguridad de toda la información de la plataforma.` };
+    case "respaldo_fallido":
+      return { accion: "falló la creación de un respaldo", quePaso: `No se pudo terminar un respaldo${sistema ? "" : ` que ${quien} intentó crear`}. Revisa que haya espacio en el disco.`, sinActor: sistema };
+    case "probar_restauracion": {
+      const res = String(d.resultado || "");
+      const frase = res === "aprobada" ? "La prueba salió bien: el respaldo se puede recuperar." : res === "fallida" ? "La prueba encontró problemas: no confíes en ese respaldo hasta revisarlo." : "La prueba no pudo terminarse.";
+      return { accion: `probó la restauración de un respaldo${res === "aprobada" ? " (salió bien)" : res === "fallida" ? " (encontró problemas)" : ""}`, quePaso: `${quien} probó recuperar un respaldo en una copia aparte, sin tocar la plataforma. ${frase}` };
+    }
     case "restaurar_respaldo":
       return { accion: "Se restauró un respaldo", quePaso: `La información de la plataforma se recuperó desde una copia de seguridad${d.responsable ? `; lo hizo ${texto(d.responsable)}` : ""}.`, sinActor: true };
     case "reportar":

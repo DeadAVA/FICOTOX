@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
-import { CalendarBlank, Certificate, ChartLine, Eye, FileText, Flask, HandPalm, HourglassLow, ListChecks, Package, Pause, PaperPlaneTilt, PencilLine, Ruler, SealCheck, ShieldWarning, Stamp, TestTube, UserMinus, UserSwitch, WarningDiamond, Wrench } from "@phosphor-icons/react";
+import { CalendarBlank, Certificate, ChartLine, ClockCounterClockwise, Database, Eye, FileText, Flask, HandPalm, HourglassLow, ListChecks, Package, Pause, PaperPlaneTilt, PencilLine, Ruler, SealCheck, ShieldWarning, Stamp, TestTube, UserMinus, UserSwitch, WarningDiamond, Wrench } from "@phosphor-icons/react";
 import type { Pendiente } from "./tipos";
 
 /* Pendientes de la persona (de /inicio/avisos): etiquetas, iconos y tonos que comparten las píldoras del Inicio y la campana. */
 
 /* Etiqueta corta e icono de cada tipo de pendiente (Para ti y campana). */
 export const CORTO: Record<string, { label: string; icono: ReactNode }> = {
+  respaldo_viejo: { label: "Sin respaldo reciente", icono: <Database weight="duotone" /> },
+  prueba_vieja: { label: "Sin prueba de restauración", icono: <ClockCounterClockwise weight="duotone" /> },
   bitacora_alterada: { label: "Cambio no autorizado", icono: <ShieldWarning weight="duotone" /> },
   por_supervisar: { label: "Por supervisar", icono: <Eye weight="duotone" /> },
   por_autorizar: { label: "Por autorizar", icono: <Stamp weight="duotone" /> },

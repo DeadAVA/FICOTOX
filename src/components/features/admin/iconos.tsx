@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Books, Crown, Flask, GearSix, GraduationCap, Medal, MagnifyingGlass, Package, ShieldCheck, ShoppingCart, TestTube, Users, Wrench, Archive, ClipboardText, FileText, SealCheck, Microscope } from "@phosphor-icons/react";
+import { Books, Crown, Database, Flask, GearSix, GraduationCap, Medal, MagnifyingGlass, Package, ShieldCheck, ShoppingCart, TestTube, Users, Wrench, Archive, ClipboardText, FileText, SealCheck, Microscope } from "@phosphor-icons/react";
 import { cn } from "@/components/ui/cn";
 import type { IconoRol as ClaveIcono } from "@/lib/shared/roles-descripcion";
 
@@ -38,6 +38,7 @@ const ICONOS_AREA: Record<string, ReactNode> = {
   calidad: <SealCheck size={18} weight="duotone" />,
   documentos: <Books size={18} weight="duotone" />,
   usuarios: <Users size={18} weight="duotone" />,
+  respaldos: <Database size={18} weight="duotone" />,
   compras: <ShoppingCart size={18} weight="duotone" />,
 };
 

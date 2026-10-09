@@ -43,7 +43,7 @@ const AREAS: Array<{ value: string; label: string; entidades: string[] }> = [
   { value: "informes", label: "Informes", entidades: ["informes"] },
   { value: "inventario", label: "Inventario", entidades: ["reactivos", "consumibles"] },
   { value: "equipos", label: "Equipos", entidades: ["equipos", "mantenimientos", "reportes_mantenimiento"] },
-  { value: "calidad", label: "Calidad", entidades: ["incidencias", "no_conformidades", "acciones_correctivas", "suspensiones", "auditoria"] },
+  { value: "calidad", label: "Calidad", entidades: ["incidencias", "no_conformidades", "acciones_correctivas", "suspensiones", "respaldos", "auditoria"] },
   { value: "biblioteca", label: "Biblioteca", entidades: ["biblioteca_documentos", "biblioteca_categorias", "documentos_sgc"] },
   { value: "usuarios", label: "Usuarios y accesos", entidades: ["usuarios", "roles", "sesion"] },
 ];

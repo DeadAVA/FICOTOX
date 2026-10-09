@@ -4,15 +4,13 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 /*
- * La pantalla Respaldos se retiró: los respaldos y las pruebas de restauración se
- * hacen por línea de comandos (npm run respaldar, npm run restaurar, tarea
- * programada) y su estado se revisa con npm run verificar-instalacion. La ruta
- * anterior lleva al Inicio.
+ * Los respaldos viven en Calidad › Respaldos. La ruta anterior
+ * (Administración › Respaldos) lleva a la nueva para no romper enlaces guardados.
  */
 export default function RespaldosRedirect() {
   const router = useRouter();
   useEffect(() => {
-    router.replace("/");
+    router.replace("/calidad/respaldos");
   }, [router]);
   return null;
 }

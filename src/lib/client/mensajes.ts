@@ -62,6 +62,7 @@ const MODULO: Record<string, string> = {
   equipos: "equipos",
   inventario: "inventario",
   calidad: "calidad",
+  respaldos: "respaldos",
   compras: "compras",
 };
 const ACCION: Record<string, string> = { V: "ver", C: "registrar", E: "editar", R: "revisar", A: "aprobar", AN: "anular", G: "administrar" };

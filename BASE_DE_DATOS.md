@@ -40,7 +40,7 @@ Todo lo que dice se tomó del código (`src/lib/server/db.ts`, `config.ts`, `mig
 | Archivo | `instance/ficotox.sqlite3` por omisión (se cambia con `SQLITE_PATH` o `DATABASE_URL`). |
 | Tamaño de la base | La decisión de motor (Fase 12) registró 0,4 MB en la base real de entonces; ver sección 13 para la advertencia sobre ese dato. |
 | Tablas | **44 tablas de datos** + 2 de control de migraciones (`schema_migraciones`, `schema_migraciones_bloqueo`). Ver sección 3. |
-| Versión del esquema | **17** (la última migración es la `0017`; la primera es la `0009`). |
+| Versión del esquema | **18** (la última migración es la `0018`; la primera es la `0009`). |
 | Dentro de la base | Datos capturados, usuarios, roles y permisos, folios, estados, bitácora de auditoría, huellas SHA-256 de los archivos. |
 | Fuera de la base | PDF de informes y evidencias de envío, evidencias de análisis, Biblioteca, PDF de no conformidades, fotos de perfil, reportes de mantenimiento, la llave de la bitácora (`auditoria.key`, si se usa) y los registros del servidor. Ver sección 8. |
 
@@ -762,6 +762,7 @@ Están en `src/lib/server/migraciones/` y se registran en `motor.mjs`:
 | 15 | `notificaciones_leidas` |
 | 16 | Foto de perfil (`usuarios.foto`, `usa_foto`) |
 | 17 | `busqueda_recientes` |
+| 18 | Permisos del módulo «Respaldos» (Calidad › Respaldos): solo datos en `rol_acciones`, sin cambios de estructura |
 
 (Empiezan en la 9 para coincidir con los respaldos anteriores, que usaban 10 y 11 como número de esquema.)
 
@@ -897,7 +898,7 @@ El respaldo **nunca** incluye `JWT_SECRET`, la contraseña SMTP ni otro secreto 
 6. **Renombra** la carpeta temporal a su nombre final: un respaldo a medias nunca aparece en la lista.
 7. Aplica la **retención** (`RESPALDO_RETENCION`, 30 por omisión): borra los más antiguos, **salvo el último respaldo verificado** con una prueba de restauración aprobada, que nunca se elimina.
 
-El respaldo por terminal no escribe en la bitácora (su registro es el manifest). El script de Python (`backup_ficotox.py`) llama a `respaldar-ficotox.mjs` y empaqueta la carpeta del respaldo en un `.zip` para la **copia externa** (carpeta de OneDrive, `rclone` o Microsoft Graph), **sin la llave** salvo que se pida `--incluir-llave`. Si la base es MySQL/MariaDB, ese mismo script ejecuta `mysqldump`. **No está claro en el código** con qué frecuencia se usa la copia externa en cada instalación: depende de cómo se programe la tarea.
+El respaldo por terminal no escribe en la bitácora (su registro es el manifest); los que se crean desde **Calidad › Respaldos** (solo con el permiso `respaldos:G`) sí dejan la entrada «creó un respaldo», y las pruebas de restauración desde esa pantalla dejan «probó la restauración». El script de Python (`backup_ficotox.py`) llama a `respaldar-ficotox.mjs` y empaqueta la carpeta del respaldo en un `.zip` para la **copia externa** (carpeta de OneDrive, `rclone` o Microsoft Graph), **sin la llave** salvo que se pida `--incluir-llave`. Si la base es MySQL/MariaDB, ese mismo script ejecuta `mysqldump`. **No está claro en el código** con qué frecuencia se usa la copia externa en cada instalación: depende de cómo se programe la tarea.
 
 Antes de cada migración y de cada actualización se hace además un respaldo automático (`pre-migracion`, `pre-actualizacion`).
 

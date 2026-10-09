@@ -328,6 +328,7 @@ function EditorPermisos({ role, iniciales, onCancelar, onGuardado }: { role: Api
                     <div className="text-[11.5px] text-ink-3">{area.detalle}</div>
                   </td>
                   {ACCION_KEYS.map((accion) => {
+                    if (area.acciones && !area.acciones.includes(accion)) return <td key={accion} className="px-1 py-2" />;
                     const alcance = matriz[celda(area.clave, accion)] || null;
                     const nombre = `${ACCIONES_LEGIBLES[accion].columna} en ${area.nombre}`;
                     return (
@@ -336,7 +337,7 @@ function EditorPermisos({ role, iniciales, onCancelar, onGuardado }: { role: Api
                           <Checkbox className="inline-flex" aria-label={nombre} checked={!!alcance} onChange={(event) => toggle(area.clave, accion, event.target.checked)} />
                           {alcance ? (
                             <select aria-label={`Hasta dónde: ${nombre}`} value={alcance} onChange={(event) => setAlcance(area.clave, accion, event.target.value)} className="w-[104px] rounded-[6px] border border-line bg-surface px-1 py-0.5 text-[11px] text-ink-2">
-                              {ALCANCES.map((a) => (
+                              {ALCANCES.filter((a) => !area.soloTotal || a.clave === "total").map((a) => (
                                 <option key={a.clave} value={a.clave}>
                                   {ALCANCES_LEGIBLES[a.clave]?.opcion || a.nombre}
                                 </option>
