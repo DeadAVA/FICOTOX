@@ -9,9 +9,8 @@ import { Skeleton } from "@/components/ui/Primitives";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { deadlineTone, fmt } from "@/lib/client/format";
 import { useResource } from "@/lib/client/store";
-import { haceCuantoCorto } from "@/lib/client/tiempo";
 import type { ApiRecord } from "@/lib/client/types";
-import { diasEntre, formatearFechaCorta, formatearFechaHora, hoyLocal } from "@/lib/shared/fechas";
+import { diasEntre, fechaSola, formatearFechaCorta, formatearFechaHora, hoyLocal } from "@/lib/shared/fechas";
 
 /*
  * Piezas comunes de Inventario (Reactivos, Consumibles, Equipos,
@@ -185,6 +184,13 @@ export const cantidadMovimiento = (m: ApiRecord): number => Math.abs(Number(m.ca
 export const TIPO_MOVIMIENTO: Record<string, string> = { entrada: "Entrada", salida: "Salida", consumo: "Consumo", ajuste: "Ajuste por conteo" };
 export const tipoMovimiento = (m: ApiRecord): string => TIPO_MOVIMIENTO[String(m.tipo || "").toLowerCase()] || (esEntrada(m) ? "Entrada" : "Salida");
 
+/* Fecha principal del movimiento (la que ocurrio) y si difiere del dia de captura. */
+export function fechaDelMovimiento(m: ApiRecord): { fecha: string; captura: string; distinta: boolean } {
+  const captura = fechaSola(m.fecha_hora);
+  const fecha = m.fecha_movimiento ? fechaSola(m.fecha_movimiento) : captura;
+  return { fecha, captura, distinta: !!captura && fecha !== captura };
+}
+
 const RUTA_VINCULO: Record<string, [string, string]> = { recepcion: ["Recepción", "/muestras/recepcion"], procesamiento: ["Procesamiento", "/muestras/procesamiento"], extraccion: ["Extracción", "/muestras/extraccion"], analisis: ["Análisis", "/muestras/analisis"] };
 
 /*
@@ -260,7 +266,7 @@ export function MovimientosRecientes({ tabla, id, unidad }: { tabla: "reactivos"
                 ) : (
                   origen.texto
                 )}{" "}
-                · <span title={formatearFechaHora(m.fecha_hora)}>{haceCuantoCorto(m.fecha_hora)}</span>
+                · <span title={`Capturado: ${formatearFechaHora(m.fecha_hora)}`}>{formatearFechaCorta(fechaDelMovimiento(m).fecha)}</span>
               </span>
             </div>
           </li>

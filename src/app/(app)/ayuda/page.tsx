@@ -267,7 +267,7 @@ export default function AyudaPage() {
           <Section anchor="inventario" title="Inventario y avisos" lead="Reactivos, consumibles y equipos con sus existencias, caducidades, calibraciones y mantenimientos. Los formatos descuentan solos lo que usan.">
             <ul className="flex flex-col gap-2">
               <li>
-                <b>Existencias.</b> Cada reactivo y consumible muestra un medidor: cuánto queda frente a su capacidad y el mínimo. «Stock bajo» es por debajo del mínimo (o del 20 % si no hay mínimo); en consumibles, 5 piezas o menos. <b>Reponer</b> registra una entrada.
+                <b>Existencias.</b> Cada reactivo y consumible muestra un medidor: cuánto queda frente a su capacidad y el mínimo. «Stock bajo» es por debajo del mínimo (o del 20 % si no hay mínimo); los consumibles se cuentan en unidades (no en cajas) y avisan con 5 unidades o menos si no tienen mínimo propio. <b>Registrar movimiento</b> anota entradas, salidas, consumos o ajustes por conteo.
               </li>
               <li>
                 <b>Equipos y mantenimiento.</b> Programar un mantenimiento pone el equipo <b>En mantenimiento</b>; al completarlo vuelve a <b>Operativo</b> y, si fue calibración, actualiza la próxima fecha. Una calibración vencida se marca en el equipo y en los avisos.

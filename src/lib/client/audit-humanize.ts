@@ -271,6 +271,7 @@ const FIELD: Record<string, string> = {
   cantidad_actual: "la existencia",
   cantidad: "la cantidad",
   piezas: "las piezas",
+  existencia: "la existencia",
   cantidad_por_pieza: "la cantidad por pieza",
   stock_minimo: "la existencia mínima",
   stock_maximo: "la existencia máxima",
@@ -354,7 +355,7 @@ const PERSON_FIELDS = new Set(["supervisor_id", "id_responsable", "responsable_i
 /* Datos de texto largo: se cita el texto nuevo en vez de "de … a …". */
 const LONG_FIELDS = new Set(["descripcion", "observaciones", "observaciones_generales", "observacion", "especificaciones", "revision_observaciones", "devolucion_observaciones", "supervision_observaciones", "accion_inmediata", "justificacion", "impacto_notas", "desarrollo_causa", "causa_raiz", "justificacion_sin_accion", "nota_riesgos", "conclusion", "alcance", "desviaciones", "descargo", "opiniones", "motivo_enmienda", "requiere_enmienda_motivo", "motivo_ultimo_cambio", "baja_motivo", "motivo_anulacion"]);
 /* Cantidades que suben o bajan. */
-const QUANTITY_FIELDS = new Set(["cantidad_actual", "cantidad", "piezas", "stock_minimo", "stock_maximo"]);
+const QUANTITY_FIELDS = new Set(["cantidad_actual", "existencia", "cantidad", "piezas", "stock_minimo", "stock_maximo"]);
 
 const sinArticulo = (n: string) => n.replace(/^(el|la|los|las) /, "");
 const fieldLabel = (key: string): string | null => (FIELD[key] ? cap(sinArticulo(FIELD[key])) : null);
@@ -750,13 +751,14 @@ function redactar(record: ApiRecord, actor: string, sistema: boolean): Partes {
       return { accion: `eliminó ${O}`, quePaso: `${quien} eliminó ${O}.` };
     case "reponer": {
       const mov = String(d.tipo || "entrada");
+      const cuandoMov = d.fecha_movimiento ? ` (movimiento del ${formatearFecha(d.fecha_movimiento)})` : "";
       if (mov === "salida" || mov === "consumo") {
         const c = Number(d.cantidad) ? ` de ${numero(Number(d.cantidad))}` : "";
-        return { accion: `registró ${mov === "consumo" ? "un consumo" : "una salida"} de ${ref || meta.noun} del inventario`, quePaso: `${quien} registró ${mov === "consumo" ? "un consumo" : "una salida"}${c} de ${ref || `un ${meta.noun}`} del inventario.` };
+        return { accion: `registró ${mov === "consumo" ? "un consumo" : "una salida"} de ${ref || meta.noun} del inventario`, quePaso: `${quien} registró ${mov === "consumo" ? "un consumo" : "una salida"}${c} de ${ref || `un ${meta.noun}`} del inventario${cuandoMov}.` };
       }
       if (mov === "ajuste") return { accion: `ajustó la existencia de ${ref || meta.noun} por conteo físico`, quePaso: `${quien} ajustó la existencia de ${ref || `un ${meta.noun}`} por conteo físico${Number.isFinite(Number(d.existencia_nueva)) && d.existencia_nueva !== null ? ` (quedó en ${numero(Number(d.existencia_nueva))})` : ""}.` };
       const cant = Number(d.cantidad) ? ` de ${numero(Number(d.cantidad))} ${Number(d.cantidad) === 1 ? "unidad" : "unidades"}` : "";
-      return { accion: `registró una entrada de ${ref || meta.noun} al inventario`, quePaso: `${quien} registró una entrada${cant} de ${ref || `un ${meta.noun}`} al inventario.` };
+      return { accion: `registró una entrada de ${ref || meta.noun} al inventario`, quePaso: `${quien} registró una entrada${cant} de ${ref || `un ${meta.noun}`} al inventario${cuandoMov}.` };
     }
     case "login":
       return { accion: "entró a la plataforma", quePaso: `${quien} entró a la plataforma.` };

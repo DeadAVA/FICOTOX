@@ -11,7 +11,7 @@ import { ColumnasVentana, DatoLateral, DatosLista, DatosRapidos, TarjetaLateral,
 import { API_BASE_URL } from "@/lib/client/api";
 import { openProtectedFile } from "@/lib/client/files";
 import { fmt } from "@/lib/client/format";
-import { cantidadMovimiento, origenDeMovimiento, esEntrada, tipoMovimiento, IconoEquipo, IconoMantenimiento, IconoMovimientoInsumo, IconoOrigen, moverEn } from "./comun";
+import { cantidadMovimiento, fechaDelMovimiento, origenDeMovimiento, esEntrada, tipoMovimiento, IconoEquipo, IconoMantenimiento, IconoMovimientoInsumo, IconoOrigen, moverEn } from "./comun";
 import { cn } from "@/components/ui/cn";
 import { haceCuantoCorto } from "@/lib/client/tiempo";
 import type { ApiRecord } from "@/lib/client/types";
@@ -181,9 +181,9 @@ function FichaMovimiento({ m }: { m: ApiRecord }) {
             </span>
           </div>
           <div className="flex flex-col items-end gap-0.5 text-right">
-            <span className="text-[14px] font-medium text-ink">{formatearFechaCorta(m.fecha_hora)}</span>
+            <span className="text-[14px] font-medium text-ink">{formatearFechaCorta(fechaDelMovimiento(m).fecha)}</span>
             <span className="text-[12.5px] text-ink-3" title={formatearFechaHora(m.fecha_hora)}>
-              {formatearHora(m.fecha_hora)} · {haceCuantoCorto(m.fecha_hora).toLowerCase()}
+              {fechaDelMovimiento(m).distinta ? `Capturado el ${formatearFechaCorta(fechaDelMovimiento(m).captura)}` : `${formatearHora(m.fecha_hora)} · ${haceCuantoCorto(m.fecha_hora).toLowerCase()}`}
             </span>
           </div>
         </div>
@@ -198,7 +198,8 @@ function FichaMovimiento({ m }: { m: ApiRecord }) {
               { etiqueta: "Tipo", valor: tipoMovimiento(m) },
               m.usuario ? { etiqueta: "Registró", valor: String(m.usuario) } : null,
               m.motivo ? { etiqueta: "Motivo", valor: String(m.motivo) } : null,
-              { etiqueta: "Fecha y hora", valor: formatearFechaHora(m.fecha_hora) },
+              { etiqueta: "Fecha del movimiento", valor: formatearFechaCorta(fechaDelMovimiento(m).fecha) },
+              { etiqueta: "Capturado", valor: formatearFechaHora(m.fecha_hora) },
             ]}
           />
         </VentanaTarjeta>

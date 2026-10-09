@@ -77,7 +77,7 @@ const VISTAS: Def[] = [
   { titulo: "Informes enviados", sub: "Enviados por correo al cliente", href: "/informes?filtro=enviado", permiso: (a) => a.can("informes"), kw: "informes enviados entregados correo historial" },
   { titulo: "Reactivos con stock bajo", sub: "Por debajo del mínimo o agotados", href: "/inventario/reactivos?filtro=bajo", permiso: (a) => a.can("inventario"), kw: "reactivos stock bajo agotado minimo" },
   { titulo: "Reactivos por vencer", sub: "Caducan pronto o ya caducaron", href: "/inventario/reactivos?filtro=vencer", permiso: (a) => a.can("inventario"), kw: "reactivos caducidad vencer vencidos" },
-  { titulo: "Consumibles con stock bajo", sub: "5 piezas o menos", href: "/inventario/consumibles?filtro=bajo", permiso: (a) => a.can("inventario"), kw: "consumibles stock bajo agotado" },
+  { titulo: "Consumibles con stock bajo", sub: "Poca existencia en unidades", href: "/inventario/consumibles?filtro=bajo", permiso: (a) => a.can("inventario"), kw: "consumibles stock bajo agotado" },
   { titulo: "Equipos con alerta de calibración", sub: "Calibración vencida, pendiente o fuera de servicio", href: "/inventario/equipos?filtro=calibracion", permiso: (a) => a.can("equipos"), kw: "equipos calibracion vencida pendiente fuera de servicio" },
   { titulo: "Equipos en mantenimiento", sub: "Con un mantenimiento pendiente", href: "/inventario/equipos?filtro=mantenimiento", permiso: (a) => a.can("equipos"), kw: "equipos mantenimiento" },
   { titulo: "Mantenimientos vencidos", sub: "Programados y no realizados a tiempo", href: "/inventario/mantenimiento?filtro=vencido", permiso: (a) => a.can("equipos"), kw: "mantenimientos vencidos atrasados" },

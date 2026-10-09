@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ArrowsLeftRight } from "@phosphor-icons/react";
-import { cantidadMovimiento, esEntrada, IconoMovimientoInsumo, origenDeMovimiento, tipoMovimiento } from "@/components/features/inventory/ventanas/comun";
+import { cantidadMovimiento, esEntrada, fechaDelMovimiento, IconoMovimientoInsumo, origenDeMovimiento, tipoMovimiento } from "@/components/features/inventory/ventanas/comun";
 import { MovimientoVentana, nombreInsumo } from "@/components/features/inventory/ventanas/MantenimientoVentana";
 import { PageBody } from "@/components/shell/AppShell";
 import { RequireModule } from "@/components/session/RequireModule";
@@ -13,9 +13,8 @@ import { PageHeader, SearchInput, Toolbar } from "@/components/ui/PageHeader";
 import { API_BASE_URL, getJsonAuth } from "@/lib/client/api";
 import { fmt, normalizeText } from "@/lib/client/format";
 import { useResource } from "@/lib/client/store";
-import { haceCuantoCorto } from "@/lib/client/tiempo";
 import type { ApiRecord } from "@/lib/client/types";
-import { formatearFechaHora } from "@/lib/shared/fechas";
+import { formatearFechaCorta, formatearFechaHora } from "@/lib/shared/fechas";
 import { useInitialParam, useParamChange } from "@/lib/client/hooks";
 
 /*
@@ -33,7 +32,7 @@ const COLUMNAS: ColumnaLista[] = [
   { clave: "insumo", titulo: "Insumo", ancho: "minmax(240px,1.6fr)" },
   { clave: "cantidad", titulo: "Cantidad", ancho: "120px" },
   { clave: "motivo", titulo: "Motivo y origen", ancho: "minmax(200px,1.4fr)" },
-  { clave: "cuando", titulo: "Cuándo", ancho: "130px" },
+  { clave: "cuando", titulo: "Fecha", ancho: "150px" },
 ];
 
 export default function MovimientosPage() {
@@ -141,8 +140,9 @@ function MovimientosContent() {
         {item.unidad ? <span className="ml-1 text-[12px] font-normal">{String(item.unidad)}</span> : null}
       </span>,
       <span key="m" className="text-[13.5px] text-ink-2">{origen.texto}</span>,
-      <span key="w" className="text-[13px] text-ink-2" title={formatearFechaHora(item.fecha_hora)}>
-        {haceCuantoCorto(item.fecha_hora)}
+      <span key="w" className="flex flex-col text-[13px] text-ink-2" title={`Capturado: ${formatearFechaHora(item.fecha_hora)}`}>
+        {formatearFechaCorta(fechaDelMovimiento(item).fecha)}
+        {fechaDelMovimiento(item).distinta ? <span className="text-[11.5px] text-ink-4">Capturado el {formatearFechaCorta(fechaDelMovimiento(item).captura)}</span> : null}
       </span>,
     ];
   };

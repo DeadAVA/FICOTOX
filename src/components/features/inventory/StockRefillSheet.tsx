@@ -4,11 +4,13 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { useSession } from "@/components/session/SessionProvider";
 import { Button } from "@/components/ui/Button";
+import { DateInput } from "@/components/ui/DateInput";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { Sheet } from "@/components/ui/Overlay";
 import { API_BASE_URL, sendJsonAuth } from "@/lib/client/api";
 import { parseNumberOrNull } from "@/lib/client/format";
 import { invalidate } from "@/lib/client/store";
+import { hoyLocal } from "@/lib/shared/fechas";
 import { useValidacion, ValidacionAmbito } from "@/components/ui/Validacion";
 import { msg } from "@/lib/client/mensajes";
 
@@ -39,12 +41,13 @@ export function StockRefillSheet({ open, target, onClose }: { open: boolean; tar
   const [tipo, setTipo] = useState("entrada");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
+  const [fecha, setFecha] = useState(() => hoyLocal());
   const [vinculo, setVinculo] = useState("");
   const [folio, setFolio] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const isReactivo = target?.type === "reactivo";
   const ajuste = tipo === "ajuste";
-  const unidad = isReactivo ? target?.unit || "" : "piezas";
+  const unidad = isReactivo ? target?.unit || "" : "unidades";
   const v = useValidacion({
     titulo: "No se pudo registrar el movimiento",
     reglas: () => {
@@ -52,6 +55,8 @@ export function StockRefillSheet({ open, target, onClose }: { open: boolean; tar
       const value = parseNumberOrNull(amount);
       if (value === null || (ajuste ? value < 0 : value <= 0)) out.push({ campo: "refill-amount", mensaje: amount.trim() ? (ajuste ? "La cantidad contada no puede ser negativa" : msg.positivo("La cantidad")) : msg.indica(ajuste ? "la cantidad contada" : "la cantidad") });
       if (ajuste && !reason.trim()) out.push({ campo: "refill-reason", mensaje: msg.indica("el motivo del ajuste") });
+      if (!fecha) out.push({ campo: "refill-fecha", mensaje: msg.indica("la fecha del movimiento") });
+      else if (fecha > hoyLocal()) out.push({ campo: "refill-fecha", mensaje: "La fecha del movimiento no puede ser futura" });
       if (vinculo && !folio.trim()) out.push({ campo: "refill-folio", mensaje: msg.indica("el folio de la muestra o del análisis") });
       return out;
     },
@@ -64,7 +69,7 @@ export function StockRefillSheet({ open, target, onClose }: { open: boolean; tar
     const value = parseNumberOrNull(amount) as number;
     setSubmitting(true);
     try {
-      const payload: Record<string, unknown> = { tipo, cantidad: value, motivo: reason.trim() || undefined };
+      const payload: Record<string, unknown> = { tipo, cantidad: value, motivo: reason.trim() || undefined, fecha_movimiento: fecha };
       if (vinculo) {
         payload.vinculo_tipo = vinculo;
         payload.vinculo_folio = Number(folio);
@@ -111,6 +116,9 @@ export function StockRefillSheet({ open, target, onClose }: { open: boolean; tar
         </Field>
         <Field label={`${ajuste ? "Cantidad contada" : "Cantidad"}${unidad ? ` (${unidad})` : ""}`} htmlFor="refill-amount" required>
           <Input id="refill-amount" type="number" inputMode="decimal" min="0" step="any" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Ejemplo: 2.5" autoFocus />
+        </Field>
+        <Field label="Fecha del movimiento" htmlFor="refill-fecha" hint="Hoy por defecto. Cámbiala si el movimiento ocurrió antes de capturarlo; no puede ser futura.">
+          <DateInput id="refill-fecha" value={fecha} onChange={setFecha} max={hoyLocal()} />
         </Field>
         <Field label={ajuste ? "Motivo" : "Motivo u observación"} htmlFor="refill-reason" required={ajuste} hint="Queda registrado en el historial de movimientos.">
           <Textarea id="refill-reason" rows={2} maxLength={180} value={reason} onChange={(event) => setReason(event.target.value)} />

@@ -38,7 +38,6 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
   const set = (key: keyof typeof form) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((prev) => ({ ...prev, [key]: event.target.value }));
   const piezas = Number(form.piezas);
   const porPieza = Number(form.cantidadPieza);
-  const total = form.piezas && form.cantidadPieza && Number.isFinite(piezas) && Number.isFinite(porPieza) ? Math.round(piezas * porPieza * 1e6) / 1e6 : null;
   const contenedores = form.contenedor && !CONTENEDORES_CONSUMIBLE.includes(form.contenedor) ? [...CONTENEDORES_CONSUMIBLE, form.contenedor] : CONTENEDORES_CONSUMIBLE;
   const v = useValidacion({
     titulo: editing ? "No se pudo guardar el consumible" : "No se pudo crear el consumible",
@@ -147,8 +146,8 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
               ))}
             </Select>
           </Field>
-          <Field label="Piezas" htmlFor="c-piezas" hint={editing ? "La existencia cambia con movimientos: usa Registrar movimiento." : "Acepta decimales (por ejemplo, 2.5 cajas)."}>
-            <Input id="c-piezas" type="number" min="0" step="any" inputMode="decimal" value={form.piezas} onChange={set("piezas")} disabled={editing} />
+          <Field label="Piezas" htmlFor="c-piezas" hint="Dato del empaque; acepta decimales (por ejemplo, 2.5 cajas). La existencia se maneja en unidades con movimientos.">
+            <Input id="c-piezas" type="number" min="0" step="any" inputMode="decimal" value={form.piezas} onChange={set("piezas")} />
           </Field>
           <Field label="Cantidad por pieza" htmlFor="c-cantidad">
             <Input id="c-cantidad" type="number" min="0" step="any" inputMode="decimal" value={form.cantidadPieza} onChange={set("cantidadPieza")} />
@@ -156,12 +155,12 @@ export function ConsumibleSheet({ open, item, onClose }: { open: boolean; item: 
           <Field label="Localización" htmlFor="c-localizacion">
             <Input id="c-localizacion" maxLength={150} value={form.localizacion} onChange={set("localizacion")} />
           </Field>
-          <Field label="Stock mínimo" htmlFor="c-minimo" hint="Opcional. Al llegar a esta cantidad de piezas aparece el aviso de stock bajo (sin mínimo, con 5 o menos).">
+          <Field label="Stock mínimo" htmlFor="c-minimo" hint="Opcional. Opcional, en unidades. Al llegar a esta cantidad aparece el aviso de stock bajo (sin mínimo, con 5 unidades o menos).">
             <Input id="c-minimo" type="number" min="0" step="any" inputMode="decimal" value={form.stockMinimo} onChange={set("stockMinimo")} />
           </Field>
         </FormGrid>
         <p className="text-[13.5px] text-ink-2">
-          Total: <b className="tnum text-ink">{total !== null ? `${total.toLocaleString("es-MX")} unidades` : "—"}</b> (piezas × cantidad por pieza)
+          Total: <b className="tnum text-ink">{form.piezas && Number.isFinite(piezas) ? `${(piezas * (form.cantidadPieza && Number.isFinite(porPieza) && porPieza > 0 ? porPieza : 1)).toLocaleString("es-MX")} unidades` : "—"}</b> (piezas × cantidad por pieza). {editing ? "La existencia actual cambia solo con movimientos." : "Es la existencia inicial, en unidades."}
         </p>
         <Field label="Observaciones" htmlFor="c-observaciones">
           <Textarea id="c-observaciones" rows={3} maxLength={1000} value={form.observaciones} onChange={set("observaciones")} />

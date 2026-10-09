@@ -208,15 +208,16 @@ function FichaReactivo({ item, acciones }: { item: ApiRecord; acciones: Acciones
 
 function FichaConsumible({ item, acciones }: { item: ApiRecord; acciones: AccionesInsumo }) {
   const nombre = String(item.producto || "Consumible");
-  const piezas = parseNumberOrNull(item.piezas) ?? 0;
-  const maximo = parseNumberOrNull(item.stock_maximo) || piezas;
+  const unidades = parseNumberOrNull(item.existencia) ?? 0;
+  const piezasEmpaque = parseNumberOrNull(item.piezas);
+  const maximo = parseNumberOrNull(item.stock_maximo) || unidades;
   const inactivo = Number(item.activo ?? 1) === 0;
   const minimo = parseNumberOrNull(item.stock_minimo) || 5;
   const porPieza = parseNumberOrNull(item.cantidad_por_pieza);
   const cad = caducidadDe(item.caducidad);
   const datos: DatoRapido[] = [
-    { icono: <Gauge size={17} weight="duotone" />, etiqueta: "Existencia", valor: `${fmt(piezas)} ${piezas === 1 ? "pieza" : "piezas"}`, tono: piezas <= 0 ? "danger" : piezas <= minimo ? "warning" : "brand" },
-    { icono: <WarningCircle size={17} weight="duotone" />, etiqueta: "Mínimo", valor: `${fmt(minimo)} piezas`, titulo: item.stock_minimo ? undefined : "Sin mínimo propio: avisa con 5 piezas o menos" },
+    { icono: <Gauge size={17} weight="duotone" />, etiqueta: "Existencia", valor: `${fmt(unidades)} ${unidades === 1 ? "unidad" : "unidades"}`, tono: unidades <= 0 ? "danger" : unidades <= minimo ? "warning" : "brand" },
+    { icono: <WarningCircle size={17} weight="duotone" />, etiqueta: "Mínimo", valor: `${fmt(minimo)} unidades`, titulo: item.stock_minimo ? undefined : "Sin mínimo propio: avisa con 5 unidades o menos" },
     { icono: <CalendarBlank size={17} weight="duotone" />, etiqueta: "Caducidad", valor: cad ? cad.texto : "Sin fecha", tono: cad?.tono || "brand" },
     { icono: <Tag size={17} weight="duotone" />, etiqueta: "Lote", valor: item.lote ? String(item.lote) : "—" },
   ];
@@ -233,9 +234,9 @@ function FichaConsumible({ item, acciones }: { item: ApiRecord; acciones: Accion
       <ColumnasVentana
         principal={
           <>
-            <TarjetaExistencia actual={piezas} maximo={maximo || null} minimo={minimo} unidad="piezas" baja={piezas <= minimo} vacia={piezas <= 0} nota={`Aviso de existencia baja con ${fmt(minimo)} piezas o menos`} />
+            <TarjetaExistencia actual={unidades} maximo={maximo || null} minimo={minimo} unidad="unidades" baja={unidades <= minimo} vacia={unidades <= 0} nota={`Aviso de existencia baja con ${fmt(minimo)} unidades o menos`} />
             <VentanaSeccion titulo="Movimientos recientes" i={2}>
-              <MovimientosRecientes tabla="consumibles" id={item.id} unidad="piezas" />
+              <MovimientosRecientes tabla="consumibles" id={item.id} unidad="unidades" />
             </VentanaSeccion>
             {item.observaciones ? (
               <VentanaSeccion titulo="Observaciones" i={2}>
@@ -252,7 +253,8 @@ function FichaConsumible({ item, acciones }: { item: ApiRecord; acciones: Accion
             <TarjetaLateral icono={<Package size={15} weight="duotone" />} titulo="Presentación" i={0}>
               {item.tamano_capacidad ? <DatoLateral etiqueta="Tamaño o capacidad">{String(item.tamano_capacidad)}</DatoLateral> : null}
               {porPieza ? <DatoLateral etiqueta="Cantidad por pieza">{fmt(porPieza)}</DatoLateral> : null}
-              {porPieza ? <DatoLateral etiqueta="Total">{`${fmt(piezas * porPieza)} unidades`}</DatoLateral> : null}
+              {piezasEmpaque !== null ? <DatoLateral etiqueta="Piezas del empaque">{fmt(piezasEmpaque)}</DatoLateral> : null}
+              {piezasEmpaque !== null ? <DatoLateral etiqueta="Total inicial">{`${fmt(piezasEmpaque * (porPieza || 1))} unidades`}</DatoLateral> : null}
               {item.contenedor ? <DatoLateral etiqueta="Contenedor">{String(item.contenedor)}</DatoLateral> : null}
               {item.id_interno ? <DatoLateral etiqueta="ID interno">{String(item.id_interno)}</DatoLateral> : null}
               {item.catalogo_parte_cas ? <DatoLateral etiqueta="Catálogo / parte">{String(item.catalogo_parte_cas)}</DatoLateral> : null}

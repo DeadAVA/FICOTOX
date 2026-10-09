@@ -211,7 +211,7 @@ async function fuenteInventario(request: Request, s: Session): Promise<Hit[]> {
   }
   for (const c of consumibles) {
     const nombre = String(c.producto || "");
-    out.push(hit({ clave: `c-${c.id}`, tipo: "consumible", grupo: "inventario", titulo: nombre, sub: join(c.piezas !== undefined && c.piezas !== null ? `${c.piezas} piezas` : null, c.marca, c.catalogo_parte_cas), href: `/inventario/consumibles?abrir=${c.id}`, etiqueta: "Consumible", lista: "/inventario/consumibles", palabras: [nombre, c.marca, c.catalogo_parte_cas, c.ubicacion, c.localizacion, "consumible"] }));
+    out.push(hit({ clave: `c-${c.id}`, tipo: "consumible", grupo: "inventario", titulo: nombre, sub: join(c.existencia !== undefined && c.existencia !== null ? `${c.existencia} unidades` : null, c.marca, c.catalogo_parte_cas), href: `/inventario/consumibles?abrir=${c.id}`, etiqueta: "Consumible", lista: "/inventario/consumibles", palabras: [nombre, c.marca, c.catalogo_parte_cas, c.ubicacion, c.localizacion, "consumible"] }));
   }
   for (const e of equipos) {
     const nombre = String(e.nombre || "");

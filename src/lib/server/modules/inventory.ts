@@ -242,7 +242,7 @@ export async function inventorySummary({ request, s }: RouteContext): Promise<Re
       (
         SELECT COUNT(*)
         FROM consumibles
-        WHERE COALESCE(activo, 1) = 1 AND COALESCE(piezas, 0) <= CASE WHEN COALESCE(stock_minimo, 0) > 0 THEN stock_minimo ELSE 5 END
+        WHERE COALESCE(activo, 1) = 1 AND COALESCE(existencia, 0) <= CASE WHEN COALESCE(stock_minimo, 0) > 0 THEN stock_minimo ELSE 5 END
       ) AS consumibles_stock_bajo,
       (
         SELECT COUNT(*)
@@ -332,9 +332,9 @@ export async function createReactivo({ request, s }: RouteContext): Promise<Resp
   const inicial = toFloatOrNull(data.cantidad_total);
   if (inicial !== null && inicial > 0) {
     await s.execute(
-      `INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario, unidad)
-       VALUES ('entrada', 'reactivos', :id, :cantidad, 'Existencia inicial', :referencia, :id_usuario, :unidad)`,
-      { id, cantidad: inicial, referencia: `reactivo-inicial-${id}`, id_usuario: userIdFromClaims(user), unidad: data.unidad_total },
+      `INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario, unidad, fecha_movimiento)
+       VALUES ('entrada', 'reactivos', :id, :cantidad, 'Existencia inicial', :referencia, :id_usuario, :unidad, :fecha_movimiento)`,
+      { id, cantidad: inicial, referencia: `reactivo-inicial-${id}`, id_usuario: userIdFromClaims(user), unidad: data.unidad_total, fecha_movimiento: hoyLocal() },
     );
   }
   await aplicarSupervision(s, "reactivos", id, supervision, userIdFromClaims(user));
@@ -404,7 +404,7 @@ export async function refillReactivo({ request, s, params }: RouteContext): Prom
   // `cantidad_actual` es la existencia canónica; las columnas heredadas solo se acompañan
   // cuando ya la reflejaban (mismo valor), para no inventar existencias en piezas o volumen.
   const current = toFloatOrNull(row.cantidad_actual) || 0;
-  const mov = await interpretarMovimiento(s, payload, current);
+  const mov = await interpretarMovimiento(s, await cargarAutorizacion(s, user), payload, current);
   const updates = ["cantidad_actual = COALESCE(cantidad_actual, 0) + :delta"];
   for (const legacy of ["restante_190126", "amount_in_stock"]) {
     const value = toFloatOrNull(row[legacy]);
@@ -428,8 +428,8 @@ export async function refillReactivo({ request, s, params }: RouteContext): Prom
 
   await s.execute(
     `
-    INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario, unidad, vinculo_tipo, vinculo_id)
-    VALUES (:tipo, 'reactivos', :id, :cantidad, :motivo, :referencia, :id_usuario, :unidad, :vinculo_tipo, :vinculo_id)
+    INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario, unidad, vinculo_tipo, vinculo_id, fecha_movimiento)
+    VALUES (:tipo, 'reactivos', :id, :cantidad, :motivo, :referencia, :id_usuario, :unidad, :vinculo_tipo, :vinculo_id, :fecha_movimiento)
     `,
     {
       tipo: mov.tipo,
@@ -441,10 +441,11 @@ export async function refillReactivo({ request, s, params }: RouteContext): Prom
       unidad: row.unidad || null,
       vinculo_tipo: mov.vinculoTipo,
       vinculo_id: mov.vinculoId,
+      fecha_movimiento: mov.fechaMovimiento,
     },
   );
   await aplicarSupervision(s, "reactivos", reactivoId, supervision, userIdFromClaims(user));
-  await registrarAuditoria(s, user, { accion: "reponer", entidad: "reactivos", entidadId: reactivoId, referencia: reactivoRef(row), motivo: mov.motivo, antes: row, despues: await snapshotRow(s, "reactivos", reactivoId), detalle: { tipo: mov.tipo, cantidad: mov.cantidad, existencia_anterior: current, existencia_nueva: currentAfter } });
+  await registrarAuditoria(s, user, { accion: "reponer", entidad: "reactivos", entidadId: reactivoId, referencia: reactivoRef(row), motivo: mov.motivo, antes: row, despues: await snapshotRow(s, "reactivos", reactivoId), detalle: { tipo: mov.tipo, fecha_movimiento: mov.fechaMovimiento, cantidad: mov.cantidad, existencia_anterior: current, existencia_nueva: currentAfter } });
   await s.commit();
   return json({ message: mov.tipo === "ajuste" ? "Existencia ajustada" : "Movimiento registrado" });
 }
@@ -670,7 +671,7 @@ export async function listConsumiblesInventory({ request, s }: RouteContext): Pr
     `
     SELECT id, id_interno, producto, marca, proveedor, catalogo_parte_cas, lote,
            fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza,
-           localizacion, stock_minimo, observaciones
+           existencia, localizacion, stock_minimo, observaciones
     FROM consumibles
     ORDER BY producto ASC
     LIMIT 200
@@ -686,7 +687,7 @@ export async function listMovimientos({ request, s }: RouteContext): Promise<Res
   const rows = await s.query(
     `
     SELECT m.id, m.referencia, m.tipo, m.tabla_origen, m.id_item, m.cantidad,
-           m.motivo, m.creado_en AS fecha_hora, m.unidad, m.vinculo_tipo, m.vinculo_id,
+           m.motivo, m.creado_en AS fecha_hora, m.fecha_movimiento, m.unidad, m.vinculo_tipo, m.vinculo_id,
            u.nombre AS usuario,
            COALESCE(r.nombre, r.producto, r.item_name, r.nombre_crm, c.producto) AS item_nombre,
            COALESCE(r.codigo_interno, r.id_interno, c.id_interno, r.catalogo, r.catalogo_parte_cas_lote, c.catalogo_parte_cas) AS item_codigo
@@ -694,12 +695,12 @@ export async function listMovimientos({ request, s }: RouteContext): Promise<Res
     LEFT JOIN reactivos r ON m.tabla_origen = 'reactivos' AND m.id_item = r.id
     LEFT JOIN consumibles c ON m.tabla_origen = 'consumibles' AND m.id_item = c.id
     LEFT JOIN usuarios u ON u.id = m.id_usuario
-    ORDER BY m.creado_en DESC
+    ORDER BY COALESCE(m.fecha_movimiento, SUBSTR(m.creado_en, 1, 10)) DESC, m.creado_en DESC
     LIMIT 200
     `,
   );
 
-  // Fase 3: "hoy", "semana" y "mes" son del calendario del laboratorio (America/Tijuana); creado_en esta en UTC.
+  // Fase 3: "hoy", "semana" y "mes" son del calendario del laboratorio (America/Tijuana) y cuentan por la fecha del movimiento (si no la tiene, por la de captura, que esta en UTC).
   const hoyLab = hoyLocal();
   const dia = (hoyLab.length === 10 ? new Date(`${hoyLab}T12:00:00Z`).getUTCDay() : 1) || 7;
   const lunes = sumarDias(hoyLab, 1 - dia);
@@ -709,15 +710,18 @@ export async function listMovimientos({ request, s }: RouteContext): Promise<Res
     semana_ini: sqlInstante(inicioDiaLocal(lunes)),
     mes_ini: sqlInstante(inicioDiaLocal(primeroMes)),
     fin: sqlInstante(finDiaLocal(hoyLab)),
+    hoy_dia: hoyLab,
+    semana_dia: lunes,
+    mes_dia: primeroMes,
   };
   const statsSql = `
       SELECT
         COUNT(*) AS total,
         SUM(CASE WHEN tabla_origen = 'reactivos' THEN 1 ELSE 0 END) AS reactivos,
         SUM(CASE WHEN tabla_origen = 'consumibles' THEN 1 ELSE 0 END) AS consumibles,
-        SUM(CASE WHEN creado_en >= :hoy_ini AND creado_en <= :fin THEN 1 ELSE 0 END) AS hoy,
-        SUM(CASE WHEN creado_en >= :semana_ini AND creado_en <= :fin THEN 1 ELSE 0 END) AS semana,
-        SUM(CASE WHEN creado_en >= :mes_ini AND creado_en <= :fin THEN 1 ELSE 0 END) AS mes
+        SUM(CASE WHEN (fecha_movimiento IS NOT NULL AND fecha_movimiento = :hoy_dia) OR (fecha_movimiento IS NULL AND creado_en >= :hoy_ini AND creado_en <= :fin) THEN 1 ELSE 0 END) AS hoy,
+        SUM(CASE WHEN (fecha_movimiento IS NOT NULL AND fecha_movimiento >= :semana_dia AND fecha_movimiento <= :hoy_dia) OR (fecha_movimiento IS NULL AND creado_en >= :semana_ini AND creado_en <= :fin) THEN 1 ELSE 0 END) AS semana,
+        SUM(CASE WHEN (fecha_movimiento IS NOT NULL AND fecha_movimiento >= :mes_dia AND fecha_movimiento <= :hoy_dia) OR (fecha_movimiento IS NULL AND creado_en >= :mes_ini AND creado_en <= :fin) THEN 1 ELSE 0 END) AS mes
       FROM movimientos
     `;
   const stats = (await s.queryOne<Row>(statsSql, limites)) || {};

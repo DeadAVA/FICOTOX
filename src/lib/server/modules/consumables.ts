@@ -4,9 +4,10 @@ import { registrarAuditoria, snapshotRow } from "../audit";
 import { intParam, json, readJson, type RouteContext } from "../http";
 import { darDeBaja, reactivarItem } from "../inventory-baja";
 
-import { requirePermission } from "../rbac";
+import { cargarAutorizacion, requirePermission } from "../rbac";
 import { aplicarSupervision, marcaSupervision } from "../supervision";
 
+import { hoyLocal } from "../../shared/fechas";
 import { interpretarMovimiento, tipoDeMovimiento } from "../inventory-movimientos";
 import { searchParam, toFloatOrNull, toStrOrNull, utcTimestampReference } from "./helpers";
 
@@ -66,7 +67,7 @@ function normalizePayload(raw: Record<string, unknown> | null | undefined): Cons
 
 const SELECT_COLUMNS = `
   SELECT id, id_interno, producto, marca, proveedor, catalogo_parte_cas, lote,
-         fecha_ingreso, tamano_capacidad, contenedor, piezas,
+         fecha_ingreso, tamano_capacidad, contenedor, piezas, existencia,
          cantidad_por_pieza, localizacion, stock_minimo, observaciones, stock_maximo, activo, baja_motivo, baja_en, creado_por, creado_en
   FROM consumibles
 `;
@@ -102,19 +103,21 @@ export async function createConsumable({ request, s }: RouteContext): Promise<Re
     return json({ message: "El campo 'producto' es obligatorio" }, 400);
   }
 
+  // Existencia inicial en unidades: piezas x cantidad por pieza (sin cantidad por pieza, x 1).
+  const existencia = (data.piezas || 0) * (data.cantidad_por_pieza && data.cantidad_por_pieza > 0 ? data.cantidad_por_pieza : 1);
   const result = await s.execute(
     `
-    INSERT INTO consumibles (id_interno, producto, marca, proveedor, catalogo_parte_cas, lote, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza, localizacion, stock_minimo, observaciones, stock_maximo, creado_por)
-    VALUES (:id_interno, :producto, :marca, :proveedor, :catalogo_parte_cas, :lote, :fecha_ingreso, :tamano_capacidad, :contenedor, COALESCE(:piezas, 0), :cantidad_por_pieza, :localizacion, :stock_minimo, :observaciones, :piezas, :creado_por)
+    INSERT INTO consumibles (id_interno, producto, marca, proveedor, catalogo_parte_cas, lote, fecha_ingreso, tamano_capacidad, contenedor, piezas, cantidad_por_pieza, localizacion, stock_minimo, observaciones, existencia, stock_maximo, creado_por)
+    VALUES (:id_interno, :producto, :marca, :proveedor, :catalogo_parte_cas, :lote, :fecha_ingreso, :tamano_capacidad, :contenedor, :piezas, :cantidad_por_pieza, :localizacion, :stock_minimo, :observaciones, :existencia, :existencia, :creado_por)
     `,
-    { ...data, creado_por: userIdFromClaims(user) },
+    { ...data, existencia, creado_por: userIdFromClaims(user) },
   );
   const id = result.lastrowid as number;
-  if (data.piezas && data.piezas > 0) {
+  if (existencia > 0) {
     await s.execute(
-      `INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario, unidad)
-       VALUES ('entrada', 'consumibles', :id, :cantidad, 'Existencia inicial', :referencia, :id_usuario, 'piezas')`,
-      { id, cantidad: data.piezas, referencia: `consumible-inicial-${id}`, id_usuario: userIdFromClaims(user) },
+      `INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario, unidad, fecha_movimiento)
+       VALUES ('entrada', 'consumibles', :id, :cantidad, 'Existencia inicial', :referencia, :id_usuario, 'unidades', :fecha_movimiento)`,
+      { id, cantidad: existencia, referencia: `consumible-inicial-${id}`, id_usuario: userIdFromClaims(user), fecha_movimiento: hoyLocal() },
     );
   }
   await aplicarSupervision(s, "consumibles", id, supervision, userIdFromClaims(user));
@@ -151,17 +154,17 @@ export async function updateConsumable({ request, s, params }: RouteContext): Pr
     return json({ message: "El campo 'producto' es obligatorio" }, 400);
   }
 
-  // Las piezas en existencia solo cambian con movimientos (entrada, salida, consumo o ajuste).
+  // La existencia (en unidades) solo cambia con movimientos; piezas y cantidad por pieza son datos del empaque.
   const antes = await snapshotRow(s, "consumibles", consumableId);
   const result = await s.execute(
     `
     UPDATE consumibles
     SET id_interno = :id_interno, producto = :producto, marca = :marca, proveedor = :proveedor, catalogo_parte_cas = :catalogo_parte_cas,
         lote = :lote, fecha_ingreso = :fecha_ingreso, tamano_capacidad = :tamano_capacidad, contenedor = :contenedor,
-        cantidad_por_pieza = :cantidad_por_pieza, localizacion = :localizacion, stock_minimo = :stock_minimo, observaciones = :observaciones
+        piezas = :piezas, cantidad_por_pieza = :cantidad_por_pieza, localizacion = :localizacion, stock_minimo = :stock_minimo, observaciones = :observaciones
     WHERE id = :id
     `,
-    { id_interno: data.id_interno, producto: data.producto, marca: data.marca, proveedor: data.proveedor, catalogo_parte_cas: data.catalogo_parte_cas, lote: data.lote, fecha_ingreso: data.fecha_ingreso, tamano_capacidad: data.tamano_capacidad, contenedor: data.contenedor, cantidad_por_pieza: data.cantidad_por_pieza, localizacion: data.localizacion, stock_minimo: data.stock_minimo, observaciones: data.observaciones, id: consumableId },
+    { id_interno: data.id_interno, producto: data.producto, marca: data.marca, proveedor: data.proveedor, catalogo_parte_cas: data.catalogo_parte_cas, lote: data.lote, fecha_ingreso: data.fecha_ingreso, tamano_capacidad: data.tamano_capacidad, contenedor: data.contenedor, piezas: data.piezas, cantidad_por_pieza: data.cantidad_por_pieza, localizacion: data.localizacion, stock_minimo: data.stock_minimo, observaciones: data.observaciones, id: consumableId },
   );
   if (result.rowcount === 0) {
     await s.rollback();
@@ -181,23 +184,23 @@ export async function refillConsumable({ request, s, params }: RouteContext): Pr
   const data = await readJson(request);
   // Corregir la existencia por conteo es una edición: pide además el permiso de editar movimientos.
   if (tipoDeMovimiento(data) === "ajuste") await requirePermission(s, user, "inventario", "E", { objeto: "movimiento" });
-  const row = await s.queryOne<Record<string, unknown>>("SELECT piezas, stock_maximo FROM consumibles WHERE id = :id LIMIT 1", { id: consumableId });
+  const row = await s.queryOne<Record<string, unknown>>("SELECT existencia, stock_maximo FROM consumibles WHERE id = :id LIMIT 1", { id: consumableId });
   if (!row) {
     return json({ message: "Consumible no encontrado" }, 404);
   }
-  const existencia = toFloatOrNull(row.piezas) || 0;
-  const mov = await interpretarMovimiento(s, data, existencia);
+  const existencia = toFloatOrNull(row.existencia) || 0;
+  const mov = await interpretarMovimiento(s, await cargarAutorizacion(s, user), data, existencia);
   const userId = userIdFromClaims(user);
 
   await s.execute(
     `
     UPDATE consumibles
     SET stock_maximo = CASE
-            WHEN stock_maximo IS NULL OR stock_maximo < COALESCE(piezas, 0) + :delta
-            THEN COALESCE(piezas, 0) + :delta
+            WHEN stock_maximo IS NULL OR stock_maximo < COALESCE(existencia, 0) + :delta
+            THEN COALESCE(existencia, 0) + :delta
             ELSE stock_maximo
         END,
-        piezas = COALESCE(piezas, 0) + :delta
+        existencia = COALESCE(existencia, 0) + :delta
     WHERE id = :id
     `,
     { id: consumableId, delta: mov.delta },
@@ -205,8 +208,8 @@ export async function refillConsumable({ request, s, params }: RouteContext): Pr
 
   await s.execute(
     `
-    INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario, unidad, vinculo_tipo, vinculo_id)
-    VALUES (:tipo, 'consumibles', :id, :cantidad, :motivo, :referencia, :id_usuario, 'piezas', :vinculo_tipo, :vinculo_id)
+    INSERT INTO movimientos (tipo, tabla_origen, id_item, cantidad, motivo, referencia, id_usuario, unidad, vinculo_tipo, vinculo_id, fecha_movimiento)
+    VALUES (:tipo, 'consumibles', :id, :cantidad, :motivo, :referencia, :id_usuario, 'unidades', :vinculo_tipo, :vinculo_id, :fecha_movimiento)
     `,
     {
       tipo: mov.tipo,
@@ -217,11 +220,12 @@ export async function refillConsumable({ request, s, params }: RouteContext): Pr
       id_usuario: userId,
       vinculo_tipo: mov.vinculoTipo,
       vinculo_id: mov.vinculoId,
+      fecha_movimiento: mov.fechaMovimiento,
     },
   );
   await aplicarSupervision(s, "consumibles", consumableId, supervision, userId);
   const despues = await snapshotRow(s, "consumibles", consumableId);
-  await registrarAuditoria(s, user, { accion: "reponer", entidad: "consumibles", entidadId: consumableId, referencia: String(despues?.producto || consumableId), motivo: mov.motivo, despues, detalle: { tipo: mov.tipo, cantidad: mov.cantidad, existencia_anterior: existencia, existencia_nueva: existencia + mov.delta } });
+  await registrarAuditoria(s, user, { accion: "reponer", entidad: "consumibles", entidadId: consumableId, referencia: String(despues?.producto || consumableId), motivo: mov.motivo, despues, detalle: { tipo: mov.tipo, fecha_movimiento: mov.fechaMovimiento, cantidad: mov.cantidad, existencia_anterior: existencia, existencia_nueva: existencia + mov.delta } });
   await s.commit();
   return json({ message: mov.tipo === "ajuste" ? "Existencia ajustada" : "Movimiento registrado" });
 }

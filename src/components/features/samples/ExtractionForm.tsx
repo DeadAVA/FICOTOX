@@ -294,24 +294,24 @@ const buildProtocolInventario = (current: ExtractionState, protocol: ExtractionP
   return result;
 };
 
-/* Consumibles fijos cuyo stock no alcanza: se avisa (no se bloquea) porque el conteo de piezas del catalogo no siempre esta al dia. */
+/* Consumibles fijos cuyo stock no alcanza: se avisa (no se bloquea) porque el conteo de unidades del catalogo no siempre esta al dia. */
 const lowConsumibles = (current: ExtractionState, protocol: ExtractionProtocol, tubes: number): string[] => {
   // El mismo consumible puede usarse en varios pasos (p. ej. viales): se suma lo requerido por referencia.
-  const required = new Map<string, { label: string; piezas: number; total: number }>();
+  const required = new Map<string, { label: string; existencia: number; total: number }>();
   for (const field of protocol.fixedFields) {
     if (field.tipo !== "consumible" || !fixedEnabled(field, current)) continue;
     const ref = String(current.fields[field.key] || "").trim();
     if (!ref) continue;
     const option = findInsumoOption("consumible", ref);
     const { total } = fixedAmount(field, current, tubes);
-    if (!option || option.piezas === null || option.piezas === undefined || total <= 0) continue;
-    const entry = required.get(option.ref) || { label: option.label, piezas: Number(option.piezas), total: 0 };
+    if (!option || option.existencia === null || option.existencia === undefined || total <= 0) continue;
+    const entry = required.get(option.ref) || { label: option.label, existencia: Number(option.existencia), total: 0 };
     entry.total += total;
     required.set(option.ref, entry);
   }
   return Array.from(required.values())
-    .filter((entry) => entry.piezas < entry.total)
-    .map((entry) => `${entry.label}: ${formatInventoryAmount(entry.piezas)} piezas disponibles, se descontarán ${formatInventoryAmount(entry.total)}`);
+    .filter((entry) => entry.existencia < entry.total)
+    .map((entry) => `${entry.label}: ${formatInventoryAmount(entry.existencia)} unidades disponibles, se descontarán ${formatInventoryAmount(entry.total)}`);
 };
 
 /* Insumos fijos activos que no se encontraron en inventario: se guardan sin descuento, previa confirmacion. */

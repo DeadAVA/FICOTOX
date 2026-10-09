@@ -13,7 +13,7 @@ export interface InsumoOption {
   ref: string;
   label: string;
   cantidad_actual?: number | null;
-  piezas?: number | null;
+  existencia?: number | null;
   unidad?: string;
   /* Solo reactivos: lote (se sugiere como folio de preparación de soluciones). */
   lote?: string | null;
@@ -66,8 +66,8 @@ export const loadInsumoOptions = (): Promise<void> => {
       }));
       consumiblesCache = ((Array.isArray(cData) ? cData : cData.items || []) as ApiRecord[]).map((c) => ({
         ref: String(c.id),
-        piezas: c.piezas ?? null,
-        unidad: "piezas",
+        existencia: c.existencia ?? null,
+        unidad: "unidades",
         label: [c.producto, c.catalogo_parte_cas].filter(Boolean).join(" · ") || String(c.id),
       }));
       // Los equipos se referencian por id (los registros viejos guardaban el nombre; ver findInsumoOption).

@@ -22,7 +22,7 @@ import { useDebouncedValue, useInitialParam, useOpenState, useParamChange, useUr
 import { invalidate, useResource } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 
-/* Columnas fijas: producto y marca, ubicacion, caducidad en color y existencia en piezas con barra. */
+/* Columnas fijas: producto y marca, ubicacion, caducidad en color y existencia en unidades con barra. */
 const COLUMNAS: ColumnaLista[] = [
   { clave: "producto", titulo: "Producto", ancho: "minmax(260px,1.7fr)" },
   { clave: "ubicacion", titulo: "Ubicación", ancho: "minmax(140px,0.8fr)" },
@@ -31,7 +31,7 @@ const COLUMNAS: ColumnaLista[] = [
 ];
 
 function celdasConsumible(item: ApiRecord) {
-  const pieces = parseNumberOrNull(item.piezas) ?? 0;
+  const pieces = parseNumberOrNull(item.existencia) ?? 0;
   const max = parseNumberOrNull(item.stock_maximo) || pieces;
   const inactive = Number(item.activo ?? 1) === 0;
   const ubicacion = item.localizacion || item.ubicacion;
@@ -49,7 +49,7 @@ function celdasConsumible(item: ApiRecord) {
     </span>,
     <span key="u" className="text-[13.5px] text-ink-2">{ubicacion ? String(ubicacion) : <span className="text-ink-4">—</span>}</span>,
     <Caducidad key="c" value={item.caducidad} />,
-    <StockMeter key="e" current={pieces} max={max} min={minimo} unit="piezas" low={pieces <= minimo} />,
+    <StockMeter key="e" current={pieces} max={max} min={minimo} unit="unidades" low={pieces <= minimo} />,
   ];
 }
 
@@ -66,7 +66,7 @@ export default function ConsumiblesPage() {
 type Filter = "todos" | "bajo" | "agotado";
 type Orden = "nombre" | "existencia";
 
-const piecesOf = (item: ApiRecord) => Number(item.piezas || 0);
+const piecesOf = (item: ApiRecord) => Number(item.existencia || 0);
 
 function ConsumiblesContent() {
   const { token, can } = useSession();
@@ -154,7 +154,7 @@ function ConsumiblesContent() {
 
   const groups: FilterGroup[] = [
     {
-      key: "piezas",
+      key: "existencia",
       label: "Existencia",
       value: filter,
       defaultValue: "todos",
@@ -177,7 +177,7 @@ function ConsumiblesContent() {
       onChange: (v) => setOrden(v as Orden),
       options: [
         { value: "nombre", label: "Nombre A–Z" },
-        { value: "existencia", label: "Menos piezas primero" },
+        { value: "existencia", label: "Menos unidades primero" },
       ],
     },
   ];

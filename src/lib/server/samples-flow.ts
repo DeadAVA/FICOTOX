@@ -382,6 +382,9 @@ export function isFolioConflict(error: unknown): boolean {
 
 /* ---------- Inventario de una etapa ---------- */
 
+/* Etapa a la que se vincula el movimiento automatico (el acceso a ese folio ya lo valido el formato que consume). */
+const VINCULO_DE_PREFIJO: Record<string, string> = { PROC: "procesamiento", EXT: "extraccion", ANA: "analisis" };
+
 /*
  * Descuenta los insumos declarados en `uso_inventario_json` con referencias
  * `<prefijo>-<id>-INS-<n>`, para que la anulacion o la reedicion puedan
@@ -424,7 +427,7 @@ export async function applyStageInventory(
     if (!ref) continue;
     const clave = `${tipo}:${String(ref)}`;
     const previo = declaradosAntes.get(clave);
-    const options = { userId, motivo, referencia: `${prefix}-${id}-INS-${idx}`, permitirInactivo: previo !== undefined && (solicitado.get(clave) || 0) <= previo + 1e-9 };
+    const options = { userId, motivo, referencia: `${prefix}-${id}-INS-${idx}`, vinculoTipo: VINCULO_DE_PREFIJO[prefix] ?? null, vinculoId: VINCULO_DE_PREFIJO[prefix] ? id : null, permitirInactivo: previo !== undefined && (solicitado.get(clave) || 0) <= previo + 1e-9 };
     if (tipo === "reactivo") await consumeReactivo(s, ref, item.cantidad || 1, options);
     else if (tipo === "consumible") await consumeConsumible(s, ref, item.cantidad || 1, options);
   }

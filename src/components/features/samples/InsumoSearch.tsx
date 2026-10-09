@@ -155,7 +155,7 @@ export function InsumoSearch({ tipo, value, onChange, placeholder = "Buscar insu
 
   const optionAside = (o: (typeof shown)[number]) => {
     if (tipo === "reactivo") return `${formatInventoryAmount(o.cantidad_actual ?? 0)} ${o.unidad || ""}`;
-    if (tipo === "consumible") return `${formatInventoryAmount(o.piezas ?? 0)} pz`;
+    if (tipo === "consumible") return `${formatInventoryAmount(o.existencia ?? 0)} unid.`;
     const alert = equipoAlert(o);
     return alert ? alert.message : "";
   };
