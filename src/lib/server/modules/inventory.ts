@@ -10,7 +10,7 @@ import { cargarAutorizacion, recortarPorModulo, requirePermission } from "../rba
 import { exigirReauth } from "../seguridad";
 import { aplicarSupervision, exigirSinSupervisionPendiente, marcaSupervision } from "../supervision";
 
-import { interpretarMovimiento } from "../inventory-movimientos";
+import { interpretarMovimiento, tipoDeMovimiento } from "../inventory-movimientos";
 import { firstTruthy, isTruthy, searchParam, toFloatOrNull, toIntOrNull, toStrOrNull, utcTimestampReference } from "./helpers";
 
 import { finDiaLocal, hoyLocal, inicioDiaLocal, sumarDias } from "../../shared/fechas";
@@ -781,7 +781,7 @@ export async function refillReactivo({ request, s, params }: RouteContext): Prom
 
   const payload = await readJson(request);
   // Corregir la existencia por conteo es una edición: pide además el permiso de editar movimientos.
-  if (String(payload.tipo || "").toLowerCase() === "ajuste") await requirePermission(s, user, "inventario", "E", { objeto: "movimiento" });
+  if (tipoDeMovimiento(payload) === "ajuste") await requirePermission(s, user, "inventario", "E", { objeto: "movimiento" });
   const row = await s.queryOne<Row>("SELECT * FROM reactivos WHERE id = :id LIMIT 1", { id: reactivoId });
   if (!row) {
     return json({ message: "Reactivo no encontrado" }, 404);

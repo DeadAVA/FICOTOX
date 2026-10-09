@@ -22,6 +22,9 @@ const TABLAS_VINCULO: Record<string, string> = {
 
 const ETIQUETA_VINCULO: Record<string, string> = { recepcion: "Recepción", procesamiento: "Procesamiento", extraccion: "Extracción", analisis: "Análisis" };
 
+/* Una sola normalización del tipo, para que la validación de permisos y la interpretación nunca difieran. */
+export const tipoDeMovimiento = (payload: Record<string, unknown>): string => String(payload.tipo || "entrada").trim().toLowerCase();
+
 export interface MovimientoManual {
   tipo: TipoMovimientoManual;
   /* Cambio con signo sobre la existencia. */
@@ -34,7 +37,7 @@ export interface MovimientoManual {
 }
 
 export async function interpretarMovimiento(s: Session, payload: Record<string, unknown>, existencia: number): Promise<MovimientoManual> {
-  const tipo = String(payload.tipo || "entrada").trim().toLowerCase() as TipoMovimientoManual;
+  const tipo = tipoDeMovimiento(payload) as TipoMovimientoManual;
   if (!TIPOS_MOVIMIENTO_MANUAL.includes(tipo)) throw new HttpError(400, { message: "El tipo de movimiento debe ser entrada, salida, consumo o ajuste" });
   const cantidad = toFloatOrNull(payload.cantidad);
   if (cantidad === null || Number.isNaN(cantidad)) throw new HttpError(400, { message: tipo === "ajuste" ? "Captura la cantidad contada" : "Captura una cantidad mayor a cero" });

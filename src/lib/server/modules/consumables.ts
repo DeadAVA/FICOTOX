@@ -7,7 +7,7 @@ import { darDeBaja, reactivarItem } from "../inventory-baja";
 import { requirePermission } from "../rbac";
 import { aplicarSupervision, marcaSupervision } from "../supervision";
 
-import { interpretarMovimiento } from "../inventory-movimientos";
+import { interpretarMovimiento, tipoDeMovimiento } from "../inventory-movimientos";
 import { searchParam, toFloatOrNull, toStrOrNull, utcTimestampReference } from "./helpers";
 
 /* Portado de modules/inventory/consumables.py del backend Flask original. */
@@ -319,7 +319,7 @@ export async function refillConsumable({ request, s, params }: RouteContext): Pr
 
   const data = await readJson(request);
   // Corregir la existencia por conteo es una edición: pide además el permiso de editar movimientos.
-  if (String(data.tipo || "").toLowerCase() === "ajuste") await requirePermission(s, user, "inventario", "E", { objeto: "movimiento" });
+  if (tipoDeMovimiento(data) === "ajuste") await requirePermission(s, user, "inventario", "E", { objeto: "movimiento" });
   const row = await s.queryOne<Record<string, unknown>>("SELECT piezas, stock_maximo FROM consumibles WHERE id = :id LIMIT 1", { id: consumableId });
   if (!row) {
     return json({ message: "Consumible no encontrado" }, 404);
