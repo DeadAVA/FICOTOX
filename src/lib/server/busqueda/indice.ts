@@ -13,6 +13,7 @@
  * llame al manejador de su lista y devuelva `Hit[]`, y registrarla en
  * `construirIndice`. El `grupo` decide en qué encabezado aparece.
  */
+import { formatearFolio } from "../../shared/folios";
 import { ESTADOS_INCIDENCIA, ESTADOS_NC, folioNc } from "../../shared/calidad";
 import { norm, type Comando, type GrupoClave, type TipoResultado } from "../../shared/busqueda";
 import { fmtDate } from "../../client/format";
@@ -173,7 +174,7 @@ async function fuenteMuestras(request: Request, s: Session): Promise<Hit[]> {
     out.push(hit({ clave: `e-${e.id}`, tipo: "muestra", grupo: "muestras", titulo, sub: join(e.id_interno, estado), href: `/muestras/extraccion/${e.id}`, mono: true, etiqueta: dsp ? "Extracción DSP" : "Extracción ASP", lista: "/muestras/extraccion", claves: [e.id_interno], palabras: [titulo, titulo.replace(/\s/g, ""), e.id_interno, estado, orgE.get(Number(e.id)), e.muestra_tipo, "extraccion muestra", dsp ? "dsp toxinas lipofilicas" : "asp acido domoico"] }));
   }
   for (const a of analisis) {
-    const titulo = `A ${String(Number(a.folio_num || 0)).padStart(7, "0")}`;
+    const titulo = formatearFolio("A", a.folio_num || 0);
     const tipo = ANALISIS_CORTO[String(a.tipo_analisis)] || a.tipo_analisis;
     const estado = a.estado ? sampleStatusLabel(a.estado) : null;
     out.push(hit({ clave: `a-${a.id}`, tipo: "analisis", grupo: "muestras", titulo, sub: join(a.solicitante, a.recepcion_id_interno, tipo, estado), href: `/muestras/analisis/${a.id}`, mono: true, etiqueta: "Análisis", lista: "/muestras/analisis", palabras: [titulo, titulo.replace(/\s/g, ""), a.solicitante, a.recepcion_id_interno, a.tipo_analisis, tipo, estado, "analisis"] }));
@@ -185,7 +186,7 @@ const INFORME_ESTADO: Record<string, string> = { borrador: "Borrador", en_revisi
 
 async function fuenteInformes(request: Request, s: Session): Promise<Hit[]> {
   return items(await leer(request, s, listInformes, "/api/informes")).map((i) => {
-    const titulo = String(i.folio || `IR ${String(Number(i.folio_num || 0)).padStart(7, "0")}${Number(i.version || 1) > 1 ? ` v${i.version}` : ""}`);
+    const titulo = String(i.folio || `${formatearFolio("IR", i.folio_num || 0)}${Number(i.version || 1) > 1 ? ` v${i.version}` : ""}`);
     const cliente = (i.cliente && typeof i.cliente === "object" ? (i.cliente as ApiRecord).nombre : null) || i.solicitante;
     const estado = INFORME_ESTADO[String(i.estado)] || null;
     return hit({ clave: `i-${i.id}`, tipo: "informe", grupo: "informes", titulo, sub: join(cliente, i.recepcion_id_interno, estado), href: `/informes/${i.id}`, mono: true, etiqueta: "Informe", lista: "/informes", palabras: [titulo, titulo.replace(/\s/g, ""), cliente, i.recepcion_id_interno, i.estado, estado, "informe"] });

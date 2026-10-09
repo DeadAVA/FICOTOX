@@ -8,7 +8,7 @@ import { Checkbox, Field, FormGrid, FormSection, Input, Select, Textarea } from 
 import { DateInput } from "@/components/ui/DateInput";
 import { Sheet } from "@/components/ui/Overlay";
 import { API_BASE_URL, getJsonAuth, sendJsonAuth } from "@/lib/client/api";
-import { toDateOnly } from "@/lib/client/format";
+import { isoDate } from "@/lib/client/format";
 import { invalidate } from "@/lib/client/store";
 import type { ApiRecord } from "@/lib/client/types";
 import { EQUIPO_ESTADOS, MANTENIMIENTO_ESTADOS, MANTENIMIENTO_TIPOS } from "./meta";

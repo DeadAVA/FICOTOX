@@ -1,3 +1,4 @@
+import { formatearFolio } from "../../../shared/folios";
 import { requireUser, userIdFromClaims } from "../../auth";
 import { registrarAuditoria, snapshotRow } from "../../audit";
 
@@ -341,7 +342,7 @@ export async function createExtractionSample({ request, s }: RouteContext): Prom
     await s.rollback();
     // Fase 12: si el folio lo asigno el servidor, el choque es de concurrencia: se relanza y apiRoute reintenta.
     if (isFolioConflict(error) && toIntOrNull(payload.folio_num)) {
-      return json({ message: `El folio ${tipo} ${String(data.folio_num).padStart(7, "0")} ya existe` }, 409);
+      return json({ message: `El folio ${formatearFolio(tipo, data.folio_num)} ya existe` }, 409);
     }
     throw error;
   }
@@ -431,7 +432,7 @@ export async function updateExtractionSample({ request, s, params }: RouteContex
   } catch (error) {
     await s.rollback();
     if (isFolioConflict(error)) {
-      return json({ message: `El folio ${tipo} ${String(data.folio_num).padStart(7, "0")} ya existe` }, 409);
+      return json({ message: `El folio ${formatearFolio(tipo, data.folio_num)} ya existe` }, 409);
     }
     throw error;
   }

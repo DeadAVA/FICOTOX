@@ -1,3 +1,4 @@
+import { formatearFolio } from "../shared/folios";
 import { requireUser, type CurrentUser } from "./auth";
 import { registrarAuditoria, snapshotRow } from "./audit";
 import type { Row, Session } from "./db";
@@ -115,7 +116,7 @@ function referenciaDe(tabla: TablaSupervisable, row: Row): string {
   const prefijo = PREFIJO_FOLIO[tabla];
   if (prefijo) {
     const base = tabla === "muestras_extraccion" ? String(row.tipo_registro || "E-A") : prefijo;
-    return `${base} ${String(row.folio_num || 0).padStart(7, "0")}`;
+    return formatearFolio(base, row.folio_num);
   }
   if (tabla === "reactivos") return String(row.producto || row.nombre || "Reactivo");
   if (tabla === "consumibles") return String(row.producto || "Consumible");

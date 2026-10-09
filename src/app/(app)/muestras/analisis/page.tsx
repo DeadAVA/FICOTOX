@@ -1,5 +1,6 @@
 "use client";
 
+import { formatearFolio } from "@/lib/shared/folios";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -54,7 +55,7 @@ function AnalisisList() {
   const [mias, setMias] = useState(false);
   const [tipoFilter, setTipoFilter] = useState("");
   const debounced = useDebouncedValue(search);
-  const folioA = (item: ApiRecord) => `A ${String(Number(item.folio_num || 0)).padStart(7, "0")}`;
+  const folioA = (item: ApiRecord) => formatearFolio("A", item.folio_num || 0);
   const { anular, restaurar } = useAnulacion("analysis", folioA);
 
   const resource = useResource<ApiRecord[]>(

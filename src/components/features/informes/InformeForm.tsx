@@ -1,5 +1,6 @@
 "use client";
 
+import { formatearFolio } from "@/lib/shared/folios";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -466,7 +467,7 @@ export function InformeForm({ item, prefillRecepcionId }: { item: ApiRecord | nu
               <option value="">Seleccionar</option>
               {recepciones.map((r) => (
                 <option key={r.id} value={r.id}>
-                  R {String(r.folio_num).padStart(7, "0")} · {r.solicitante || r.id_interno || ""} · {fmtDate(r.fecha_recepcion)}
+                  {formatearFolio("R", r.folio_num)} · {r.solicitante || r.id_interno || ""} · {fmtDate(r.fecha_recepcion)}
                 </option>
               ))}
             </Select>

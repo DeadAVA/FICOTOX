@@ -1,4 +1,5 @@
 /* Avisos de calidad para el Inicio y la campana (Fase 11). */
+import { formatearFolio } from "../../../shared/folios";
 import { type Row, type Session } from "../../db";
 import { permisoDe, type Autorizacion } from "../../rbac";
 import { TIPO_INCIDENCIA_LABEL, accionVencida, folioIncidencia, folioNc } from "../../../shared/calidad";
@@ -52,7 +53,7 @@ export async function avisosCalidad(s: Session, auth: Autorizacion): Promise<Avi
   // Informes retenidos (quien libera o envia informes y calidad:A).
   if (puede("A") || permisoDe(auth, "informes", "A")) {
     const filas = await s.query<Row>(`SELECT r.id AS retencion_id, r.retenido_en, r.informe_id, i.folio_num, i.version, n.id AS nc_id, n.folio_num AS nc_folio FROM ${T.retenciones} r JOIN informes i ON i.id = r.informe_id JOIN ${T.nc} n ON n.id = r.nc_id WHERE r.liberada_en IS NULL ORDER BY r.id LIMIT 15`);
-    for (const f of filas) out.push({ tipo: "informe_retenido", titulo: `Informe retenido: IR ${String(f.folio_num).padStart(7, "0")}${Number(f.version || 1) > 1 ? ` v${f.version}` : ""}`, detalle: `Por ${folioNc(f.nc_folio)}`, href: total ? `/calidad/nc/${f.nc_id}` : `/informes/${f.informe_id}`, tono: "danger", clave: `informe_retenido:${f.retencion_id}`, cuando: (f.retenido_en as string | null) ?? null, registro: `IR ${String(f.folio_num).padStart(7, "0")}${Number(f.version || 1) > 1 ? ` v${f.version}` : ""}` });
+    for (const f of filas) out.push({ tipo: "informe_retenido", titulo: `Informe retenido: ${formatearFolio("IR", f.folio_num)}${Number(f.version || 1) > 1 ? ` v${f.version}` : ""}`, detalle: `Por ${folioNc(f.nc_folio)}`, href: total ? `/calidad/nc/${f.nc_id}` : `/informes/${f.informe_id}`, tono: "danger", clave: `informe_retenido:${f.retencion_id}`, cuando: (f.retenido_en as string | null) ?? null, registro: `${formatearFolio("IR", f.folio_num)}${Number(f.version || 1) > 1 ? ` v${f.version}` : ""}` });
   }
   // Metodos y equipos suspendidos (quien captura ensayos y calidad).
   if (puede("R") || puede("A") || permisoDe(auth, "ensayos", "C") || permisoDe(auth, "ensayos", "E")) {

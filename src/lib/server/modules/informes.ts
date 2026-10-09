@@ -1,3 +1,4 @@
+import { formatearFolio } from "../../shared/folios";
 import { createHash } from "node:crypto";
 
 import { exigirSinRetencion, retencionesActivas } from "./calidad/bloqueos";
@@ -47,7 +48,7 @@ function informesDir(): string {
 }
 
 export function informeFolio(row: Row | null | undefined): string {
-  return `IR ${String(row?.folio_num || 0).padStart(7, "0")}`;
+  return formatearFolio("IR", row?.folio_num);
 }
 
 function serializeInforme(row: Row): Row {
@@ -120,7 +121,7 @@ function methodLabel(value: string, otro?: string | null): string {
 /* Copia congelada de los analisis aprobados que el informe reporta. */
 function snapshotAnalyses(rows: Row[]): InformeAnalisis[] {
   return rows.map((a) => ({
-    folio: `A ${String(a.folio_num || 0).padStart(7, "0")}`,
+    folio: formatearFolio("A", a.folio_num),
     tipo: analysisLabel(String(a.tipo_analisis || "")),
     metodo: methodLabel(String(a.metodo || ""), a.metodo_otro as string | null),
     metodo_referencia: (a.metodo_referencia as string | null) || null,
@@ -147,7 +148,7 @@ async function loadRecepcion(s: Session, id: number | null): Promise<Row> {
   const row = await snapshotRow(s, "muestras_recepcion", id);
   if (!row) throw new HttpError(404, { message: "Recepcion no encontrada" });
   if (["anulada", "rechazada"].includes(String(row.estado || ""))) throw new HttpError(409, { message: "La recepcion esta anulada o rechazada; no se puede informar" });
-  exigirSinSupervisionPendiente(row, `La recepcion R ${String(row.folio_num || 0).padStart(7, "0")}`, "informar a partir de ella");
+  exigirSinSupervisionPendiente(row, `La recepcion ${formatearFolio("R", row.folio_num)}`, "informar a partir de ella");
   return row;
 }
 
@@ -158,7 +159,7 @@ async function loadRecepcion(s: Session, id: number | null): Promise<Row> {
 async function exigirAnalisisSinSolicitud(s: Session, ids: number[], que: string): Promise<void> {
   for (const analisisId of ids) {
     const fila = await s.queryOne<Row>("SELECT folio_num FROM muestras_analisis WHERE id = :id", { id: analisisId });
-    await exigirSinSolicitudPendiente(s, "muestras_analisis", analisisId, `El analisis A ${String(fila?.folio_num || 0).padStart(7, "0")}`, que);
+    await exigirSinSolicitudPendiente(s, "muestras_analisis", analisisId, `El analisis ${formatearFolio("A", fila?.folio_num)}`, que);
   }
 }
 
@@ -440,7 +441,7 @@ async function buildRender(s: Session, row: Row, analyses: Row[]): Promise<Infor
     motivo_enmienda: (row.motivo_enmienda as string | null) || null,
     fecha_emision: String(row.fecha_emision || hoyLocal()),
     cliente,
-    recepcion: { folio: `R ${String(recepcion?.folio_num || 0).padStart(7, "0")}`, fecha_recepcion: (recepcion?.fecha_recepcion as string | null) || null, fecha_muestra: (recepcion?.fecha_muestra as string | null) || null, medio: (recepcion?.medio_recepcion as string | null) || null },
+    recepcion: { folio: formatearFolio("R", recepcion?.folio_num), fecha_recepcion: (recepcion?.fecha_recepcion as string | null) || null, fecha_muestra: (recepcion?.fecha_muestra as string | null) || null, medio: (recepcion?.medio_recepcion as string | null) || null },
     muestras: safeJsonLoad(String(row.muestras_json || "[]"), []),
     analisis: analyses.length ? snapshotAnalyses(analyses) : safeJsonLoad(String(row.resultados_json || "[]"), []),
     declaraciones,
@@ -491,7 +492,7 @@ export async function authorizeInforme({ request, s, params }: RouteContext): Pr
   if (!analyses.length) return json({ message: "El informe no incluye analisis" }, 400);
   await exigirAnalisisSinSolicitud(s, ids, "autorizar en un informe");
   const noAprobados = analyses.filter((a) => String(a.estado) !== "aprobado");
-  if (noAprobados.length) return json({ message: `Hay analisis sin aprobar: ${noAprobados.map((a) => `A ${String(a.folio_num).padStart(7, "0")}`).join(", ")}` }, 409);
+  if (noAprobados.length) return json({ message: `Hay analisis sin aprobar: ${noAprobados.map((a) => formatearFolio("A", a.folio_num)).join(", ")}` }, 409);
 
   const now = new Date().toISOString();
   const fechaEmision = strippedOrNull(payload.fecha_emision, 10) || String(antes.fecha_emision || hoyLocal());
@@ -526,7 +527,7 @@ export async function liberarInforme({ request, s, params }: RouteContext): Prom
   const ids = safeJsonLoad<number[]>(String(antes.analisis_ids_json || "[]"), []);
   const analyses = await loadAnalyses(s, ids);
   const noAprobados = analyses.filter((a) => String(a.estado) !== "aprobado");
-  if (!analyses.length || noAprobados.length) return json({ message: noAprobados.length ? `Hay analisis sin aprobar: ${noAprobados.map((a) => `A ${String(a.folio_num).padStart(7, "0")}`).join(", ")}` : "El informe no incluye analisis" }, 409);
+  if (!analyses.length || noAprobados.length) return json({ message: noAprobados.length ? `Hay analisis sin aprobar: ${noAprobados.map((a) => formatearFolio("A", a.folio_num)).join(", ")}` : "El informe no incluye analisis" }, 409);
   await exigirReauth(s, request, user, "informes:A");
   const now = new Date().toISOString();
   await s.execute(
@@ -640,7 +641,7 @@ async function violacionInforme(s: Session, usuarioId: number, informe: Row, ana
   for (const analisisId of analisisIds) {
     const fila = await s.queryOne<Row>("SELECT id, folio_num, creado_por FROM muestras_analisis WHERE id = :id", { id: analisisId });
     if (!fila) continue;
-    porAnalisis.push({ folio: `A ${String(fila.folio_num || 0).padStart(7, "0")}`, elaboradores: await elaboradoresDe(s, "muestras_analisis", analisisId, fila.creado_por) });
+    porAnalisis.push({ folio: formatearFolio("A", fila.folio_num), elaboradores: await elaboradoresDe(s, "muestras_analisis", analisisId, fila.creado_por) });
   }
   return evaluarInforme(usuarioId, elaboradores, porAnalisis, accion);
 }

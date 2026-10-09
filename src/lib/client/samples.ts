@@ -1,25 +1,14 @@
+import { formatearFolio } from "../shared/folios";
 import type { ApiRecord } from "./types";
 import { SAMPLE_STATES, SAMPLE_TERMINAL_STATES } from "../shared/sgc";
 
 /* Helpers de muestras identicos a los de el app.js de la interfaz original. */
 
-export const formatSampleFolio = (item: ApiRecord): string => {
-  const type = String(item.tipo_registro || "R").toUpperCase();
-  const num = Number(item.folio_num || 0);
-  return `${type} ${String(num).padStart(7, "0")}`;
-};
+const folioDe = (predeterminado: string) => (item: ApiRecord): string => formatearFolio(String(item.tipo_registro || predeterminado).toUpperCase(), item.folio_num);
 
-export const formatProcessingFolio = (item: ApiRecord): string => {
-  const type = String(item.tipo_registro || "P").toUpperCase();
-  const num = Number(item.folio_num || 0);
-  return `${type} ${String(num).padStart(7, "0")}`;
-};
-
-export const formatExtractionFolio = (item: ApiRecord): string => {
-  const type = String(item.tipo_registro || "E-A").toUpperCase();
-  const num = Number(item.folio_num || 0);
-  return `${type} ${String(num).padStart(7, "0")}`;
-};
+export const formatSampleFolio = folioDe("R");
+export const formatProcessingFolio = folioDe("P");
+export const formatExtractionFolio = folioDe("E-A");
 
 export const normalizeSampleStatus = (status: unknown): string => String(status || "registrada").toLowerCase().replace(/\s+/g, "_");
 

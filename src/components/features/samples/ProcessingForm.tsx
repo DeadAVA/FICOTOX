@@ -1,5 +1,6 @@
 "use client";
 
+import { formatearFolio } from "@/lib/shared/folios";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -550,7 +551,7 @@ export function ProcessingForm({ item, prefillReceptionId }: { item: ApiRecord |
               <option value="">Sin vincular</option>
               {receptions.map((option) => (
                 <option key={option.id} value={option.id}>
-                  R {String(option.folio_num || "").padStart(7, "0")} · {option.solicitante || option.id_interno || "Sin solicitante"}
+                  {formatearFolio("R", option.folio_num)} · {option.solicitante || option.id_interno || "Sin solicitante"}
                 </option>
               ))}
             </Select>

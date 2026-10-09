@@ -1,5 +1,6 @@
 "use client";
 
+import { formatearFolio } from "@/lib/shared/folios";
 import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight, CheckCircle, FilePdf, FileText, FloppyDisk, LinkSimple, Lock, Paperclip, Pause, Play, Plus, Prohibit, SealCheck, Warning } from "@phosphor-icons/react";
@@ -539,7 +540,7 @@ function InformesAfectados({ item, afectados, retenciones, editar }: { item: Api
         </p>
       ) : null}
       {/* Quien edita la NC marca el informe como afectado; quien solo puede retener (calidad:R) lo retiene directo (retener tambien lo marca). */}
-      {editar || puede.retener ? <InformePicker excluir={afectados.map((a) => Number(a.entidad_id))} onElegir={(i) => (editar ? enviar("POST", `/calidad/nc/${item.id}/afectados`, { informe_id: i.id }) : retener(i.id, String(i.folio || `IR ${String(i.folio_num).padStart(7, "0")}`)))} /> : null}
+      {editar || puede.retener ? <InformePicker excluir={afectados.map((a) => Number(a.entidad_id))} onElegir={(i) => (editar ? enviar("POST", `/calidad/nc/${item.id}/afectados`, { informe_id: i.id }) : retener(i.id, String(i.folio || formatearFolio("IR", i.folio_num))))} /> : null}
     </Panel>
   );
 }

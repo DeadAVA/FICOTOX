@@ -25,6 +25,7 @@
  * verificacion independiente de todos los responsables evita cerrar una NC con
  * acciones "eficaces" por separado que en conjunto no eliminan la causa.
  */
+import { formatearFolio } from "../../../shared/folios";
 import { syncEquipoEstado } from "../inventory";
 import { expandirPermisos, permite } from "../../../shared/permisos";
 import { incidenciaPorAlertaIntegridad } from "./automaticas";
@@ -268,12 +269,12 @@ async function detalleNc(s: Session, acc: AccesoCalidad, nc: Row): Promise<Row> 
     // Con alcance "incidencias", de las incidencias ajenas agrupadas en la NC solo el folio y el estado.
     incidencias: incidencias.map((i) => (acc.total || Number(i.reportada_por) === acc.yo ? { ...i, folio: folioIncidencia(i.folio_num) } : { id: i.id, folio_num: i.folio_num, estado: i.estado, folio: folioIncidencia(i.folio_num), restringida: true })),
     // Enmiendas de cada informe afectado (7.10: la correccion se hace con el flujo de enmienda existente).
-    afectados: await Promise.all(afectados.map(async (a) => (a.entidad === "informes" ? { ...a, enmiendas: (await s.query<Row>("SELECT id, folio_num, version, estado FROM informes WHERE sustituye_a = :id ORDER BY version", { id: a.entidad_id })).map((e) => ({ id: e.id, estado: e.estado, referencia: `IR ${String(e.folio_num).padStart(7, "0")} v${e.version}` })) } : a))),
+    afectados: await Promise.all(afectados.map(async (a) => (a.entidad === "informes" ? { ...a, enmiendas: (await s.query<Row>("SELECT id, folio_num, version, estado FROM informes WHERE sustituye_a = :id ORDER BY version", { id: a.entidad_id })).map((e) => ({ id: e.id, estado: e.estado, referencia: `${formatearFolio("IR", e.folio_num)} v${e.version}` })) } : a))),
     acciones: acciones.map((a) => ({ ...a, vencida: accionVencida(a, hoy), responsable_vigente: Number(a.responsable_activo) === 1 && (!a.responsable_vigente_hasta || String(a.responsable_vigente_hasta) >= hoy) })),
     verificaciones,
     comunicaciones: comunicaciones.map((c) => ({ ...c, informe_ids: JSON.parse(String(c.informe_ids_json || "[]")) })),
     suspensiones,
-    retenciones: retenciones.map((r) => ({ ...r, informe: `IR ${String(r.informe_folio || 0).padStart(7, "0")}${Number(r.informe_version || 1) > 1 ? ` v${r.informe_version}` : ""}` })),
+    retenciones: retenciones.map((r) => ({ ...r, informe: `${formatearFolio("IR", r.informe_folio)}${Number(r.informe_version || 1) > 1 ? ` v${r.informe_version}` : ""}` })),
     propuesta,
     solicitud_pendiente: pendiente ? serializarSolicitud(pendiente) : null,
     segregacion: { verificar: bloqueo(evaluarVerificacion(acc.yo, responsablesAcciones), "verificar"), cerrar: bloqueo(evaluarCierreNc(acc.yo, responsablesNc(nc)), "cerrar") },

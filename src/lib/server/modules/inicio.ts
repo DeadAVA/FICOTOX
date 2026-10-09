@@ -1,3 +1,4 @@
+import { numeroFolio } from "../../shared/folios";
 import { requireUser } from "../auth";
 import { pendientesDe } from "../pendientes";
 import { json, type RouteContext } from "../http";
@@ -21,7 +22,6 @@ import { esCoordinacion, filtroAsignadas, soloAsignado } from "../asignaciones";
  * coincida con lo que se ve al abrirlo.
  */
 
-const pad = (n: unknown) => String(Number(n || 0)).padStart(7, "0");
 
 type StepKey = "recepcion" | "procesamiento" | "extraccion" | "analisis" | "informe";
 type StepState = "done" | "current" | "pending" | "warn";
@@ -109,7 +109,7 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
 
   const items: FlowItem[] = recepciones.map((r) => {
     const id = Number(r.id);
-    const folio = `R ${pad(r.folio_num)}`;
+    const folio = `R ${numeroFolio(r.folio_num)}`;
     const lote = safeJson<Array<Record<string, unknown>>>(r.lote_muestras_json, []);
     const muestras = r.muestra_unica || !lote.length ? [String(r.id_interno || "")].filter(Boolean) : lote.filter((m) => m.trabajar !== false).map((m) => String(m.id_interno || "")).filter(Boolean);
     const tipos = safeJson<{ tipos?: string[] }>(r.analisis_json, {}).tipos || [];
@@ -204,10 +204,10 @@ export async function inicioEnCurso({ request, s }: RouteContext): Promise<Respo
     const stateFor = (index: number): StepState => (index < currentIndex ? "done" : index === currentIndex ? "current" : "pending");
     const pasos: FlowStep[] = [
       { key: "recepcion", label: "Recepción", state: stateFor(0), folio, href: `/muestras/recepcion/${id}`, detail: aceptada ? (decision === "aceptada_con_desviacion" ? "Aceptada con desviación" : "Aceptada") : "Sin decisión de aceptación" },
-      { key: "procesamiento", label: "Procesamiento", state: stateFor(1), folio: proc ? `P ${pad(proc.folio_num)}` : null, href: proc ? `/muestras/procesamiento/${proc.id}` : null, detail: proc ? fmtDate(proc.fecha_procesamiento) : null },
-      { key: "extraccion", label: "Extracción", state: stateFor(2), folio: exts.length ? exts.map((e) => `${e.tipo_registro || "E-A"} ${pad(e.folio_num)}`).join(" · ") : null, href: ext ? `/muestras/extraccion/${ext.id}` : null, detail: faltaTipo ? `Falta la extracción ${faltaTipo === "E-D" ? "DSP" : "ASP"}` : exts.length ? exts.map((e) => (String(e.tipo_registro) === "E-D" ? "DSP" : "ASP")).join(" + ") : tipoExtraccion ? (tipoExtraccion === "E-D" ? "DSP" : "ASP") : null },
-      { key: "analisis", label: "Análisis", state: stateFor(3), folio: ans.length ? ans.map((a) => `A ${pad(a.folio_num)}`).join(" · ") : null, href: an ? `/muestras/analisis/${an.id}` : null, detail: extSinAnalisis && an ? `Falta el análisis ${String(extSinAnalisis.tipo_registro) === "E-D" ? "DSP" : "ASP"}` : an ? (anEstado === "aprobado" ? (ans.length > 1 ? "Aprobados" : "Aprobado") : anEstado === "revisado" ? "Revisado, falta aprobar" : anEstado === "en_revision" ? "Enviado a revisión, falta revisar" : "Registrado, falta enviar a revisión") : null },
-      { key: "informe", label: "Informe", state: stateFor(4), folio: inf ? `IR ${pad(inf.folio_num)}${Number(inf.version || 1) > 1 ? ` v${inf.version}` : ""}` : null, href: inf ? `/informes/${inf.id}` : null, detail: inf ? ({ borrador: "Borrador", en_revision: "En revisión", autorizado: "Autorizado, falta liberar", liberado: "Liberado, falta enviar", enviado: "Enviado" } as Record<string, string>)[infEstado] || infEstado : null },
+      { key: "procesamiento", label: "Procesamiento", state: stateFor(1), folio: proc ? `P ${numeroFolio(proc.folio_num)}` : null, href: proc ? `/muestras/procesamiento/${proc.id}` : null, detail: proc ? fmtDate(proc.fecha_procesamiento) : null },
+      { key: "extraccion", label: "Extracción", state: stateFor(2), folio: exts.length ? exts.map((e) => `${e.tipo_registro || "E-A"} ${numeroFolio(e.folio_num)}`).join(" · ") : null, href: ext ? `/muestras/extraccion/${ext.id}` : null, detail: faltaTipo ? `Falta la extracción ${faltaTipo === "E-D" ? "DSP" : "ASP"}` : exts.length ? exts.map((e) => (String(e.tipo_registro) === "E-D" ? "DSP" : "ASP")).join(" + ") : tipoExtraccion ? (tipoExtraccion === "E-D" ? "DSP" : "ASP") : null },
+      { key: "analisis", label: "Análisis", state: stateFor(3), folio: ans.length ? ans.map((a) => `A ${numeroFolio(a.folio_num)}`).join(" · ") : null, href: an ? `/muestras/analisis/${an.id}` : null, detail: extSinAnalisis && an ? `Falta el análisis ${String(extSinAnalisis.tipo_registro) === "E-D" ? "DSP" : "ASP"}` : an ? (anEstado === "aprobado" ? (ans.length > 1 ? "Aprobados" : "Aprobado") : anEstado === "revisado" ? "Revisado, falta aprobar" : anEstado === "en_revision" ? "Enviado a revisión, falta revisar" : "Registrado, falta enviar a revisión") : null },
+      { key: "informe", label: "Informe", state: stateFor(4), folio: inf ? `IR ${numeroFolio(inf.folio_num)}${Number(inf.version || 1) > 1 ? ` v${inf.version}` : ""}` : null, href: inf ? `/informes/${inf.id}` : null, detail: inf ? ({ borrador: "Borrador", en_revision: "En revisión", autorizado: "Autorizado, falta liberar", liberado: "Liberado, falta enviar", enviado: "Enviado" } as Record<string, string>)[infEstado] || infEstado : null },
     ];
 
     const revision = (etapa === "analisis" && (anEstado === "en_revision" || anEstado === "revisado")) || (etapa === "informe" && !!inf && (infEstado === "borrador" || infEstado === "en_revision"));

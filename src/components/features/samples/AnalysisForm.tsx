@@ -1,5 +1,6 @@
 "use client";
 
+import { formatearFolio } from "@/lib/shared/folios";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -199,7 +200,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
   const [submitting, setSubmitting] = useState(false);
   const [sign, setSign] = useState<"revisar" | "aprobar" | null>(null);
   const [signing, setSigning] = useState(false);
-  const { anular, restaurar } = useAnulacion("analysis", (row) => `A ${String(row.folio_num || 0).padStart(7, "0")}`);
+  const { anular, restaurar } = useAnulacion("analysis", (row) => formatearFolio("A", row.folio_num));
   const editing = !!item?.id;
   const estado = String(item?.estado || "registrado");
   // E solo mientras el análisis está registrado (Fase 1): revisado y aprobado se leen, no se editan.
@@ -695,7 +696,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
 
       <FormCard id="sec-origen" title="Muestra y origen" description={requiereExtraccion ? "El análisis parte de un extracto; la cadena recepción → procesamiento se deriva de él." : "Si el análisis no requiere extracción (plancton), vincula directamente la recepción."}>
         <FormGrid>
-          <Field label="Extracción" htmlFor="a-ext" required={requiereExtraccion} hint={ext ? `${ext.tipo_registro} ${String(ext.folio_num).padStart(7, "0")} · ${ext.id_interno || "sin ID"} · P ${String(ext.folio_procesamiento_num || 0).padStart(7, "0")}` : "Al vincular se cargan las muestras del extracto."}>
+          <Field label="Extracción" htmlFor="a-ext" required={requiereExtraccion} hint={ext ? `${formatearFolio(ext.tipo_registro, ext.folio_num)} · ${ext.id_interno || "sin ID"} · ${formatearFolio("P", ext.folio_procesamiento_num)}` : "Al vincular se cargan las muestras del extracto."}>
             <Select
               id="a-ext"
               value={form.extraccionId}
@@ -720,7 +721,7 @@ export function AnalysisForm({ item, prefillExtraccionId }: { item: ApiRecord | 
                 <option value="">Sin vincular</option>
                 {recepciones.map((r) => (
                   <option key={r.id} value={r.id}>
-                    R {String(r.folio_num).padStart(7, "0")} · {r.solicitante || r.id_interno || ""}
+                    {formatearFolio("R", r.folio_num)} · {r.solicitante || r.id_interno || ""}
                   </option>
                 ))}
               </Select>

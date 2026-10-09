@@ -1,3 +1,4 @@
+import { formatearFolio } from "../../../shared/folios";
 import { requireUser, userIdFromClaims, type CurrentUser } from "../../auth";
 import { incidenciaPorDecisionRecepcion } from "../calidad/automaticas";
 import { actorDe } from "../calidad/comun";
@@ -488,7 +489,7 @@ export async function ejecutarDecisionRecepcion(ctx: ContextoEjecucion): Promise
 }
 
 async function aplicarCambioFolio(s: Session, user: CurrentUser, antes: Row, folio: number, motivo: string, detalle: Record<string, unknown>): Promise<Row> {
-  if (await s.scalar(`SELECT id FROM ${TABLE} WHERE folio_num = :folio AND id <> :id`, { folio, id: antes.id })) throw new HttpError(409, { message: `El folio R ${String(folio).padStart(7, "0")} ya existe` });
+  if (await s.scalar(`SELECT id FROM ${TABLE} WHERE folio_num = :folio AND id <> :id`, { folio, id: antes.id })) throw new HttpError(409, { message: `El folio ${formatearFolio("R", folio)} ya existe` });
   await s.execute(`UPDATE ${TABLE} SET folio_num = :folio WHERE id = :id`, { folio, id: antes.id });
   const despues = (await snapshotRow(s, TABLE, Number(antes.id)))!;
   await registrarAuditoria(s, user, { accion: "cambiar_folio", entidad: TABLE, entidadId: Number(antes.id), referencia: folioLabel(TABLE, despues), antes, despues, motivo, detalle: { folio_anterior: antes.folio_num, folio_nuevo: folio, ...detalle } });
@@ -541,7 +542,7 @@ export async function cambiarFolioRecepcion({ request, s, params }: RouteContext
   await exigirReauth(s, request, user, "muestras:E");
   const solicitud = await crearSolicitud(s, user, { tipo: "cambiar_folio", entidad: TABLE, entidadId: Number(antes.id), referencia: folioLabel(TABLE, antes), accion: "cambiar_folio", datos: { folio_num: folio }, motivo, cargo: actuo.cargo });
   await s.commit();
-  return respuestaSolicitud(solicitud, `el cambio de folio de ${solicitud.referencia} a R ${String(folio).padStart(7, "0")}`);
+  return respuestaSolicitud(solicitud, `el cambio de folio de ${solicitud.referencia} a ${formatearFolio("R", folio)}`);
 }
 
 /* POST /api/samples/reception/:id/reabrir { motivo }: directo con muestras:A; si no, solicitud. */

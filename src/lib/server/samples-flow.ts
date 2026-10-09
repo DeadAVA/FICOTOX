@@ -1,3 +1,4 @@
+import { formatearFolio } from "../shared/folios";
 import type { CurrentUser } from "./auth";
 import { registrarAuditoria, snapshotRow } from "./audit";
 import { esConflictoDeFolio, type Row, type Session } from "./db";
@@ -95,7 +96,7 @@ export function folioLabel(table: SampleTable, row: Row | null | undefined): str
   const prefix = table === "muestras_extraccion" ? String(row.tipo_registro || "E-A") : FOLIO_PREFIX[table];
   // Fase 5: las enmiendas de analisis conservan el folio con su version.
   const version = table === "muestras_analisis" && Number(row.version || 1) > 1 ? ` v${row.version}` : "";
-  return `${prefix} ${String(row.folio_num || 0).padStart(7, "0")}${version}`;
+  return `${formatearFolio(prefix, row.folio_num)}${version}`;
 }
 
 function isAnulado(table: SampleTable, row: Row | null | undefined): boolean {
@@ -171,7 +172,7 @@ export function opcionesAnulacion(s: Session, table: SampleTable, id: number): {
               return false;
             }
           });
-          return usado ? `El analisis esta incluido en el informe IR ${String(usado.folio_num).padStart(7, "0")} autorizado; anula o enmienda el informe primero` : null;
+          return usado ? `El analisis esta incluido en el informe ${formatearFolio("IR", usado.folio_num)} autorizado; anula o enmienda el informe primero` : null;
         },
       };
   }

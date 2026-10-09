@@ -1,3 +1,4 @@
+import { formatearFolio } from "../shared/folios";
 import type { ApiRecord } from "@/lib/client/types";
 import { ACCION_KEYS, isAccion, isModulo } from "@/lib/shared/permisos";
 import { ACCEPTANCE_DECISIONS, ANALYSIS_METHODS, ANALYSIS_STATES, ANALYSIS_TYPES, CLIENT_CONTACT_MEDIA, DISPOSAL_TYPES, DOCUMENT_STATES, RECEPTION_ANALYSIS_TYPES, RECEPTION_DELIVERY_MEDIA, RECEPTION_METHODS, RECEPTION_SAMPLE_TYPES, REPORT_DELIVERY_MEDIA, REPORT_STATES, SAMPLE_STATES, STORAGE_PLACES } from "@/lib/shared/sgc";
@@ -844,7 +845,7 @@ function redactar(record: ApiRecord, actor: string, sistema: boolean): Partes {
     case "sustituir":
       return { accion: `${cap(O)} quedó reemplazado por su versión corregida`, quePaso: `${cap(O)} quedó reemplazado por una versión corregida${actor ? ` (lo registró ${actor})` : ""}. Se conserva para consulta.`, sinActor: true };
     case "cambiar_folio":
-      return { accion: `cambió el folio ${de(O)}`, quePaso: `${quien} cambió el folio ${de(O)}${d.folio_anterior ? ` (antes era R ${String(d.folio_anterior).padStart(7, "0")})` : ""}.${conSolicitud}` };
+      return { accion: `cambió el folio ${de(O)}`, quePaso: `${quien} cambió el folio ${de(O)}${d.folio_anterior ? ` (antes era ${formatearFolio("R", d.folio_anterior)})` : ""}.${conSolicitud}` };
     case "reabrir":
       if (entidad === "no_conformidades") return { accion: `reabrió ${O}`, quePaso: `${quien} reabrió ${O}: las acciones no resolvieron el problema, así que se vuelve a analizar.` };
       return { accion: `reabrió ${O}`, quePaso: `${quien} reabrió ${O}; vuelve al estado en que estaba antes de cerrarse.${conSolicitud}` };

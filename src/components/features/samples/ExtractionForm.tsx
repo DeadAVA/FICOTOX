@@ -1,5 +1,6 @@
 "use client";
 
+import { formatearFolio } from "@/lib/shared/folios";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -518,7 +519,7 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
       const muestraTipo: "unica" | "lote" = processing.muestra_tipo === "lote" || (!processing.muestra_tipo && rows.length > 1) ? "lote" : "unica";
       const resguardo = processing.resguardo || {};
       const frozen = !!resguardo.congelador_co1 || !!resguardo.congelador_co2 || !!resguardo.congelador_co3;
-      const folio = processing.folio_num ? `P ${String(processing.folio_num).padStart(7, "0")}` : "Procesamiento";
+      const folio = processing.folio_num ? formatearFolio("P", processing.folio_num) : "Procesamiento";
       return {
         ...prev,
         idInterno: ids || processing.id_interno || "",
@@ -809,7 +810,7 @@ export function ExtractionForm({ item, tipo, prefillProcessingId }: { item: ApiR
               <option value="">Sin vincular</option>
               {processings.map((option) => (
                 <option key={option.id} value={option.id}>
-                  P {String(option.folio_num || "").padStart(7, "0")} · {option.id_interno || "Sin ID interno"}
+                  {formatearFolio("P", option.folio_num)} · {option.id_interno || "Sin ID interno"}
                 </option>
               ))}
             </Select>

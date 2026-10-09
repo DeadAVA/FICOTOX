@@ -5,6 +5,7 @@
  * Tecnica, muestras:A), cambiar el folio y reabrir (con motivo y contrasena;
  * sin muestras:A quedan como solicitud para la Coord. Tecnica).
  */
+import { formatearFolio } from "@/lib/shared/folios";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useSession } from "@/components/session/SessionProvider";
@@ -59,7 +60,7 @@ export function useAccionesRecepcion(onDone?: () => void) {
       v.avisar({ que: `«${folio}» no es un número de folio válido.`, hacer: "Vuelve a «Cambiar folio…» y escribe solo el número (1 o mayor)." });
       return;
     }
-    const motivo = await prompt({ critico: true, title: `Cambiar folio a R ${String(numero).padStart(7, "0")}`, description: "Motivo del cambio de folio.", confirmLabel: "Cambiar folio" });
+    const motivo = await prompt({ critico: true, title: `Cambiar folio a ${formatearFolio("R", numero)}`, description: "Motivo del cambio de folio.", confirmLabel: "Cambiar folio" });
     if (!motivo) return;
     try {
       const data = await sendJsonAuth("POST", `${API_BASE_URL}/samples/reception/${item.id}/folio`, token, { folio_num: numero, motivo });

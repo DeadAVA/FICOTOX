@@ -1,3 +1,4 @@
+import { formatearFolio } from "./folios";
 /*
  * Calidad (Fase 11; FX-MO-2-1 secciones 4 y 5, ISO/IEC 17025 7.10 y 8.7):
  * incidencias, no conformidades (NC), acciones correctivas, comunicaciones con
@@ -127,8 +128,8 @@ export const MEDIO_COMUNICACION_LABEL = etiquetas(MEDIOS_COMUNICACION);
 export const METODOS_SUSPENDIBLES = ["ASP", "DSP", "PSP", "pigmentos", "plancton", "otro"] as const;
 
 /* Folios: "INC 0000001", "NC 0000001". */
-export const folioIncidencia = (n: unknown) => `INC ${String(Number(n) || 0).padStart(7, "0")}`;
-export const folioNc = (n: unknown) => `NC ${String(Number(n) || 0).padStart(7, "0")}`;
+export const folioIncidencia = (n: unknown) => formatearFolio("INC", n);
+export const folioNc = (n: unknown) => formatearFolio("NC", n);
 
 /* Clave del formato "Registro de no conformidad" (por confirmar con Mejora Continua; configurable con NC_FORMATO_CLAVE). */
 export const NC_FORMATO_CLAVE_DEFAULT = "FX-MC-NC (por confirmar)";

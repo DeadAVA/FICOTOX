@@ -44,8 +44,6 @@ export const parseFloatOrNull = (value: unknown): number | null => {
 };
 
 /* "AAAA-MM-DD" de cualquier valor (fecha sola tal cual; instante -> dia local del laboratorio). */
-export const toDateOnly = (value: unknown): string => fechaSola(value);
-
 export const isoDate = (value: unknown): string => fechaSola(value);
 
 export const normalizeText = (value: unknown): string => String(value || "").toLowerCase();

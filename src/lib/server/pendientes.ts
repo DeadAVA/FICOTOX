@@ -14,6 +14,7 @@
  * "por autorizar" o "por revisar"). Un evento desaparece solo cuando el
  * pendiente se resuelve.
  */
+import { numeroFolio } from "../shared/folios";
 import { ACCIONES_CRITICAS } from "../shared/acciones-criticas";
 import { formatearFecha, hoyLocal, sumarDias } from "../shared/fechas";
 import { autorizacionesPorVencer, permisoAdministrar } from "./autorizaciones";
@@ -53,7 +54,6 @@ export interface GrupoPendiente {
   eventos: Evento[];
 }
 
-const pad = (n: unknown) => String(Number(n || 0)).padStart(7, "0");
 const fmt = (v: unknown): string => (v ? formatearFecha(v) : "");
 /* Tope de eventos por grupo (la cuenta es la de los eventos). */
 const MAX = 200;
@@ -65,7 +65,7 @@ const safeJson = <T,>(raw: unknown, fallback: T): T => {
     return fallback;
   }
 };
-const folioIr = (r: Row) => `IR ${pad(r.folio_num)}${Number(r.version || 1) > 1 ? ` v${r.version}` : ""}`;
+const folioIr = (r: Row) => `IR ${numeroFolio(r.folio_num)}${Number(r.version || 1) > 1 ? ` v${r.version}` : ""}`;
 const clienteDe = (r: Row) => safeJson<{ nombre?: string }>(r.cliente_json, {}).nombre || null;
 
 export async function pendientesDe(s: Session, auth: Autorizacion): Promise<GrupoPendiente[]> {
@@ -119,7 +119,7 @@ export async function pendientesDe(s: Session, auth: Autorizacion): Promise<Grup
        ORDER BY a.asignado_en DESC LIMIT ${MAX}`,
       { yo, desde: `${sumarDias(hoy, -7)} 00:00:00` },
     );
-    agregar("muestras_asignadas", "Muestras asignadas", "info", "/muestras/recepcion?mias=1", filas.map((r) => ({ clave: `asignacion:R${r.recepcion_id}:usuario${yo}:${r.id}`, frase: "Muestra asignada", registro: `R ${pad(r.folio_num)}`, detalle: [r.id_interno || r.solicitante, r.asignador ? `te la asignó ${String(r.asignador).split(" ")[0]}` : null].filter(Boolean).join(" · ") || null, href: `/muestras/recepcion/${r.recepcion_id}`, tono: "info", cuando: (r.asignado_en as string | null) ?? null, persona_id: Number(r.asignado_por) || null, persona: (r.asignador as string | null) ?? null })));
+    agregar("muestras_asignadas", "Muestras asignadas", "info", "/muestras/recepcion?mias=1", filas.map((r) => ({ clave: `asignacion:R${r.recepcion_id}:usuario${yo}:${r.id}`, frase: "Muestra asignada", registro: `R ${numeroFolio(r.folio_num)}`, detalle: [r.id_interno || r.solicitante, r.asignador ? `te la asignó ${String(r.asignador).split(" ")[0]}` : null].filter(Boolean).join(" · ") || null, href: `/muestras/recepcion/${r.recepcion_id}`, tono: "info", cuando: (r.asignado_en as string | null) ?? null, persona_id: Number(r.asignado_por) || null, persona: (r.asignador as string | null) ?? null })));
   }
 
   // Analisis por revisar (ensayos:R) o aprobar (ensayos:A), sin los que elaboro la persona.
@@ -132,7 +132,7 @@ export async function pendientesDe(s: Session, auth: Autorizacion): Promise<Grup
     );
     agregar("analisis_pendientes", "Análisis esperando revisión o aprobación", "info", "/muestras/analisis?filtro=pendiente", filas.map((a) => {
       const aprobar = String(a.estado) === "revisado";
-      return { clave: `analisis:${a.id}:${a.estado}:${aprobar ? a.revisado_en || "" : a.enviado_revision_en || ""}`, frase: aprobar ? "Aprobar análisis" : "Revisar análisis", registro: `A ${pad(a.folio_num)}${Number(a.version || 1) > 1 ? ` v${a.version}` : ""}`, detalle: (a.solicitante as string | null) || null, href: `/muestras/analisis/${a.id}`, tono: "info" as Tono, cuando: ((aprobar ? a.revisado_en : a.enviado_revision_en) as string | null) ?? null, persona_id: Number(a.enviado_revision_por || a.creado_por) || null };
+      return { clave: `analisis:${a.id}:${a.estado}:${aprobar ? a.revisado_en || "" : a.enviado_revision_en || ""}`, frase: aprobar ? "Aprobar análisis" : "Revisar análisis", registro: `A ${numeroFolio(a.folio_num)}${Number(a.version || 1) > 1 ? ` v${a.version}` : ""}`, detalle: (a.solicitante as string | null) || null, href: `/muestras/analisis/${a.id}`, tono: "info" as Tono, cuando: ((aprobar ? a.revisado_en : a.enviado_revision_en) as string | null) ?? null, persona_id: Number(a.enviado_revision_por || a.creado_por) || null };
     }));
   }
 
