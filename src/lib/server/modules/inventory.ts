@@ -780,6 +780,8 @@ export async function refillReactivo({ request, s, params }: RouteContext): Prom
   const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "movimiento" }));
 
   const payload = await readJson(request);
+  // Corregir la existencia por conteo es una edición: pide además el permiso de editar movimientos.
+  if (String(payload.tipo || "").toLowerCase() === "ajuste") await requirePermission(s, user, "inventario", "E", { objeto: "movimiento" });
   const row = await s.queryOne<Row>("SELECT * FROM reactivos WHERE id = :id LIMIT 1", { id: reactivoId });
   if (!row) {
     return json({ message: "Reactivo no encontrado" }, 404);

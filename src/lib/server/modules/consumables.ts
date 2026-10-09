@@ -318,6 +318,8 @@ export async function refillConsumable({ request, s, params }: RouteContext): Pr
   const supervision = marcaSupervision(await requirePermission(s, user, "inventario", "C", { objeto: "movimiento" }));
 
   const data = await readJson(request);
+  // Corregir la existencia por conteo es una edición: pide además el permiso de editar movimientos.
+  if (String(data.tipo || "").toLowerCase() === "ajuste") await requirePermission(s, user, "inventario", "E", { objeto: "movimiento" });
   const row = await s.queryOne<Record<string, unknown>>("SELECT piezas, stock_maximo FROM consumibles WHERE id = :id LIMIT 1", { id: consumableId });
   if (!row) {
     return json({ message: "Consumible no encontrado" }, 404);
