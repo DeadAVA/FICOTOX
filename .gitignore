@@ -67,3 +67,6 @@ instance/llave-bitacora.huella
 
 # Archivo de la instancia anterior (comenzar en limpio para pruebas manuales)
 archivo-pre-pruebas-*/
+
+# Toda la instancia (bases, archivos subidos, logs, llaves y fotos)
+instance/

@@ -14,6 +14,7 @@
     "test:reset-db": "node tests/reset-test-db.mjs",
     "test:fixture": "node tests/build-fixture.mjs",
     "seed:roles": "node scripts/seed-roles-usuarios.mjs",
+    "cargar-inventario": "node scripts/cargar-inventario-general.mjs",
     "respaldar": "node scripts/respaldar-ficotox.mjs",
     "restaurar": "node scripts/restaurar-ficotox.mjs",
     "start:standalone": "node scripts/start-ficotox.mjs",
