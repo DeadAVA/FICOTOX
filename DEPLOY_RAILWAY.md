@@ -61,6 +61,8 @@ El `Dockerfile` ya fija por omisión `HOST=0.0.0.0`, `FICOTOX_DATA_DIR=/data`, `
 
 Si necesitas cambiar la carpeta de datos, `FICOTOX_DATA_DIR` (por omisión `/data`) define dónde están `instance/`, `backups/` e `import/`.
 
+> **Sobre `TRUST_PROXY=1` y la IP del cliente.** FICOTOX toma la IP de la primera dirección de `X-Forwarded-For` para el bloqueo por IP. Eso solo es confiable si **todo el tráfico entra por el proxy de Railway** (no expongas otro puerto público). Si el proxy agregara la IP real al final de una cabecera que el cliente ya trae, alguien podría variar su IP para esquivar el límite **por IP**; el bloqueo **por cuenta** (5 intentos) sigue aplicando igual. Es un ambiente de pruebas: no uses `TRUST_PROXY=1` fuera de un proxy propio.
+
 ## 5. Después de la primera restauración
 
 1. Confirma en los logs: `Restauración completada: … bitácora íntegra.`

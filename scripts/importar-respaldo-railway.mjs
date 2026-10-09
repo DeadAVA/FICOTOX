@@ -20,6 +20,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -219,7 +220,10 @@ async function principal() {
 
   const sello = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-");
   const temporal = path.join(importDir, `extraido-${sello}`);
-  const llaveTemporal = path.join(importDir, `.llave-${sello}`);
+  // La llave se pasa a la restauración por un archivo temporal PRIVADO en el disco efímero del contenedor (nunca en el volumen).
+  const carpetaLlave = fs.mkdtempSync(path.join(os.tmpdir(), "ficotox-llave-"));
+  fs.chmodSync(carpetaLlave, 0o700);
+  const llaveTemporal = path.join(carpetaLlave, "llave");
   try {
     const carpeta = extraer(archivo, temporal);
     fs.writeFileSync(llaveTemporal, `${secretKey}\n`, { mode: 0o600 });
@@ -252,7 +256,7 @@ async function principal() {
     throw error;
   } finally {
     fs.rmSync(temporal, { recursive: true, force: true });
-    fs.rmSync(llaveTemporal, { force: true });
+    fs.rmSync(carpetaLlave, { recursive: true, force: true });
     fs.rmSync(path.join(path.dirname(instanceDir), "instance-restaurada"), { recursive: true, force: true });
   }
 }
