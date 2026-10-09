@@ -94,6 +94,9 @@ function resolveSqlitePath(baseDir: string): string {
   if (configured) {
     return path.resolve(/*turbopackIgnore: true*/ baseDir, configured);
   }
+  // FICOTOX_DATA_DIR (volumen de un hosting): <datos>/instance/ficotox.sqlite3.
+  const datos = (process.env.FICOTOX_DATA_DIR || "").trim();
+  if (datos) return path.join(/*turbopackIgnore: true*/ path.resolve(baseDir, datos), "instance", "ficotox.sqlite3");
   return path.join(/*turbopackIgnore: true*/ baseDir, "instance", "ficotox.sqlite3");
 }
 
@@ -141,7 +144,8 @@ export function getConfig(): AppConfig {
     LOGIN_VENTANA_MIN: envInt("LOGIN_VENTANA_MIN", 15),
     LOGIN_BLOQUEO_MIN: envInt("LOGIN_BLOQUEO_MIN", 15),
     LOGIN_IP_MAX_INTENTOS: envInt("LOGIN_IP_MAX_INTENTOS", 20),
-    TRUST_PROXY: envBool("TRUST_PROXY", "false"),
+    // Detras del proxy de un hosting: TRUST_PROXY=true o 1.
+    TRUST_PROXY: ["true", "1"].includes((process.env.TRUST_PROXY ?? "false").trim().toLowerCase()),
     SUPERVISAR_CUENTAS_TEMPORALES: envBool("SUPERVISAR_CUENTAS_TEMPORALES", "true"),
     SESION_INACTIVIDAD_MIN: envInt("SESION_INACTIVIDAD_MIN", 30),
     REAUTH_TTL_MIN: envInt("REAUTH_TTL_MIN", 5),
@@ -152,7 +156,7 @@ export function getConfig(): AppConfig {
     EVIDENCIA_OBLIGATORIA_ANALISIS: envBool("EVIDENCIA_OBLIGATORIA_ANALISIS", "true"),
     // Misma carpeta que scripts/backup_ficotox.py: FICOTOX_BACKUP_DIR o <proyecto>/backups.
     // turbopackIgnore: la carpeta se decide en tiempo de ejecucion; sin esto el build standalone copiaria backups/.
-    RESPALDOS_DIR: process.env.FICOTOX_BACKUP_DIR ? path.resolve(/*turbopackIgnore: true*/ BASE_DIR, process.env.FICOTOX_BACKUP_DIR) : path.join(/*turbopackIgnore: true*/ BASE_DIR, "backups"),
+    RESPALDOS_DIR: process.env.FICOTOX_BACKUP_DIR ? path.resolve(/*turbopackIgnore: true*/ BASE_DIR, process.env.FICOTOX_BACKUP_DIR) : path.join(/*turbopackIgnore: true*/ process.env.FICOTOX_DATA_DIR ? path.resolve(BASE_DIR, process.env.FICOTOX_DATA_DIR) : BASE_DIR, "backups"),
     RESPALDO_RETENCION: envInt("RESPALDO_RETENCION", 30),
     RESPALDO_AVISO_HORAS: envInt("RESPALDO_AVISO_HORAS", 24),
     PRUEBA_RESTAURACION_AVISO_DIAS: envInt("PRUEBA_RESTAURACION_AVISO_DIAS", 90),

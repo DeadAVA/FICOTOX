@@ -112,7 +112,8 @@ export function resolverEntorno(baseDir, env = process.env) {
       const raw = databaseUrl.replace(/^sqlite:\/*/, "");
       sqlitePath = path.isAbsolute(raw) ? raw : path.resolve(/*turbopackIgnore: true*/ baseDir, raw);
     } else {
-      sqlitePath = String(env.SQLITE_PATH || "").trim() ? path.resolve(/*turbopackIgnore: true*/ baseDir, String(env.SQLITE_PATH).trim()) : path.join(/*turbopackIgnore: true*/ baseDir, "instance", "ficotox.sqlite3");
+      const datos = String(env.FICOTOX_DATA_DIR || "").trim();
+      sqlitePath = String(env.SQLITE_PATH || "").trim() ? path.resolve(/*turbopackIgnore: true*/ baseDir, String(env.SQLITE_PATH).trim()) : path.join(/*turbopackIgnore: true*/ datos ? path.resolve(baseDir, datos) : baseDir, "instance", "ficotox.sqlite3");
     }
   }
   const instanceDir = env.FICOTOX_INSTANCE_DIR ? path.resolve(/*turbopackIgnore: true*/ baseDir, env.FICOTOX_INSTANCE_DIR) : sqlitePath ? path.dirname(sqlitePath) : path.join(/*turbopackIgnore: true*/ baseDir, "instance");
@@ -125,7 +126,7 @@ export function resolverEntorno(baseDir, env = process.env) {
     motor,
     sqlitePath,
     instanceDir,
-    respaldosDir: env.FICOTOX_BACKUP_DIR ? path.resolve(/*turbopackIgnore: true*/ baseDir, env.FICOTOX_BACKUP_DIR) : path.join(/*turbopackIgnore: true*/ baseDir, "backups"),
+    respaldosDir: env.FICOTOX_BACKUP_DIR ? path.resolve(/*turbopackIgnore: true*/ baseDir, env.FICOTOX_BACKUP_DIR) : path.join(/*turbopackIgnore: true*/ String(env.FICOTOX_DATA_DIR || "").trim() ? path.resolve(baseDir, String(env.FICOTOX_DATA_DIR).trim()) : baseDir, "backups"),
     secretKey: env.SECRET_KEY || "",
     retencion: entero("RESPALDO_RETENCION", 30),
     puerto: entero("PORT", entero("FLASK_PORT", 5000)),

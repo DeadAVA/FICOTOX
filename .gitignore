@@ -70,3 +70,15 @@ archivo-pre-pruebas-*/
 
 # Toda la instancia (bases, archivos subidos, logs, llaves y fotos)
 instance/
+
+# Despliegue (Railway): nunca se suben bases, respaldos, Excel, llaves ni secretos
+instance/
+backups/
+.env
+.env.*
+!.env.example
+*.sqlite3*
+*.xlsx
+*.tar.gz
+auditoria.key
+*.pem

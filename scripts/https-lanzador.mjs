@@ -23,7 +23,7 @@ if (cert && key) {
     const extra = argumentos.find((a) => a && typeof a === "object") || {};
     return https.createServer({ ...extra, ...opciones }, listener);
   };
-  if (String(process.env.TRUST_PROXY ?? "false").toLowerCase() !== "true") {
+  if (!["true", "1"].includes(String(process.env.TRUST_PROXY ?? "false").trim().toLowerCase())) {
     const emit = https.Server.prototype.emit;
     https.Server.prototype.emit = function emitConIpReal(event, req, ...rest) {
       if (event === "request" && req && req.headers) {

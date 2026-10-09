@@ -63,7 +63,8 @@ const truthy = (name, fallback = "false") => ["1", "true", "yes", "on"].includes
 function resolveSqlitePath() {
   const configured = (process.env.SQLITE_PATH || "").trim();
   if (configured) return path.resolve(rootDir, configured);
-  return path.join(rootDir, "instance", "ficotox.sqlite3");
+  const datos = (process.env.FICOTOX_DATA_DIR || "").trim();
+  return path.join(datos ? path.resolve(rootDir, datos) : rootDir, "instance", "ficotox.sqlite3");
 }
 
 if (!(process.env.DATABASE_URL || "").trim()) {
@@ -91,6 +92,34 @@ const fallar = (mensaje, codigo = 1) => {
   const { erroresSecretosProduccion } = await import("../src/lib/shared/secretos.mjs");
   const errores = erroresSecretosProduccion({ ...process.env, NODE_ENV: process.env.NODE_ENV || "production" });
   if (errores.length) fallar(`FICOTOX no arranca en produccion: ${errores.join("; ")}. Define un JWT_SECRET aleatorio de al menos 32 caracteres en .env (npm run configurar).`, SALIDA_FATAL);
+}
+
+// Hosting con volumen (Railway): importar un respaldo en el primer arranque, ANTES de iniciar el servidor
+// (scripts/importar-respaldo-railway.mjs). Solo actua si no existe la base; si algo falla, no se arranca.
+{
+  const datos = (process.env.FICOTOX_DATA_DIR || "").trim() ? path.resolve(rootDir, process.env.FICOTOX_DATA_DIR) : path.dirname(instanceDir);
+  const hayRespaldo = fs.existsSync(path.join((process.env.FICOTOX_IMPORT_DIR || "").trim() ? path.resolve(rootDir, process.env.FICOTOX_IMPORT_DIR) : path.join(datos, "import"), "ficotox-respaldo.tar.gz"));
+  const enHosting = truthy("FICOTOX_IMPORTAR") || !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID) || !!(process.env.IMPORTAR_URL || "").trim() || hayRespaldo;
+  if (enHosting && !(process.env.DATABASE_URL || "").trim()) {
+    const codigo = await new Promise((resolve) => {
+      const proceso = spawn(process.execPath, [path.join(rootDir, "scripts", "importar-respaldo-railway.mjs")], { cwd: rootDir, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+      for (const [flujo, error] of [[proceso.stdout, false], [proceso.stderr, true]]) {
+        let pendiente = "";
+        flujo.on("data", (d) => {
+          pendiente += d;
+          const lineas = pendiente.split(/\r?\n/);
+          pendiente = lineas.pop() || "";
+          for (const linea of lineas) if (linea.trim()) avisar(linea, error);
+        });
+      }
+      proceso.on("error", (e) => {
+        avisar(`[importación] no se pudo ejecutar el importador (${e.message}).`, true);
+        resolve(1);
+      });
+      proceso.on("exit", (c) => resolve(c ?? 1));
+    });
+    if (codigo !== 0) fallar("FICOTOX no arranca: la importación del respaldo falló (ver el motivo arriba).", SALIDA_FATAL);
+  }
 }
 
 const standaloneDir = path.join(rootDir, ".next", "standalone");
