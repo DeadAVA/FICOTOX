@@ -64,3 +64,6 @@ instance/llave-bitacora.huella
 # Herramientas locales
 .claude/scheduled_tasks.lock
 .venv/
+
+# Archivo de la instancia anterior (comenzar en limpio para pruebas manuales)
+archivo-pre-pruebas-*/
